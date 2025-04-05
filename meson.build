@@ -7,8 +7,9 @@ glfw3_lib = cc.find_library('libglfw3', dirs: glfw3_path)
 
 sources = [
     'src/cleanup.c',
-    'src/main.c',
     'src/instance.c',
+    'src/main.c',
+    'src/validation.c',
     'src/vulkan.c',
     'src/window.c'
 ]
