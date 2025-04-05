@@ -3,7 +3,7 @@ project('VKRT', 'c')
 cc = meson.get_compiler('c')
 
 glfw3_path = meson.current_source_dir() + '/src/external/glfw3/lib'
-glfw3_lib = cc.find_library('libglfw3', dirs: glfw3_path)
+glfw3_lib = cc.find_library('glfw3', dirs: glfw3_path)
 
 sources = [
     'src/cleanup.c',
