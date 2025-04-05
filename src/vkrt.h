@@ -9,9 +9,7 @@
 typedef struct VKRT {
     GLFWwindow* window;
     VkInstance instance;
+    VkDebugUtilsMessengerEXT debugMessenger;
 } VKRT;
 
-#include "cleanup.h"
-#include "instance.h"
-#include "vulkan.h"
-#include "window.h"
+#define ARRLEN(arr) sizeof((void *)arr) / sizeof(arr[0])

@@ -1,4 +1,9 @@
+#include "cleanup.h"
 #include "vkrt.h"
+#include "vulkan.h"
+#include "window.h"
+
+#include <stdlib.h>
 
 void run(VKRT* vkrt) {
     initWindow(vkrt);
@@ -15,5 +20,5 @@ int main() {
     VKRT vkrt;
     run(&vkrt);
 
-    return 0;
+    return EXIT_SUCCESS;
 }
