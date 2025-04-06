@@ -4,6 +4,12 @@
 #include <stdio.h>
 #include <string.h>
 
+const char* deviceExtensions[] = {
+    VK_KHR_SWAPCHAIN_EXTENSION_NAME
+};
+
+const uint32_t numDeviceExtensions = 1;
+
 void pickPhysicalDevice(VKRT* vkrt) {
     vkrt->physicalDevice = VK_NULL_HANDLE;
 
@@ -73,8 +79,8 @@ void createLogicalDevice(VKRT* vkrt) {
 
     createInfo.pEnabledFeatures = &deviceFeatures;
 
-    createInfo.enabledExtensionCount = 0;
-    createInfo.flags = 0;
+    createInfo.enabledExtensionCount = numDeviceExtensions;
+    createInfo.ppEnabledExtensionNames = deviceExtensions;
 
     if (enableValidationLayers) {
         createInfo.enabledLayerCount = numValidationLayers;
@@ -134,16 +140,37 @@ VkBool32 isDeviceSuitable(VkPhysicalDevice device) {
     vkGetPhysicalDeviceProperties(device, &deviceProperties);
     vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
 
-    if (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
-        if (enableValidationLayers) {
-            printf("INFO: Using device [%s].\n", deviceProperties.deviceName);
-        }
-        return 1;
+    if (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU && extensionsSupported(device)) {
+        printf("INFO: Using device [%s].\n", deviceProperties.deviceName);
+        return VK_TRUE;
     }
 
-    return 0;
+    return VK_FALSE;
 }
 
 VkBool32 isQueueFamilyComplete(QueueFamily indices) {
     return indices.graphics >= 0 && indices.present >= 0;
+}
+
+VkBool32 extensionsSupported(VkPhysicalDevice device) {
+    uint32_t extensionCount;
+    vkEnumerateDeviceExtensionProperties(device, NULL, &extensionCount, NULL);
+
+    VkExtensionProperties* availableExtensions = (VkExtensionProperties*)malloc(extensionCount * sizeof(VkExtensionProperties));
+    vkEnumerateDeviceExtensionProperties(device, NULL, &extensionCount, availableExtensions);
+
+    for (uint32_t i = 0; i < numDeviceExtensions; i++) {
+        VkBool32 extensionAvailable = VK_FALSE;
+        for (uint32_t j = 0; j < extensionCount; j++) {
+            if (!strcmp(deviceExtensions[i], availableExtensions[j].extensionName)) {
+                extensionAvailable = VK_TRUE;
+            }
+        }
+
+        if (!extensionAvailable) {
+            return VK_FALSE;
+        }
+    }
+
+    return VK_TRUE;
 }

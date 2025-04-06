@@ -26,7 +26,7 @@ int checkValidationLayerSupport() {
         int layerFound = 0;
 
         for (int j = 0; j < layerCount; j++) {
-            if (strcmp(validationLayers[i], availableLayers[j].layerName) == 0) {
+            if (!strcmp(validationLayers[i], availableLayers[j].layerName)) {
                 layerFound = 1;
                 break;
             }
@@ -34,12 +34,12 @@ int checkValidationLayerSupport() {
 
         if (!layerFound) {
             free(availableLayers);
-            return 0;
+            return VK_FALSE;
         }
     }
 
     free(availableLayers);
-    return 1;
+    return VK_TRUE;
 }
 
 const char** getRequiredExtensions(uint32_t* extensionCount) {
