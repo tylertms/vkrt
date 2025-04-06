@@ -4,13 +4,15 @@
 #include <string.h>
 
 const char* validationLayers[] = {
-    "VK_LAYER_KHRONOS_validation",
+    "VK_LAYER_KHRONOS_validation"
 };
 
+const uint32_t numValidationLayers = 1;
+
 #ifdef NODEBUG
-    const uint8_t enableValidationLayers = 0;
+    const VkBool32 enableValidationLayers = 0;
 #else
-    const uint8_t enableValidationLayers = 1;
+    const VkBool32 enableValidationLayers = 1;
 #endif
 
 int checkValidationLayerSupport() {
@@ -20,7 +22,7 @@ int checkValidationLayerSupport() {
     VkLayerProperties* availableLayers = (VkLayerProperties*)malloc(layerCount * sizeof(VkLayerProperties));
     vkEnumerateInstanceLayerProperties(&layerCount, availableLayers);
     
-    for (int i = 0; i < ARRLEN(validationLayers); i++) {
+    for (int i = 0; i < numValidationLayers; i++) {
         int layerFound = 0;
 
         for (int j = 0; j < layerCount; j++) {

@@ -2,7 +2,8 @@
 #include "vkrt.h"
 
 extern const char* validationLayers[];
-extern const uint8_t enableValidationLayers;
+extern const uint32_t numValidationLayers;
+extern const VkBool32 enableValidationLayers;
 
 int checkValidationLayerSupport();
 const char** getRequiredExtensions(uint32_t* extensionCount);

@@ -30,7 +30,7 @@ void createInstance(VKRT* vkrt) {
 
     VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo = {0};
     if (enableValidationLayers) {
-        createInfo.enabledLayerCount = ARRLEN(validationLayers);
+        createInfo.enabledLayerCount = numValidationLayers;
         createInfo.ppEnabledLayerNames = validationLayers;
 
         populateDebugMessengerCreateInfo(&debugCreateInfo);
