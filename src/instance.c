@@ -9,7 +9,7 @@ void createInstance(VKRT* vkrt) {
         exit(EXIT_FAILURE);
     }
 
-    VkApplicationInfo appInfo;
+    VkApplicationInfo appInfo = {0};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     appInfo.pApplicationName = "VKRT";
     appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
@@ -18,7 +18,7 @@ void createInstance(VKRT* vkrt) {
     appInfo.apiVersion = VK_API_VERSION_1_0;
     appInfo.pNext = 0;
 
-    VkInstanceCreateInfo createInfo;
+    VkInstanceCreateInfo createInfo = {0};
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     createInfo.pApplicationInfo = &appInfo;
 
@@ -28,7 +28,7 @@ void createInstance(VKRT* vkrt) {
     createInfo.enabledExtensionCount = extensionCount;
     createInfo.ppEnabledExtensionNames = extensions;
 
-    VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo;
+    VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo = {0};
     if (enableValidationLayers) {
         createInfo.enabledLayerCount = ARRLEN(validationLayers);
         createInfo.ppEnabledLayerNames = validationLayers;
