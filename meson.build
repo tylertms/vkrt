@@ -1,4 +1,4 @@
-project('VKRT', 'c')
+project('VKRT', 'c', default_options : ['cpp_std=c23'])
 
 cc = meson.get_compiler('c')
 
@@ -7,6 +7,7 @@ glfw3_lib = cc.find_library('glfw3', dirs: glfw3_path)
 
 sources = [
     'src/cleanup.c',
+    'src/device.c',
     'src/instance.c',
     'src/main.c',
     'src/validation.c',
