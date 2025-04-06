@@ -34,23 +34,42 @@ void pickPhysicalDevice(VKRT* vkrt) {
 }
 
 void createLogicalDevice(VKRT* vkrt) {
-    QueueFamily indices = findQueueFamilies(vkrt->physicalDevice);
-
-    VkDeviceQueueCreateInfo queueCreateInfo = {0};
-    queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    queueCreateInfo.queueFamilyIndex = indices.graphics;
-    queueCreateInfo.queueCount = 1;
+    QueueFamily indices = findQueueFamilies(vkrt);
 
     float queuePriority = 1.0f;
-    queueCreateInfo.pQueuePriorities = &queuePriority;
+
+    uint32_t uniqueQueueFamilies[2] = { indices.graphics, indices.present };
+    uint32_t uniqueQueueFamilyCount = 2;
+
+    VkDeviceQueueCreateInfo* queueCreateInfos = malloc(uniqueQueueFamilyCount * sizeof(VkDeviceQueueCreateInfo));
+    uint32_t queueCreateInfoCount = 0;
+
+    for (uint32_t i = 0; i < uniqueQueueFamilyCount; i++) {
+        VkBool32 duplicate = VK_FALSE;
+        for (uint32_t j = 0; j < queueCreateInfoCount; j++) {
+            if (uniqueQueueFamilies[i] == queueCreateInfos[j].queueFamilyIndex) {
+                duplicate = VK_TRUE;
+                break;
+            }
+        }
+        if (!duplicate) {
+            VkDeviceQueueCreateInfo queueCreateInfo = {0};
+            queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+            queueCreateInfo.queueFamilyIndex = uniqueQueueFamilies[i];
+            queueCreateInfo.queueCount = 1;
+            queueCreateInfo.pQueuePriorities = &queuePriority;
+            queueCreateInfos[queueCreateInfoCount] = queueCreateInfo;
+            queueCreateInfoCount++;
+        }
+    }
 
     VkPhysicalDeviceFeatures deviceFeatures = {0};
 
     VkDeviceCreateInfo createInfo = {0};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 
-    createInfo.pQueueCreateInfos = &queueCreateInfo;
-    createInfo.queueCreateInfoCount = 1;
+    createInfo.pQueueCreateInfos = queueCreateInfos;
+    createInfo.queueCreateInfoCount = queueCreateInfoCount;
 
     createInfo.pEnabledFeatures = &deviceFeatures;
 
@@ -58,7 +77,7 @@ void createLogicalDevice(VKRT* vkrt) {
     createInfo.flags = 0;
 
     if (enableValidationLayers) {
-        createInfo.enabledLayerCount = ARRLEN(validationLayers);
+        createInfo.enabledLayerCount = numValidationLayers;
         createInfo.ppEnabledLayerNames = validationLayers;
     } else {
         createInfo.enabledLayerCount = 0;
@@ -70,20 +89,33 @@ void createLogicalDevice(VKRT* vkrt) {
     }
 
     vkGetDeviceQueue(vkrt->device, indices.graphics, 0, &vkrt->graphicsQueue);
+    vkGetDeviceQueue(vkrt->device, indices.present, 0, &vkrt->presentQueue);
+
+    free(queueCreateInfos);
 }
 
-QueueFamily findQueueFamilies(VkPhysicalDevice device) {
+
+QueueFamily findQueueFamilies(VKRT* vkrt) {
     QueueFamily indices;
+    indices.graphics = -1;
+    indices.present = -1;
 
     uint32_t queueFamilyCount = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, NULL);
+    vkGetPhysicalDeviceQueueFamilyProperties(vkrt->physicalDevice, &queueFamilyCount, NULL);
 
     VkQueueFamilyProperties* queueFamilies = (VkQueueFamilyProperties*)malloc(queueFamilyCount * sizeof(VkQueueFamilyProperties));
-    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies);
+    vkGetPhysicalDeviceQueueFamilyProperties(vkrt->physicalDevice, &queueFamilyCount, queueFamilies);
 
     for (int i = 0; i < queueFamilyCount; i++) {
         if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
             indices.graphics = i;
+        }
+
+        VkBool32 presentSupport = VK_FALSE;
+        vkGetPhysicalDeviceSurfaceSupportKHR(vkrt->physicalDevice, i, vkrt->surface, &presentSupport);
+
+        if (presentSupport) {
+            indices.present = i;
         }
 
         if (isQueueFamilyComplete(indices)) {
@@ -96,7 +128,7 @@ QueueFamily findQueueFamilies(VkPhysicalDevice device) {
     return indices;
 }
 
-uint8_t isDeviceSuitable(VkPhysicalDevice device) {
+VkBool32 isDeviceSuitable(VkPhysicalDevice device) {
     VkPhysicalDeviceProperties deviceProperties = {0};
     VkPhysicalDeviceFeatures deviceFeatures = {0};
     vkGetPhysicalDeviceProperties(device, &deviceProperties);
@@ -112,6 +144,6 @@ uint8_t isDeviceSuitable(VkPhysicalDevice device) {
     return 0;
 }
 
-uint8_t isQueueFamilyComplete(QueueFamily indices) {
-    return indices.graphics >= 0;
+VkBool32 isQueueFamilyComplete(QueueFamily indices) {
+    return indices.graphics >= 0 && indices.present >= 0;
 }

@@ -5,10 +5,11 @@ void cleanup(VKRT* vkrt) {
     vkDestroyDevice(vkrt->device, NULL);
 
     if (enableValidationLayers) {
-        DestroyDebugUtilsMessengerEXT(vkrt->instance, vkrt->debugMessenger, 0);
+        DestroyDebugUtilsMessengerEXT(vkrt->instance, vkrt->debugMessenger, NULL);
     }
 
-    vkDestroyInstance(vkrt->instance, 0);
+    vkDestroySurfaceKHR(vkrt->instance, vkrt->surface, NULL);
+    vkDestroyInstance(vkrt->instance, NULL);
 
     glfwDestroyWindow(vkrt->window);
 

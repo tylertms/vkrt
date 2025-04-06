@@ -13,6 +13,8 @@ typedef struct VKRT {
     VkPhysicalDevice physicalDevice;
     VkDevice device;
     VkQueue graphicsQueue;
+    VkQueue presentQueue;
+    VkSurfaceKHR surface;
 } VKRT;
 
-#define ARRLEN(arr) sizeof((void *)arr) / sizeof(arr[0])
+#define COUNT_OF(x) ((sizeof(x)/sizeof(0[x])) / ((size_t)(!(sizeof(x) % sizeof(0[x])))))

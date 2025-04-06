@@ -3,10 +3,11 @@
 
 typedef struct QueueFamily {
     int32_t graphics;
+    int32_t present;
 } QueueFamily;
 
 void pickPhysicalDevice(VKRT* vkrt);
 void createLogicalDevice(VKRT* vkrt);
-uint8_t isDeviceSuitable(VkPhysicalDevice device);
-uint8_t isQueueFamilyComplete(QueueFamily indices);
-QueueFamily findQueueFamilies(VkPhysicalDevice device);
+VkBool32 isDeviceSuitable(VkPhysicalDevice device);
+VkBool32 isQueueFamilyComplete(QueueFamily indices);
+QueueFamily findQueueFamilies(VKRT* vkrt);

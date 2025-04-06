@@ -10,6 +10,7 @@ sources = [
     'src/device.c',
     'src/instance.c',
     'src/main.c',
+    'src/surface.c',
     'src/validation.c',
     'src/vulkan.c',
     'src/window.c'
