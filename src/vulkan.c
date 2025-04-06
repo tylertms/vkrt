@@ -12,4 +12,5 @@ void initVulkan(VKRT* vkrt) {
     pickPhysicalDevice(vkrt);
     createLogicalDevice(vkrt);
     createSwapChain(vkrt);
+    createImageViews(vkrt);
 }

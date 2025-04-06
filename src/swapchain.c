@@ -48,16 +48,42 @@ void createSwapChain(VKRT* vkrt) {
     createInfo.oldSwapchain = VK_NULL_HANDLE;
 
     if (vkCreateSwapchainKHR(vkrt->device, &createInfo, NULL, &vkrt->swapChain) != VK_SUCCESS) {
-        printf("ERROR: Failed to create swapchain!");
+        printf("ERROR: Failed to create swapchain!\n");
         exit(EXIT_FAILURE);
     }
 
     vkGetSwapchainImagesKHR(vkrt->device, vkrt->swapChain, &imageCount, NULL);
     vkrt->swapChainImages = (VkImage*)malloc(imageCount * sizeof(VkImage));
+    vkrt->swapChainImageCount = imageCount;
     vkGetSwapchainImagesKHR(vkrt->device, vkrt->swapChain, &imageCount, vkrt->swapChainImages);
 
     vkrt->swapChainImageFormat = surfaceFormat.format;
     vkrt->swapChainExtent = extent;
+}
+
+void createImageViews(VKRT* vkrt) {
+    vkrt->swapChainImageViews = (VkImageView*)malloc(vkrt->swapChainImageCount * sizeof(VkImageView));
+    for (size_t i = 0; i < vkrt->swapChainImageCount; i++) {
+        VkImageViewCreateInfo createInfo = {0};
+        createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        createInfo.image = vkrt->swapChainImages[i];
+        createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        createInfo.format = vkrt->swapChainImageFormat;
+        createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+        createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+        createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+        createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+        createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        createInfo.subresourceRange.baseMipLevel = 0;
+        createInfo.subresourceRange.levelCount = 1;
+        createInfo.subresourceRange.baseArrayLayer = 0;
+        createInfo.subresourceRange.layerCount = 1;
+
+        if (vkCreateImageView(vkrt->device, &createInfo, NULL, &vkrt->swapChainImageViews[i]) != VK_SUCCESS) {
+            printf("ERROR: Failed to create image views!\n");
+            exit(EXIT_FAILURE);
+        }
+    }
 }
 
 SwapChainSupportDetails querySwapChainSupport(VKRT* vkrt) {

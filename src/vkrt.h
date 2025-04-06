@@ -17,6 +17,8 @@ typedef struct VKRT {
     VkSurfaceKHR surface;
     VkSwapchainKHR swapChain;
     VkImage* swapChainImages;
+    VkImageView* swapChainImageViews;
+    size_t swapChainImageCount;
     VkFormat swapChainImageFormat;
     VkExtent2D swapChainExtent;
 } VKRT;

@@ -5,7 +5,7 @@
 
 void createInstance(VKRT* vkrt) {
     if (enableValidationLayers && !checkValidationLayerSupport()) {
-        printf("ERROR: Validation layers requested but not available!");
+        printf("ERROR: Validation layers requested but not available!\n");
         exit(EXIT_FAILURE);
     }
 

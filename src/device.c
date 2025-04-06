@@ -18,7 +18,7 @@ void pickPhysicalDevice(VKRT* vkrt) {
     vkEnumeratePhysicalDevices(vkrt->instance, &deviceCount, NULL);
 
     if (deviceCount == 0) {
-        printf("ERROR: Failed to find a GPU with Vulkan support!");
+        printf("ERROR: Failed to find a GPU with Vulkan support!\n");
         exit(EXIT_FAILURE);
     }
 
@@ -36,7 +36,7 @@ void pickPhysicalDevice(VKRT* vkrt) {
     free(devices);
 
     if (vkrt->physicalDevice == VK_NULL_HANDLE) {
-        printf("ERROR: Failed to find a suitable GPU!");
+        printf("ERROR: Failed to find a suitable GPU!\n");
         exit(EXIT_FAILURE);
     }
 }
@@ -92,7 +92,7 @@ void createLogicalDevice(VKRT* vkrt) {
     }
 
     if (vkCreateDevice(vkrt->physicalDevice, &createInfo, NULL, &vkrt->device) != VK_SUCCESS) {
-        printf("ERROR: Failed to create logical device!");
+        printf("ERROR: Failed to create logical device!\n");
         exit(EXIT_FAILURE);
     }
 

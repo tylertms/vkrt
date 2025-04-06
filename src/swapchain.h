@@ -10,6 +10,7 @@ typedef struct SwapChainSupportDetails {
 } SwapChainSupportDetails;
 
 void createSwapChain(VKRT* vkrt);
+void createImageViews(VKRT* vkrt);
 SwapChainSupportDetails querySwapChainSupport(VKRT* vkrt);
 VkSurfaceFormatKHR chooseSwapSurfaceFormat(SwapChainSupportDetails* supportDetails);
 VkPresentModeKHR chooseSwapPresentMode(SwapChainSupportDetails* supportDetails);
