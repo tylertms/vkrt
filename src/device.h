@@ -11,7 +11,7 @@ typedef struct QueueFamily {
 
 void pickPhysicalDevice(VKRT* vkrt);
 void createLogicalDevice(VKRT* vkrt);
-VkBool32 isDeviceSuitable(VkPhysicalDevice device);
+VkBool32 isDeviceSuitable(VKRT* vkrt);
 VkBool32 isQueueFamilyComplete(QueueFamily indices);
 QueueFamily findQueueFamilies(VKRT* vkrt);
 VkBool32 extensionsSupported(VkPhysicalDevice device);

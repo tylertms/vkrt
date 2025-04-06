@@ -11,6 +11,7 @@ sources = [
     'src/instance.c',
     'src/main.c',
     'src/surface.c',
+    'src/swapchain.c',
     'src/validation.c',
     'src/vulkan.c',
     'src/window.c'

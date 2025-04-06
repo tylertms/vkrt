@@ -1,5 +1,6 @@
 #include "device.h"
 #include "validation.h"
+#include "swapchain.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -25,10 +26,11 @@ void pickPhysicalDevice(VKRT* vkrt) {
     vkEnumeratePhysicalDevices(vkrt->instance, &deviceCount, devices);
 
     for (int i = 0; i < deviceCount; i++) {
-        if (isDeviceSuitable(devices[i])) {
-            vkrt->physicalDevice = devices[i];
+        vkrt->physicalDevice = devices[i];
+        if (isDeviceSuitable(vkrt)) {
             break;
         }
+        vkrt->physicalDevice = VK_NULL_HANDLE;
     }
 
     free(devices);
@@ -134,13 +136,29 @@ QueueFamily findQueueFamilies(VKRT* vkrt) {
     return indices;
 }
 
-VkBool32 isDeviceSuitable(VkPhysicalDevice device) {
+VkBool32 isDeviceSuitable(VKRT* vkrt) {
     VkPhysicalDeviceProperties deviceProperties = {0};
     VkPhysicalDeviceFeatures deviceFeatures = {0};
-    vkGetPhysicalDeviceProperties(device, &deviceProperties);
-    vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
+    vkGetPhysicalDeviceProperties(vkrt->physicalDevice, &deviceProperties);
+    vkGetPhysicalDeviceFeatures(vkrt->physicalDevice, &deviceFeatures);
 
-    if (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU && extensionsSupported(device)) {
+    QueueFamily indices = findQueueFamilies(vkrt);
+    VkBool32 queueFamilyComplete = isQueueFamilyComplete(indices);
+
+    VkBool32 extensionSupport = extensionsSupported(vkrt->physicalDevice);
+
+    VkBool32 swapChainAdequate = VK_FALSE;
+    if (extensionSupport) {
+        SwapChainSupportDetails swapChainSupport = querySwapChainSupport(vkrt);
+        swapChainAdequate = swapChainSupport.formatCount && swapChainSupport.presentModeCount;
+
+        free(swapChainSupport.formats);
+        free(swapChainSupport.presentModes);
+    }
+
+    VkBool32 validDeviceType = deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
+
+    if (queueFamilyComplete && extensionSupport && swapChainAdequate && validDeviceType) {
         printf("INFO: Using device [%s].\n", deviceProperties.deviceName);
         return VK_TRUE;
     }
