@@ -2,6 +2,8 @@
 #include "validation.h"
 
 void cleanup(VKRT* vkrt) {
+    vkDestroyDevice(vkrt->device, NULL);
+
     if (enableValidationLayers) {
         DestroyDebugUtilsMessengerEXT(vkrt->instance, vkrt->debugMessenger, 0);
     }

@@ -10,6 +10,9 @@ typedef struct VKRT {
     GLFWwindow* window;
     VkInstance instance;
     VkDebugUtilsMessengerEXT debugMessenger;
+    VkPhysicalDevice physicalDevice;
+    VkDevice device;
+    VkQueue graphicsQueue;
 } VKRT;
 
 #define ARRLEN(arr) sizeof((void *)arr) / sizeof(arr[0])
