@@ -2,6 +2,8 @@
 #include "validation.h"
 
 void cleanup(VKRT* vkrt) {
+    vkDestroySwapchainKHR(vkrt->device, vkrt->swapChain, NULL);
+
     vkDestroyDevice(vkrt->device, NULL);
 
     if (enableValidationLayers) {

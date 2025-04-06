@@ -1,5 +1,64 @@
 #include "swapchain.h"
+#include "device.h"
 #include <stdlib.h>
+#include <stdio.h>
+
+void createSwapChain(VKRT* vkrt) {
+    SwapChainSupportDetails supportDetails = querySwapChainSupport(vkrt);
+
+    VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(&supportDetails);
+    VkPresentModeKHR presentMode = chooseSwapPresentMode(&supportDetails);
+    VkExtent2D extent = chooseSwapExtent(vkrt, &supportDetails);
+
+    free(supportDetails.formats);
+    free(supportDetails.presentModes);
+
+    uint32_t imageCount = supportDetails.capabilities.minImageCount + 1;
+    if (supportDetails.capabilities.maxImageCount && imageCount > supportDetails.capabilities.maxImageCount) {
+        imageCount = supportDetails.capabilities.maxImageCount;
+    }
+
+    VkSwapchainCreateInfoKHR createInfo = {0};
+    createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    createInfo.surface = vkrt->surface;
+    createInfo.minImageCount = imageCount;
+    createInfo.imageFormat = surfaceFormat.format;
+    createInfo.imageColorSpace = surfaceFormat.colorSpace;
+    createInfo.imageExtent = extent;
+    createInfo.imageArrayLayers = 1;
+    createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+    QueueFamily indices = findQueueFamilies(vkrt);
+    uint32_t queueFamilyIndices[] = {indices.graphics, indices.present};
+
+    if (indices.graphics != indices.present) {
+        createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+        createInfo.queueFamilyIndexCount = 2;
+        createInfo.pQueueFamilyIndices = queueFamilyIndices;
+    } else {
+        createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        createInfo.queueFamilyIndexCount = 0;
+        createInfo.pQueueFamilyIndices = NULL;
+    }
+
+    createInfo.preTransform = supportDetails.capabilities.currentTransform;
+    createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    createInfo.presentMode = presentMode;
+    createInfo.clipped = VK_TRUE;
+    createInfo.oldSwapchain = VK_NULL_HANDLE;
+
+    if (vkCreateSwapchainKHR(vkrt->device, &createInfo, NULL, &vkrt->swapChain) != VK_SUCCESS) {
+        printf("ERROR: Failed to create swapchain!");
+        exit(EXIT_FAILURE);
+    }
+
+    vkGetSwapchainImagesKHR(vkrt->device, vkrt->swapChain, &imageCount, NULL);
+    vkrt->swapChainImages = (VkImage*)malloc(imageCount * sizeof(VkImage));
+    vkGetSwapchainImagesKHR(vkrt->device, vkrt->swapChain, &imageCount, vkrt->swapChainImages);
+
+    vkrt->swapChainImageFormat = surfaceFormat.format;
+    vkrt->swapChainExtent = extent;
+}
 
 SwapChainSupportDetails querySwapChainSupport(VKRT* vkrt) {
     SwapChainSupportDetails details;
@@ -25,4 +84,54 @@ SwapChainSupportDetails querySwapChainSupport(VKRT* vkrt) {
     }
 
     return details;
+}
+
+VkSurfaceFormatKHR chooseSwapSurfaceFormat(SwapChainSupportDetails* supportDetails) {
+    for (uint32_t i = 0; i < supportDetails->formatCount; i++) {
+        VkSurfaceFormatKHR format = supportDetails->formats[i];
+        if (format.format == VK_FORMAT_B8G8R8A8_SRGB && format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+            return format;
+        }
+    }
+
+    return supportDetails->formats[0];
+}
+
+VkPresentModeKHR chooseSwapPresentMode(SwapChainSupportDetails* supportDetails) {
+    for (uint32_t i = 0; i < supportDetails->presentModeCount; i++) {
+        if (supportDetails->presentModes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
+            return supportDetails->presentModes[i];
+        }
+    }
+
+    return VK_PRESENT_MODE_FIFO_KHR;
+}
+
+VkExtent2D chooseSwapExtent(VKRT* vkrt, SwapChainSupportDetails* supportDetails) {
+    VkSurfaceCapabilitiesKHR capabilities = supportDetails->capabilities;
+    if (capabilities.currentExtent.width != UINT32_MAX) {
+        return capabilities.currentExtent;
+    } else {
+        int width, height;
+        glfwGetFramebufferSize(vkrt->window, &width, &height);
+
+        VkExtent2D actualExtent = {
+            (uint32_t)width,
+            (uint32_t)height
+        };
+
+        if (actualExtent.width < capabilities.minImageExtent.width) {
+            actualExtent.width = capabilities.minImageExtent.width;
+        } else if (actualExtent.width > capabilities.maxImageExtent.width) {
+            actualExtent.width = capabilities.maxImageExtent.width;
+        }
+
+        if (actualExtent.height < capabilities.minImageExtent.height) {
+            actualExtent.height = capabilities.minImageExtent.height;
+        } else if (actualExtent.height > capabilities.maxImageExtent.height) {
+            actualExtent.height = capabilities.maxImageExtent.height;
+        }
+
+        return actualExtent;
+    }
 }

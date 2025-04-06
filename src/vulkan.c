@@ -2,6 +2,7 @@
 #include "device.h"
 #include "instance.h"
 #include "surface.h"
+#include "swapchain.h"
 #include "validation.h"
 
 void initVulkan(VKRT* vkrt) {
@@ -10,4 +11,5 @@ void initVulkan(VKRT* vkrt) {
     createSurface(vkrt);
     pickPhysicalDevice(vkrt);
     createLogicalDevice(vkrt);
+    createSwapChain(vkrt);
 }

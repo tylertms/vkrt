@@ -9,4 +9,8 @@ typedef struct SwapChainSupportDetails {
     uint32_t presentModeCount;
 } SwapChainSupportDetails;
 
+void createSwapChain(VKRT* vkrt);
 SwapChainSupportDetails querySwapChainSupport(VKRT* vkrt);
+VkSurfaceFormatKHR chooseSwapSurfaceFormat(SwapChainSupportDetails* supportDetails);
+VkPresentModeKHR chooseSwapPresentMode(SwapChainSupportDetails* supportDetails);
+VkExtent2D chooseSwapExtent(VKRT* vkrt, SwapChainSupportDetails* supportDetails);

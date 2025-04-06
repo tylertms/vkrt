@@ -149,11 +149,11 @@ VkBool32 isDeviceSuitable(VKRT* vkrt) {
 
     VkBool32 swapChainAdequate = VK_FALSE;
     if (extensionSupport) {
-        SwapChainSupportDetails swapChainSupport = querySwapChainSupport(vkrt);
-        swapChainAdequate = swapChainSupport.formatCount && swapChainSupport.presentModeCount;
+        SwapChainSupportDetails supportDetails = querySwapChainSupport(vkrt);
+        swapChainAdequate = supportDetails.formatCount && supportDetails.presentModeCount;
 
-        free(swapChainSupport.formats);
-        free(swapChainSupport.presentModes);
+        free(supportDetails.formats);
+        free(supportDetails.presentModes);
     }
 
     VkBool32 validDeviceType = deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
