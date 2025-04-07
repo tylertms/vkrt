@@ -3,7 +3,7 @@
 #include <stdlib.h>
 
 int main() {
-    VKRT vkrt;
+    VKRT vkrt = {0};
     run(&vkrt);
 
     return EXIT_SUCCESS;

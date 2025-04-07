@@ -6,6 +6,8 @@
 #define WIDTH 800
 #define HEIGHT 600
 
+#define MAX_FRAMES_IN_FLIGHT 2
+
 typedef struct VKRT {
     GLFWwindow* window;
     VkInstance instance;
@@ -26,10 +28,11 @@ typedef struct VKRT {
     VkRenderPass renderPass;
     VkFramebuffer* swapChainFramebuffers;
     VkCommandPool commandPool;
-    VkCommandBuffer commandBuffer;
-    VkSemaphore imageAvailableSemaphore;
-    VkSemaphore renderFinishedSemaphore;
-    VkFence inFlightFence;
+    VkCommandBuffer commandBuffers[MAX_FRAMES_IN_FLIGHT];
+    VkSemaphore imageAvailableSemaphores[MAX_FRAMES_IN_FLIGHT];
+    VkSemaphore renderFinishedSemaphores[MAX_FRAMES_IN_FLIGHT];
+    VkFence inFlightFences[MAX_FRAMES_IN_FLIGHT];
+    uint32_t currentFrame;
     VkBuffer shaderBindingTableBuffer;
     VkStridedDeviceAddressRegionKHR shaderBindingTables[4];
 } VKRT;

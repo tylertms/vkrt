@@ -24,11 +24,11 @@ void initVulkan(VKRT* vkrt) {
     createSurface(vkrt);
     pickPhysicalDevice(vkrt);
     createLogicalDevice(vkrt);
-    setupShaderBindingTable(vkrt);
     createSwapChain(vkrt);
     createImageViews(vkrt);
     createRenderPass(vkrt);
     createRayTracingPipeline(vkrt);
+    setupShaderBindingTable(vkrt);
     createFramebuffers(vkrt);
     createCommandPool(vkrt);
     createCommandBuffer(vkrt);
@@ -36,9 +36,11 @@ void initVulkan(VKRT* vkrt) {
 }
 
 void deinit(VKRT* vkrt) {
-    vkDestroySemaphore(vkrt->device, vkrt->imageAvailableSemaphore, NULL);
-    vkDestroySemaphore(vkrt->device, vkrt->renderFinishedSemaphore, NULL);
-    vkDestroyFence(vkrt->device, vkrt->inFlightFence, NULL);
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        vkDestroySemaphore(vkrt->device, vkrt->imageAvailableSemaphores[i], NULL);
+        vkDestroySemaphore(vkrt->device, vkrt->renderFinishedSemaphores[i], NULL);
+        vkDestroyFence(vkrt->device, vkrt->inFlightFences[i], NULL);
+    }
 
     vkDestroyCommandPool(vkrt->device, vkrt->commandPool, NULL);
     

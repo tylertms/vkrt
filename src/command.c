@@ -19,14 +19,14 @@ void createCommandPool(VKRT* vkrt) {
     }
 }
 
-void createCommandBuffer(VKRT* vkrt) {
+void createCommandBuffers(VKRT* vkrt) {
     VkCommandBufferAllocateInfo allocInfo = {0};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     allocInfo.commandPool = vkrt->commandPool;
     allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    allocInfo.commandBufferCount = 1;
+    allocInfo.commandBufferCount = MAX_FRAMES_IN_FLIGHT;
     
-    if (vkAllocateCommandBuffers(vkrt->device, &allocInfo, &vkrt->commandBuffer) != VK_SUCCESS) {
+    if (vkAllocateCommandBuffers(vkrt->device, &allocInfo, vkrt->commandBuffers) != VK_SUCCESS) {
         perror("ERROR: Failed to allocate command buffers");
         exit(EXIT_FAILURE);
     }
@@ -38,7 +38,7 @@ void recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
     beginInfo.flags = 0;
     beginInfo.pInheritanceInfo = NULL;
 
-    if (vkBeginCommandBuffer(vkrt->commandBuffer, &beginInfo) != VK_SUCCESS) {
+    if (vkBeginCommandBuffer(vkrt->commandBuffers[vkrt->currentFrame], &beginInfo) != VK_SUCCESS) {
         perror("ERROR: Failed to begin recording command buffer");
         exit(EXIT_FAILURE);
     }
@@ -54,9 +54,9 @@ void recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
     renderPassInfo.clearValueCount = 1;
     renderPassInfo.pClearValues = &clearColor;
 
-    vkCmdBeginRenderPass2(vkrt->commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBeginRenderPass2(vkrt->commandBuffers[vkrt->currentFrame], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-    vkCmdBindPipeline(vkrt->commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, vkrt->rayTracingPipeline);
+    vkCmdBindPipeline(vkrt->commandBuffers[vkrt->currentFrame], VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, vkrt->rayTracingPipeline);
 
     VkViewport viewport = {0};
     viewport.x = 0.0f;
@@ -65,51 +65,51 @@ void recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
     viewport.height = (float)vkrt->swapChainExtent.height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
-    vkCmdSetViewport(vkrt->commandBuffer, 0, 1, &viewport);
+    vkCmdSetViewport(vkrt->commandBuffers[vkrt->currentFrame], 0, 1, &viewport);
 
     VkRect2D scissor = {0};
     scissor.offset = (VkOffset2D){0, 0};
     scissor.extent = vkrt->swapChainExtent;
-    vkCmdSetScissor(vkrt->commandBuffer, 0, 1, &scissor);
+    vkCmdSetScissor(vkrt->commandBuffers[vkrt->currentFrame], 0, 1, &scissor);
 
     // TODO
     //vkCmdTraceRaysKHR(vkrt->commandBuffer, &vkrt->shaderBindingTables[0], &vkrt->shaderBindingTables[1], &vkrt->shaderBindingTables[2], &vkrt->shaderBindingTables[3], vkrt->swapChainExtent.width, vkrt->swapChainExtent.height, 1);
 
-    vkCmdEndRenderPass(vkrt->commandBuffer);
+    vkCmdEndRenderPass(vkrt->commandBuffers[vkrt->currentFrame]);
 
-    if (vkEndCommandBuffer(vkrt->commandBuffer) != VK_SUCCESS) {
+    if (vkEndCommandBuffer(vkrt->commandBuffers[vkrt->currentFrame]) != VK_SUCCESS) {
         perror("ERROR: Failed to record the command buffer");
         exit(EXIT_FAILURE);
     }
 }
 
 void drawFrame(VKRT* vkrt) {
-    vkWaitForFences(vkrt->device, 1, &vkrt->inFlightFence, VK_TRUE, UINT64_MAX);
-    vkResetFences(vkrt->device, 1, &vkrt->inFlightFence);
+    vkWaitForFences(vkrt->device, 1, &vkrt->inFlightFences[vkrt->currentFrame], VK_TRUE, UINT64_MAX);
+    vkResetFences(vkrt->device, 1, &vkrt->inFlightFences[vkrt->currentFrame]);
 
     uint32_t imageIndex;
-    vkAcquireNextImageKHR(vkrt->device, vkrt->swapChain, UINT64_MAX, vkrt->imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+    vkAcquireNextImageKHR(vkrt->device, vkrt->swapChain, UINT64_MAX, vkrt->imageAvailableSemaphores[vkrt->currentFrame], VK_NULL_HANDLE, &imageIndex);
 
-    vkResetCommandBuffer(vkrt->commandBuffer, 0);
+    vkResetCommandBuffer(vkrt->commandBuffers[vkrt->currentFrame], 0);
     recordCommandBuffer(vkrt, imageIndex);
 
     VkSubmitInfo submitInfo = {0};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
-    VkSemaphore waitSemaphores[] = {vkrt->imageAvailableSemaphore};
+    VkSemaphore waitSemaphores[] = {vkrt->imageAvailableSemaphores[vkrt->currentFrame]};
     VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
     submitInfo.waitSemaphoreCount = 1;
     submitInfo.pWaitSemaphores = waitSemaphores;
     submitInfo.pWaitDstStageMask = waitStages;
 
     submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &vkrt->commandBuffer;
+    submitInfo.pCommandBuffers = &vkrt->commandBuffers[vkrt->currentFrame];
 
-    VkSemaphore signalSemaphores[] = {vkrt->renderFinishedSemaphore};
+    VkSemaphore signalSemaphores[] = {vkrt->renderFinishedSemaphores[vkrt->currentFrame]};
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = signalSemaphores;
 
-    if (vkQueueSubmit(vkrt->graphicsQueue, 1, &submitInfo, vkrt->inFlightFence) != VK_SUCCESS) {
+    if (vkQueueSubmit(vkrt->graphicsQueue, 1, &submitInfo, vkrt->inFlightFences[vkrt->currentFrame]) != VK_SUCCESS) {
         perror("ERROR: Failed to submit draw command buffer");
         exit(EXIT_FAILURE);
     }
@@ -127,6 +127,8 @@ void drawFrame(VKRT* vkrt) {
     presentInfo.pImageIndices = &imageIndex;
 
     vkQueuePresentKHR(vkrt->presentQueue, &presentInfo);
+
+    vkrt->currentFrame = (vkrt->currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
 
 void setupShaderBindingTable(VKRT* vkrt) {
