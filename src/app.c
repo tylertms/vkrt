@@ -24,6 +24,7 @@ void initVulkan(VKRT* vkrt) {
     createSurface(vkrt);
     pickPhysicalDevice(vkrt);
     createLogicalDevice(vkrt);
+    setupShaderBindingTable(vkrt);
     createSwapChain(vkrt);
     createImageViews(vkrt);
     createRenderPass(vkrt);

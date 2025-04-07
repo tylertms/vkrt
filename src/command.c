@@ -1,7 +1,9 @@
 #include "command.h"
 #include "device.h"
+#include "swapchain.h"
 
 #include <stdlib.h>
+#include <stdio.h>
 
 void createCommandPool(VKRT* vkrt) {
     QueueFamily indices = findQueueFamilies(vkrt);
@@ -71,7 +73,7 @@ void recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
     vkCmdSetScissor(vkrt->commandBuffer, 0, 1, &scissor);
 
     // TODO
-    vkCmdTraceRaysKHR(vkrt->commandBuffer);
+    //vkCmdTraceRaysKHR(vkrt->commandBuffer, &vkrt->shaderBindingTables[0], &vkrt->shaderBindingTables[1], &vkrt->shaderBindingTables[2], &vkrt->shaderBindingTables[3], vkrt->swapChainExtent.width, vkrt->swapChainExtent.height, 1);
 
     vkCmdEndRenderPass(vkrt->commandBuffer);
 
@@ -125,4 +127,28 @@ void drawFrame(VKRT* vkrt) {
     presentInfo.pImageIndices = &imageIndex;
 
     vkQueuePresentKHR(vkrt->presentQueue, &presentInfo);
+}
+
+void setupShaderBindingTable(VKRT* vkrt) {
+    VkPhysicalDeviceRayTracingPipelinePropertiesKHR rayTracingProperties;
+    rayTracingProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
+
+    vkGetPhysicalDeviceProperties(vkrt->physicalDevice, (void*)&rayTracingProperties);
+
+    VkDeviceSize bindingTableSize = rayTracingProperties.shaderGroupBaseAlignment * 4;
+
+    QueueFamily indices = findQueueFamilies(vkrt);
+
+    VkBufferCreateInfo bindingTableCreateInfo;
+    bindingTableCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bindingTableCreateInfo.size = bindingTableSize;
+    bindingTableCreateInfo.usage = VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+    bindingTableCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    bindingTableCreateInfo.queueFamilyIndexCount = 1;
+    bindingTableCreateInfo.pQueueFamilyIndices = (uint32_t*)&indices.graphics;
+
+    if (vkCreateBuffer(vkrt->device, &bindingTableCreateInfo, NULL, &vkrt->shaderBindingTableBuffer) != VK_SUCCESS) {
+        perror("ERROR: Failed to create shader binding table buffer");
+        exit(EXIT_FAILURE);
+    }
 }
