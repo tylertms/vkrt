@@ -16,3 +16,67 @@ void createCommandPool(VKRT* vkrt) {
         exit(EXIT_FAILURE);
     }
 }
+
+void createCommandBuffer(VKRT* vkrt) {
+    VkCommandBufferAllocateInfo allocInfo = {0};
+    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocInfo.commandPool = vkrt->commandPool;
+    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocInfo.commandBufferCount = 1;
+    
+    if (vkAllocateCommandBuffers(vkrt->device, &allocInfo, &vkrt->commandBuffer) != VK_SUCCESS) {
+        perror("ERROR: Failed to allocate command buffers");
+        exit(EXIT_FAILURE);
+    }
+}
+
+void recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
+    VkCommandBufferBeginInfo beginInfo = {0};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = 0;
+    beginInfo.pInheritanceInfo = NULL;
+
+    if (vkBeginCommandBuffer(vkrt->commandBuffer, &beginInfo) != VK_SUCCESS) {
+        perror("ERROR: Failed to begin recording command buffer");
+        exit(EXIT_FAILURE);
+    }
+
+    VkRenderPassBeginInfo renderPassInfo = {0};
+    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    renderPassInfo.renderPass = vkrt->renderPass;
+    renderPassInfo.framebuffer = vkrt->swapChainFramebuffers[imageIndex];
+    renderPassInfo.renderArea.offset = (VkOffset2D){0, 0};
+    renderPassInfo.renderArea.extent = vkrt->swapChainExtent;
+
+    VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
+    renderPassInfo.clearValueCount = 1;
+    renderPassInfo.pClearValues = &clearColor;
+
+    vkCmdBeginRenderPass2(vkrt->commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+    vkCmdBindPipeline(vkrt->commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, vkrt->rayTracingPipeline);
+
+    VkViewport viewport = {0};
+    viewport.x = 0.0f;
+    viewport.y = 0.0f;
+    viewport.width = (float)vkrt->swapChainExtent.width;
+    viewport.height = (float)vkrt->swapChainExtent.height;
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+    vkCmdSetViewport(vkrt->commandBuffer, 0, 1, &viewport);
+
+    VkRect2D scissor = {0};
+    scissor.offset = (VkOffset2D){0, 0};
+    scissor.extent = vkrt->swapChainExtent;
+    vkCmdSetScissor(vkrt->commandBuffer, 0, 1, &scissor);
+
+    // TODO
+    vkCmdTraceRaysKHR(vkrt->commandBuffer);
+
+    vkCmdEndRenderPass(vkrt->commandBuffer);
+
+    if (vkEndCommandBuffer(vkrt->commandBuffer) != VK_SUCCESS) {
+        perror("ERROR: Failed to record the command buffer");
+        exit(EXIT_FAILURE);
+    }
+}
