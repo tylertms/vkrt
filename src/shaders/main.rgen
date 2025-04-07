@@ -1,21 +1,34 @@
 #version 460 core
 #extension GL_EXT_ray_tracing : enable
+
 layout(location = 0) rayPayloadEXT vec4 payload;
-layout(binding = 0, set = 0) uniform accelerationStructureEXT acc;
-layout(binding = 1, rgba32f) uniform image2D img;
-layout(binding = 1, set = 0) uniform rayParams
-{
-    vec3 rayOrigin;
-    vec3 rayDir;
-    uint sbtOffset;
-    uint sbtStride;
-    uint missIndex;
-};
+layout(set = 0, binding = 0) uniform accelerationStructureEXT acc;
+
 void main() {
-    traceRayEXT(acc, gl_RayFlagsOpaqueEXT, 0xff, sbtOffset,
-                sbtStride, missIndex, rayOrigin, 0.0,
-                computeDir(rayDir, gl_LaunchIDEXT, gl_LaunchSizeEXT),
-                100.0f, 0 /* payload */);
-    imgColor = payload + vec4(blendColor) ;
-    imageStore(img, ivec2(gl_LaunchIDEXT), payload);
+    // Define the origin and direction of the ray
+    vec3 rayOrigin = vec3(0.0, 0.0, 0.0);
+    vec3 rayDirection = normalize(vec3(1.0, 0.0, 0.0));
+
+    // Set the ray tracing parameters
+    uint rayFlags = 0;        // No special flags
+    uint cullMask = 0;        // No culling mask
+    uint sbtRecordOffset = 0; // No offset for the shader binding table record
+    uint sbtRecordStride = 0; // No stride for the shader binding table record
+    uint missIndex = 0;       // Miss shader index
+
+    // Trace the ray through the acceleration structure
+    traceRayEXT(acc, 
+                rayFlags, 
+                cullMask, 
+                sbtRecordOffset, 
+                sbtRecordStride, 
+                missIndex, 
+                rayOrigin, 
+                0.0,              // Ray Tmin
+                rayDirection,     // Ray Direction
+                100000.0,         // Ray Tmax
+                0);               // Payload (set to 0 initially)
+
+    // Set the color of the ray's payload upon hit or miss
+    payload = vec4(1.0, 0.0, 0.0, 1.0); // Red color on hit (can be adjusted)
 }

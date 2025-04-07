@@ -91,7 +91,7 @@ void setupDebugMessenger(VKRT* vkrt) {
     populateDebugMessengerCreateInfo(&createInfo);
 
     if (CreateDebugUtilsMessengerEXT(vkrt->instance, &createInfo, 0, &vkrt->debugMessenger) != VK_SUCCESS) {
-        printf("ERROR: Failed to set up debug messenger!\n");
+        perror("ERROR: Failed to set up debug messenger");
         exit(EXIT_FAILURE);
     }
 }

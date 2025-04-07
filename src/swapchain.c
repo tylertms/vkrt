@@ -48,7 +48,7 @@ void createSwapChain(VKRT* vkrt) {
     createInfo.oldSwapchain = VK_NULL_HANDLE;
 
     if (vkCreateSwapchainKHR(vkrt->device, &createInfo, NULL, &vkrt->swapChain) != VK_SUCCESS) {
-        printf("ERROR: Failed to create swapchain!\n");
+        perror("ERROR: Failed to create swapchain");
         exit(EXIT_FAILURE);
     }
 
@@ -80,7 +80,7 @@ void createImageViews(VKRT* vkrt) {
         createInfo.subresourceRange.layerCount = 1;
 
         if (vkCreateImageView(vkrt->device, &createInfo, NULL, &vkrt->swapChainImageViews[i]) != VK_SUCCESS) {
-            printf("ERROR: Failed to create image views!\n");
+            perror("ERROR: Failed to create image views");
             exit(EXIT_FAILURE);
         }
     }
@@ -159,5 +159,29 @@ VkExtent2D chooseSwapExtent(VKRT* vkrt, SwapChainSupportDetails* supportDetails)
         }
 
         return actualExtent;
+    }
+}
+
+void createFramebuffers(VKRT* vkrt) {
+    vkrt->swapChainFramebuffers = (VkFramebuffer*)malloc(vkrt->swapChainImageCount * sizeof(VkFramebuffer));
+
+    for (size_t i = 0; i < vkrt->swapChainImageCount; i++) {
+        VkImageView attachments[] = {
+            vkrt->swapChainImageViews[i]
+        };
+
+        VkFramebufferCreateInfo framebufferInfo = {0};
+        framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        framebufferInfo.renderPass = vkrt->renderPass;
+        framebufferInfo.attachmentCount = 1;
+        framebufferInfo.pAttachments = attachments;
+        framebufferInfo.width = vkrt->swapChainExtent.width;
+        framebufferInfo.height = vkrt->swapChainExtent.height;
+        framebufferInfo.layers = 1;
+
+        if (vkCreateFramebuffer(vkrt->device, &framebufferInfo, NULL, &vkrt->swapChainFramebuffers[i]) != VK_SUCCESS) {
+            perror("ERROR: Failed to create framebuffer");
+            exit(EXIT_FAILURE);
+        }
     }
 }

@@ -5,7 +5,7 @@
 const char* readFile(const char* filename, size_t* fileSize) {
     FILE* file = fopen(filename, "rb");
     if (file == NULL) {
-        perror("ERROR: Failed to open file!");
+        perror("ERROR: Failed to open file");
         return NULL;
     }
 
@@ -28,11 +28,11 @@ const char* readFile(const char* filename, size_t* fileSize) {
 
 void createRayTracingPipeline(VKRT* vkrt) {
     size_t rayGenLen;
-    const char* rayGenCode = readFile("shaders/rayGen.glsl", &rayGenLen);
+    const char* rayGenCode = readFile("./shaders/rgen.spv", &rayGenLen);
     size_t closestHitLen;
-    const char* closestHitCode = readFile("shaders/closestHit.glsl", &closestHitLen);
+    const char* closestHitCode = readFile("./shaders/rchit.spv", &closestHitLen);
     size_t missLen;
-    const char* missCode = readFile("shaders/miss.glsl", &missLen);
+    const char* missCode = readFile("./shaders/rmiss.spv", &missLen);
 
     VkShaderModule rayGenModule = createShaderModule(vkrt, rayGenCode, rayGenLen);
     VkShaderModule closestHitModule = createShaderModule(vkrt, closestHitCode, closestHitLen);
@@ -72,30 +72,73 @@ void createRayTracingPipeline(VKRT* vkrt) {
     dynamicState.dynamicStateCount = (uint32_t)COUNT_OF(dynamicStates);
     dynamicState.pDynamicStates = dynamicStates;
 
-    VkPipelineViewportStateCreateInfo viewportState = {0};
-    viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-    viewportState.viewportCount = 1;
-    viewportState.scissorCount = 1;
-
     VkPipelineLayoutCreateInfo pipelineLayoutInfo = {0};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = 0;
     pipelineLayoutInfo.pushConstantRangeCount = 0;
 
     if (vkCreatePipelineLayout(vkrt->device, &pipelineLayoutInfo, NULL, &vkrt->pipelineLayout) != VK_SUCCESS) {
-        printf("ERROR: Failed to create pipeline layout!\n");
+        perror("ERROR: Failed to create pipeline layout");
         exit(EXIT_FAILURE);
     }
 
-    VkRayTracingPipelineCreateInfoKHR rayTracingPipelineCreateInfo = {0};
-    rayTracingPipelineCreateInfo.sType = VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR;
-    rayTracingPipelineCreateInfo.stageCount = 3;
-    rayTracingPipelineCreateInfo.maxPipelineRayRecursionDepth = 1;
+    VkRayTracingPipelineCreateInfoKHR pipelineCreateInfo = {0};
+    pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR;
+    pipelineCreateInfo.maxPipelineRayRecursionDepth = 1;
+    pipelineCreateInfo.stageCount = 3;
+    pipelineCreateInfo.pStages = shaderStages;
+    pipelineCreateInfo.pDynamicState = &dynamicState;
+    pipelineCreateInfo.layout = vkrt->pipelineLayout;
+    pipelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE;
+    pipelineCreateInfo.basePipelineIndex = -1;
+
+    PFN_vkCreateRayTracingPipelinesKHR pvkCreateRayTracingPipelinesKHR =
+    (PFN_vkCreateRayTracingPipelinesKHR)vkGetDeviceProcAddr(
+        vkrt->device, "vkCreateRayTracingPipelinesKHR");
+
+    if (pvkCreateRayTracingPipelinesKHR(vkrt->device, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &pipelineCreateInfo, NULL, &vkrt->rayTracingPipeline) != VK_SUCCESS) {
+        perror("ERROR: Failed to create ray tracing pipeline");
+        exit(EXIT_FAILURE);
+    }
 
     vkDestroyShaderModule(vkrt->device, rayGenModule, NULL);
     vkDestroyShaderModule(vkrt->device, closestHitModule, NULL);
     vkDestroyShaderModule(vkrt->device, missModule, NULL);
 }
+
+void createRenderPass(VKRT* vkrt) {
+    VkAttachmentDescription colorAttachment = {0};
+    colorAttachment.format = vkrt->swapChainImageFormat;
+    colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+    VkAttachmentReference colorAttachmentRef = {0};
+    colorAttachmentRef.attachment = 0;
+    colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    VkSubpassDescription subpass = {0};
+    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR;
+    subpass.colorAttachmentCount = 1;
+    subpass.pColorAttachments = &colorAttachmentRef;
+
+    VkRenderPassCreateInfo renderPassInfo = {0};
+    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    renderPassInfo.attachmentCount = 1;
+    renderPassInfo.pAttachments = &colorAttachment;
+    renderPassInfo.subpassCount = 1;
+    renderPassInfo.pSubpasses = &subpass;
+
+    if (vkCreateRenderPass(vkrt->device, &renderPassInfo, NULL, &vkrt->renderPass) != VK_SUCCESS) {
+        printf("ERROR: Failed to create render pass!\n");
+        exit(EXIT_FAILURE);
+    }
+}
+
 
 VkShaderModule createShaderModule(VKRT* vkrt, const char* spirv, size_t length) {
     VkShaderModuleCreateInfo createInfo = {0};
@@ -105,7 +148,7 @@ VkShaderModule createShaderModule(VKRT* vkrt, const char* spirv, size_t length) 
 
     VkShaderModule shaderModule;
     if (vkCreateShaderModule(vkrt->device, &createInfo, NULL, &shaderModule) != VK_SUCCESS) {
-        printf("ERROR: Failed to create shader module!\n");
+        perror("ERROR: Failed to create shader module");
         exit(EXIT_FAILURE);
     }
 

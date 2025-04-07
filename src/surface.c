@@ -4,7 +4,7 @@
 
 void createSurface(VKRT* vkrt) {
     if (glfwCreateWindowSurface(vkrt->instance, vkrt->window, NULL, &vkrt->surface) != VK_SUCCESS) {
-        printf("ERROR: Failed to create window surface!\n");
+        perror("ERROR: Failed to create window surface");
         exit(EXIT_FAILURE);
     }
 }

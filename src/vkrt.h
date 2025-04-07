@@ -22,6 +22,11 @@ typedef struct VKRT {
     VkFormat swapChainImageFormat;
     VkExtent2D swapChainExtent;
     VkPipelineLayout pipelineLayout;
+    VkPipeline rayTracingPipeline;
+    VkRenderPass renderPass;
+    VkFramebuffer* swapChainFramebuffers;
+    VkCommandPool commandPool;
+    VkCommandBuffer commandBuffer;
 } VKRT;
 
 #define COUNT_OF(x) ((sizeof(x)/sizeof(0[x])) / ((size_t)(!(sizeof(x) % sizeof(0[x])))))

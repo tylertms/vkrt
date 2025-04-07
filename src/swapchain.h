@@ -15,3 +15,4 @@ SwapChainSupportDetails querySwapChainSupport(VKRT* vkrt);
 VkSurfaceFormatKHR chooseSwapSurfaceFormat(SwapChainSupportDetails* supportDetails);
 VkPresentModeKHR chooseSwapPresentMode(SwapChainSupportDetails* supportDetails);
 VkExtent2D chooseSwapExtent(VKRT* vkrt, SwapChainSupportDetails* supportDetails);
+void createFramebuffers(VKRT* vkrt);

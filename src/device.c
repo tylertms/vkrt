@@ -8,10 +8,11 @@
 const char* deviceExtensions[] = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
     VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
-    VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME
+    VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
+    VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME
 };
 
-const uint32_t numDeviceExtensions = 3;
+const uint32_t numDeviceExtensions = 4;
 
 void pickPhysicalDevice(VKRT* vkrt) {
     vkrt->physicalDevice = VK_NULL_HANDLE;
@@ -20,7 +21,7 @@ void pickPhysicalDevice(VKRT* vkrt) {
     vkEnumeratePhysicalDevices(vkrt->instance, &deviceCount, NULL);
 
     if (deviceCount == 0) {
-        printf("ERROR: Failed to find a GPU with Vulkan support!\n");
+        perror("ERROR: Failed to find a GPU with Vulkan support");
         exit(EXIT_FAILURE);
     }
 
@@ -38,7 +39,7 @@ void pickPhysicalDevice(VKRT* vkrt) {
     free(devices);
 
     if (vkrt->physicalDevice == VK_NULL_HANDLE) {
-        printf("ERROR: Failed to find a suitable GPU!\n");
+        perror("ERROR: Failed to find a suitable GPU");
         exit(EXIT_FAILURE);
     }
 }
@@ -73,6 +74,23 @@ void createLogicalDevice(VKRT* vkrt) {
         }
     }
 
+    VkPhysicalDeviceAccelerationStructureFeaturesKHR deviceAccelerationStructureFeatures = {0};
+    deviceAccelerationStructureFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+    deviceAccelerationStructureFeatures.accelerationStructure = VK_TRUE;
+    deviceAccelerationStructureFeatures.accelerationStructureCaptureReplay = VK_FALSE;
+    deviceAccelerationStructureFeatures.accelerationStructureIndirectBuild = VK_FALSE;
+    deviceAccelerationStructureFeatures.accelerationStructureHostCommands = VK_FALSE;
+    deviceAccelerationStructureFeatures.descriptorBindingAccelerationStructureUpdateAfterBind = VK_FALSE;
+
+    VkPhysicalDeviceRayTracingPipelineFeaturesKHR deviceRayTracingPipelineFeatures = {0};
+    deviceRayTracingPipelineFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
+    deviceRayTracingPipelineFeatures.pNext = &deviceAccelerationStructureFeatures;
+    deviceRayTracingPipelineFeatures.rayTracingPipeline = VK_TRUE;
+    deviceRayTracingPipelineFeatures.rayTracingPipelineShaderGroupHandleCaptureReplay = VK_FALSE;
+    deviceRayTracingPipelineFeatures.rayTracingPipelineShaderGroupHandleCaptureReplayMixed = VK_FALSE;
+    deviceRayTracingPipelineFeatures.rayTracingPipelineTraceRaysIndirect = VK_FALSE;
+    deviceRayTracingPipelineFeatures.rayTraversalPrimitiveCulling = VK_FALSE;
+
     VkPhysicalDeviceFeatures deviceFeatures = {0};
 
     VkDeviceCreateInfo createInfo = {0};
@@ -82,6 +100,7 @@ void createLogicalDevice(VKRT* vkrt) {
     createInfo.queueCreateInfoCount = queueCreateInfoCount;
 
     createInfo.pEnabledFeatures = &deviceFeatures;
+    createInfo.pNext = &deviceRayTracingPipelineFeatures;
 
     createInfo.enabledExtensionCount = numDeviceExtensions;
     createInfo.ppEnabledExtensionNames = deviceExtensions;
@@ -94,7 +113,7 @@ void createLogicalDevice(VKRT* vkrt) {
     }
 
     if (vkCreateDevice(vkrt->physicalDevice, &createInfo, NULL, &vkrt->device) != VK_SUCCESS) {
-        printf("ERROR: Failed to create logical device!\n");
+        perror("ERROR: Failed to create logical device");
         exit(EXIT_FAILURE);
     }
 
