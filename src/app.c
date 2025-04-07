@@ -16,6 +16,8 @@ void initWindow(VKRT* vkrt) {
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
     vkrt->window = glfwCreateWindow(WIDTH, HEIGHT, "VKRT", 0, 0);
+    glfwSetWindowUserPointer(vkrt->window, vkrt);
+    glfwSetFramebufferSizeCallback(vkrt->window, framebufferResizedCallback);
 }
 
 void initVulkan(VKRT* vkrt) {
@@ -36,6 +38,13 @@ void initVulkan(VKRT* vkrt) {
 }
 
 void deinit(VKRT* vkrt) {
+    cleanupSwapChain(vkrt);
+
+    vkDestroyPipeline(vkrt->device, vkrt->rayTracingPipeline, NULL);
+    vkDestroyPipelineLayout(vkrt->device, vkrt->pipelineLayout, NULL);
+
+    vkDestroyRenderPass(vkrt->device, vkrt->renderPass, NULL);
+
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         vkDestroySemaphore(vkrt->device, vkrt->imageAvailableSemaphores[i], NULL);
         vkDestroySemaphore(vkrt->device, vkrt->renderFinishedSemaphores[i], NULL);
@@ -43,24 +52,6 @@ void deinit(VKRT* vkrt) {
     }
 
     vkDestroyCommandPool(vkrt->device, vkrt->commandPool, NULL);
-    
-    for (size_t i = 0; i < vkrt->swapChainImageCount; i++) {
-        vkDestroyFramebuffer(vkrt->device, vkrt->swapChainFramebuffers[i], NULL);
-    }
-
-    vkDestroyPipeline(vkrt->device, vkrt->rayTracingPipeline, NULL);
-    vkDestroyPipelineLayout(vkrt->device, vkrt->pipelineLayout, NULL);
-    vkDestroyRenderPass(vkrt->device, vkrt->renderPass, NULL);
-
-    for (size_t i = 0; i < vkrt->swapChainImageCount; i++) {
-        vkDestroyImageView(vkrt->device, vkrt->swapChainImageViews[i], NULL);
-    }
-
-    free(vkrt->swapChainFramebuffers);
-    free(vkrt->swapChainImageViews);
-    free(vkrt->swapChainImages);
-
-    vkDestroySwapchainKHR(vkrt->device, vkrt->swapChain, NULL);
 
     vkDestroyDevice(vkrt->device, NULL);
 
@@ -88,4 +79,9 @@ void run(VKRT* vkrt) {
     vkDeviceWaitIdle(vkrt->device);
 
     deinit(vkrt);
+}
+
+static void framebufferResizedCallback(GLFWwindow* window, int width, int height) {
+    VKRT* vkrt = (VKRT*)glfwGetWindowUserPointer(window);
+    vkrt->framebufferResized = VK_TRUE;
 }

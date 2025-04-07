@@ -33,6 +33,7 @@ typedef struct VKRT {
     VkSemaphore renderFinishedSemaphores[MAX_FRAMES_IN_FLIGHT];
     VkFence inFlightFences[MAX_FRAMES_IN_FLIGHT];
     uint32_t currentFrame;
+    VkBool32 framebufferResized;
     VkBuffer shaderBindingTableBuffer;
     VkStridedDeviceAddressRegionKHR shaderBindingTables[4];
 } VKRT;

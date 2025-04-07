@@ -61,6 +61,39 @@ void createSwapChain(VKRT* vkrt) {
     vkrt->swapChainExtent = extent;
 }
 
+void recreateSwapChain(VKRT* vkrt) {
+    int width = 0, height = 0;
+    glfwGetFramebufferSize(vkrt->window, &width, &height);
+    while (width == 0 || height == 0) {
+        glfwGetFramebufferSize(vkrt->window, &width, &height);
+        glfwWaitEvents();
+    }
+
+    vkDeviceWaitIdle(vkrt->device);
+
+    cleanupSwapChain(vkrt);
+
+    createSwapChain(vkrt);
+    createImageViews(vkrt);
+    createFramebuffers(vkrt);
+}
+
+void cleanupSwapChain(VKRT* vkrt) {
+    for (size_t i = 0; i < vkrt->swapChainImageCount; i++) {
+        vkDestroyFramebuffer(vkrt->device, vkrt->swapChainFramebuffers[i], NULL);
+    }
+
+    for (size_t i = 0; i < vkrt->swapChainImageCount; i++) {
+        vkDestroyImageView(vkrt->device, vkrt->swapChainImageViews[i], NULL);
+    }
+    
+    vkDestroySwapchainKHR(vkrt->device, vkrt->swapChain, NULL);
+
+    free(vkrt->swapChainFramebuffers);
+    free(vkrt->swapChainImageViews);
+    free(vkrt->swapChainImages);
+}
+
 void createImageViews(VKRT* vkrt) {
     vkrt->swapChainImageViews = (VkImageView*)malloc(vkrt->swapChainImageCount * sizeof(VkImageView));
     for (size_t i = 0; i < vkrt->swapChainImageCount; i++) {

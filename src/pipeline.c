@@ -195,7 +195,7 @@ void createRenderPass(VKRT* vkrt) {
     renderPassInfo.pDependencies = &dependency;
 
     if (vkCreateRenderPass(vkrt->device, &renderPassInfo, NULL, &vkrt->renderPass) != VK_SUCCESS) {
-        printf("ERROR: Failed to create render pass!\n");
+        perror("ERROR: Failed to create render pass");
         exit(EXIT_FAILURE);
     }
 }
