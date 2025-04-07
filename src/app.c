@@ -30,9 +30,15 @@ void initVulkan(VKRT* vkrt) {
     createRayTracingPipeline(vkrt);
     createFramebuffers(vkrt);
     createCommandPool(vkrt);
+    createCommandBuffer(vkrt);
+    createSyncObjects(vkrt);
 }
 
 void deinit(VKRT* vkrt) {
+    vkDestroySemaphore(vkrt->device, vkrt->imageAvailableSemaphore, NULL);
+    vkDestroySemaphore(vkrt->device, vkrt->renderFinishedSemaphore, NULL);
+    vkDestroyFence(vkrt->device, vkrt->inFlightFence, NULL);
+
     vkDestroyCommandPool(vkrt->device, vkrt->commandPool, NULL);
     
     for (size_t i = 0; i < vkrt->swapChainImageCount; i++) {
@@ -73,7 +79,10 @@ void run(VKRT* vkrt) {
 
     while (!glfwWindowShouldClose(vkrt->window)) {
         glfwPollEvents();
+        drawFrame(vkrt);
     }
+
+    vkDeviceWaitIdle(vkrt->device);
 
     deinit(vkrt);
 }

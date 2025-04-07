@@ -126,12 +126,22 @@ void createRenderPass(VKRT* vkrt) {
     subpass.colorAttachmentCount = 1;
     subpass.pColorAttachments = &colorAttachmentRef;
 
+    VkSubpassDependency dependency = {0};
+    dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+    dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependency.srcAccessMask = 0;
+    dependency.dstSubpass = 0;
+    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
     VkRenderPassCreateInfo renderPassInfo = {0};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
     renderPassInfo.attachmentCount = 1;
     renderPassInfo.pAttachments = &colorAttachment;
     renderPassInfo.subpassCount = 1;
     renderPassInfo.pSubpasses = &subpass;
+    renderPassInfo.dependencyCount = 1;
+    renderPassInfo.pDependencies = &dependency;
 
     if (vkCreateRenderPass(vkrt->device, &renderPassInfo, NULL, &vkrt->renderPass) != VK_SUCCESS) {
         printf("ERROR: Failed to create render pass!\n");
@@ -139,6 +149,23 @@ void createRenderPass(VKRT* vkrt) {
     }
 }
 
+void createSyncObjects(VKRT* vkrt) {
+    VkSemaphoreCreateInfo semaphoreInfo = {0};
+    semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+    VkFenceCreateInfo fenceInfo = {0};
+    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+    VkResult imageAvailableSemaphoreResult = vkCreateSemaphore(vkrt->device, &semaphoreInfo, NULL, &vkrt->imageAvailableSemaphore);
+    VkResult renderFinishedSemaphoreResult = vkCreateSemaphore(vkrt->device, &semaphoreInfo, NULL, &vkrt->renderFinishedSemaphore);
+    VkResult inFlightFenceResult = vkCreateFence(vkrt->device, &fenceInfo, NULL, &vkrt->inFlightFence);
+
+    if (imageAvailableSemaphoreResult != VK_SUCCESS || renderFinishedSemaphoreResult != VK_SUCCESS || inFlightFenceResult != VK_SUCCESS) {
+        perror("ERROR: Failed to create sync objects");
+        exit(EXIT_FAILURE);
+    }
+}
 
 VkShaderModule createShaderModule(VKRT* vkrt, const char* spirv, size_t length) {
     VkShaderModuleCreateInfo createInfo = {0};

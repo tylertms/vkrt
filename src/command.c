@@ -80,3 +80,49 @@ void recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
         exit(EXIT_FAILURE);
     }
 }
+
+void drawFrame(VKRT* vkrt) {
+    vkWaitForFences(vkrt->device, 1, &vkrt->inFlightFence, VK_TRUE, UINT64_MAX);
+    vkResetFences(vkrt->device, 1, &vkrt->inFlightFence);
+
+    uint32_t imageIndex;
+    vkAcquireNextImageKHR(vkrt->device, vkrt->swapChain, UINT64_MAX, vkrt->imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+
+    vkResetCommandBuffer(vkrt->commandBuffer, 0);
+    recordCommandBuffer(vkrt, imageIndex);
+
+    VkSubmitInfo submitInfo = {0};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+
+    VkSemaphore waitSemaphores[] = {vkrt->imageAvailableSemaphore};
+    VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+    submitInfo.waitSemaphoreCount = 1;
+    submitInfo.pWaitSemaphores = waitSemaphores;
+    submitInfo.pWaitDstStageMask = waitStages;
+
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &vkrt->commandBuffer;
+
+    VkSemaphore signalSemaphores[] = {vkrt->renderFinishedSemaphore};
+    submitInfo.signalSemaphoreCount = 1;
+    submitInfo.pSignalSemaphores = signalSemaphores;
+
+    if (vkQueueSubmit(vkrt->graphicsQueue, 1, &submitInfo, vkrt->inFlightFence) != VK_SUCCESS) {
+        perror("ERROR: Failed to submit draw command buffer");
+        exit(EXIT_FAILURE);
+    }
+
+    VkPresentInfoKHR presentInfo = {0};
+    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+
+    presentInfo.waitSemaphoreCount = 1;
+    presentInfo.pWaitSemaphores = signalSemaphores;
+
+    VkSwapchainKHR swapChains[] = {vkrt->swapChain};
+    presentInfo.swapchainCount = 1;
+    presentInfo.pSwapchains = swapChains;
+
+    presentInfo.pImageIndices = &imageIndex;
+
+    vkQueuePresentKHR(vkrt->presentQueue, &presentInfo);
+}
