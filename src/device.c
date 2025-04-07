@@ -6,10 +6,12 @@
 #include <string.h>
 
 const char* deviceExtensions[] = {
-    VK_KHR_SWAPCHAIN_EXTENSION_NAME
+    VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+    VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
+    VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME
 };
 
-const uint32_t numDeviceExtensions = 1;
+const uint32_t numDeviceExtensions = 3;
 
 void pickPhysicalDevice(VKRT* vkrt) {
     vkrt->physicalDevice = VK_NULL_HANDLE;
