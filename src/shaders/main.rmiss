@@ -1,7 +1,8 @@
-#version 460 core
+#version 460
 #extension GL_EXT_ray_tracing : enable
-layout(location = 0) rayPayloadInEXT vec4 payload;
+
+layout(location = 0) rayPayloadInEXT vec3 hitValue;
 
 void main() {
-    payload = vec4(0.0, 0.0, 1.0, 1.0);
+    hitValue = vec3(0.0, 0.0, 0.2);
 }
