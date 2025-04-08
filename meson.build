@@ -7,7 +7,9 @@ glfw3_lib = cc.find_library('glfw3', dirs: glfw3_path)
 
 sources = [
     'src/app.c',
+    'src/buffer.c',
     'src/command.c',
+    'src/descriptor.c',
     'src/device.c',
     'src/instance.c',
     'src/main.c',
