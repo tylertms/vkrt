@@ -1,4 +1,5 @@
 #include "buffer.h"
+#include "device.h"
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -9,25 +10,25 @@ void createBuffer(VKRT* vkrt, VkDeviceSize size, VkBufferUsageFlags usage, VkMem
     bufferInfo.usage = usage;
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-    if (vkCreateBuffer(vkrt->device, &bufferInfo, NULL, &buffer) != VK_SUCCESS) {
+    if (vkCreateBuffer(vkrt->device, &bufferInfo, NULL, buffer) != VK_SUCCESS) {
         perror("ERROR: Failed to create buffer");
         exit(EXIT_FAILURE);
     }
 
     VkMemoryRequirements memRequirements;
-    vkGetBufferMemoryRequirements(vkrt->device, buffer, &memRequirements);
+    vkGetBufferMemoryRequirements(vkrt->device, *buffer, &memRequirements);
 
     VkMemoryAllocateInfo allocInfo = {0};
     allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     allocInfo.allocationSize = memRequirements.size;
-    allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
+    allocInfo.memoryTypeIndex = findMemoryType(vkrt, memRequirements.memoryTypeBits, properties);
 
-    if (vkAllocateMemory(vkrt->device, &allocInfo, NULL, &bufferMemory) != VK_SUCCESS) {
+    if (vkAllocateMemory(vkrt->device, &allocInfo, NULL, bufferMemory) != VK_SUCCESS) {
         perror("ERROR: Failed to allocate buffer memory");
         exit(EXIT_FAILURE);
     }
 
-    vkBindBufferMemory(vkrt->inFlightFences, buffer, bufferMemory, 0);
+    vkBindBufferMemory(vkrt->device, *buffer, *bufferMemory, 0);
 }
 
 void copyBuffer(VKRT* vkrt, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
@@ -61,4 +62,11 @@ void copyBuffer(VKRT* vkrt, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize
     vkQueueWaitIdle(vkrt->graphicsQueue);
 
     vkFreeCommandBuffers(vkrt->device, vkrt->commandPool, 1, &commandBuffer);
+}
+
+void createUniformBuffer(VKRT* vkrt) {
+    VkDeviceSize bufferSize = sizeof(SceneUniform);
+
+    createBuffer(vkrt, bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &vkrt->uniformBuffer, &vkrt->uniformBufferMemory);
+    vkMapMemory(vkrt->device, vkrt->uniformBufferMemory, 0, bufferSize, 0, &vkrt->uniformBufferMapped);
 }
