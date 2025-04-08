@@ -62,6 +62,7 @@ void createSwapChain(VKRT* vkrt) {
 }
 
 void recreateSwapChain(VKRT* vkrt) {
+    printf("RECREATING SWAPCHAIN\n");
     int width = 0, height = 0;
     glfwGetFramebufferSize(vkrt->window, &width, &height);
     while (width == 0 || height == 0) {
@@ -75,21 +76,15 @@ void recreateSwapChain(VKRT* vkrt) {
 
     createSwapChain(vkrt);
     createImageViews(vkrt);
-    createFramebuffers(vkrt);
 }
 
 void cleanupSwapChain(VKRT* vkrt) {
-    for (size_t i = 0; i < vkrt->swapChainImageCount; i++) {
-        vkDestroyFramebuffer(vkrt->device, vkrt->swapChainFramebuffers[i], NULL);
-    }
-
     for (size_t i = 0; i < vkrt->swapChainImageCount; i++) {
         vkDestroyImageView(vkrt->device, vkrt->swapChainImageViews[i], NULL);
     }
     
     vkDestroySwapchainKHR(vkrt->device, vkrt->swapChain, NULL);
 
-    free(vkrt->swapChainFramebuffers);
     free(vkrt->swapChainImageViews);
     free(vkrt->swapChainImages);
 }
@@ -148,7 +143,7 @@ SwapChainSupportDetails querySwapChainSupport(VKRT* vkrt) {
 VkSurfaceFormatKHR chooseSwapSurfaceFormat(SwapChainSupportDetails* supportDetails) {
     for (uint32_t i = 0; i < supportDetails->formatCount; i++) {
         VkSurfaceFormatKHR format = supportDetails->formats[i];
-        if (format.format == VK_FORMAT_B8G8R8A8_SRGB && format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+        if (format.format == VK_FORMAT_R32G32B32A32_SFLOAT && format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
             return format;
         }
     }
@@ -192,29 +187,5 @@ VkExtent2D chooseSwapExtent(VKRT* vkrt, SwapChainSupportDetails* supportDetails)
         }
 
         return actualExtent;
-    }
-}
-
-void createFramebuffers(VKRT* vkrt) {
-    vkrt->swapChainFramebuffers = (VkFramebuffer*)malloc(vkrt->swapChainImageCount * sizeof(VkFramebuffer));
-
-    for (size_t i = 0; i < vkrt->swapChainImageCount; i++) {
-        VkImageView attachments[] = {
-            vkrt->swapChainImageViews[i]
-        };
-
-        VkFramebufferCreateInfo framebufferInfo = {0};
-        framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        framebufferInfo.renderPass = vkrt->renderPass;
-        framebufferInfo.attachmentCount = 1;
-        framebufferInfo.pAttachments = attachments;
-        framebufferInfo.width = vkrt->swapChainExtent.width;
-        framebufferInfo.height = vkrt->swapChainExtent.height;
-        framebufferInfo.layers = 1;
-
-        if (vkCreateFramebuffer(vkrt->device, &framebufferInfo, NULL, &vkrt->swapChainFramebuffers[i]) != VK_SUCCESS) {
-            perror("ERROR: Failed to create framebuffer");
-            exit(EXIT_FAILURE);
-        }
     }
 }
