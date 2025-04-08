@@ -1,4 +1,5 @@
 #include "command.h"
+#include "buffer.h"
 #include "device.h"
 #include "swapchain.h"
 
@@ -43,39 +44,26 @@ void recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
         exit(EXIT_FAILURE);
     }
 
-    VkRenderPassBeginInfo renderPassInfo = {0};
-    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    renderPassInfo.renderPass = vkrt->renderPass;
-    renderPassInfo.framebuffer = vkrt->swapChainFramebuffers[imageIndex];
-    renderPassInfo.renderArea.offset = (VkOffset2D){0, 0};
-    renderPassInfo.renderArea.extent = vkrt->swapChainExtent;
-
-    VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
-    renderPassInfo.clearValueCount = 1;
-    renderPassInfo.pClearValues = &clearColor;
-
-    vkCmdBeginRenderPass2(vkrt->commandBuffers[vkrt->currentFrame], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-
     vkCmdBindPipeline(vkrt->commandBuffers[vkrt->currentFrame], VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, vkrt->rayTracingPipeline);
+    vkCmdBindDescriptorSets(vkrt->commandBuffers[vkrt->currentFrame], VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, vkrt->pipelineLayout, 0, 1, &vkrt->descriptorSet, 0, NULL);
 
-    VkViewport viewport = {0};
-    viewport.x = 0.0f;
-    viewport.y = 0.0f;
-    viewport.width = (float)vkrt->swapChainExtent.width;
-    viewport.height = (float)vkrt->swapChainExtent.height;
-    viewport.minDepth = 0.0f;
-    viewport.maxDepth = 1.0f;
-    vkCmdSetViewport(vkrt->commandBuffers[vkrt->currentFrame], 0, 1, &viewport);
+    PFN_vkCmdTraceRaysKHR pvkCmdTraceRaysKHR = (PFN_vkCmdTraceRaysKHR)vkGetDeviceProcAddr(vkrt->device, "vkCmdTraceRaysKHR");
+    pvkCmdTraceRaysKHR(vkrt->commandBuffers[vkrt->currentFrame], &vkrt->shaderBindingTables[0], &vkrt->shaderBindingTables[1], &vkrt->shaderBindingTables[2], &vkrt->shaderBindingTables[3], vkrt->swapChainExtent.width, vkrt->swapChainExtent.height, 1);
 
-    VkRect2D scissor = {0};
-    scissor.offset = (VkOffset2D){0, 0};
-    scissor.extent = vkrt->swapChainExtent;
-    vkCmdSetScissor(vkrt->commandBuffers[vkrt->currentFrame], 0, 1, &scissor);
+    transitionImageLayout(vkrt, vkrt->swapChainImages[imageIndex], vkrt->swapChainImageFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    transitionImageLayout(vkrt, vkrt->storageImage, vkrt->swapChainImageFormat, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 
-    // TODO
-    //vkCmdTraceRaysKHR(vkrt->commandBuffer, &vkrt->shaderBindingTables[0], &vkrt->shaderBindingTables[1], &vkrt->shaderBindingTables[2], &vkrt->shaderBindingTables[3], vkrt->swapChainExtent.width, vkrt->swapChainExtent.height, 1);
+    VkImageCopy copyRegion = {0};
+    copyRegion.srcSubresource = (VkImageSubresourceLayers){ VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
+    copyRegion.srcOffset = (VkOffset3D){ 0, 0, 0 };
+    copyRegion.dstSubresource = (VkImageSubresourceLayers){ VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
+    copyRegion.dstOffset = (VkOffset3D){ 0, 0, 0 };
+    copyRegion.extent = (VkExtent3D){ vkrt->swapChainExtent.width, vkrt->swapChainExtent.height, 1 };
 
-    vkCmdEndRenderPass(vkrt->commandBuffers[vkrt->currentFrame]);
+    vkCmdCopyImage(vkrt->commandBuffers[vkrt->currentFrame], vkrt->storageImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, vkrt->swapChainImages[imageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+
+    transitionImageLayout(vkrt, vkrt->swapChainImages[imageIndex], vkrt->swapChainImageFormat, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+    transitionImageLayout(vkrt, vkrt->storageImage, vkrt->swapChainImageFormat, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
 
     if (vkEndCommandBuffer(vkrt->commandBuffers[vkrt->currentFrame]) != VK_SUCCESS) {
         perror("ERROR: Failed to record the command buffer");
@@ -170,4 +158,170 @@ void setupShaderBindingTable(VKRT* vkrt) {
         perror("ERROR: Failed to create shader binding table buffer");
         exit(EXIT_FAILURE);
     }
+}
+
+VkCommandBuffer beginSingleTimeCommands(VKRT* vkrt) {
+    VkCommandBufferAllocateInfo allocInfo = {0};
+    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocInfo.commandPool = vkrt->commandPool;
+    allocInfo.commandBufferCount = 1;
+
+    VkCommandBuffer commandBuffer;
+    vkAllocateCommandBuffers(vkrt->device, &allocInfo, &commandBuffer);
+
+    VkCommandBufferBeginInfo beginInfo = {0};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+    vkBeginCommandBuffer(commandBuffer, &beginInfo);
+
+    return commandBuffer;
+}
+
+void endSingleTimeCommands(VKRT* vkrt, VkCommandBuffer commandBuffer) {
+    vkEndCommandBuffer(commandBuffer);
+
+    VkSubmitInfo submitInfo = {0};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &commandBuffer;
+
+    vkQueueSubmit(vkrt->graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+    vkQueueWaitIdle(vkrt->graphicsQueue);
+
+    vkFreeCommandBuffers(vkrt->device, vkrt->commandPool, 1, &commandBuffer);
+}
+
+
+void transitionImageLayout(VKRT* vkrt, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout) {
+    VkCommandBuffer commandBuffer = beginSingleTimeCommands(vkrt);
+
+    VkImageMemoryBarrier barrier = {0};
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.oldLayout = oldLayout;
+    barrier.newLayout = newLayout;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = image;
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrier.subresourceRange.baseMipLevel = 0;
+    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.baseArrayLayer = 0;
+    barrier.subresourceRange.layerCount = 1;
+
+    VkPipelineStageFlags sourceStage;
+    VkPipelineStageFlags destinationStage;
+
+    if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+        sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    } else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+        sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    } else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_GENERAL) {
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+
+        sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        destinationStage = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    } else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+        sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    } else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) {
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = 0;
+
+        sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        destinationStage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+    } else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_GENERAL) {
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+
+        sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        destinationStage = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    } else {
+        perror("ERROR: Unsupported layout transition");
+        exit(EXIT_FAILURE);
+    }
+
+    vkCmdPipelineBarrier(
+        commandBuffer,
+        sourceStage, destinationStage,
+        0,
+        0, NULL,
+        0, NULL,
+        1, &barrier
+    );
+
+    endSingleTimeCommands(vkrt, commandBuffer);
+}
+
+
+void createStorageImage(VKRT* vkrt) {
+    VkImageCreateInfo image = {0};
+    image.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    image.imageType = VK_IMAGE_TYPE_2D;
+    image.format = vkrt->swapChainImageFormat;
+    image.extent.width = vkrt->swapChainExtent.width;
+    image.extent.height = vkrt->swapChainExtent.height;
+    image.extent.depth = 1;
+    image.mipLevels = 1;
+    image.arrayLayers = 1;
+    image.samples = VK_SAMPLE_COUNT_1_BIT;
+    image.tiling = VK_IMAGE_TILING_OPTIMAL;
+    image.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
+    image.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    if (vkCreateImage(vkrt->device, &image, NULL, &vkrt->storageImage) != VK_SUCCESS) {
+        perror("ERROR: Failed to create storage image");
+        exit(EXIT_FAILURE);
+    }
+
+    VkMemoryRequirements memReqs;
+    vkGetImageMemoryRequirements(vkrt->device, vkrt->storageImage, &memReqs);
+
+    VkMemoryAllocateInfo allocInfo = {0};
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.allocationSize = memReqs.size;
+    allocInfo.memoryTypeIndex = findMemoryType(vkrt, memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+    if (vkAllocateMemory(vkrt->device, &allocInfo, NULL, &vkrt->storageImageMemory) != VK_SUCCESS) {
+        perror("ERROR: Failed to allocate storage image memory");
+        exit(EXIT_FAILURE);
+    }
+
+    if (vkBindImageMemory(vkrt->device, vkrt->storageImage, vkrt->storageImageMemory, 0) != VK_SUCCESS) {
+        perror("ERROR: Failed to bind storage image memory");
+        exit(EXIT_FAILURE);
+    }
+
+    VkImageViewCreateInfo colorImageView = {0};
+    colorImageView.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    colorImageView.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    colorImageView.format = vkrt->swapChainImageFormat;
+    colorImageView.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    colorImageView.subresourceRange.baseMipLevel = 0;
+    colorImageView.subresourceRange.levelCount = 1;
+    colorImageView.subresourceRange.baseArrayLayer = 0;
+    colorImageView.subresourceRange.layerCount = 1;
+    colorImageView.image = vkrt->storageImage;
+
+    if (vkCreateImageView(vkrt->device, &colorImageView, NULL, &vkrt->storageImageView) != VK_SUCCESS) {
+        perror("ERROR: Failed to create storage image view");
+        exit(EXIT_FAILURE);
+    }
+
+    VkCommandBuffer cmdBuffer = beginSingleTimeCommands(vkrt);
+    transitionImageLayout(vkrt, vkrt->storageImage, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+    endSingleTimeCommands(vkrt, cmdBuffer);
 }
