@@ -23,10 +23,11 @@ typedef struct VKRT {
     size_t swapChainImageCount;
     VkFormat swapChainImageFormat;
     VkExtent2D swapChainExtent;
+    VkDescriptorSetLayout descriptorSetLayout;
+    VkDescriptorPool descriptorPool;
+    VkDescriptorSet descriptorSet;
     VkPipelineLayout pipelineLayout;
     VkPipeline rayTracingPipeline;
-    VkRenderPass renderPass;
-    VkFramebuffer* swapChainFramebuffers;
     VkCommandPool commandPool;
     VkCommandBuffer commandBuffers[MAX_FRAMES_IN_FLIGHT];
     VkSemaphore imageAvailableSemaphores[MAX_FRAMES_IN_FLIGHT];
@@ -36,6 +37,22 @@ typedef struct VKRT {
     VkBool32 framebufferResized;
     VkBuffer shaderBindingTableBuffer;
     VkStridedDeviceAddressRegionKHR shaderBindingTables[4];
+    VkBuffer uniformBuffer;
+    VkDeviceMemory uniformBufferMemory;
+    void* uniformBufferMapped;
+    VkImage storageImage;
+    VkImageView storageImageView;
+    VkDeviceMemory storageImageMemory;
+    VkAccelerationStructureKHR topLevelAccelerationStructure;
+    VkDeviceMemory topLevelAccelerationStructureMemory;
+    VkBuffer topLevelAccelerationStructureBuffer;
+    VkAccelerationStructureKHR bottomLevelAccelerationStructure;
+    VkDeviceMemory bottomLevelAccelerationStructureMemory;
+    VkBuffer bottomLevelAccelerationStructureBuffer;
 } VKRT;
+
+typedef struct SceneUniform {
+    float view[4][4];
+} SceneUniform;
 
 #define COUNT_OF(x) ((sizeof(x)/sizeof(0[x])) / ((size_t)(!(sizeof(x) % sizeof(0[x])))))
