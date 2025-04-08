@@ -213,3 +213,17 @@ VkBool32 extensionsSupported(VkPhysicalDevice device) {
 
     return VK_TRUE;
 }
+
+uint32_t findMemoryType(VKRT* vkrt, uint32_t typeFilter, VkMemoryPropertyFlags properties) {
+    VkPhysicalDeviceMemoryProperties memProperties;
+    vkGetPhysicalDeviceMemoryProperties(vkrt->physicalDevice, &memProperties);
+
+    for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
+        if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
+            return i;
+        }
+    }
+
+    perror("ERROR: Failed to find suitable memory type");
+    exit(EXIT_FAILURE);
+}
