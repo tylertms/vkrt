@@ -1,5 +1,7 @@
 #include "app.h"
+#include "buffer.h"
 #include "command.h"
+#include "descriptor.h"
 #include "device.h"
 #include "instance.h"
 #include "pipeline.h"
@@ -8,6 +10,11 @@
 #include "validation.h"
 
 #include <stdlib.h>
+
+static void framebufferResizedCallback(GLFWwindow* window, int width, int height) {
+    VKRT* vkrt = (VKRT*)glfwGetWindowUserPointer(window);
+    vkrt->framebufferResized = VK_TRUE;
+}
 
 void initWindow(VKRT* vkrt) {
     glfwInit();
@@ -28,22 +35,29 @@ void initVulkan(VKRT* vkrt) {
     createLogicalDevice(vkrt);
     createSwapChain(vkrt);
     createImageViews(vkrt);
-    createRenderPass(vkrt);
+    createDescriptorSetLayout(vkrt);
     createRayTracingPipeline(vkrt);
-    setupShaderBindingTable(vkrt);
-    createFramebuffers(vkrt);
     createCommandPool(vkrt);
-    createCommandBuffer(vkrt);
+    createStorageImage(vkrt);
+    createUniformBuffer(vkrt);
+    createDescriptorPool(vkrt);
+    createDescriptorSet(vkrt);
+    createCommandBuffers(vkrt);
     createSyncObjects(vkrt);
 }
 
 void deinit(VKRT* vkrt) {
     cleanupSwapChain(vkrt);
 
+    vkDestroyBuffer(vkrt->device, vkrt->uniformBuffer, NULL);
+    vkFreeMemory(vkrt->device, vkrt->uniformBufferMemory, NULL);
+
+    vkDestroyDescriptorPool(vkrt->device, vkrt->descriptorPool, NULL);
+
+    vkDestroyDescriptorSetLayout(vkrt->device, vkrt->descriptorSetLayout, NULL);
+
     vkDestroyPipeline(vkrt->device, vkrt->rayTracingPipeline, NULL);
     vkDestroyPipelineLayout(vkrt->device, vkrt->pipelineLayout, NULL);
-
-    vkDestroyRenderPass(vkrt->device, vkrt->renderPass, NULL);
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         vkDestroySemaphore(vkrt->device, vkrt->imageAvailableSemaphores[i], NULL);
@@ -79,9 +93,4 @@ void run(VKRT* vkrt) {
     vkDeviceWaitIdle(vkrt->device);
 
     deinit(vkrt);
-}
-
-static void framebufferResizedCallback(GLFWwindow* window, int width, int height) {
-    VKRT* vkrt = (VKRT*)glfwGetWindowUserPointer(window);
-    vkrt->framebufferResized = VK_TRUE;
 }
