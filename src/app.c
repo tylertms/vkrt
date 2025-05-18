@@ -5,6 +5,7 @@
 #include "device.h"
 #include "instance.h"
 #include "pipeline.h"
+#include "structure.h"
 #include "surface.h"
 #include "swapchain.h"
 #include "validation.h"
@@ -35,13 +36,18 @@ void initVulkan(VKRT* vkrt) {
     createLogicalDevice(vkrt);
     createSwapChain(vkrt);
     createImageViews(vkrt);
+    createCommandPool(vkrt);
+    createVertexBuffer(vkrt);
+    createIndexBuffer(vkrt);
+    createBottomLevelAccelerationStructure(vkrt);
+    createTopLevelAccelerationStructure(vkrt);
     createDescriptorSetLayout(vkrt);
     createRayTracingPipeline(vkrt);
-    createCommandPool(vkrt);
     createStorageImage(vkrt);
     createUniformBuffer(vkrt);
     createDescriptorPool(vkrt);
     createDescriptorSet(vkrt);
+    createShaderBindingTable(vkrt);
     createCommandBuffers(vkrt);
     createSyncObjects(vkrt);
 }
@@ -49,23 +55,43 @@ void initVulkan(VKRT* vkrt) {
 void deinit(VKRT* vkrt) {
     cleanupSwapChain(vkrt);
 
+    vkDestroyBuffer(vkrt->device, vkrt->shaderBindingTableBuffer, NULL);
+    vkFreeMemory(vkrt->device, vkrt->shaderBindingTableMemory, NULL);
+
+    PFN_vkDestroyAccelerationStructureKHR vkDestroyAS = (PFN_vkDestroyAccelerationStructureKHR)vkGetDeviceProcAddr(vkrt->device, "vkDestroyAccelerationStructureKHR");
+    vkDestroyAS(vkrt->device, vkrt->bottomLevelAccelerationStructure, NULL);
+    vkDestroyBuffer(vkrt->device, vkrt->bottomLevelAccelerationStructureBuffer, NULL);
+    vkFreeMemory(vkrt->device, vkrt->bottomLevelAccelerationStructureMemory, NULL);
+
+    vkDestroyAS(vkrt->device, vkrt->topLevelAccelerationStructure, NULL);
+    vkDestroyBuffer(vkrt->device, vkrt->topLevelAccelerationStructureBuffer, NULL);
+    vkFreeMemory(vkrt->device, vkrt->topLevelAccelerationStructureMemory, NULL);
+
+    vkDestroyBuffer(vkrt->device, vkrt->vertexBuffer, NULL);
+    vkFreeMemory(vkrt->device, vkrt->vertexBufferMemory, NULL);
+    vkDestroyBuffer(vkrt->device, vkrt->indexBuffer, NULL);
+    vkFreeMemory(vkrt->device, vkrt->indexBufferMemory, NULL);
+
+    vkDestroyImageView(vkrt->device, vkrt->storageImageView, NULL);
+    vkDestroyImage(vkrt->device, vkrt->storageImage, NULL);
+    vkFreeMemory(vkrt->device, vkrt->storageImageMemory, NULL);
+
     vkDestroyBuffer(vkrt->device, vkrt->uniformBuffer, NULL);
     vkFreeMemory(vkrt->device, vkrt->uniformBufferMemory, NULL);
 
     vkDestroyDescriptorPool(vkrt->device, vkrt->descriptorPool, NULL);
-
     vkDestroyDescriptorSetLayout(vkrt->device, vkrt->descriptorSetLayout, NULL);
 
     vkDestroyPipeline(vkrt->device, vkrt->rayTracingPipeline, NULL);
     vkDestroyPipelineLayout(vkrt->device, vkrt->pipelineLayout, NULL);
+
+    vkDestroyCommandPool(vkrt->device, vkrt->commandPool, NULL);
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         vkDestroySemaphore(vkrt->device, vkrt->imageAvailableSemaphores[i], NULL);
         vkDestroySemaphore(vkrt->device, vkrt->renderFinishedSemaphores[i], NULL);
         vkDestroyFence(vkrt->device, vkrt->inFlightFences[i], NULL);
     }
-
-    vkDestroyCommandPool(vkrt->device, vkrt->commandPool, NULL);
 
     vkDestroyDevice(vkrt->device, NULL);
 
@@ -77,7 +103,6 @@ void deinit(VKRT* vkrt) {
     vkDestroyInstance(vkrt->instance, NULL);
 
     glfwDestroyWindow(vkrt->window);
-
     glfwTerminate();
 }
 
