@@ -50,6 +50,7 @@ void initVulkan(VKRT* vkrt) {
     createShaderBindingTable(vkrt);
     createCommandBuffers(vkrt);
     createSyncObjects(vkrt);
+    initializeFrameTimers(vkrt);
 }
 
 void deinit(VKRT* vkrt) {

@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 const char* deviceExtensions[NUM_EXTENSIONS] = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
@@ -228,4 +229,38 @@ uint32_t findMemoryType(VKRT* vkrt, uint32_t typeFilter, VkMemoryPropertyFlags p
 
     perror("ERROR: Failed to find suitable memory type");
     exit(EXIT_FAILURE);
+}
+
+uint64_t getTimeNanoSeconds() {
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    return (uint64_t)ts.tv_sec * 1000000000 + (uint64_t)ts.tv_nsec;
+}
+
+void initializeFrameTimers(VKRT* vkrt) {
+    uint64_t currentTime = getTimeNanoSeconds();
+    vkrt->previousTime = currentTime;
+    vkrt->currentTime = currentTime;
+    vkrt->lastFrameTimeReported = currentTime;
+    vkrt->tempFrameCount = 0;
+}
+
+void recordFrameTime(VKRT* vkrt) {
+    vkrt->previousTime = vkrt->currentTime;
+    vkrt->currentTime = getTimeNanoSeconds();
+    vkrt->tempFrameCount++;
+
+    uint64_t elapsed = vkrt->currentTime - vkrt->lastFrameTimeReported;
+    const uint64_t oneSecondNs = 1000000000ULL;
+
+    if (elapsed >= oneSecondNs) {
+        float seconds = (float)elapsed / 1e9f;
+        uint32_t fps = (uint32_t)(vkrt->tempFrameCount / seconds + 0.5f);
+        float avgFrameMs = (seconds * 1e3f) / vkrt->tempFrameCount;
+
+        printf("| %u FPS | %.3f ms |\n", fps, avgFrameMs);
+
+        vkrt->tempFrameCount = 0;
+        vkrt->lastFrameTimeReported = vkrt->currentTime;
+    }
 }

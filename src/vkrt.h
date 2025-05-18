@@ -61,6 +61,10 @@ typedef struct VKRT {
     VkDeviceAddress indexBufferDeviceAddress;
     uint32_t indexCount;
     uint32_t frameCount;
+    uint32_t tempFrameCount;
+    uint64_t previousTime;
+    uint64_t currentTime;
+    uint64_t lastFrameTimeReported;
 } VKRT;
 
 typedef struct SceneUniform {

@@ -1,4 +1,4 @@
-project('VKRT', 'c')
+project('VKRT', 'c', default_options: ['c_std=c17'])
 
 cc = meson.get_compiler('c')
 

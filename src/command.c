@@ -175,6 +175,8 @@ void drawFrame(VKRT* vkrt) {
         exit(EXIT_FAILURE);
     }
 
+    recordFrameTime(vkrt);
+
     vkQueueWaitIdle(vkrt->presentQueue);
     vkrt->currentFrame = (vkrt->currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
