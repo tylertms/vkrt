@@ -1,6 +1,7 @@
 #include "pipeline.h"
-#include <stdlib.h>
+
 #include <stdio.h>
+#include <stdlib.h>
 
 const char* readFile(const char* filename, size_t* fileSize) {
     FILE* file = fopen(filename, "rb");
@@ -38,11 +39,10 @@ void createRayTracingPipeline(VKRT* vkrt) {
         exit(EXIT_FAILURE);
     }
 
-    size_t rayGenLen;
+    size_t rayGenLen, closestHitLen, missLen;
+
     const char* rayGenCode = readFile("./shaders/rgen.spv", &rayGenLen);
-    size_t closestHitLen;
     const char* closestHitCode = readFile("./shaders/rchit.spv", &closestHitLen);
-    size_t missLen;
     const char* missCode = readFile("./shaders/rmiss.spv", &missLen);
 
     VkShaderModule rayGenModule = createShaderModule(vkrt, rayGenCode, rayGenLen);
@@ -76,7 +76,7 @@ void createRayTracingPipeline(VKRT* vkrt) {
     missShaderGroup.closestHitShader = VK_SHADER_UNUSED_KHR;
     missShaderGroup.anyHitShader = VK_SHADER_UNUSED_KHR;
     missShaderGroup.intersectionShader = VK_SHADER_UNUSED_KHR;
-    
+
     VkPipelineShaderStageCreateInfo closestHitStageInfo = {0};
     closestHitStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     closestHitStageInfo.stage = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
@@ -91,18 +91,15 @@ void createRayTracingPipeline(VKRT* vkrt) {
     closestHitShaderGroup.anyHitShader = VK_SHADER_UNUSED_KHR;
     closestHitShaderGroup.intersectionShader = VK_SHADER_UNUSED_KHR;
 
-
     VkPipelineShaderStageCreateInfo shaderStages[] = {
         rayGenStageInfo,
         missStageInfo,
-        closestHitStageInfo
-    };
+        closestHitStageInfo};
 
     VkRayTracingShaderGroupCreateInfoKHR shaderGroups[] = {
         rayGenShaderGroup,
         missShaderGroup,
-        closestHitShaderGroup
-    };
+        closestHitShaderGroup};
 
     VkRayTracingPipelineCreateInfoKHR pipelineCreateInfo = {0};
     pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR;
@@ -126,16 +123,16 @@ void createRayTracingPipeline(VKRT* vkrt) {
 }
 
 void createSyncObjects(VKRT* vkrt) {
-    VkSemaphoreCreateInfo semaphoreInfo = {0};
-    semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+    VkSemaphoreCreateInfo semaphoreCreateInfo = {0};
+    semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
     VkFenceCreateInfo fenceInfo = {0};
     fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
     fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        VkResult imageAvailableSemaphoreResult = vkCreateSemaphore(vkrt->device, &semaphoreInfo, NULL, &vkrt->imageAvailableSemaphores[i]);
-        VkResult renderFinishedSemaphoreResult = vkCreateSemaphore(vkrt->device, &semaphoreInfo, NULL, &vkrt->renderFinishedSemaphores[i]);
+        VkResult imageAvailableSemaphoreResult = vkCreateSemaphore(vkrt->device, &semaphoreCreateInfo, NULL, &vkrt->imageAvailableSemaphores[i]);
+        VkResult renderFinishedSemaphoreResult = vkCreateSemaphore(vkrt->device, &semaphoreCreateInfo, NULL, &vkrt->renderFinishedSemaphores[i]);
         VkResult inFlightFenceResult = vkCreateFence(vkrt->device, &fenceInfo, NULL, &vkrt->inFlightFences[i]);
 
         if (imageAvailableSemaphoreResult != VK_SUCCESS || renderFinishedSemaphoreResult != VK_SUCCESS || inFlightFenceResult != VK_SUCCESS) {
@@ -146,13 +143,13 @@ void createSyncObjects(VKRT* vkrt) {
 }
 
 VkShaderModule createShaderModule(VKRT* vkrt, const char* spirv, size_t length) {
-    VkShaderModuleCreateInfo createInfo = {0};
-    createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    createInfo.codeSize = length;
-    createInfo.pCode = (const uint32_t*)spirv;
+    VkShaderModuleCreateInfo shaderModuleCreateInfo = {0};
+    shaderModuleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    shaderModuleCreateInfo.codeSize = length;
+    shaderModuleCreateInfo.pCode = (const uint32_t*)spirv;
 
     VkShaderModule shaderModule;
-    if (vkCreateShaderModule(vkrt->device, &createInfo, NULL, &shaderModule) != VK_SUCCESS) {
+    if (vkCreateShaderModule(vkrt->device, &shaderModuleCreateInfo, NULL, &shaderModule) != VK_SUCCESS) {
         perror("ERROR: Failed to create shader module");
         exit(EXIT_FAILURE);
     }

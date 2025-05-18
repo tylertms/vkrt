@@ -1,5 +1,6 @@
 #include "instance.h"
 #include "validation.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -9,38 +10,38 @@ void createInstance(VKRT* vkrt) {
         exit(EXIT_FAILURE);
     }
 
-    VkApplicationInfo appInfo = {0};
-    appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    appInfo.pApplicationName = "VKRT";
-    appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.pEngineName = "No Engine";
-    appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.apiVersion = VK_API_VERSION_1_3;
-    appInfo.pNext = 0;
+    VkApplicationInfo applicationInfo = {0};
+    applicationInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+    applicationInfo.pApplicationName = "VKRT";
+    applicationInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+    applicationInfo.pEngineName = "No Engine";
+    applicationInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
+    applicationInfo.apiVersion = VK_API_VERSION_1_4;
+    applicationInfo.pNext = 0;
 
-    VkInstanceCreateInfo createInfo = {0};
-    createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    createInfo.pApplicationInfo = &appInfo;
+    VkInstanceCreateInfo instanceCreateInfo = {0};
+    instanceCreateInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+    instanceCreateInfo.pApplicationInfo = &applicationInfo;
 
     uint32_t extensionCount;
     const char** extensions = getRequiredExtensions(&extensionCount);
 
-    createInfo.enabledExtensionCount = extensionCount;
-    createInfo.ppEnabledExtensionNames = extensions;
+    instanceCreateInfo.enabledExtensionCount = extensionCount;
+    instanceCreateInfo.ppEnabledExtensionNames = extensions;
 
     VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo = {0};
     if (enableValidationLayers) {
-        createInfo.enabledLayerCount = numValidationLayers;
-        createInfo.ppEnabledLayerNames = validationLayers;
+        instanceCreateInfo.enabledLayerCount = numValidationLayers;
+        instanceCreateInfo.ppEnabledLayerNames = validationLayers;
 
         populateDebugMessengerCreateInfo(&debugCreateInfo);
-        createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*) &debugCreateInfo;
+        instanceCreateInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*)&debugCreateInfo;
     } else {
-        createInfo.enabledLayerCount = 0;
-        createInfo.pNext = 0;
+        instanceCreateInfo.enabledLayerCount = 0;
+        instanceCreateInfo.pNext = 0;
     }
 
-    if (vkCreateInstance(&createInfo, 0, &vkrt->instance) != VK_SUCCESS) {
+    if (vkCreateInstance(&instanceCreateInfo, 0, &vkrt->instance) != VK_SUCCESS) {
         perror("ERROR: Failed to create instance");
         free(extensions);
         exit(EXIT_FAILURE);

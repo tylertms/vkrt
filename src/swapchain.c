@@ -1,7 +1,8 @@
 #include "swapchain.h"
 #include "device.h"
-#include <stdlib.h>
+
 #include <stdio.h>
+#include <stdlib.h>
 
 void createSwapChain(VKRT* vkrt) {
     SwapChainSupportDetails supportDetails = querySwapChainSupport(vkrt);
@@ -18,36 +19,36 @@ void createSwapChain(VKRT* vkrt) {
         imageCount = supportDetails.capabilities.maxImageCount;
     }
 
-    VkSwapchainCreateInfoKHR createInfo = {0};
-    createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-    createInfo.surface = vkrt->surface;
-    createInfo.minImageCount = imageCount;
-    createInfo.imageFormat = surfaceFormat.format;
-    createInfo.imageColorSpace = surfaceFormat.colorSpace;
-    createInfo.imageExtent = extent;
-    createInfo.imageArrayLayers = 1;
-    createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    VkSwapchainCreateInfoKHR swapChainCreateInfo = {0};
+    swapChainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    swapChainCreateInfo.surface = vkrt->surface;
+    swapChainCreateInfo.minImageCount = imageCount;
+    swapChainCreateInfo.imageFormat = surfaceFormat.format;
+    swapChainCreateInfo.imageColorSpace = surfaceFormat.colorSpace;
+    swapChainCreateInfo.imageExtent = extent;
+    swapChainCreateInfo.imageArrayLayers = 1;
+    swapChainCreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
     QueueFamily indices = findQueueFamilies(vkrt);
     uint32_t queueFamilyIndices[] = {indices.graphics, indices.present};
 
     if (indices.graphics != indices.present) {
-        createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-        createInfo.queueFamilyIndexCount = 2;
-        createInfo.pQueueFamilyIndices = queueFamilyIndices;
+        swapChainCreateInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+        swapChainCreateInfo.queueFamilyIndexCount = 2;
+        swapChainCreateInfo.pQueueFamilyIndices = queueFamilyIndices;
     } else {
-        createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        createInfo.queueFamilyIndexCount = 0;
-        createInfo.pQueueFamilyIndices = NULL;
+        swapChainCreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        swapChainCreateInfo.queueFamilyIndexCount = 0;
+        swapChainCreateInfo.pQueueFamilyIndices = NULL;
     }
 
-    createInfo.preTransform = supportDetails.capabilities.currentTransform;
-    createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-    createInfo.presentMode = presentMode;
-    createInfo.clipped = VK_TRUE;
-    createInfo.oldSwapchain = VK_NULL_HANDLE;
+    swapChainCreateInfo.preTransform = supportDetails.capabilities.currentTransform;
+    swapChainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    swapChainCreateInfo.presentMode = presentMode;
+    swapChainCreateInfo.clipped = VK_TRUE;
+    swapChainCreateInfo.oldSwapchain = VK_NULL_HANDLE;
 
-    if (vkCreateSwapchainKHR(vkrt->device, &createInfo, NULL, &vkrt->swapChain) != VK_SUCCESS) {
+    if (vkCreateSwapchainKHR(vkrt->device, &swapChainCreateInfo, NULL, &vkrt->swapChain) != VK_SUCCESS) {
         perror("ERROR: Failed to create swapchain");
         exit(EXIT_FAILURE);
     }
@@ -63,8 +64,9 @@ void createSwapChain(VKRT* vkrt) {
 
 void recreateSwapChain(VKRT* vkrt) {
     printf("RECREATING SWAPCHAIN\n");
-    int width = 0, height = 0;
+    int width, height;
     glfwGetFramebufferSize(vkrt->window, &width, &height);
+
     while (width == 0 || height == 0) {
         glfwGetFramebufferSize(vkrt->window, &width, &height);
         glfwWaitEvents();
@@ -73,7 +75,6 @@ void recreateSwapChain(VKRT* vkrt) {
     vkDeviceWaitIdle(vkrt->device);
 
     cleanupSwapChain(vkrt);
-
     createSwapChain(vkrt);
     createImageViews(vkrt);
 }
@@ -82,7 +83,7 @@ void cleanupSwapChain(VKRT* vkrt) {
     for (size_t i = 0; i < vkrt->swapChainImageCount; i++) {
         vkDestroyImageView(vkrt->device, vkrt->swapChainImageViews[i], NULL);
     }
-    
+
     vkDestroySwapchainKHR(vkrt->device, vkrt->swapChain, NULL);
 
     free(vkrt->swapChainImageViews);
@@ -91,53 +92,54 @@ void cleanupSwapChain(VKRT* vkrt) {
 
 void createImageViews(VKRT* vkrt) {
     vkrt->swapChainImageViews = (VkImageView*)malloc(vkrt->swapChainImageCount * sizeof(VkImageView));
-    for (size_t i = 0; i < vkrt->swapChainImageCount; i++) {
-        VkImageViewCreateInfo createInfo = {0};
-        createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        createInfo.image = vkrt->swapChainImages[i];
-        createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        createInfo.format = vkrt->swapChainImageFormat;
-        createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-        createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-        createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-        createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-        createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        createInfo.subresourceRange.baseMipLevel = 0;
-        createInfo.subresourceRange.levelCount = 1;
-        createInfo.subresourceRange.baseArrayLayer = 0;
-        createInfo.subresourceRange.layerCount = 1;
 
-        if (vkCreateImageView(vkrt->device, &createInfo, NULL, &vkrt->swapChainImageViews[i]) != VK_SUCCESS) {
-            perror("ERROR: Failed to create image views");
+    for (size_t i = 0; i < vkrt->swapChainImageCount; i++) {
+        VkImageViewCreateInfo imageViewCreateInfo = {0};
+        imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        imageViewCreateInfo.image = vkrt->swapChainImages[i];
+        imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        imageViewCreateInfo.format = vkrt->swapChainImageFormat;
+        imageViewCreateInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+        imageViewCreateInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+        imageViewCreateInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+        imageViewCreateInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+        imageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
+        imageViewCreateInfo.subresourceRange.levelCount = 1;
+        imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
+        imageViewCreateInfo.subresourceRange.layerCount = 1;
+
+        if (vkCreateImageView(vkrt->device, &imageViewCreateInfo, NULL, &vkrt->swapChainImageViews[i]) != VK_SUCCESS) {
+            perror("ERROR: Failed to create swapchain image views");
             exit(EXIT_FAILURE);
         }
     }
 }
 
 SwapChainSupportDetails querySwapChainSupport(VKRT* vkrt) {
-    SwapChainSupportDetails details;
+    SwapChainSupportDetails supportDetails;
 
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vkrt->physicalDevice, vkrt->surface, &details.capabilities);
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vkrt->physicalDevice, vkrt->surface, &supportDetails.capabilities);
 
     uint32_t formatCount;
     vkGetPhysicalDeviceSurfaceFormatsKHR(vkrt->physicalDevice, vkrt->surface, &formatCount, NULL);
 
     if (formatCount) {
-        details.formats = (VkSurfaceFormatKHR*)malloc(formatCount * sizeof(VkSurfaceFormatKHR));
-        vkGetPhysicalDeviceSurfaceFormatsKHR(vkrt->physicalDevice, vkrt->surface, &formatCount, details.formats);
-        details.formatCount = formatCount;
+        supportDetails.formats = (VkSurfaceFormatKHR*)malloc(formatCount * sizeof(VkSurfaceFormatKHR));
+        vkGetPhysicalDeviceSurfaceFormatsKHR(vkrt->physicalDevice, vkrt->surface, &formatCount, supportDetails.formats);
+        supportDetails.formatCount = formatCount;
     }
 
     uint32_t presentModeCount;
     vkGetPhysicalDeviceSurfacePresentModesKHR(vkrt->physicalDevice, vkrt->surface, &presentModeCount, NULL);
 
     if (presentModeCount) {
-        details.presentModes = (VkPresentModeKHR*)malloc(presentModeCount * sizeof(VkPresentModeKHR));
-        vkGetPhysicalDeviceSurfacePresentModesKHR(vkrt->physicalDevice, vkrt->surface, &presentModeCount, details.presentModes);
-        details.presentModeCount = presentModeCount;
+        supportDetails.presentModes = (VkPresentModeKHR*)malloc(presentModeCount * sizeof(VkPresentModeKHR));
+        vkGetPhysicalDeviceSurfacePresentModesKHR(vkrt->physicalDevice, vkrt->surface, &presentModeCount, supportDetails.presentModes);
+        supportDetails.presentModeCount = presentModeCount;
     }
 
-    return details;
+    return supportDetails;
 }
 
 VkSurfaceFormatKHR chooseSwapSurfaceFormat(SwapChainSupportDetails* supportDetails) {
@@ -171,8 +173,7 @@ VkExtent2D chooseSwapExtent(VKRT* vkrt, SwapChainSupportDetails* supportDetails)
 
         VkExtent2D actualExtent = {
             (uint32_t)width,
-            (uint32_t)height
-        };
+            (uint32_t)height};
 
         if (actualExtent.width < capabilities.minImageExtent.width) {
             actualExtent.width = capabilities.minImageExtent.width;
