@@ -1,8 +1,8 @@
 #pragma once
 #include "vkrt.h"
 
-extern const char* deviceExtensions[];
-extern const uint32_t numDeviceExtensions;
+#define NUM_EXTENSIONS 5
+extern const char* deviceExtensions[NUM_EXTENSIONS];
 
 typedef struct QueueFamily {
     int32_t graphics;

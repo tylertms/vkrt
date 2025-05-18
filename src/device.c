@@ -1,18 +1,17 @@
 #include "device.h"
-#include "validation.h"
 #include "swapchain.h"
-#include <stdlib.h>
+#include "validation.h"
+
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
-const char* deviceExtensions[] = {
+const char* deviceExtensions[NUM_EXTENSIONS] = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
     VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
     VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
-    VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME
-};
-
-const uint32_t numDeviceExtensions = 4;
+    VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
+    VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME};
 
 void pickPhysicalDevice(VKRT* vkrt) {
     vkrt->physicalDevice = VK_NULL_HANDLE;
@@ -48,11 +47,10 @@ void createLogicalDevice(VKRT* vkrt) {
     QueueFamily indices = findQueueFamilies(vkrt);
 
     float queuePriority = 1.0f;
-
-    uint32_t uniqueQueueFamilies[2] = { indices.graphics, indices.present };
+    uint32_t uniqueQueueFamilies[2] = {indices.graphics, indices.present};
     uint32_t uniqueQueueFamilyCount = 2;
 
-    VkDeviceQueueCreateInfo* queueCreateInfos = malloc(uniqueQueueFamilyCount * sizeof(VkDeviceQueueCreateInfo));
+    VkDeviceQueueCreateInfo* queueCreateInfos = (VkDeviceQueueCreateInfo*)malloc(uniqueQueueFamilyCount * sizeof(VkDeviceQueueCreateInfo));
     uint32_t queueCreateInfoCount = 0;
 
     for (uint32_t i = 0; i < uniqueQueueFamilyCount; i++) {
@@ -69,13 +67,20 @@ void createLogicalDevice(VKRT* vkrt) {
             queueCreateInfo.queueFamilyIndex = uniqueQueueFamilies[i];
             queueCreateInfo.queueCount = 1;
             queueCreateInfo.pQueuePriorities = &queuePriority;
+
             queueCreateInfos[queueCreateInfoCount] = queueCreateInfo;
             queueCreateInfoCount++;
         }
     }
 
+    VkPhysicalDeviceBufferDeviceAddressFeatures deviceBufferDeviceAddressFeatures = {0};
+    deviceBufferDeviceAddressFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_KHR;
+    deviceBufferDeviceAddressFeatures.pNext = NULL;
+    deviceBufferDeviceAddressFeatures.bufferDeviceAddress = VK_TRUE;
+
     VkPhysicalDeviceAccelerationStructureFeaturesKHR deviceAccelerationStructureFeatures = {0};
     deviceAccelerationStructureFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+    deviceAccelerationStructureFeatures.pNext = &deviceBufferDeviceAddressFeatures;
     deviceAccelerationStructureFeatures.accelerationStructure = VK_TRUE;
     deviceAccelerationStructureFeatures.accelerationStructureCaptureReplay = VK_FALSE;
     deviceAccelerationStructureFeatures.accelerationStructureIndirectBuild = VK_FALSE;
@@ -95,14 +100,11 @@ void createLogicalDevice(VKRT* vkrt) {
 
     VkDeviceCreateInfo createInfo = {0};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-
     createInfo.pQueueCreateInfos = queueCreateInfos;
     createInfo.queueCreateInfoCount = queueCreateInfoCount;
-
     createInfo.pEnabledFeatures = &deviceFeatures;
     createInfo.pNext = &deviceRayTracingPipelineFeatures;
-
-    createInfo.enabledExtensionCount = numDeviceExtensions;
+    createInfo.enabledExtensionCount = NUM_EXTENSIONS;
     createInfo.ppEnabledExtensionNames = deviceExtensions;
 
     if (enableValidationLayers) {
@@ -122,7 +124,6 @@ void createLogicalDevice(VKRT* vkrt) {
 
     free(queueCreateInfos);
 }
-
 
 QueueFamily findQueueFamilies(VKRT* vkrt) {
     QueueFamily indices;
@@ -160,6 +161,7 @@ QueueFamily findQueueFamilies(VKRT* vkrt) {
 VkBool32 isDeviceSuitable(VKRT* vkrt) {
     VkPhysicalDeviceProperties deviceProperties = {0};
     VkPhysicalDeviceFeatures deviceFeatures = {0};
+
     vkGetPhysicalDeviceProperties(vkrt->physicalDevice, &deviceProperties);
     vkGetPhysicalDeviceFeatures(vkrt->physicalDevice, &deviceFeatures);
 
@@ -198,7 +200,7 @@ VkBool32 extensionsSupported(VkPhysicalDevice device) {
     VkExtensionProperties* availableExtensions = (VkExtensionProperties*)malloc(extensionCount * sizeof(VkExtensionProperties));
     vkEnumerateDeviceExtensionProperties(device, NULL, &extensionCount, availableExtensions);
 
-    for (uint32_t i = 0; i < numDeviceExtensions; i++) {
+    for (uint32_t i = 0; i < NUM_EXTENSIONS; i++) {
         VkBool32 extensionAvailable = VK_FALSE;
         for (uint32_t j = 0; j < extensionCount; j++) {
             if (!strcmp(deviceExtensions[i], availableExtensions[j].extensionName)) {
