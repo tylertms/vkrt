@@ -4,15 +4,14 @@
 #include <string.h>
 
 const char* validationLayers[] = {
-    "VK_LAYER_KHRONOS_validation"
-};
+    "VK_LAYER_KHRONOS_validation"};
 
 const uint32_t numValidationLayers = 1;
 
 #ifdef NODEBUG
-    const VkBool32 enableValidationLayers = 0;
+const VkBool32 enableValidationLayers = 0;
 #else
-    const VkBool32 enableValidationLayers = 1;
+const VkBool32 enableValidationLayers = 1;
 #endif
 
 int checkValidationLayerSupport() {
@@ -21,7 +20,7 @@ int checkValidationLayerSupport() {
 
     VkLayerProperties* availableLayers = (VkLayerProperties*)malloc(layerCount * sizeof(VkLayerProperties));
     vkEnumerateInstanceLayerProperties(&layerCount, availableLayers);
-    
+
     for (int i = 0; i < numValidationLayers; i++) {
         int layerFound = 0;
 
@@ -65,12 +64,11 @@ const char** getRequiredExtensions(uint32_t* extensionCount) {
     return extensions;
 }
 
-
 static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
     VkDebugUtilsMessageTypeFlagsEXT messageType,
-    const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
-    void *pUserData) {
+    const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+    void* pUserData) {
 
     printf("%s - %s: %s\n", severityString(messageSeverity), typeString(messageType), pCallbackData->pMessage);
 
@@ -85,7 +83,8 @@ void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT* create
 }
 
 void setupDebugMessenger(VKRT* vkrt) {
-    if (!enableValidationLayers) return;
+    if (!enableValidationLayers)
+        return;
 
     VkDebugUtilsMessengerCreateInfoEXT createInfo = {0};
     populateDebugMessengerCreateInfo(&createInfo);
@@ -97,7 +96,7 @@ void setupDebugMessenger(VKRT* vkrt) {
 }
 
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
-    PFN_vkCreateDebugUtilsMessengerEXT func = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
+    PFN_vkCreateDebugUtilsMessengerEXT func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
     if (func != 0) {
         return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
     } else {
@@ -106,7 +105,7 @@ VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMes
 }
 
 void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator) {
-    PFN_vkDestroyDebugUtilsMessengerEXT func = (PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
+    PFN_vkDestroyDebugUtilsMessengerEXT func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
     if (func != 0) {
         func(instance, debugMessenger, pAllocator);
     }
