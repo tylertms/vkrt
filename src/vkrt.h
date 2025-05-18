@@ -36,6 +36,7 @@ typedef struct VKRT {
     uint32_t currentFrame;
     VkBool32 framebufferResized;
     VkBuffer shaderBindingTableBuffer;
+    VkDeviceMemory shaderBindingTableMemory;
     VkStridedDeviceAddressRegionKHR shaderBindingTables[4];
     VkBuffer uniformBuffer;
     VkDeviceMemory uniformBufferMemory;
@@ -46,13 +47,24 @@ typedef struct VKRT {
     VkAccelerationStructureKHR topLevelAccelerationStructure;
     VkDeviceMemory topLevelAccelerationStructureMemory;
     VkBuffer topLevelAccelerationStructureBuffer;
+    VkDeviceAddress topLevelAccelerationStructureDeviceAddress;
     VkAccelerationStructureKHR bottomLevelAccelerationStructure;
     VkDeviceMemory bottomLevelAccelerationStructureMemory;
     VkBuffer bottomLevelAccelerationStructureBuffer;
+    VkDeviceAddress bottomLevelAccelerationStructureDeviceAddress;
+    VkBuffer vertexBuffer;
+    VkDeviceMemory vertexBufferMemory;
+    VkDeviceAddress vertexBufferDeviceAddress;
+    uint32_t vertexCount;
+    VkBuffer indexBuffer;
+    VkDeviceMemory indexBufferMemory;
+    VkDeviceAddress indexBufferDeviceAddress;
+    uint32_t indexCount;
+    uint32_t frameCount;
 } VKRT;
 
 typedef struct SceneUniform {
     float view[4][4];
 } SceneUniform;
 
-#define COUNT_OF(x) ((sizeof(x)/sizeof(0[x])) / ((size_t)(!(sizeof(x) % sizeof(0[x])))))
+#define COUNT_OF(x) ((sizeof(x) / sizeof(0 [x])) / ((size_t)(!(sizeof(x) % sizeof(0 [x])))))
