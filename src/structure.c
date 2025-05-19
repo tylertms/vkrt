@@ -89,7 +89,7 @@ void createBottomLevelAccelerationStructure(VKRT* vkrt) {
     accelerationStructureGeometryTrianglesData.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
     accelerationStructureGeometryTrianglesData.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
     accelerationStructureGeometryTrianglesData.vertexData.deviceAddress = vkrt->vertexBufferDeviceAddress;
-    accelerationStructureGeometryTrianglesData.vertexStride = sizeof(float) * 3;
+    accelerationStructureGeometryTrianglesData.vertexStride = sizeof(Vertex);
     accelerationStructureGeometryTrianglesData.maxVertex = vkrt->vertexCount;
     accelerationStructureGeometryTrianglesData.indexType = VK_INDEX_TYPE_UINT32;
     accelerationStructureGeometryTrianglesData.indexData.deviceAddress = vkrt->indexBufferDeviceAddress;

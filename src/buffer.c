@@ -71,70 +71,24 @@ void copyBuffer(VKRT* vkrt, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize
     vkFreeCommandBuffers(vkrt->device, vkrt->commandPool, 1, &commandBuffer);
 }
 
-void createUniformBuffer(VKRT* vkrt) {
-    VkDeviceSize uniformBufferSize = sizeof(SceneUniform);
-    createBuffer(vkrt, uniformBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &vkrt->uniformBuffer, &vkrt->uniformBufferMemory);
-    vkMapMemory(vkrt->device, vkrt->uniformBufferMemory, 0, uniformBufferSize, 0, (void**)&vkrt->uniformBufferMapped);
-    memset(vkrt->uniformBufferMapped, 0, uniformBufferSize);
-}
+VkDeviceAddress createBufferFromHostData(VKRT* vkrt, const void* hostData, VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer* outBuffer, VkDeviceMemory* outMemory) {
+    VkBuffer stagingBuf;
+    VkDeviceMemory stagingMem;
+    createBuffer(vkrt, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBuf, &stagingMem);
 
-void createVertexBuffer(VKRT* vkrt) {
-    float vertices[3][3] = {
-        {-0.5f, -0.5f, 0.0f},
-        {0.5f, -0.5f, 0.0f},
-        {0.0f, 0.5f, 0.0f}};
+    void* mapped;
+    vkMapMemory(vkrt->device, stagingMem, 0, size, 0, &mapped);
+    memcpy(mapped, hostData, (size_t)size);
+    vkUnmapMemory(vkrt->device, stagingMem);
 
-    vkrt->vertexCount = COUNT_OF(vertices);
-    VkDeviceSize size = sizeof(vertices);
+    createBuffer(vkrt, size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | usage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, outBuffer, outMemory);
 
-    VkBuffer stagingBuffer;
-    VkDeviceMemory stagingMemory;
-    createBuffer(vkrt, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBuffer, &stagingMemory);
+    copyBuffer(vkrt, stagingBuf, *outBuffer, size);
 
-    void* data;
-    vkMapMemory(vkrt->device, stagingMemory, 0, size, 0, &data);
-    memcpy(data, vertices, (size_t)size);
-    vkUnmapMemory(vkrt->device, stagingMemory);
+    vkDestroyBuffer(vkrt->device, stagingBuf, NULL);
+    vkFreeMemory(vkrt->device, stagingMem, NULL);
 
-    createBuffer(vkrt, size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vkrt->vertexBuffer, &vkrt->vertexBufferMemory);
-
-    copyBuffer(vkrt, stagingBuffer, vkrt->vertexBuffer, size);
-    vkDestroyBuffer(vkrt->device, stagingBuffer, NULL);
-    vkFreeMemory(vkrt->device, stagingMemory, NULL);
-
-    VkBufferDeviceAddressInfo bufferDeviceAddressInfo = {0};
-    bufferDeviceAddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
-    bufferDeviceAddressInfo.buffer = vkrt->vertexBuffer;
-
+    VkBufferDeviceAddressInfo addrInfo = {.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, .buffer = *outBuffer};
     PFN_vkGetBufferDeviceAddressKHR pvkGetBufferDeviceAddressKHR = (PFN_vkGetBufferDeviceAddressKHR)vkGetDeviceProcAddr(vkrt->device, "vkGetBufferDeviceAddressKHR");
-    vkrt->vertexBufferDeviceAddress = pvkGetBufferDeviceAddressKHR(vkrt->device, &bufferDeviceAddressInfo);
-}
-
-void createIndexBuffer(VKRT* vkrt) {
-    uint32_t indices[3] = {0, 1, 2};
-
-    vkrt->indexCount = COUNT_OF(indices);
-    VkDeviceSize size = sizeof(indices);
-
-    VkBuffer stagingBuffer;
-    VkDeviceMemory stagingMemory;
-    createBuffer(vkrt, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBuffer, &stagingMemory);
-
-    void* data;
-    vkMapMemory(vkrt->device, stagingMemory, 0, size, 0, &data);
-    memcpy(data, indices, (size_t)size);
-    vkUnmapMemory(vkrt->device, stagingMemory);
-
-    createBuffer(vkrt, size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vkrt->indexBuffer, &vkrt->indexBufferMemory);
-
-    copyBuffer(vkrt, stagingBuffer, vkrt->indexBuffer, size);
-    vkDestroyBuffer(vkrt->device, stagingBuffer, NULL);
-    vkFreeMemory(vkrt->device, stagingMemory, NULL);
-
-    VkBufferDeviceAddressInfo bufferDeviceAddressInfo = {0};
-    bufferDeviceAddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
-    bufferDeviceAddressInfo.buffer = vkrt->indexBuffer;
-
-    PFN_vkGetBufferDeviceAddressKHR pvkGetBufferDeviceAddressKHR = (PFN_vkGetBufferDeviceAddressKHR)vkGetDeviceProcAddr(vkrt->device, "vkGetBufferDeviceAddressKHR");
-    vkrt->indexBufferDeviceAddress = pvkGetBufferDeviceAddressKHR(vkrt->device, &bufferDeviceAddressInfo);
+    return pvkGetBufferDeviceAddressKHR(vkrt->device, &addrInfo);
 }

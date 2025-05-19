@@ -5,6 +5,7 @@
 #include "device.h"
 #include "instance.h"
 #include "interface.h"
+#include "object.h"
 #include "pipeline.h"
 #include "structure.h"
 #include "surface.h"
@@ -14,7 +15,8 @@
 #include <stdlib.h>
 
 static void framebufferResizedCallback(GLFWwindow* window, int width, int height) {
-    (void)width; (void)height;
+    (void)width;
+    (void)height;
 
     VKRT* vkrt = (VKRT*)glfwGetWindowUserPointer(window);
     vkrt->framebufferResized = VK_TRUE;
@@ -42,8 +44,7 @@ void initVulkan(VKRT* vkrt) {
     createRenderPass(vkrt);
     createFramebuffers(vkrt);
     createCommandPool(vkrt);
-    createVertexBuffer(vkrt);
-    createIndexBuffer(vkrt);
+    loadObject(vkrt, "assets/dragon.glb");
     createBottomLevelAccelerationStructure(vkrt);
     createTopLevelAccelerationStructure(vkrt);
     createDescriptorSetLayout(vkrt);
@@ -96,7 +97,7 @@ void deinit(VKRT* vkrt) {
 
     vkDestroyPipeline(vkrt->device, vkrt->rayTracingPipeline, NULL);
     vkDestroyPipelineLayout(vkrt->device, vkrt->pipelineLayout, NULL);
-    
+
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         vkDestroySemaphore(vkrt->device, vkrt->imageAvailableSemaphores[i], NULL);
         vkDestroySemaphore(vkrt->device, vkrt->renderFinishedSemaphores[i], NULL);
@@ -104,7 +105,7 @@ void deinit(VKRT* vkrt) {
     }
 
     vkFreeCommandBuffers(vkrt->device, vkrt->commandPool, COUNT_OF(vkrt->commandBuffers), vkrt->commandBuffers);
-    
+
     vkDestroyCommandPool(vkrt->device, vkrt->commandPool, NULL);
 
     vkDestroyDevice(vkrt->device, NULL);

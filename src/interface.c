@@ -131,8 +131,8 @@ void setupSceneUniform(VKRT* vkrt) {
         .aspect = WIDTH / HEIGHT,
         .nearZ = 0.001,
         .farZ = 10000.0,
-        .fovy = 60.0,
-        .pos = {0, 0, -2},
+        .fovy = 40.0,
+        .pos = {-0.2, -0.2, 0.4},
         .target = {0, 0, 0},
         .up = {0, 1, 0}};
 

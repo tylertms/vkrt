@@ -91,4 +91,9 @@ typedef struct VKRT {
     float averageFrametime;
 } VKRT;
 
+typedef struct Vertex {
+    float position[4];
+    float normal[4];
+} Vertex;
+
 #define COUNT_OF(x) ((sizeof(x) / sizeof(0 [x])) / ((size_t)(!(sizeof(x) % sizeof(0 [x])))))
