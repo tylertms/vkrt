@@ -58,33 +58,8 @@ void recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
     PFN_vkCmdTraceRaysKHR pvkCmdTraceRaysKHR = (PFN_vkCmdTraceRaysKHR)vkGetDeviceProcAddr(vkrt->device, "vkCmdTraceRaysKHR");
     pvkCmdTraceRaysKHR(commandBuffer, &vkrt->shaderBindingTables[0], &vkrt->shaderBindingTables[1], &vkrt->shaderBindingTables[2], &vkrt->shaderBindingTables[3], extent.width, extent.height, 1);
 
-    VkImageMemoryBarrier barrier[2] = {0};
-
-    barrier[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    barrier[0].oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    barrier[0].newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    barrier[0].srcAccessMask = 0;
-    barrier[0].dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    barrier[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier[0].image = destImage;
-    barrier[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    barrier[0].subresourceRange.baseMipLevel = 0;
-    barrier[0].subresourceRange.levelCount = 1;
-    barrier[0].subresourceRange.baseArrayLayer = 0;
-    barrier[0].subresourceRange.layerCount = 1;
-
-    barrier[1].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    barrier[1].oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-    barrier[1].newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-    barrier[1].srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-    barrier[1].dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-    barrier[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier[1].image = sourceImage;
-    barrier[1].subresourceRange = barrier[0].subresourceRange;
-
-    vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 2, barrier);
+    transitionImageLayout(commandBuffer, destImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    transitionImageLayout(commandBuffer, sourceImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 
     VkImageBlit blit = {0};
     blit.srcSubresource = (VkImageSubresourceLayers){VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
@@ -96,29 +71,8 @@ void recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
 
     vkCmdBlitImage(commandBuffer, sourceImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, destImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
 
-    VkImageMemoryBarrier back[2] = {0};
-
-    back[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    back[0].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    back[0].newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-    back[0].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    back[0].dstAccessMask = 0;
-    back[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    back[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    back[0].image = destImage;
-    back[0].subresourceRange = barrier[0].subresourceRange;
-
-    back[1].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    back[1].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-    back[1].newLayout = VK_IMAGE_LAYOUT_GENERAL;
-    back[1].srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-    back[1].dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT;
-    back[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    back[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    back[1].image = sourceImage;
-    back[1].subresourceRange = barrier[1].subresourceRange;
-
-    vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT | VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 0, 0, NULL, 0, NULL, 2, back);
+    transitionImageLayout(commandBuffer, destImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+    transitionImageLayout(commandBuffer, sourceImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
 
     if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
         perror("ERROR: Failed to end command buffer");
@@ -219,9 +173,7 @@ void endSingleTimeCommands(VKRT* vkrt, VkCommandBuffer commandBuffer) {
     vkFreeCommandBuffers(vkrt->device, vkrt->commandPool, 1, &commandBuffer);
 }
 
-void transitionImageLayout(VKRT* vkrt, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout) {
-    VkCommandBuffer commandBuffer = beginSingleTimeCommands(vkrt);
-
+void transitionImageLayout(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout) {
     VkImageMemoryBarrier barrier = {0};
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
     barrier.oldLayout = oldLayout;
@@ -308,7 +260,6 @@ void transitionImageLayout(VKRT* vkrt, VkImage image, VkImageLayout oldLayout, V
     }
 
     vkCmdPipelineBarrier(commandBuffer, srcStage, dstStage, 0, 0, NULL, 0, NULL, 1, &barrier);
-    endSingleTimeCommands(vkrt, commandBuffer);
 }
 
 void createStorageImage(VKRT* vkrt) {
@@ -365,5 +316,7 @@ void createStorageImage(VKRT* vkrt) {
         exit(EXIT_FAILURE);
     }
 
-    transitionImageLayout(vkrt, vkrt->storageImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+    VkCommandBuffer commandBuffer = beginSingleTimeCommands(vkrt);
+    transitionImageLayout(commandBuffer, vkrt->storageImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+    endSingleTimeCommands(vkrt, commandBuffer);
 }

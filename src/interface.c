@@ -46,10 +46,6 @@ void setupImGui(VKRT* vkrt) {
 
     cImGui_ImplVulkan_Init(&imGuiVulkanInitInfo);
     cImGui_ImplVulkan_CreateFontsTexture();
-
-    for (size_t i = 0; i < vkrt->swapChainImageCount; i++) {
-        transitionImageLayout(vkrt, vkrt->swapChainImages[i], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
-    }
 }
 
 void setDarkTheme() {
