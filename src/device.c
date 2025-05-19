@@ -28,7 +28,7 @@ void pickPhysicalDevice(VKRT* vkrt) {
     VkPhysicalDevice* devices = (VkPhysicalDevice*)malloc(deviceCount * sizeof(VkPhysicalDevice));
     vkEnumeratePhysicalDevices(vkrt->instance, &deviceCount, devices);
 
-    for (int i = 0; i < deviceCount; i++) {
+    for (uint32_t i = 0; i < deviceCount; i++) {
         vkrt->physicalDevice = devices[i];
         if (isDeviceSuitable(vkrt)) {
             break;
@@ -137,7 +137,7 @@ QueueFamily findQueueFamilies(VKRT* vkrt) {
     VkQueueFamilyProperties* queueFamilies = (VkQueueFamilyProperties*)malloc(queueFamilyCount * sizeof(VkQueueFamilyProperties));
     vkGetPhysicalDeviceQueueFamilyProperties(vkrt->physicalDevice, &queueFamilyCount, queueFamilies);
 
-    for (int i = 0; i < queueFamilyCount; i++) {
+    for (uint32_t i = 0; i < queueFamilyCount; i++) {
         if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
             indices.graphics = i;
         }

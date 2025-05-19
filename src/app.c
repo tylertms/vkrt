@@ -13,6 +13,8 @@
 #include <stdlib.h>
 
 static void framebufferResizedCallback(GLFWwindow* window, int width, int height) {
+    (void)width; (void)height;
+
     VKRT* vkrt = (VKRT*)glfwGetWindowUserPointer(window);
     vkrt->framebufferResized = VK_TRUE;
 }

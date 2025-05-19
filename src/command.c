@@ -214,7 +214,7 @@ void endSingleTimeCommands(VKRT* vkrt, VkCommandBuffer commandBuffer) {
     vkFreeCommandBuffers(vkrt->device, vkrt->commandPool, 1, &commandBuffer);
 }
 
-void transitionImageLayout(VKRT* vkrt, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout) {
+void transitionImageLayout(VKRT* vkrt, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout) {
     VkCommandBuffer commandBuffer = beginSingleTimeCommands(vkrt);
 
     VkImageMemoryBarrier barrier = {0};
@@ -345,5 +345,5 @@ void createStorageImage(VKRT* vkrt) {
         exit(EXIT_FAILURE);
     }
 
-    transitionImageLayout(vkrt, vkrt->storageImage, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+    transitionImageLayout(vkrt, vkrt->storageImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 }

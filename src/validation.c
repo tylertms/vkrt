@@ -21,10 +21,10 @@ int checkValidationLayerSupport() {
     VkLayerProperties* availableLayers = (VkLayerProperties*)malloc(layerCount * sizeof(VkLayerProperties));
     vkEnumerateInstanceLayerProperties(&layerCount, availableLayers);
 
-    for (int i = 0; i < numValidationLayers; i++) {
+    for (uint32_t i = 0; i < numValidationLayers; i++) {
         int layerFound = 0;
 
-        for (int j = 0; j < layerCount; j++) {
+        for (uint32_t j = 0; j < layerCount; j++) {
             if (!strcmp(validationLayers[i], availableLayers[j].layerName)) {
                 layerFound = 1;
                 break;
@@ -70,6 +70,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
     void* pUserData) {
 
+    (void)pUserData;
     printf("%s - %s: %s\n", severityString(messageSeverity), typeString(messageType), pCallbackData->pMessage);
 
     return VK_FALSE;
