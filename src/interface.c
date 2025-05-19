@@ -64,9 +64,65 @@ void drawInterface(VKRT* vkrt) {
     ImGui_Text("Frame rate:%10d FPS", vkrt->averageFPS);
     ImGui_Text("Frame time:%10.3f ms", vkrt->averageFrametime);
 
+    handleCameraMovement(vkrt);
+
     ImGui_End();
 
     ImGui_Render();
+}
+
+void handleCameraMovement(VKRT* vkrt) {
+    float movementSpeed = 0.00145f;
+    float zoomSpeed = 0.05f;
+    
+    ImGuiIO* io = ImGui_GetIO();
+    ImVec2 mouseDelta = io->MouseDelta;
+    float scroll = io->MouseWheel;
+
+    if (ImGui_IsMouseDragging(ImGuiMouseButton_Right, -1.f)) {
+        movementSpeed *= glm_vec3_distance(vkrt->camera.pos, vkrt->camera.target);
+        glm_vec3_sub(vkrt->camera.pos, (vec3){mouseDelta.x * movementSpeed, mouseDelta.y * movementSpeed, 0}, vkrt->camera.pos);
+        glm_vec3_sub(vkrt->camera.target, (vec3){mouseDelta.x * movementSpeed, mouseDelta.y * movementSpeed, 0}, vkrt->camera.target);
+        updateMatricesFromCamera(vkrt);
+    }
+
+    if (ImGui_IsMouseDragging(ImGuiMouseButton_Left, -1.f)) {
+
+    }
+
+    if (scroll != 0.f) {
+        vec3 offset;
+        glm_vec3_sub(vkrt->camera.target, vkrt->camera.pos, offset);
+
+        glm_vec3_scale(offset, scroll * zoomSpeed, offset);
+        glm_vec3_add(vkrt->camera.pos, offset, vkrt->camera.pos);
+
+        updateMatricesFromCamera(vkrt);
+    }
+}
+
+void setupSceneUniform(VKRT* vkrt) {
+    vkrt->camera = (Camera){
+        .aspect = WIDTH / HEIGHT,
+        .nearZ = 0.001,
+        .farZ = 10000.0,
+        .fovy = 60.0,
+        .pos = {0, 0, 1},
+        .target = {0, 0, 0},
+        .up = {0, 1, 0}
+    };
+
+    updateMatricesFromCamera(vkrt);
+}
+void updateMatricesFromCamera(VKRT* vkrt) {
+    mat4 view, proj;
+    Camera cam = vkrt->camera;
+
+    glm_lookat(cam.pos, cam.target, cam.up, view);
+    glm_perspective(glm_rad(cam.fovy), cam.aspect, cam.nearZ, cam.farZ, proj);
+
+    glm_mat4_inv(view, vkrt->uniformBufferMapped->viewInverse);
+    glm_mat4_inv(proj, vkrt->uniformBufferMapped->projInverse);
 }
 
 void setDarkTheme() {

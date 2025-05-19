@@ -74,14 +74,15 @@ void copyBuffer(VKRT* vkrt, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize
 void createUniformBuffer(VKRT* vkrt) {
     VkDeviceSize uniformBufferSize = sizeof(SceneUniform);
     createBuffer(vkrt, uniformBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &vkrt->uniformBuffer, &vkrt->uniformBufferMemory);
-    vkMapMemory(vkrt->device, vkrt->uniformBufferMemory, 0, uniformBufferSize, 0, &vkrt->uniformBufferMapped);
+    vkMapMemory(vkrt->device, vkrt->uniformBufferMemory, 0, uniformBufferSize, 0, (void**)&vkrt->uniformBufferMapped);
+    memset(vkrt->uniformBufferMapped, 0, uniformBufferSize);
 }
 
 void createVertexBuffer(VKRT* vkrt) {
     float vertices[3][3] = {
-        {-0.5f, -0.5f, -1.0f},
-        {0.5f, -0.5f, -1.0f},
-        {0.0f, 0.5f, -1.0f}};
+        {-0.5f, -0.5f, 0.0f},
+        {0.5f, -0.5f, 0.0f},
+        {0.0f, 0.5f, 0.0f}};
 
     vkrt->vertexCount = COUNT_OF(vertices);
     VkDeviceSize size = sizeof(vertices);

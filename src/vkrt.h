@@ -3,12 +3,28 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+#include "cglm.h"
 #include "dcimgui.h"
 
 #define WIDTH 800
 #define HEIGHT 600
 
 #define MAX_FRAMES_IN_FLIGHT 2
+
+typedef struct SceneUniform {
+    mat4 viewInverse;
+    mat4 projInverse;
+} SceneUniform;
+
+typedef struct Camera {
+    vec3 pos;
+    vec3 target;
+    vec3 up;
+    float fovy;
+    float aspect;
+    float nearZ;
+    float farZ;
+} Camera;
 
 typedef struct VKRT {
     GLFWwindow* window;
@@ -45,7 +61,8 @@ typedef struct VKRT {
     VkStridedDeviceAddressRegionKHR shaderBindingTables[4];
     VkBuffer uniformBuffer;
     VkDeviceMemory uniformBufferMemory;
-    void* uniformBufferMapped;
+    SceneUniform* uniformBufferMapped;
+    Camera camera;
     VkImage storageImage;
     VkImageView storageImageView;
     VkDeviceMemory storageImageMemory;
@@ -73,9 +90,5 @@ typedef struct VKRT {
     uint32_t averageFPS;
     float averageFrametime;
 } VKRT;
-
-typedef struct SceneUniform {
-    float view[4][4];
-} SceneUniform;
 
 #define COUNT_OF(x) ((sizeof(x) / sizeof(0 [x])) / ((size_t)(!(sizeof(x) % sizeof(0 [x])))))

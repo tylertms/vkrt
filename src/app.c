@@ -57,6 +57,7 @@ void initVulkan(VKRT* vkrt) {
     createSyncObjects(vkrt);
     initializeFrameTimers(vkrt);
     setupImGui(vkrt);
+    setupSceneUniform(vkrt);
 }
 
 void deinit(VKRT* vkrt) {
