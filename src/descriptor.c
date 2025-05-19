@@ -42,13 +42,15 @@ void createDescriptorPool(VKRT* vkrt) {
     VkDescriptorPoolSize poolSizes[] = {
         {VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1},
         {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1},
-        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1}};
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1},
+        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1}};
 
     VkDescriptorPoolCreateInfo descriptorPoolCreateInfo = {0};
     descriptorPoolCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     descriptorPoolCreateInfo.poolSizeCount = COUNT_OF(poolSizes);
     descriptorPoolCreateInfo.pPoolSizes = poolSizes;
     descriptorPoolCreateInfo.maxSets = MAX_FRAMES_IN_FLIGHT;
+    descriptorPoolCreateInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
 
     if (vkCreateDescriptorPool(vkrt->device, &descriptorPoolCreateInfo, NULL, &vkrt->descriptorPool) != VK_SUCCESS) {
         perror("ERROR: Failed to create descriptor pool");

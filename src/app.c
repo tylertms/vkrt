@@ -4,6 +4,7 @@
 #include "descriptor.h"
 #include "device.h"
 #include "instance.h"
+#include "interface.h"
 #include "pipeline.h"
 #include "structure.h"
 #include "surface.h"
@@ -38,6 +39,8 @@ void initVulkan(VKRT* vkrt) {
     createLogicalDevice(vkrt);
     createSwapChain(vkrt);
     createImageViews(vkrt);
+    createRenderPass(vkrt);
+    createFramebuffers(vkrt);
     createCommandPool(vkrt);
     createVertexBuffer(vkrt);
     createIndexBuffer(vkrt);
@@ -53,10 +56,15 @@ void initVulkan(VKRT* vkrt) {
     createCommandBuffers(vkrt);
     createSyncObjects(vkrt);
     initializeFrameTimers(vkrt);
+    setupImGui(vkrt);
 }
 
 void deinit(VKRT* vkrt) {
+    deinitImGui(vkrt);
+
     cleanupSwapChain(vkrt);
+
+    vkDestroyRenderPass(vkrt->device, vkrt->renderPass, NULL);
 
     vkDestroyBuffer(vkrt->device, vkrt->shaderBindingTableBuffer, NULL);
     vkFreeMemory(vkrt->device, vkrt->shaderBindingTableMemory, NULL);
@@ -87,14 +95,16 @@ void deinit(VKRT* vkrt) {
 
     vkDestroyPipeline(vkrt->device, vkrt->rayTracingPipeline, NULL);
     vkDestroyPipelineLayout(vkrt->device, vkrt->pipelineLayout, NULL);
-
-    vkDestroyCommandPool(vkrt->device, vkrt->commandPool, NULL);
-
+    
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         vkDestroySemaphore(vkrt->device, vkrt->imageAvailableSemaphores[i], NULL);
         vkDestroySemaphore(vkrt->device, vkrt->renderFinishedSemaphores[i], NULL);
         vkDestroyFence(vkrt->device, vkrt->inFlightFences[i], NULL);
     }
+
+    vkFreeCommandBuffers(vkrt->device, vkrt->commandPool, COUNT_OF(vkrt->commandBuffers), vkrt->commandBuffers);
+    
+    vkDestroyCommandPool(vkrt->device, vkrt->commandPool, NULL);
 
     vkDestroyDevice(vkrt->device, NULL);
 

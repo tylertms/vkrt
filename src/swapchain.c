@@ -81,6 +81,7 @@ void recreateSwapChain(VKRT* vkrt) {
 
 void cleanupSwapChain(VKRT* vkrt) {
     for (size_t i = 0; i < vkrt->swapChainImageCount; i++) {
+        vkDestroyFramebuffer(vkrt->device, vkrt->framebuffers[i], NULL);
         vkDestroyImageView(vkrt->device, vkrt->swapChainImageViews[i], NULL);
     }
 
@@ -111,6 +112,26 @@ void createImageViews(VKRT* vkrt) {
 
         if (vkCreateImageView(vkrt->device, &imageViewCreateInfo, NULL, &vkrt->swapChainImageViews[i]) != VK_SUCCESS) {
             perror("ERROR: Failed to create swapchain image views");
+            exit(EXIT_FAILURE);
+        }
+    }
+}
+
+void createFramebuffers(VKRT* vkrt) {
+    vkrt->framebuffers = (VkFramebuffer*)malloc(vkrt->swapChainImageCount * sizeof(VkFramebuffer));
+
+    for (size_t i = 0; i < vkrt->swapChainImageCount; i++) {
+        VkFramebufferCreateInfo framebufferCreateInfo = {0};
+        framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        framebufferCreateInfo.renderPass = vkrt->renderPass;
+        framebufferCreateInfo.attachmentCount = 1;
+        framebufferCreateInfo.pAttachments = &vkrt->swapChainImageViews[i];
+        framebufferCreateInfo.width = vkrt->swapChainExtent.width;
+        framebufferCreateInfo.height = vkrt->swapChainExtent.height;
+        framebufferCreateInfo.layers = 1;
+
+        if (vkCreateFramebuffer(vkrt->device, &framebufferCreateInfo, NULL, &vkrt->framebuffers[i]) != VK_SUCCESS) {
+            perror("ERROR: Failed to create framebuffer");
             exit(EXIT_FAILURE);
         }
     }

@@ -13,6 +13,7 @@ void createSwapChain(VKRT* vkrt);
 void recreateSwapChain(VKRT* vkrt);
 void cleanupSwapChain(VKRT* vkrt);
 void createImageViews(VKRT* vkrt);
+void createFramebuffers(VKRT* vkrt);
 SwapChainSupportDetails querySwapChainSupport(VKRT* vkrt);
 VkSurfaceFormatKHR chooseSwapSurfaceFormat(SwapChainSupportDetails* supportDetails);
 VkPresentModeKHR chooseSwapPresentMode(SwapChainSupportDetails* supportDetails);

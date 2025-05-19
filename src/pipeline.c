@@ -4,13 +4,13 @@
 #include <stdlib.h>
 
 #if defined(_WIN32)
-  #include <windows.h>
+#include <windows.h>
 #elif defined(__APPLE__)
-  #include <limits.h>
-  #include <mach-o/dyld.h>
+#include <limits.h>
+#include <mach-o/dyld.h>
 #else
-  #include <unistd.h>
-  #include <limits.h>
+#include <limits.h>
+#include <unistd.h>
 #endif
 
 void createRayTracingPipeline(VKRT* vkrt) {
@@ -143,32 +143,81 @@ VkShaderModule createShaderModule(VKRT* vkrt, const char* spirv, size_t length) 
     return shaderModule;
 }
 
-static int get_exe_dir(char *out, size_t sz) {
+void createRenderPass(VKRT* vkrt) {
+    VkAttachmentDescription colorAttachment = {0};
+    colorAttachment.format = vkrt->swapChainImageFormat;
+    colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+    VkAttachmentReference colorRef = {0};
+    colorRef.attachment = 0;
+    colorRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    VkSubpassDescription subpass = {0};
+    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.colorAttachmentCount = 1;
+    subpass.pColorAttachments = &colorRef;
+
+    VkSubpassDependency dependency = {0};
+    dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+    dependency.dstSubpass = 0;
+    dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependency.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+    VkRenderPassCreateInfo renderPassCreateInfo = {0};
+    renderPassCreateInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    renderPassCreateInfo.attachmentCount = 1;
+    renderPassCreateInfo.pAttachments = &colorAttachment;
+    renderPassCreateInfo.subpassCount = 1;
+    renderPassCreateInfo.pSubpasses = &subpass;
+    renderPassCreateInfo.dependencyCount = 1;
+    renderPassCreateInfo.pDependencies = &dependency;
+
+    if (vkCreateRenderPass(vkrt->device, &renderPassCreateInfo, NULL, &vkrt->renderPass) != VK_SUCCESS) {
+        perror("ERROR: Failed to create UI render pass");
+        exit(EXIT_FAILURE);
+    }
+}
+
+static int get_exe_dir(char* out, size_t sz) {
 #if defined(_WIN32)
     DWORD len = GetModuleFileNameA(NULL, out, (DWORD)sz);
-    if (len == 0 || len == sz) return -1;
+    if (len == 0 || len == sz)
+        return -1;
     /* strip back to last backslash */
-    while (len && out[len] != '\\') --len;
+    while (len && out[len] != '\\')
+        --len;
     out[len] = '\0';
     return 0;
 #elif defined(__APPLE__)
     uint32_t len = (uint32_t)sz;
-    if (_NSGetExecutablePath(out, &len) != 0) return -1;
-    char *dir = strrchr(out, '/');
-    if (!dir) return -1;
+    if (_NSGetExecutablePath(out, &len) != 0)
+        return -1;
+    char* dir = strrchr(out, '/');
+    if (!dir)
+        return -1;
     *dir = '\0';
     return 0;
 #else
-    ssize_t len = readlink("/proc/self/exe", out, sz-1);
-    if (len <= 0) return -1;
+    ssize_t len = readlink("/proc/self/exe", out, sz - 1);
+    if (len <= 0)
+        return -1;
     out[len] = '\0';
-    while (len && out[len] != '/') --len;
+    while (len && out[len] != '/')
+        --len;
     out[len] = '\0';
     return 0;
 #endif
 }
 
-FILE* fopen_exe_relative(const char *relpath, const char *mode) {
+FILE* fopen_exe_relative(const char* relpath, const char* mode) {
     char buf[4096];
     if (get_exe_dir(buf, sizeof buf) < 0) {
         perror("ERROR: cannot get exe path");

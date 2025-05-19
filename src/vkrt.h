@@ -3,6 +3,8 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+#include "dcimgui.h"
+
 #define WIDTH 800
 #define HEIGHT 600
 
@@ -10,6 +12,7 @@
 
 typedef struct VKRT {
     GLFWwindow* window;
+    ImGuiContext* imguiContext;
     VkInstance instance;
     VkDebugUtilsMessengerEXT debugMessenger;
     VkPhysicalDevice physicalDevice;
@@ -23,6 +26,8 @@ typedef struct VKRT {
     size_t swapChainImageCount;
     VkFormat swapChainImageFormat;
     VkExtent2D swapChainExtent;
+    VkRenderPass renderPass;
+    VkFramebuffer* framebuffers;
     VkDescriptorSetLayout descriptorSetLayout;
     VkDescriptorPool descriptorPool;
     VkDescriptorSet descriptorSet;
