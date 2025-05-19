@@ -5,7 +5,10 @@ cc = meson.get_compiler('c')
 glfw3_path = meson.current_source_dir() / 'external' / 'glfw3' / 'lib'
 glfw3_lib = cc.find_library('glfw3', dirs: glfw3_path, static: true)
 
-incs = include_directories('external/glfw3/include', 'external/imgui/include')
+incs = include_directories(
+    'external/glfw3/include', 
+    'external/imgui/include',
+    'external/cglm/include')
 deps = [ dependency('vulkan'), glfw3_lib ]
 
 dcimgui = static_library(
