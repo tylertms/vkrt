@@ -1,6 +1,7 @@
 #include "command.h"
 #include "buffer.h"
 #include "device.h"
+#include "interface.h"
 #include "swapchain.h"
 
 #include "dcimgui.h"
@@ -81,12 +82,9 @@ void recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
     renderPassBeginInfo.pClearValues = NULL;
 
     vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-    cImGui_ImplVulkan_NewFrame();
-    ImGui_NewFrame();
 
-    ImGui_Text("HEY");
+    drawInterface(vkrt);
 
-    ImGui_Render();
     cImGui_ImplVulkan_RenderDrawData(ImGui_GetDrawData(), commandBuffer);
     vkCmdEndRenderPass(commandBuffer);
 

@@ -70,6 +70,8 @@ typedef struct VKRT {
     uint64_t previousTime;
     uint64_t currentTime;
     uint64_t lastFrameTimeReported;
+    uint32_t averageFPS;
+    float averageFrametime;
 } VKRT;
 
 typedef struct SceneUniform {

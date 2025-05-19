@@ -258,8 +258,8 @@ void recordFrameTime(VKRT* vkrt) {
         uint32_t fps = (uint32_t)(vkrt->tempFrameCount / seconds + 0.5f);
         float avgFrameMs = (seconds * 1e3f) / vkrt->tempFrameCount;
 
-        printf("| %u FPS | %.3f ms |\n", fps, avgFrameMs);
-
+        vkrt->averageFPS = fps;
+        vkrt->averageFrametime = avgFrameMs;
         vkrt->tempFrameCount = 0;
         vkrt->lastFrameTimeReported = vkrt->currentTime;
     }

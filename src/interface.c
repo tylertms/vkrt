@@ -1,5 +1,4 @@
 #include "interface.h"
-#include "command.h"
 #include "device.h"
 
 #include "dcimgui.h"
@@ -46,6 +45,28 @@ void setupImGui(VKRT* vkrt) {
 
     cImGui_ImplVulkan_Init(&imGuiVulkanInitInfo);
     cImGui_ImplVulkan_CreateFontsTexture();
+}
+
+void deinitImGui(VKRT* vkrt) {
+    cImGui_ImplVulkan_Shutdown();
+    cImGui_ImplGlfw_Shutdown();
+
+    ImGui_DestroyContext(vkrt->imguiContext);
+}
+
+void drawInterface(VKRT* vkrt) {
+    cImGui_ImplVulkan_NewFrame();
+    ImGui_NewFrame();
+
+    bool open = true;
+    ImGui_Begin("Statistics", &open, ImGuiWindowFlags_NoTitleBar);
+
+    ImGui_Text("Frame rate:%10d FPS", vkrt->averageFPS);
+    ImGui_Text("Frame time:%10.3f ms", vkrt->averageFrametime);
+
+    ImGui_End();
+
+    ImGui_Render();
 }
 
 void setDarkTheme() {
@@ -107,11 +128,4 @@ void setDarkTheme() {
     colors[ImGuiCol_NavWindowingHighlight] = lightGray;
     colors[ImGuiCol_NavWindowingDimBg] = darkGray;
     colors[ImGuiCol_ModalWindowDimBg] = almostBlack;
-}
-
-void deinitImGui(VKRT* vkrt) {
-    cImGui_ImplVulkan_Shutdown();
-    cImGui_ImplGlfw_Shutdown();
-
-    ImGui_DestroyContext(vkrt->imguiContext);
 }

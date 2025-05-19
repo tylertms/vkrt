@@ -2,5 +2,6 @@
 #include "vkrt.h"
 
 void setupImGui(VKRT* vkrt);
-void setDarkTheme();
 void deinitImGui(VKRT* vkrt);
+void drawInterface(VKRT* vkrt);
+void setDarkTheme();
