@@ -1,12 +1,32 @@
-project('VKRT', 'c', default_options: ['c_std=c17', 'warning_level=3'])
+project('VKRT', ['c', 'cpp'], default_options: ['c_std=c11', 'warning_level=3'])
 
-cxx = meson.get_compiler('c')
+cc = meson.get_compiler('c')
 
 glfw3_path = meson.current_source_dir() / 'external' / 'glfw3' / 'lib'
-glfw3_lib = cxx.find_library('glfw3', dirs: glfw3_path, static: true)
+glfw3_lib = cc.find_library('glfw3', dirs: glfw3_path, static: true)
 
-incs = include_directories('external/glfw3/include')
+incs = include_directories('external/glfw3/include', 'external/imgui/include')
 deps = [ dependency('vulkan'), glfw3_lib ]
+
+dcimgui = static_library(
+    'dcimgui', 
+    cpp_args: ['-std=c++17'], 
+    include_directories: incs,
+    dependencies: deps,
+    sources: files(
+        'external/imgui/src/dcimgui.cpp',
+        'external/imgui/src/dcimgui_internal.cpp',
+        'external/imgui/src/imgui.cpp',
+        'external/imgui/src/imgui_demo.cpp',
+        'external/imgui/src/imgui_draw.cpp',
+        'external/imgui/src/imgui_tables.cpp',
+        'external/imgui/src/imgui_widgets.cpp',
+        'external/imgui/src/dcimgui_impl_glfw.cpp',
+        'external/imgui/src/dcimgui_impl_vulkan.cpp',
+        'external/imgui/src/imgui_impl_glfw.cpp',
+        'external/imgui/src/imgui_impl_vulkan.cpp',
+    )
+)
 
 glslc = find_program('glslc')
 
@@ -17,6 +37,7 @@ sources = [
     'src/descriptor.c',
     'src/device.c',
     'src/instance.c',
+    'src/interface.c',
     'src/main.c',
     'src/pipeline.c',
     'src/structure.c',
@@ -48,5 +69,7 @@ executable(
     'vkrt',
     sources,
     include_directories: incs,
-    dependencies: deps
+    dependencies: deps,
+    link_with: [dcimgui],
+    link_language: 'cpp'
 )
