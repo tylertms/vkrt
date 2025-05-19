@@ -72,31 +72,56 @@ void drawInterface(VKRT* vkrt) {
 }
 
 void handleCameraMovement(VKRT* vkrt) {
-    float movementSpeed = 0.00145f;
-    float zoomSpeed = 0.05f;
-    
-    ImGuiIO* io = ImGui_GetIO();
-    ImVec2 mouseDelta = io->MouseDelta;
-    float scroll = io->MouseWheel;
+    const float panSpeed = -0.00145f;
+    const float orbitSpeed = -0.01f;
+    const float zoomSpeed = 0.1f;
+    const float minDist = 0.001f, maxDist = 10000.0f;
 
-    if (ImGui_IsMouseDragging(ImGuiMouseButton_Right, -1.f)) {
-        movementSpeed *= glm_vec3_distance(vkrt->camera.pos, vkrt->camera.target);
-        glm_vec3_sub(vkrt->camera.pos, (vec3){mouseDelta.x * movementSpeed, mouseDelta.y * movementSpeed, 0}, vkrt->camera.pos);
-        glm_vec3_sub(vkrt->camera.target, (vec3){mouseDelta.x * movementSpeed, mouseDelta.y * movementSpeed, 0}, vkrt->camera.target);
+    ImGuiIO* io = ImGui_GetIO();
+
+    vec3 viewDir;
+    glm_vec3_sub(vkrt->camera.target, vkrt->camera.pos, viewDir);
+    float dist = glm_vec3_norm(viewDir);
+    float scroll = io->MouseWheel;
+    float newDist = glm_clamp(dist - scroll, minDist, maxDist);
+
+    vec3 right, up;
+    glm_vec3_cross(viewDir, (vec3){0, 1, 0}, right);
+    glm_vec3_normalize(right);
+    glm_vec3_cross(right, viewDir, up);
+    glm_vec3_normalize(up);
+
+    if (ImGui_IsMouseDragging(ImGuiMouseButton_Right, -1.0f)) {
+        vec2 d = {io->MouseDelta.x * panSpeed * dist,
+                  io->MouseDelta.y * panSpeed * dist};
+        vec3 move, tmp;
+        glm_vec3_scale(right, d[0], move);
+        glm_vec3_scale(up, d[1], tmp);
+        glm_vec3_add(move, tmp, move);
+
+        glm_vec3_add(vkrt->camera.pos, move, vkrt->camera.pos);
+        glm_vec3_add(vkrt->camera.target, move, vkrt->camera.target);
         updateMatricesFromCamera(vkrt);
     }
 
-    if (ImGui_IsMouseDragging(ImGuiMouseButton_Left, -1.f)) {
+    if (ImGui_IsMouseDragging(ImGuiMouseButton_Left, -1.0f)) {
+        vec2 d = {io->MouseDelta.x * orbitSpeed,
+                  io->MouseDelta.y * orbitSpeed};
+        float theta = atan2(viewDir[0], viewDir[2]) + d[0];
+        float phi = acos(glm_clamp(viewDir[1] / dist, -1.0f, 1.0f));
+        phi = glm_clamp(phi + d[1], 0.001f, M_PI - 0.001f);
 
+        vec3 offset = {
+            -dist * sin(phi) * sin(theta),
+            -dist * cos(phi),
+            -dist * sin(phi) * cos(theta)};
+        glm_vec3_add(vkrt->camera.target, offset, vkrt->camera.pos);
+        updateMatricesFromCamera(vkrt);
     }
 
-    if (scroll != 0.f) {
-        vec3 offset;
-        glm_vec3_sub(vkrt->camera.target, vkrt->camera.pos, offset);
-
-        glm_vec3_scale(offset, scroll * zoomSpeed, offset);
-        glm_vec3_add(vkrt->camera.pos, offset, vkrt->camera.pos);
-
+    if (newDist != dist) {
+        glm_vec3_scale(viewDir, scroll * zoomSpeed, viewDir);
+        glm_vec3_add(vkrt->camera.pos, viewDir, vkrt->camera.pos);
         updateMatricesFromCamera(vkrt);
     }
 }
@@ -107,10 +132,9 @@ void setupSceneUniform(VKRT* vkrt) {
         .nearZ = 0.001,
         .farZ = 10000.0,
         .fovy = 60.0,
-        .pos = {0, 0, 1},
+        .pos = {0, 0, -2},
         .target = {0, 0, 0},
-        .up = {0, 1, 0}
-    };
+        .up = {0, 1, 0}};
 
     updateMatricesFromCamera(vkrt);
 }
