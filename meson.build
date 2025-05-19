@@ -8,7 +8,8 @@ glfw3_lib = cc.find_library('glfw3', dirs: glfw3_path, static: true)
 incs = include_directories(
     'external/glfw3/include', 
     'external/imgui/include',
-    'external/cglm/include')
+    'external/cglm/include',
+    'external/cgltf/include')
 deps = [ dependency('vulkan'), glfw3_lib ]
 
 dcimgui = static_library(
@@ -42,6 +43,7 @@ sources = [
     'src/instance.c',
     'src/interface.c',
     'src/main.c',
+    'src/object.c',
     'src/pipeline.c',
     'src/structure.c',
     'src/surface.c',
