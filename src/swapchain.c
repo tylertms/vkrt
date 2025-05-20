@@ -194,13 +194,13 @@ VkPresentModeKHR chooseSwapPresentMode(SwapChainSupportDetails* supportDetails, 
     }
 
     for (uint32_t i = 0; i < supportDetails->presentModeCount; i++) {
-        if (supportDetails->presentModes[i] == VK_PRESENT_MODE_IMMEDIATE_KHR) {
+        if (supportDetails->presentModes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
             return supportDetails->presentModes[i];
         }
     }
 
     for (uint32_t i = 0; i < supportDetails->presentModeCount; i++) {
-        if (supportDetails->presentModes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
+        if (supportDetails->presentModes[i] == VK_PRESENT_MODE_IMMEDIATE_KHR) {
             return supportDetails->presentModes[i];
         }
     }
