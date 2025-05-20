@@ -13,7 +13,7 @@ incs = include_directories(
     'external/cgltf/include',
 )
 
-deps = [dependency('vulkan'), dependency('glfw3', static: true)]
+deps = [dependency('vulkan'), dependency('glfw3', static: true), dependency('rt', required: false)]
 
 dcimgui = static_library(
     'dcimgui',
@@ -73,11 +73,14 @@ foreach shader_in : shader_inputs
     shader_targets += shader_target
 endforeach
 
+c_args = ['-D_GNU_SOURCE']
+
 executable(
     'vkrt',
     sources,
+    c_args: c_args,
     include_directories: incs,
     dependencies: deps,
     link_with: [dcimgui],
-    link_language: 'cpp',
+    link_language: 'cpp'
 )
