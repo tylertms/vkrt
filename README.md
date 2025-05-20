@@ -50,6 +50,11 @@ meson compile -C build
 ./build/vkrt
 ```
 
+## Usage
+- Hold left-click and drag to orbit the camera.
+- Hold right-click and drag to pan the camera.
+- Use the scroll wheel to zoom.
+
 ## Extras
 
 ### Extension Support
