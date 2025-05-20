@@ -20,12 +20,12 @@ This project is not limited to any GPU or OS. However, your GPU must meet the fo
 ## Dependencies
 
 ### Windows
-- Download and run the [Vulkan SDK] installer.
+- Download and run the [Vulkan SDK](https://vulkan.lunarg.com/sdk/home) installer.
 - Install a C/C++ compiler, e.g. through [Visual Studio](https://visualstudio.microsoft.com/) or [MSYS2](https://www.msys2.org/)
 - Install the [Meson](https://mesonbuild.com/SimpleStart.html) build system.
 
 ### Linux
-- Install the [Vulkan SDK](https://vulkan.lunarg.com/doc/view/latest/linux/getting_started.html) according to your distribution.
+- Install the [Vulkan SDK](https://vulkan.lunarg.com/sdk/home) according to your distribution.
 - Install a C and C++ compiler. See [C/C++ Compiler](#cc-compiler)
 - Install the [Meson](https://mesonbuild.com/SimpleStart.html) build system.
 - See [Compiling GLFW](https://www.glfw.org/docs/3.4/compile.html) and install the packages for your distribution and display server. GLFW itself will be compiled automatically during the build process.
