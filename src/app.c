@@ -26,7 +26,7 @@ void initWindow(VKRT* vkrt) {
     glfwInit();
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
     vkrt->window = glfwCreateWindow(WIDTH, HEIGHT, "VKRT", 0, 0);
     glfwSetWindowUserPointer(vkrt->window, vkrt);
@@ -84,10 +84,6 @@ void deinit(VKRT* vkrt) {
     vkFreeMemory(vkrt->device, vkrt->vertexBufferMemory, NULL);
     vkDestroyBuffer(vkrt->device, vkrt->indexBuffer, NULL);
     vkFreeMemory(vkrt->device, vkrt->indexBufferMemory, NULL);
-
-    vkDestroyImageView(vkrt->device, vkrt->storageImageView, NULL);
-    vkDestroyImage(vkrt->device, vkrt->storageImage, NULL);
-    vkFreeMemory(vkrt->device, vkrt->storageImageMemory, NULL);
 
     vkDestroyBuffer(vkrt->device, vkrt->uniformBuffer, NULL);
     vkFreeMemory(vkrt->device, vkrt->uniformBufferMemory, NULL);

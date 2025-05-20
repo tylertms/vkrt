@@ -98,18 +98,19 @@ void recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
 
 void drawFrame(VKRT* vkrt) {
     vkWaitForFences(vkrt->device, 1, &vkrt->inFlightFences[vkrt->currentFrame], VK_TRUE, UINT64_MAX);
-    vkResetFences(vkrt->device, 1, &vkrt->inFlightFences[vkrt->currentFrame]);
 
     uint32_t imageIndex;
     VkResult result = vkAcquireNextImageKHR(vkrt->device, vkrt->swapChain, UINT64_MAX, vkrt->imageAvailableSemaphores[vkrt->currentFrame], VK_NULL_HANDLE, &imageIndex);
 
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
         recreateSwapChain(vkrt);
         return;
-    } else if (result != VK_SUCCESS) {
+    } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
         perror("ERROR: Failed to acquire next swapchain image");
         exit(EXIT_FAILURE);
     }
+
+    vkResetFences(vkrt->device, 1, &vkrt->inFlightFences[vkrt->currentFrame]);
 
     vkResetCommandBuffer(vkrt->commandBuffers[vkrt->currentFrame], 0);
     recordCommandBuffer(vkrt, imageIndex);

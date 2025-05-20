@@ -184,6 +184,7 @@ VkBool32 isDeviceSuitable(VKRT* vkrt) {
 
     if (queueFamilyComplete && extensionSupport && swapChainAdequate && validDeviceType) {
         printf("INFO: Using device [%s].\n", deviceProperties.deviceName);
+        snprintf(vkrt->deviceName, COUNT_OF(vkrt->deviceName), "%s", deviceProperties.deviceName);
         return VK_TRUE;
     }
 

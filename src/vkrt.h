@@ -17,13 +17,9 @@ typedef struct SceneUniform {
 } SceneUniform;
 
 typedef struct Camera {
-    vec3 pos;
-    vec3 target;
-    vec3 up;
-    float fovy;
-    float aspect;
-    float nearZ;
-    float farZ;
+    vec3 pos, target, up;
+    uint32_t width, height;
+    float nearZ, farZ, vfov;
 } Camera;
 
 typedef struct VKRT {
@@ -33,6 +29,7 @@ typedef struct VKRT {
     VkDebugUtilsMessengerEXT debugMessenger;
     VkPhysicalDevice physicalDevice;
     VkDevice device;
+    char deviceName[256];
     VkQueue graphicsQueue;
     VkQueue presentQueue;
     VkSurfaceKHR surface;

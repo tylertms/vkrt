@@ -61,6 +61,7 @@ void drawInterface(VKRT* vkrt) {
     bool open = true;
     ImGui_Begin("Statistics", &open, ImGuiWindowFlags_NoTitleBar);
 
+    ImGui_Text("Device: %s", vkrt->deviceName);
     ImGui_Text("Frame rate:%10d FPS", vkrt->averageFPS);
     ImGui_Text("Frame time:%10.3f ms", vkrt->averageFrametime);
 
@@ -73,7 +74,7 @@ void drawInterface(VKRT* vkrt) {
 
 void handleCameraMovement(VKRT* vkrt) {
     const float panSpeed = -0.00145f;
-    const float orbitSpeed = -0.01f;
+    const float orbitSpeed = -0.004f;
     const float zoomSpeed = 0.1f;
     const float minDist = 0.001f, maxDist = 10000.0f;
 
@@ -128,22 +129,22 @@ void handleCameraMovement(VKRT* vkrt) {
 
 void setupSceneUniform(VKRT* vkrt) {
     vkrt->camera = (Camera){
-        .aspect = WIDTH / HEIGHT,
-        .nearZ = 0.001,
-        .farZ = 10000.0,
-        .fovy = 40.0,
-        .pos = {-0.2, -0.2, 0.4},
+        .width = WIDTH, .height = HEIGHT,
+        .nearZ = 0.001, .farZ = 10000.0,
+        .vfov = 40.0,
+        .pos = {0, 0, 0.3},
         .target = {0, 0, 0},
         .up = {0, 1, 0}};
 
     updateMatricesFromCamera(vkrt);
 }
+
 void updateMatricesFromCamera(VKRT* vkrt) {
     mat4 view, proj;
     Camera cam = vkrt->camera;
 
     glm_lookat(cam.pos, cam.target, cam.up, view);
-    glm_perspective(glm_rad(cam.fovy), cam.aspect, cam.nearZ, cam.farZ, proj);
+    glm_perspective(glm_rad(cam.vfov), (float)cam.width / cam.height, cam.nearZ, cam.farZ, proj);
 
     glm_mat4_inv(view, vkrt->uniformBufferMapped->viewInverse);
     glm_mat4_inv(proj, vkrt->uniformBufferMapped->projInverse);

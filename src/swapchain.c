@@ -1,5 +1,8 @@
 #include "swapchain.h"
+#include "command.h"
+#include "descriptor.h"
 #include "device.h"
+#include "interface.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -63,20 +66,27 @@ void createSwapChain(VKRT* vkrt) {
 }
 
 void recreateSwapChain(VKRT* vkrt) {
-    printf("RECREATING SWAPCHAIN\n");
-    int width, height;
-    glfwGetFramebufferSize(vkrt->window, &width, &height);
+    glfwGetFramebufferSize(vkrt->window, 
+        (int*)&vkrt->camera.width, 
+        (int*)&vkrt->camera.height);
 
-    while (width == 0 || height == 0) {
-        glfwGetFramebufferSize(vkrt->window, &width, &height);
+    while (vkrt->camera.width == 0 || vkrt->camera.height == 0) {
+        glfwGetFramebufferSize(vkrt->window, 
+            (int*)&vkrt->camera.width, 
+            (int*)&vkrt->camera.height);
         glfwWaitEvents();
     }
 
     vkDeviceWaitIdle(vkrt->device);
 
     cleanupSwapChain(vkrt);
+
     createSwapChain(vkrt);
     createImageViews(vkrt);
+    createStorageImage(vkrt);
+    updateDescriptorSet(vkrt);
+    createFramebuffers(vkrt);
+    updateMatricesFromCamera(vkrt);
 }
 
 void cleanupSwapChain(VKRT* vkrt) {
@@ -89,6 +99,10 @@ void cleanupSwapChain(VKRT* vkrt) {
 
     free(vkrt->swapChainImageViews);
     free(vkrt->swapChainImages);
+    
+    vkDestroyImageView(vkrt->device, vkrt->storageImageView, NULL);
+    vkDestroyImage(vkrt->device, vkrt->storageImage, NULL);
+    vkFreeMemory(vkrt->device, vkrt->storageImageMemory, NULL);
 }
 
 void createImageViews(VKRT* vkrt) {
@@ -175,7 +189,7 @@ VkSurfaceFormatKHR chooseSwapSurfaceFormat(SwapChainSupportDetails* supportDetai
 }
 
 VkPresentModeKHR chooseSwapPresentMode(SwapChainSupportDetails* supportDetails) {
-    /*
+    
     for (uint32_t i = 0; i < supportDetails->presentModeCount; i++) {
         if (supportDetails->presentModes[i] == VK_PRESENT_MODE_IMMEDIATE_KHR) {
             return supportDetails->presentModes[i];
@@ -187,8 +201,9 @@ VkPresentModeKHR chooseSwapPresentMode(SwapChainSupportDetails* supportDetails) 
             return supportDetails->presentModes[i];
         }
     }
-    */
+    
 
+    (void)supportDetails;
     return VK_PRESENT_MODE_FIFO_KHR;
 }
 

@@ -85,6 +85,10 @@ void createDescriptorSet(VKRT* vkrt) {
         exit(EXIT_FAILURE);
     }
 
+    updateDescriptorSet(vkrt);
+}
+
+void updateDescriptorSet(VKRT* vkrt) {
     VkWriteDescriptorSetAccelerationStructureKHR accelerationStructureInfo = {0};
     accelerationStructureInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
     accelerationStructureInfo.accelerationStructureCount = 1;
