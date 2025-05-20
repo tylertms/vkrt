@@ -28,12 +28,27 @@ This project is not limited to any GPU or OS. However, your GPU must meet the fo
 - Install the [Vulkan SDK](https://vulkan.lunarg.com/doc/view/latest/linux/getting_started.html) according to your distribution.
 - Install a C and C++ compiler. See [C/C++ Compiler](#cc-compiler)
 - Install the [Meson](https://mesonbuild.com/SimpleStart.html) build system.
+- See [Compiling GLFW](https://www.glfw.org/docs/3.4/compile.html) and install the packages for your distribution and display server. GLFW itself will be compiled automatically during the build process.
 
 This project also depends on `glfw3`, `cglm`, `cgltf`, and `imgui`. These are automatically included in the build process, you do not need to install any of these.
 
 ## Building
 
-TODO: score GPU when picking device.
+After the [dependencies](#dependencies) are installed, run the following:
+
+```
+git clone https://github.com/tylertms/vkrt
+cd vkrt
+meson setup build
+meson compile -C build
+./build/vkrt
+```
+
+To rebuild the program after changes are made to any source file, including shaders, run the following:
+```
+meson compile -C build
+./build/vkrt
+```
 
 ## Extras
 
