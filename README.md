@@ -55,6 +55,11 @@ meson compile -C build
 - Hold right-click and drag to pan the camera.
 - Use the scroll wheel to zoom.
 
+## Demo
+![dragon](./assets/dragon.png)
+
+By default, this program loads and ray-traces this [870k-triangle Stanford Dragon](https://graphics.stanford.edu/data/3Dscanrep/). V-Sync can be toggled, and the frame rate is reported every second. The window can be resized, and the controls are shown in [Usage](#usage).
+
 ## Extras
 
 ### Extension Support
