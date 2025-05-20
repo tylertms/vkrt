@@ -1,17 +1,21 @@
 # vkrt
 This is a lightweight, functional implementation of the Vulkan ray tracing pipeline, written in C. It features an interactive, resizable window using GLFW, and a simple GUI integration using ImGui.
 
+![dragon](./assets/dragon.png)
+
+By default, this program loads and ray-traces this [870k-triangle Stanford Dragon](https://graphics.stanford.edu/data/3Dscanrep/).<br/>
+The normal vector is returned as the color. This can easily be expanded upon to ray trace light, reflections, etc.<br/>
+The controls are shown in [Usage](#usage). The GUI reports FPS and frametime, and can be used to toggle VSync.
+
 ## Requirements
 This project is not limited to any GPU or OS. However, your GPU must meet the following requirements:
 - Must support the following extensions (see [Extension Support](#extension-support)):
 
-  ```
-  VK_KHR_ray_tracing_pipeline
-  VK_KHR_acceleration_structure
-  VK_KHR_swapchain
-  VK_KHR_deferred_host_operations
-  VK_KHR_buffer_device_address
-  ```
+  `VK_KHR_ray_tracing_pipeline`,<br/>
+  `VK_KHR_acceleration_structure`,<br/>
+  `VK_KHR_swapchain`,<br/>
+  `VK_KHR_deferred_host_operations`,<br/>
+  `VK_KHR_buffer_device_address`<br/>
 
 - Must support Vulkan API version 1.4. Any GPU supporting those extensions should support Vulkan API version 1.4.
 
@@ -54,11 +58,6 @@ meson compile -C build
 - Hold left-click and drag to orbit the camera.
 - Hold right-click and drag to pan the camera.
 - Use the scroll wheel to zoom.
-
-## Demo
-![dragon](./assets/dragon.png)
-
-By default, this program loads and ray-traces this [870k-triangle Stanford Dragon](https://graphics.stanford.edu/data/3Dscanrep/). V-Sync can be toggled, and the frame rate is reported every second. The window can be resized, and the controls are shown in [Usage](#usage).
 
 ## Extras
 
