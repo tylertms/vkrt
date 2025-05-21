@@ -65,6 +65,10 @@ void drawInterface(VKRT* vkrt) {
     ImGui_Text("Frame rate:%10d FPS", vkrt->averageFPS);
     ImGui_Text("Frame time:%10.3f ms", vkrt->averageFrametime);
 
+    if (ImGui_Checkbox("V-Sync", (bool*)&vkrt->vsync)) {
+        vkrt->framebufferResized = VK_TRUE;
+    }
+
     handleCameraMovement(vkrt);
 
     ImGui_End();
@@ -132,7 +136,7 @@ void setupSceneUniform(VKRT* vkrt) {
         .width = WIDTH, .height = HEIGHT,
         .nearZ = 0.001, .farZ = 10000.0,
         .vfov = 40.0,
-        .pos = {0, 0, 0.3},
+        .pos = {0, 0, 0.5},
         .target = {0, 0, 0},
         .up = {0, 1, 0}};
 

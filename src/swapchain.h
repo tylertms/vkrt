@@ -16,5 +16,5 @@ void createImageViews(VKRT* vkrt);
 void createFramebuffers(VKRT* vkrt);
 SwapChainSupportDetails querySwapChainSupport(VKRT* vkrt);
 VkSurfaceFormatKHR chooseSwapSurfaceFormat(SwapChainSupportDetails* supportDetails);
-VkPresentModeKHR chooseSwapPresentMode(SwapChainSupportDetails* supportDetails);
+VkPresentModeKHR chooseSwapPresentMode(SwapChainSupportDetails* supportDetails, uint8_t vsync);
 VkExtent2D chooseSwapExtent(VKRT* vkrt, SwapChainSupportDetails* supportDetails);

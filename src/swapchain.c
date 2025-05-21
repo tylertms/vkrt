@@ -11,7 +11,7 @@ void createSwapChain(VKRT* vkrt) {
     SwapChainSupportDetails supportDetails = querySwapChainSupport(vkrt);
 
     VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(&supportDetails);
-    VkPresentModeKHR presentMode = chooseSwapPresentMode(&supportDetails);
+    VkPresentModeKHR presentMode = chooseSwapPresentMode(&supportDetails, vkrt->vsync);
     VkExtent2D extent = chooseSwapExtent(vkrt, &supportDetails);
 
     free(supportDetails.formats);
@@ -188,8 +188,11 @@ VkSurfaceFormatKHR chooseSwapSurfaceFormat(SwapChainSupportDetails* supportDetai
     return supportDetails->formats[0];
 }
 
-VkPresentModeKHR chooseSwapPresentMode(SwapChainSupportDetails* supportDetails) {
-    
+VkPresentModeKHR chooseSwapPresentMode(SwapChainSupportDetails* supportDetails, uint8_t vsync) {
+    if (vsync) {
+        return VK_PRESENT_MODE_FIFO_KHR;
+    }
+
     for (uint32_t i = 0; i < supportDetails->presentModeCount; i++) {
         if (supportDetails->presentModes[i] == VK_PRESENT_MODE_IMMEDIATE_KHR) {
             return supportDetails->presentModes[i];
@@ -201,9 +204,7 @@ VkPresentModeKHR chooseSwapPresentMode(SwapChainSupportDetails* supportDetails) 
             return supportDetails->presentModes[i];
         }
     }
-    
 
-    (void)supportDetails;
     return VK_PRESENT_MODE_FIFO_KHR;
 }
 

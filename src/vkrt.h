@@ -86,6 +86,7 @@ typedef struct VKRT {
     uint64_t lastFrameTimeReported;
     uint32_t averageFPS;
     float averageFrametime;
+    uint8_t vsync;
 } VKRT;
 
 typedef struct Vertex {

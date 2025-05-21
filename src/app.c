@@ -31,6 +31,8 @@ void initWindow(VKRT* vkrt) {
     vkrt->window = glfwCreateWindow(WIDTH, HEIGHT, "VKRT", 0, 0);
     glfwSetWindowUserPointer(vkrt->window, vkrt);
     glfwSetFramebufferSizeCallback(vkrt->window, framebufferResizedCallback);
+
+    vkrt->vsync = 1;
 }
 
 void initVulkan(VKRT* vkrt) {
