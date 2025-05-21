@@ -14,6 +14,12 @@ const char* deviceExtensions[NUM_EXTENSIONS] = {
     VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
     VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME};
 
+const VkPhysicalDeviceType rankedDeviceTypes[4] = {
+    VK_PHYSICAL_DEVICE_TYPE_CPU,
+    VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU,
+    VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU,
+    VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU};
+
 void pickPhysicalDevice(VKRT* vkrt) {
     vkrt->physicalDevice = VK_NULL_HANDLE;
 
@@ -28,20 +34,34 @@ void pickPhysicalDevice(VKRT* vkrt) {
     VkPhysicalDevice* devices = (VkPhysicalDevice*)malloc(deviceCount * sizeof(VkPhysicalDevice));
     vkEnumeratePhysicalDevices(vkrt->instance, &deviceCount, devices);
 
+    int32_t highestScore = -1;
+    int32_t bestDevice = -1;
+
     for (uint32_t i = 0; i < deviceCount; i++) {
         vkrt->physicalDevice = devices[i];
-        if (isDeviceSuitable(vkrt)) {
+        int32_t score = isDeviceSuitable(vkrt);
+        
+        if (score > highestScore) {
+            highestScore = score;
+            bestDevice = i;
             break;
         }
-        vkrt->physicalDevice = VK_NULL_HANDLE;
     }
 
-    free(devices);
-
-    if (vkrt->physicalDevice == VK_NULL_HANDLE) {
+    if (bestDevice < 0) {
         perror("ERROR: Failed to find a suitable GPU");
+        free(devices);
         exit(EXIT_FAILURE);
     }
+
+    vkrt->physicalDevice = devices[bestDevice];
+
+    VkPhysicalDeviceProperties deviceProperties = {0};
+    vkGetPhysicalDeviceProperties(vkrt->physicalDevice, &deviceProperties);
+
+    printf("INFO: Using device [%s].\n", deviceProperties.deviceName);
+    snprintf(vkrt->deviceName, COUNT_OF(vkrt->deviceName), "%s", deviceProperties.deviceName);
+    free(devices);
 }
 
 void createLogicalDevice(VKRT* vkrt) {
@@ -159,7 +179,7 @@ QueueFamily findQueueFamilies(VKRT* vkrt) {
     return indices;
 }
 
-VkBool32 isDeviceSuitable(VKRT* vkrt) {
+int32_t isDeviceSuitable(VKRT* vkrt) {
     VkPhysicalDeviceProperties deviceProperties = {0};
     VkPhysicalDeviceFeatures deviceFeatures = {0};
 
@@ -180,15 +200,15 @@ VkBool32 isDeviceSuitable(VKRT* vkrt) {
         free(supportDetails.presentModes);
     }
 
-    VkBool32 validDeviceType = deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
-
-    if (queueFamilyComplete && extensionSupport && swapChainAdequate && validDeviceType) {
-        printf("INFO: Using device [%s].\n", deviceProperties.deviceName);
-        snprintf(vkrt->deviceName, COUNT_OF(vkrt->deviceName), "%s", deviceProperties.deviceName);
-        return VK_TRUE;
+    if (queueFamilyComplete && extensionSupport && swapChainAdequate) {
+        for (size_t i = 0; i < COUNT_OF(rankedDeviceTypes); i++) {
+            if (deviceProperties.deviceType == rankedDeviceTypes[i]) {
+                return i;
+            }
+        }
     }
 
-    return VK_FALSE;
+    return -1;
 }
 
 VkBool32 isQueueFamilyComplete(QueueFamily indices) {
