@@ -26,7 +26,7 @@ This project is not limited to any GPU or OS. However, your GPU must meet the fo
 ### Windows
 - Download and run the [Vulkan SDK](https://vulkan.lunarg.com/sdk/home) installer.
 - Install a C/C++ compiler. See [C/C++ Compiler](#cc-compiler).
-- Install the [Meson](https://mesonbuild.com/SimpleStart.html) build system.
+- Install the [Meson](https://mesonbuild.com/SimpleStart.html#installing-meson) build system.
 
 ### Linux
 - Install the [Vulkan SDK](https://vulkan.lunarg.com/sdk/home) according to your distribution.
