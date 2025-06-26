@@ -3,9 +3,9 @@
 #include "validation.h"
 
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 const char* deviceExtensions[NUM_EXTENSIONS] = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
@@ -252,14 +252,25 @@ uint32_t findMemoryType(VKRT* vkrt, uint32_t typeFilter, VkMemoryPropertyFlags p
     exit(EXIT_FAILURE);
 }
 
-uint64_t getTimeNanoSeconds() {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t)ts.tv_sec * 1000000000 + (uint64_t)ts.tv_nsec;
-}
+#if defined(_WIN32) || defined(_WIN64)
+    #include <windows.h>
+    uint64_t getMicroseconds() {
+        LARGE_INTEGER frequency, counter;
+        QueryPerformanceFrequency(&frequency);
+        QueryPerformanceCounter(&counter);
+        return (uint64_t)(counter.QuadPart * 1000000 / frequency.QuadPart);
+    }
+#else
+    #include <time.h>
+    uint64_t getMicroseconds() {
+        struct timespec ts;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        return (uint64_t)ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
+    }
+#endif
 
 void initializeFrameTimers(VKRT* vkrt) {
-    uint64_t currentTime = getTimeNanoSeconds();
+    uint64_t currentTime = getMicroseconds();
     vkrt->previousTime = currentTime;
     vkrt->currentTime = currentTime;
     vkrt->lastFrameTimeReported = currentTime;
@@ -268,14 +279,14 @@ void initializeFrameTimers(VKRT* vkrt) {
 
 void recordFrameTime(VKRT* vkrt) {
     vkrt->previousTime = vkrt->currentTime;
-    vkrt->currentTime = getTimeNanoSeconds();
+    vkrt->currentTime = getMicroseconds();
     vkrt->tempFrameCount++;
 
     uint64_t elapsed = vkrt->currentTime - vkrt->lastFrameTimeReported;
-    const uint64_t oneSecondNs = 1000000000ULL;
+    const uint64_t oneSecondUs = 1000000ULL;
 
-    if (elapsed >= oneSecondNs) {
-        float seconds = (float)elapsed / 1e9f;
+    if (elapsed >= oneSecondUs) {
+        float seconds = (float)elapsed / 1e6f;
         uint32_t fps = (uint32_t)(vkrt->tempFrameCount / seconds + 0.5f);
         float avgFrameMs = (seconds * 1e3f) / vkrt->tempFrameCount;
 
