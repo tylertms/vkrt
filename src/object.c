@@ -147,7 +147,7 @@ static int get_exe_dir(char* out, size_t sz) {
     DWORD len = GetModuleFileNameA(NULL, out, (DWORD)sz);
     if (len == 0 || len == sz)
         return -1;
-    /* strip back to last backslash */
+
     while (len && out[len] != '\\')
         --len;
     out[len] = '\0';
