@@ -1,7 +1,7 @@
 project(
     'VKRT',
     ['c', 'cpp'],
-    default_options: ['c_std=c11', 'warning_level=3'],
+    default_options: ['c_std=c11', 'warning_level=2'],
 )
 
 cc = meson.get_compiler('c')
@@ -11,15 +11,16 @@ incs = include_directories(
     'external/imgui/include',
     'external/cglm/include',
     'external/cgltf/include',
+    is_system: true
 )
 
 deps = [dependency('vulkan'), dependency('glfw3', static: true), dependency('rt', required: false)]
 
 dcimgui = static_library(
     'dcimgui',
-    cpp_args: ['-std=c++17'],
     include_directories: incs,
     dependencies: deps,
+    override_options: ['warning_level=0', 'cpp_std=c++17'],
     sources: files(
         'external/imgui/src/dcimgui.cpp',
         'external/imgui/src/dcimgui_impl_glfw.cpp',
