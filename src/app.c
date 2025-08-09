@@ -1,6 +1,7 @@
 #include "app.h"
 #include "buffer.h"
 #include "command.h"
+#include "debug.h"
 #include "descriptor.h"
 #include "device.h"
 #include "instance.h"
@@ -48,8 +49,6 @@ void initVulkan(VKRT* vkrt) {
     createCommandPool(vkrt);
     loadObject(vkrt, "assets/sphere.glb");
     loadObject(vkrt, "assets/dragon.glb");
-    createBottomLevelAccelerationStructure(vkrt);
-    createTopLevelAccelerationStructure(vkrt);
     createDescriptorSetLayout(vkrt);
     createRayTracingPipeline(vkrt);
     createStorageImage(vkrt);

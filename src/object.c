@@ -133,6 +133,8 @@ void loadObject(VKRT* vkrt, const char* filename) {
     free(vertices);
     free(indices);
     cgltf_free(data);
+
+    createBottomLevelAccelerationStructure(vkrt, &vkrt->meshes[meshIndex]);
 }
 
 void createUniformBuffer(VKRT* vkrt) {
@@ -180,9 +182,15 @@ FILE* fopen_exe_relative(const char* relpath, const char* mode) {
         return NULL;
     }
 
-    strncat(buf, "/", sizeof buf - strlen(buf) - 1);
-    strncat(buf, relpath, sizeof buf - strlen(buf) - 1);
-    return fopen(buf, mode);
+    strncat_s(buf, sizeof buf, "/", _TRUNCATE);
+    strncat_s(buf, sizeof buf, relpath, _TRUNCATE);
+
+    FILE* file = NULL;
+    if (fopen_s(&file, buf, mode) != 0) {
+        return NULL;
+    }
+
+    return file;
 }
 
 const char* readFile(const char* filename, size_t* fileSize) {

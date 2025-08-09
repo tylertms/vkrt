@@ -253,6 +253,8 @@ void createBottomLevelAccelerationStructure(VKRT* vkrt) {
 
     vkDestroyBuffer(vkrt->device, scratchBuffer, NULL);
     vkFreeMemory(vkrt->device, scratchDeviceMemory, NULL);
+
+    vkrt->topLevelAccelerationStructure.needsRebuild = 1;
 }
 
 void createTopLevelAccelerationStructure(VKRT* vkrt) {
