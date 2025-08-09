@@ -30,10 +30,20 @@ typedef struct AccelerationStructure {
     uint8_t needsRebuild;
 } AccelerationStructure;
 
+typedef struct MeshInfo {
+    vec3 position;
+    uint32_t vertexBase;
+    vec3 rotation;
+    uint32_t vertexCount;
+    vec3 scale;
+    uint32_t indexBase;
+    uint32_t indexCount;
+    uint32_t materialIndex;
+    uint64_t padding;
+} MeshInfo;
+
 typedef struct Mesh {
-    vec3 position, rotation, scale;
-    uint32_t vertexCount, firstVertex;
-    uint32_t indexCount, firstIndex; 
+    MeshInfo info;
     AccelerationStructure bottomLevelAccelerationStructure;
 } Mesh;
 
@@ -108,10 +118,5 @@ typedef struct Vertex {
     float position[4];
     float normal[4];
 } Vertex;
-
-typedef struct MeshInfo {
-    uint32_t vertexBase;
-    uint32_t triBase;
-} MeshInfo;
 
 #define COUNT_OF(x) ((sizeof(x) / sizeof(0 [x])) / ((size_t)(!(sizeof(x) % sizeof(0 [x])))))

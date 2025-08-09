@@ -90,7 +90,7 @@ void createBottomLevelAccelerationStructure(VKRT* vkrt, Mesh* mesh) {
     accelerationStructureGeometryTrianglesData.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
     accelerationStructureGeometryTrianglesData.vertexData.deviceAddress = vkrt->vertexBufferDeviceAddress;
     accelerationStructureGeometryTrianglesData.vertexStride = sizeof(Vertex);
-    accelerationStructureGeometryTrianglesData.maxVertex = mesh->firstVertex + mesh->vertexCount - 1;
+    accelerationStructureGeometryTrianglesData.maxVertex = mesh->info.vertexBase + mesh->info.vertexCount - 1;
     accelerationStructureGeometryTrianglesData.indexType = VK_INDEX_TYPE_UINT32;
     accelerationStructureGeometryTrianglesData.indexData.deviceAddress = vkrt->indexBufferDeviceAddress;
     accelerationStructureGeometryTrianglesData.transformData.deviceAddress = 0;
@@ -112,7 +112,7 @@ void createBottomLevelAccelerationStructure(VKRT* vkrt, Mesh* mesh) {
     accelerationStructureBuildGeometryInfo.dstAccelerationStructure = VK_NULL_HANDLE;
     accelerationStructureBuildGeometryInfo.scratchData.deviceAddress = 0;
 
-    uint32_t primitiveCount = mesh->indexCount / 3;
+    uint32_t primitiveCount = mesh->info.indexCount / 3;
     VkAccelerationStructureBuildSizesInfoKHR accelerationStructureBuildSizesInfo = {0};
     accelerationStructureBuildSizesInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
 
@@ -227,8 +227,8 @@ void createBottomLevelAccelerationStructure(VKRT* vkrt, Mesh* mesh) {
 
     VkAccelerationStructureBuildRangeInfoKHR accelerationStructureBuildRangeInfo = {0};
     accelerationStructureBuildRangeInfo.primitiveCount = primitiveCount;
-    accelerationStructureBuildRangeInfo.primitiveOffset = (uint32_t)(mesh->firstIndex * sizeof(uint32_t));
-    accelerationStructureBuildRangeInfo.firstVertex = mesh->firstVertex;
+    accelerationStructureBuildRangeInfo.primitiveOffset = (uint32_t)(mesh->info.indexBase * sizeof(uint32_t));
+    accelerationStructureBuildRangeInfo.firstVertex = mesh->info.vertexBase;
     accelerationStructureBuildRangeInfo.transformOffset = 0;
     const VkAccelerationStructureBuildRangeInfoKHR* pBuildRangeInfo = &accelerationStructureBuildRangeInfo;
 
@@ -297,9 +297,7 @@ void createTopLevelAccelerationStructure(VKRT* vkrt) {
         inst.accelerationStructureReference = vkrt->meshes[i].bottomLevelAccelerationStructure.deviceAddress;
 
         instances[i] = inst;
-
-        meshInfos[i].vertexBase = vkrt->meshes[i].firstVertex;
-        meshInfos[i].triBase = vkrt->meshes[i].firstIndex / 3u;
+        meshInfos[i] = vkrt->meshes[i].info;
     }
 
     VkBufferCreateInfo instanceBufferCreateInfo = {0};

@@ -47,8 +47,8 @@ void initVulkan(VKRT* vkrt) {
     createRenderPass(vkrt);
     createFramebuffers(vkrt);
     createCommandPool(vkrt);
-    loadObject(vkrt, "assets/sphere.glb");
-    loadObject(vkrt, "assets/dragon.glb");
+    loadObject(vkrt, "assets/models/sphere.glb");
+    loadObject(vkrt, "assets/models/dragon.glb");
     createDescriptorSetLayout(vkrt);
     createRayTracingPipeline(vkrt);
     createStorageImage(vkrt);

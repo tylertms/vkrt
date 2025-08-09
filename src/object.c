@@ -119,11 +119,10 @@ void loadObject(VKRT* vkrt, const char* filename) {
     vkrt->meshCount++;
     vkrt->meshes = realloc(vkrt->meshes, vkrt->meshCount * sizeof(Mesh));
 
-    vkrt->meshes[meshIndex].vertexCount = (uint32_t)numVertices;
-    vkrt->meshes[meshIndex].indexCount = (uint32_t)numIndices;
-    vkrt->meshes[meshIndex].firstVertex = vkrt->totalVertexCount;
-    vkrt->meshes[meshIndex].firstIndex = vkrt->totalIndexCount;
-
+    vkrt->meshes[meshIndex].info.vertexCount = (uint32_t)numVertices;
+    vkrt->meshes[meshIndex].info.indexCount = (uint32_t)numIndices;
+    vkrt->meshes[meshIndex].info.vertexBase = vkrt->totalVertexCount;
+    vkrt->meshes[meshIndex].info.indexBase = vkrt->totalIndexCount;
 
     vkrt->vertexBufferDeviceAddress = appendBufferFromHostData(vkrt, vertices, 
         numVertices * sizeof(Vertex), 

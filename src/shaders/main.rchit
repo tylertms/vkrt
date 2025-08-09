@@ -9,8 +9,14 @@ struct Vertex {
 };
 
 struct MeshInfo {
+    vec3 position;
     uint vertexBase;
-    uint triBase;
+    vec3 rotation;
+    uint vertexCount;
+    vec3 scale;
+    uint indexBase;
+    uint indexCount;
+    uint materialIndex;
 };
 
 layout(set = 0, binding = 2, std430) readonly buffer VertexBuffer {
@@ -25,17 +31,16 @@ layout(set = 0, binding = 5, std430) readonly buffer MeshInfoBuffer {
     MeshInfo infos[];
 } meshInfo;
 
-
 hitAttributeEXT vec2 barycentrics;
 
 void main() {
-    uint inst = gl_InstanceCustomIndexEXT;
-    uint primID = meshInfo.infos[inst].triBase + gl_PrimitiveID;
-    uint vbase = meshInfo.infos[inst].vertexBase;
-    
-    uint index0 = indexBuffer.indices[primID*3 + 0] + vbase;
-    uint index1 = indexBuffer.indices[primID*3 + 1] + vbase;
-    uint index2 = indexBuffer.indices[primID*3 + 2] + vbase;
+    uint instance = gl_InstanceCustomIndexEXT;
+    uint primitiveID = meshInfo.infos[instance].indexBase + gl_PrimitiveID * 3;
+    uint vertexBase = meshInfo.infos[instance].vertexBase;
+
+    uint index0 = indexBuffer.indices[primitiveID + 0] + vertexBase;
+    uint index1 = indexBuffer.indices[primitiveID + 1] + vertexBase;
+    uint index2 = indexBuffer.indices[primitiveID + 2] + vertexBase;
 
     vec3 normal0 = vertexBuffer.vertices[index0].normal;
     vec3 normal1 = vertexBuffer.vertices[index1].normal;
@@ -43,7 +48,7 @@ void main() {
 
     float u = barycentrics.x;
     float v = barycentrics.y;
-    vec3 interp = normalize(mix(mix(normal0, normal1, u), normal2, v));
+    vec3 interp = normalize(normal0 * (1.0 - u - v) + normal1 * u + normal2 * v);
 
     color = interp * 0.5 + 0.5;
 }

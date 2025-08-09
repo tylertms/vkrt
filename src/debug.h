@@ -30,11 +30,11 @@ static inline void printVertex(const Vertex* v) {
 }
 
 static inline void printMesh(const Mesh* m) {
-    printf("Mesh{\n  position="); printVec3(m->position);
-    printf(", rotation=");        printVec3(m->rotation);
-    printf(", scale=");           printVec3(m->scale);
-    printf("\n  vertexCount=%u, firstVertex=%u, indexCount=%u, firstIndex=%u\n}\n",
-           m->vertexCount, m->firstVertex, m->indexCount, m->firstIndex);
+    printf("Mesh{\n  position="); printVec3(m->info.position);
+    printf(", rotation=");        printVec3(m->info.rotation);
+    printf(", scale=");           printVec3(m->info.scale);
+    printf("\n  vertexCount=%u, vertexBase=%u, indexCount=%u, indexBase=%u\n}\n",
+           m->info.vertexCount, m->info.vertexBase, m->info.indexCount, m->info.indexBase);
 }
 
 static inline void printSceneUniform(const SceneUniform* u) {
