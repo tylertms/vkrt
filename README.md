@@ -3,7 +3,7 @@ This is a lightweight, functional implementation of the Vulkan ray tracing pipel
 
 ![dragon](./assets/images/dragon.png)
 
-By default, this program loads and ray-traces this [870k-triangle Stanford Dragon](https://graphics.stanford.edu/data/3Dscanrep/) inside of a sphere.<br/>
+By default, this program loads and ray-traces this [870k-triangle Stanford Dragon](https://graphics.stanford.edu/data/3Dscanrep/) inside of a sphere with smoothed vertex normals.<br/>
 The normal vector is returned as the color. This can easily be expanded upon to ray trace light, reflections, etc.<br/>
 The controls are shown in [Usage](#usage). The GUI reports FPS and frametime, and can be used to toggle VSync.
 
