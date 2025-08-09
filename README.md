@@ -1,7 +1,7 @@
 # vkrt
 This is a lightweight, functional implementation of the Vulkan ray tracing pipeline, written in C. It features an interactive, resizable window using GLFW, and a simple GUI integration using ImGui.
 
-![dragon](./assets/dragon.png)
+![dragon](./assets/images/dragon.png)
 
 By default, this program loads and ray-traces this [870k-triangle Stanford Dragon](https://graphics.stanford.edu/data/3Dscanrep/) inside of a sphere.<br/>
 The normal vector is returned as the color. This can easily be expanded upon to ray trace light, reflections, etc.<br/>
