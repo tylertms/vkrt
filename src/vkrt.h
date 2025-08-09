@@ -22,6 +22,13 @@ typedef struct Camera {
     float nearZ, farZ, vfov;
 } Camera;
 
+typedef struct Mesh {
+    vec3 position, rotation, scale;
+    uint32_t vertexCount, firstVertex;
+    uint32_t indexCount, firstIndex; 
+    AccelerationStructure bottomLevelAccelerationStructure;
+} Mesh;
+
 typedef struct VKRT {
     GLFWwindow* window;
     ImGuiContext* imguiContext;
@@ -63,22 +70,19 @@ typedef struct VKRT {
     VkImage storageImage;
     VkImageView storageImageView;
     VkDeviceMemory storageImageMemory;
-    VkAccelerationStructureKHR topLevelAccelerationStructure;
-    VkDeviceMemory topLevelAccelerationStructureMemory;
-    VkBuffer topLevelAccelerationStructureBuffer;
-    VkDeviceAddress topLevelAccelerationStructureDeviceAddress;
-    VkAccelerationStructureKHR bottomLevelAccelerationStructure;
-    VkDeviceMemory bottomLevelAccelerationStructureMemory;
-    VkBuffer bottomLevelAccelerationStructureBuffer;
-    VkDeviceAddress bottomLevelAccelerationStructureDeviceAddress;
+    uint32_t meshCount;
+    Mesh* meshes;
+    AccelerationStructure topLevelAccelerationStructure;
     VkBuffer vertexBuffer;
     VkDeviceMemory vertexBufferMemory;
     VkDeviceAddress vertexBufferDeviceAddress;
-    uint32_t vertexCount;
+    uint32_t totalVertexCount;
     VkBuffer indexBuffer;
     VkDeviceMemory indexBufferMemory;
     VkDeviceAddress indexBufferDeviceAddress;
-    uint32_t indexCount;
+    uint32_t totalIndexCount;
+    VkBuffer meshInfoBuffer;
+    VkDeviceMemory meshInfoMemory;
     uint32_t frameCount;
     uint32_t tempFrameCount;
     uint64_t previousTime;
@@ -86,12 +90,20 @@ typedef struct VKRT {
     uint64_t lastFrameTimeReported;
     uint32_t averageFPS;
     float averageFrametime;
+    float frameTimes[128];
+    uint8_t frameTimeStartIndex;
     uint8_t vsync;
+    uint8_t paused;
 } VKRT;
 
 typedef struct Vertex {
     float position[4];
     float normal[4];
 } Vertex;
+
+typedef struct MeshInfo {
+    uint32_t vertexBase;
+    uint32_t triBase;
+} MeshInfo;
 
 #define COUNT_OF(x) ((sizeof(x) / sizeof(0 [x])) / ((size_t)(!(sizeof(x) % sizeof(0 [x])))))

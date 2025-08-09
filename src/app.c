@@ -88,6 +88,8 @@ void deinit(VKRT* vkrt) {
     vkFreeMemory(vkrt->device, vkrt->vertexBufferMemory, NULL);
     vkDestroyBuffer(vkrt->device, vkrt->indexBuffer, NULL);
     vkFreeMemory(vkrt->device, vkrt->indexBufferMemory, NULL);
+    vkDestroyBuffer(vkrt->device, vkrt->meshInfoBuffer, NULL);
+    vkFreeMemory(vkrt->device, vkrt->meshInfoMemory, NULL);
 
     vkDestroyBuffer(vkrt->device, vkrt->uniformBuffer, NULL);
     vkFreeMemory(vkrt->device, vkrt->uniformBufferMemory, NULL);
@@ -105,7 +107,6 @@ void deinit(VKRT* vkrt) {
     }
 
     vkFreeCommandBuffers(vkrt->device, vkrt->commandPool, COUNT_OF(vkrt->commandBuffers), vkrt->commandBuffers);
-
     vkDestroyCommandPool(vkrt->device, vkrt->commandPool, NULL);
 
     vkDestroyDevice(vkrt->device, NULL);
