@@ -1,5 +1,6 @@
 #include "object.h"
 #include "buffer.h"
+#include "structure.h"
 
 #define CGLTF_IMPLEMENTATION
 #include "cgltf.h"
@@ -113,22 +114,32 @@ void loadObject(VKRT* vkrt, const char* filename) {
         }
     }
 
-    vkrt->vertexCount = (uint32_t)numVertices;
-    vkrt->indexCount = (uint32_t)numIndices;
+    uint32_t meshIndex = vkrt->meshCount;
+    
+    vkrt->meshCount++;
+    vkrt->meshes = realloc(vkrt->meshes, vkrt->meshCount * sizeof(Mesh));
 
-    vkrt->vertexBufferDeviceAddress = createBufferFromHostData(
-        vkrt,
-        vertices, numVertices * sizeof(Vertex),
-        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-        &vkrt->vertexBuffer,
-        &vkrt->vertexBufferMemory);
+    vkrt->meshes[meshIndex].vertexCount = (uint32_t)numVertices;
+    vkrt->meshes[meshIndex].indexCount = (uint32_t)numIndices;
+    vkrt->meshes[meshIndex].firstVertex = vkrt->totalVertexCount;
+    vkrt->meshes[meshIndex].firstIndex = vkrt->totalIndexCount;
 
-    vkrt->indexBufferDeviceAddress = createBufferFromHostData(
-        vkrt,
-        indices, numIndices * sizeof(uint32_t),
+
+    vkrt->vertexBufferDeviceAddress = appendBufferFromHostData(vkrt, vertices, 
+        numVertices * sizeof(Vertex), 
+        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, 
+        &vkrt->vertexBuffer, &vkrt->vertexBufferMemory, 
+        vkrt->totalVertexCount * sizeof(Vertex));
+
+
+    vkrt->indexBufferDeviceAddress = appendBufferFromHostData(vkrt, indices, 
+        numIndices * sizeof(uint32_t),
         VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-        &vkrt->indexBuffer,
-        &vkrt->indexBufferMemory);
+        &vkrt->indexBuffer, &vkrt->indexBufferMemory,
+        vkrt->totalIndexCount * sizeof(uint32_t));
+
+    vkrt->totalVertexCount += (uint32_t)numVertices;
+    vkrt->totalIndexCount += (uint32_t)numIndices;
 
     free(vertices);
     free(indices);

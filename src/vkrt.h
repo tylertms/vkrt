@@ -22,6 +22,14 @@ typedef struct Camera {
     float nearZ, farZ, vfov;
 } Camera;
 
+typedef struct AccelerationStructure {
+    VkAccelerationStructureKHR structure;
+    VkDeviceMemory memory;
+    VkBuffer buffer;
+    VkDeviceAddress deviceAddress;
+    uint8_t needsRebuild;
+} AccelerationStructure;
+
 typedef struct Mesh {
     vec3 position, rotation, scale;
     uint32_t vertexCount, firstVertex;
