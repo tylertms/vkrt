@@ -12,13 +12,15 @@ const char* deviceExtensions[NUM_EXTENSIONS] = {
     VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
     VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
     VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
-    VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME};
+    VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME
+};
 
 const VkPhysicalDeviceType rankedDeviceTypes[4] = {
     VK_PHYSICAL_DEVICE_TYPE_CPU,
     VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU,
     VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU,
-    VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU};
+    VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU
+};
 
 void pickPhysicalDevice(VKRT* vkrt) {
     vkrt->physicalDevice = VK_NULL_HANDLE;
@@ -94,9 +96,13 @@ void createLogicalDevice(VKRT* vkrt) {
         }
     }
 
+    VkPhysicalDeviceRobustness2FeaturesEXT robustness2Features = {0};
+    robustness2Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT;
+    robustness2Features.nullDescriptor = VK_TRUE;
+
     VkPhysicalDeviceBufferDeviceAddressFeatures deviceBufferDeviceAddressFeatures = {0};
     deviceBufferDeviceAddressFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_KHR;
-    deviceBufferDeviceAddressFeatures.pNext = NULL;
+    deviceBufferDeviceAddressFeatures.pNext = &robustness2Features;
     deviceBufferDeviceAddressFeatures.bufferDeviceAddress = VK_TRUE;
 
     VkPhysicalDeviceAccelerationStructureFeaturesKHR deviceAccelerationStructureFeatures = {0};
@@ -201,7 +207,7 @@ int32_t isDeviceSuitable(VKRT* vkrt) {
     }
 
     if (queueFamilyComplete && extensionSupport && swapChainAdequate) {
-        for (size_t i = 0; i < COUNT_OF(rankedDeviceTypes); i++) {
+        for (uint32_t i = 0; i < COUNT_OF(rankedDeviceTypes); i++) {
             if (deviceProperties.deviceType == rankedDeviceTypes[i]) {
                 return i;
             }
@@ -278,8 +284,19 @@ void initializeFrameTimers(VKRT* vkrt) {
 }
 
 void recordFrameTime(VKRT* vkrt) {
+    if (vkrt->paused) {
+        uint64_t now = getMicroseconds();
+        vkrt->previousTime = now;
+        vkrt->currentTime = now;
+        vkrt->lastFrameTimeReported = now;
+        vkrt->tempFrameCount = 0;
+        return;
+    }
+
     vkrt->previousTime = vkrt->currentTime;
     vkrt->currentTime = getMicroseconds();
+    vkrt->frameTimes[vkrt->frameTimeStartIndex] = (vkrt->currentTime - vkrt->previousTime) / 1000.0f;
+    vkrt->frameTimeStartIndex = (vkrt->frameTimeStartIndex + 1) % COUNT_OF(vkrt->frameTimes);
     vkrt->tempFrameCount++;
 
     uint64_t elapsed = vkrt->currentTime - vkrt->lastFrameTimeReported;

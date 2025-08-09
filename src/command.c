@@ -1,7 +1,9 @@
 #include "command.h"
 #include "buffer.h"
+#include "descriptor.h"
 #include "device.h"
 #include "interface.h"
+#include "structure.h"
 #include "swapchain.h"
 
 #include "dcimgui.h"
@@ -53,24 +55,27 @@ void recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
         exit(EXIT_FAILURE);
     }
 
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, vkrt->rayTracingPipeline);
-    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, vkrt->pipelineLayout, 0, 1, &vkrt->descriptorSet, 0, NULL);
-
-    PFN_vkCmdTraceRaysKHR pvkCmdTraceRaysKHR = (PFN_vkCmdTraceRaysKHR)vkGetDeviceProcAddr(vkrt->device, "vkCmdTraceRaysKHR");
-    pvkCmdTraceRaysKHR(commandBuffer, &vkrt->shaderBindingTables[0], &vkrt->shaderBindingTables[1], &vkrt->shaderBindingTables[2], &vkrt->shaderBindingTables[3], extent.width, extent.height, 1);
-
     transitionImageLayout(commandBuffer, destImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-    transitionImageLayout(commandBuffer, sourceImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 
-    VkImageBlit blit = {0};
-    blit.srcSubresource = (VkImageSubresourceLayers){VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-    blit.srcOffsets[0] = (VkOffset3D){0, 0, 0};
-    blit.srcOffsets[1] = (VkOffset3D){(int32_t)extent.width, (int32_t)extent.height, 1};
-    blit.dstSubresource = (VkImageSubresourceLayers){VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-    blit.dstOffsets[0] = (VkOffset3D){0, 0, 0};
-    blit.dstOffsets[1] = (VkOffset3D){(int32_t)extent.width, (int32_t)extent.height, 1};
+    if (!vkrt->paused) {
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, vkrt->rayTracingPipeline);
+        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, vkrt->pipelineLayout, 0, 1, &vkrt->descriptorSet, 0, NULL);
 
-    vkCmdBlitImage(commandBuffer, sourceImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, destImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
+        PFN_vkCmdTraceRaysKHR pvkCmdTraceRaysKHR = (PFN_vkCmdTraceRaysKHR)vkGetDeviceProcAddr(vkrt->device, "vkCmdTraceRaysKHR");
+        pvkCmdTraceRaysKHR(commandBuffer, &vkrt->shaderBindingTables[0], &vkrt->shaderBindingTables[1], &vkrt->shaderBindingTables[2], &vkrt->shaderBindingTables[3], extent.width, extent.height, 1);
+
+        transitionImageLayout(commandBuffer, sourceImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+
+        VkImageBlit blit = (VkImageBlit){0};
+        blit.srcSubresource = (VkImageSubresourceLayers){VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        blit.srcOffsets[0] = (VkOffset3D){0, 0, 0};
+        blit.srcOffsets[1] = (VkOffset3D){(int32_t)extent.width, (int32_t)extent.height, 1};
+        blit.dstSubresource = (VkImageSubresourceLayers){VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        blit.dstOffsets[0] = (VkOffset3D){0, 0, 0};
+        blit.dstOffsets[1] = (VkOffset3D){(int32_t)extent.width, (int32_t)extent.height, 1};
+
+        vkCmdBlitImage(commandBuffer, sourceImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, destImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
+    }
 
     VkRenderPassBeginInfo renderPassBeginInfo = {0};
     renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -88,7 +93,9 @@ void recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
     cImGui_ImplVulkan_RenderDrawData(ImGui_GetDrawData(), commandBuffer);
     vkCmdEndRenderPass(commandBuffer);
 
-    transitionImageLayout(commandBuffer, sourceImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+    if (!vkrt->paused) {
+        transitionImageLayout(commandBuffer, sourceImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+    }
 
     if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
         perror("ERROR: Failed to end command buffer");
@@ -98,6 +105,13 @@ void recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
 
 void drawFrame(VKRT* vkrt) {
     vkWaitForFences(vkrt->device, 1, &vkrt->inFlightFences[vkrt->currentFrame], VK_TRUE, UINT64_MAX);
+
+    if (vkrt->topLevelAccelerationStructure.needsRebuild) {
+        vkDeviceWaitIdle(vkrt->device);
+        createTopLevelAccelerationStructure(vkrt);
+        updateDescriptorSet(vkrt);
+        vkrt->topLevelAccelerationStructure.needsRebuild = 0;
+    }
 
     uint32_t imageIndex;
     VkResult result = vkAcquireNextImageKHR(vkrt->device, vkrt->swapChain, UINT64_MAX, vkrt->imageAvailableSemaphores[vkrt->currentFrame], VK_NULL_HANDLE, &imageIndex);

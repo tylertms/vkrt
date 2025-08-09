@@ -71,12 +71,14 @@ void createRayTracingPipeline(VKRT* vkrt) {
     VkPipelineShaderStageCreateInfo shaderStages[] = {
         rayGenStageInfo,
         missStageInfo,
-        closestHitStageInfo};
+        closestHitStageInfo
+    };
 
     VkRayTracingShaderGroupCreateInfoKHR shaderGroups[] = {
         rayGenShaderGroup,
         missShaderGroup,
-        closestHitShaderGroup};
+        closestHitShaderGroup
+    };
 
     VkRayTracingPipelineCreateInfoKHR pipelineCreateInfo = {0};
     pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR;

@@ -4,7 +4,8 @@
 #include <string.h>
 
 const char* validationLayers[] = {
-    "VK_LAYER_KHRONOS_validation"};
+    "VK_LAYER_KHRONOS_validation"
+};
 
 const uint32_t numValidationLayers = 1;
 

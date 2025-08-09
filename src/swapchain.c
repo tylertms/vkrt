@@ -194,12 +194,6 @@ VkPresentModeKHR chooseSwapPresentMode(SwapChainSupportDetails* supportDetails, 
     }
 
     for (uint32_t i = 0; i < supportDetails->presentModeCount; i++) {
-        if (supportDetails->presentModes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
-            return supportDetails->presentModes[i];
-        }
-    }
-
-    for (uint32_t i = 0; i < supportDetails->presentModeCount; i++) {
         if (supportDetails->presentModes[i] == VK_PRESENT_MODE_IMMEDIATE_KHR) {
             return supportDetails->presentModes[i];
         }
@@ -218,7 +212,8 @@ VkExtent2D chooseSwapExtent(VKRT* vkrt, SwapChainSupportDetails* supportDetails)
 
         VkExtent2D actualExtent = {
             (uint32_t)width,
-            (uint32_t)height};
+            (uint32_t)height
+        };
 
         if (actualExtent.width < capabilities.minImageExtent.width) {
             actualExtent.width = capabilities.minImageExtent.width;
