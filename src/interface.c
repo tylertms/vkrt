@@ -6,15 +6,13 @@
 #include "dcimgui_impl_vulkan.h"
 #include "dcimgui_internal.h"
 
+#include <stdint.h>
+#include <math.h>
+
 void setupImGui(VKRT* vkrt) {
     vkrt->imguiContext = ImGui_CreateContext(NULL);
 
-    float width = (float)vkrt->swapChainExtent.width;
-    float height = (float)vkrt->swapChainExtent.height;
-
     ImGuiIO* io = ImGui_GetIO();
-    io->DisplaySize = (ImVec2){width, height};
-    io->DisplayFramebufferScale = (ImVec2){1.0f, 1.0f};
     io->ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
     setDarkTheme();
@@ -38,8 +36,10 @@ void setupImGui(VKRT* vkrt) {
     imGuiVulkanInitInfo.PipelineCache = VK_NULL_HANDLE;
     imGuiVulkanInitInfo.DescriptorPool = vkrt->descriptorPool;
     imGuiVulkanInitInfo.Allocator = VK_NULL_HANDLE;
-    imGuiVulkanInitInfo.MinImageCount = vkrt->swapChainImageCount - 1;
-    imGuiVulkanInitInfo.ImageCount = vkrt->swapChainImageCount;
+    uint32_t imgCount = (uint32_t)vkrt->swapChainImageCount;
+    uint32_t minImgCount = (imgCount > 1u) ? (imgCount - 1u) : imgCount;
+    imGuiVulkanInitInfo.MinImageCount = minImgCount;
+    imGuiVulkanInitInfo.ImageCount = imgCount;
     imGuiVulkanInitInfo.CheckVkResultFn = VK_NULL_HANDLE;
     imGuiVulkanInitInfo.RenderPass = vkrt->renderPass;
 
@@ -55,6 +55,7 @@ void deinitImGui(VKRT* vkrt) {
 }
 
 void drawInterface(VKRT* vkrt) {
+    cImGui_ImplGlfw_NewFrame();
     cImGui_ImplVulkan_NewFrame();
     ImGui_NewFrame();
 
@@ -65,14 +66,17 @@ void drawInterface(VKRT* vkrt) {
     ImGui_Text("Frame rate:%10d FPS", vkrt->averageFPS);
     ImGui_Text("Frame time:%10.3f ms", vkrt->averageFrametime);
 
+    ImGui_PlotLinesEx("##", vkrt->frameTimes, COUNT_OF(vkrt->frameTimes), (int)vkrt->frameTimeStartIndex, "", 0.0f, 2 * vkrt->averageFrametime, (ImVec2){160.0f, 40.0f}, sizeof(float));
+
     if (ImGui_Checkbox("V-Sync", (bool*)&vkrt->vsync)) {
         vkrt->framebufferResized = VK_TRUE;
     }
 
+    ImGui_Checkbox("Pause", (bool*)&vkrt->paused);
+
     handleCameraMovement(vkrt);
 
     ImGui_End();
-
     ImGui_Render();
 }
 
@@ -97,8 +101,7 @@ void handleCameraMovement(VKRT* vkrt) {
     glm_vec3_normalize(up);
 
     if (ImGui_IsMouseDragging(ImGuiMouseButton_Right, -1.0f)) {
-        vec2 d = {io->MouseDelta.x * panSpeed * dist,
-                  io->MouseDelta.y * panSpeed * dist};
+        vec2 d = {io->MouseDelta.x * panSpeed * dist, io->MouseDelta.y * panSpeed * dist};
         vec3 move, tmp;
         glm_vec3_scale(right, d[0], move);
         glm_vec3_scale(up, d[1], tmp);
@@ -109,17 +112,19 @@ void handleCameraMovement(VKRT* vkrt) {
         updateMatricesFromCamera(vkrt);
     }
 
-    if (ImGui_IsMouseDragging(ImGuiMouseButton_Left, -1.0f)) {
-        vec2 d = {io->MouseDelta.x * orbitSpeed,
-                  io->MouseDelta.y * orbitSpeed};
-        float theta = atan2(viewDir[0], viewDir[2]) + d[0];
-        float phi = acos(glm_clamp(viewDir[1] / dist, -1.0f, 1.0f));
-        phi = glm_clamp(phi + d[1], 0.001f, M_PI - 0.001f);
+    if (ImGui_IsMouseDragging(ImGuiMouseButton_Left, -1.0f) && !ImGui_IsWindowFocused(0)) {
+        vec2 d = {io->MouseDelta.x * orbitSpeed, io->MouseDelta.y * orbitSpeed};
+        const float PI = 3.14159265358979323846f;
+        float theta = atan2f(viewDir[0], viewDir[2]) + d[0];
+        float phi = acosf(glm_clamp(viewDir[1] / dist, -1.0f, 1.0f));
+        phi = glm_clamp(phi + d[1], 0.001f, PI - 0.001f);
 
         vec3 offset = {
-            -dist * sin(phi) * sin(theta),
-            -dist * cos(phi),
-            -dist * sin(phi) * cos(theta)};
+            -dist * sinf(phi) * sinf(theta),
+            -dist * cosf(phi),
+            -dist * sinf(phi) * cosf(theta)
+        };
+
         glm_vec3_add(vkrt->camera.target, offset, vkrt->camera.pos);
         updateMatricesFromCamera(vkrt);
     }
@@ -134,11 +139,12 @@ void handleCameraMovement(VKRT* vkrt) {
 void setupSceneUniform(VKRT* vkrt) {
     vkrt->camera = (Camera){
         .width = WIDTH, .height = HEIGHT,
-        .nearZ = 0.001, .farZ = 10000.0,
-        .vfov = 40.0,
-        .pos = {0, 0, 0.5},
-        .target = {0, 0, 0},
-        .up = {0, 1, 0}};
+        .nearZ = 0.001f, .farZ = 10000.0f,
+        .vfov = 40.0f,
+        .pos = {0.0f, 0.0f, 0.5f},
+        .target = {0.0f, 0.0f, 0.0f},
+        .up = {0.0f, 1.0f, 0.0f}
+    };
 
     updateMatricesFromCamera(vkrt);
 }
