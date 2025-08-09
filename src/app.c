@@ -46,6 +46,7 @@ void initVulkan(VKRT* vkrt) {
     createRenderPass(vkrt);
     createFramebuffers(vkrt);
     createCommandPool(vkrt);
+    loadObject(vkrt, "assets/sphere.glb");
     loadObject(vkrt, "assets/dragon.glb");
     createBottomLevelAccelerationStructure(vkrt);
     createTopLevelAccelerationStructure(vkrt);
@@ -73,14 +74,16 @@ void deinit(VKRT* vkrt) {
     vkDestroyBuffer(vkrt->device, vkrt->shaderBindingTableBuffer, NULL);
     vkFreeMemory(vkrt->device, vkrt->shaderBindingTableMemory, NULL);
 
-    PFN_vkDestroyAccelerationStructureKHR vkDestroyAS = (PFN_vkDestroyAccelerationStructureKHR)vkGetDeviceProcAddr(vkrt->device, "vkDestroyAccelerationStructureKHR");
-    vkDestroyAS(vkrt->device, vkrt->bottomLevelAccelerationStructure, NULL);
-    vkDestroyBuffer(vkrt->device, vkrt->bottomLevelAccelerationStructureBuffer, NULL);
-    vkFreeMemory(vkrt->device, vkrt->bottomLevelAccelerationStructureMemory, NULL);
+    PFN_vkDestroyAccelerationStructureKHR pvkDestroyAccelerationStructureKHR = (PFN_vkDestroyAccelerationStructureKHR)vkGetDeviceProcAddr(vkrt->device, "vkDestroyAccelerationStructureKHR");
+    pvkDestroyAccelerationStructureKHR(vkrt->device, vkrt->topLevelAccelerationStructure.structure, NULL);
+    vkDestroyBuffer(vkrt->device, vkrt->topLevelAccelerationStructure.buffer, NULL);
+    vkFreeMemory(vkrt->device, vkrt->topLevelAccelerationStructure.memory, NULL);
 
-    vkDestroyAS(vkrt->device, vkrt->topLevelAccelerationStructure, NULL);
-    vkDestroyBuffer(vkrt->device, vkrt->topLevelAccelerationStructureBuffer, NULL);
-    vkFreeMemory(vkrt->device, vkrt->topLevelAccelerationStructureMemory, NULL);
+    for (uint32_t i = 0; i < vkrt->meshCount; i++) {
+        pvkDestroyAccelerationStructureKHR(vkrt->device, vkrt->meshes[i].bottomLevelAccelerationStructure.structure, NULL);
+        vkDestroyBuffer(vkrt->device, vkrt->meshes[i].bottomLevelAccelerationStructure.buffer, NULL);
+        vkFreeMemory(vkrt->device, vkrt->meshes[i].bottomLevelAccelerationStructure.memory, NULL);
+    }
 
     vkDestroyBuffer(vkrt->device, vkrt->vertexBuffer, NULL);
     vkFreeMemory(vkrt->device, vkrt->vertexBufferMemory, NULL);
