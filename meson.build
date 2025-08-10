@@ -92,7 +92,7 @@ if get_option('build_examples')
 
     shader_targets = []
     foreach shader_in : shader_inputs
-        basename = shader_in.split('.')[-1]
+        basename = shader_in.split('/')[-1]
         shader_target = custom_target(
             'compile_' + basename,
             input: shader_in,
