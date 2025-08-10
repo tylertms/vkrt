@@ -79,14 +79,8 @@ void loadObject(VKRT* vkrt, const char* filename) {
                 cgltf_accessor_read_float(normAcc, i, norm, 3);
 
                 Vertex* V = &vertices[vertexBase + i];
-
-                V->position[0] = pos[2];
-                V->position[1] = -pos[0];
-                V->position[2] = pos[1];
-
-                V->normal[0] = -norm[2];
-                V->normal[1] = norm[0];
-                V->normal[2] = -norm[1];
+                memcpy(V->position, pos, sizeof(float) * 3);
+                memcpy(V->normal, norm, sizeof(float) * 3);
             }
 
             cgltf_accessor* idxAcc = prim->indices;
@@ -157,19 +151,26 @@ void loadObject(VKRT* vkrt, const char* filename) {
 }
 
 VkTransformMatrixKHR meshTransformTLAS(MeshInfo* meshInfo) {
+    vec3 scale;
+    glm_vec3_copy(meshInfo->scale, scale);
+    scale[1] = -scale[1];
+
+    vec3 position;
+    glm_vec3_copy(meshInfo->position, position);
+
     vec3 rotation = {
-        glm_rad(meshInfo->rotation[0]),
+        glm_rad(meshInfo->rotation[0] - 90),
         glm_rad(meshInfo->rotation[1]),
-        glm_rad(meshInfo->rotation[2])
+        glm_rad(meshInfo->rotation[2] - 90)
     };
 
     mat4 matrix;
     glm_mat4_identity(matrix);
-    glm_translate(matrix, meshInfo->position);
+    glm_translate(matrix, position);
     glm_rotate(matrix, rotation[2], (vec3){0.f, 0.f, 1.f});
     glm_rotate(matrix, rotation[1], (vec3){0.f, 1.f, 0.f});
     glm_rotate(matrix, rotation[0], (vec3){1.f, 0.f, 0.f});
-    glm_scale(matrix, meshInfo->scale);
+    glm_scale(matrix, scale);
 
     VkTransformMatrixKHR transform = {0};
     for (int r = 0; r < 3; ++r)
