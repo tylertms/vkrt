@@ -3,6 +3,7 @@
 
 #include "app.h"
 #include "command.h"
+#include "interface.h"
 #include "object.h"
 #include "structure.h"
 #include "vkrt.h"
@@ -46,4 +47,9 @@ void VKRT_addMaterial(VKRT* vkrt, Material* material) {
 void VKRT_updateTLAS(VKRT* vkrt) {
     if (!vkrt) return;
     createTopLevelAccelerationStructure(vkrt);
+}
+
+void VKRT_pollCameraMovement(VKRT* vkrt) {
+    if (!vkrt) return;
+    pollCameraMovement(vkrt);
 }

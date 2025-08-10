@@ -86,7 +86,11 @@ void recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
 
     vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-    drawInterface(vkrt);
+    if (vkrt->interface.draw) {
+        vkrt->interface.draw(vkrt);
+    } else {
+        drawInterface(vkrt);
+    }
 
     cImGui_ImplVulkan_RenderDrawData(ImGui_GetDrawData(), commandBuffer);
     vkCmdEndRenderPass(commandBuffer);

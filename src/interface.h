@@ -4,7 +4,7 @@
 void setupImGui(VKRT* vkrt);
 void deinitImGui(VKRT* vkrt);
 void drawInterface(VKRT* vkrt);
-void handleCameraMovement(VKRT* vkrt);
+void pollCameraMovement(VKRT* vkrt);
 void setupSceneUniform(VKRT* vkrt);
 void resetSceneFrame(VKRT* vkrt);
 void updateMatricesFromCamera(VKRT* vkrt);

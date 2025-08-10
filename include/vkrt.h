@@ -65,6 +65,12 @@ typedef struct Buffer {
     uint32_t count;
 } Buffer;
 
+typedef struct Interface {
+    void (*init)(VKRT* vkrt);
+    void (*deinit)(VKRT* vkrt);
+    void (*draw)(VKRT* vkrt);
+} Interface;
+
 typedef struct VKRT {
     GLFWwindow* window;
     ImGuiContext* imguiContext;
@@ -104,6 +110,7 @@ typedef struct VKRT {
     VkDeviceMemory sceneDataMemory;
     SceneData* sceneData;
     Camera camera;
+    Interface interface;
     VkImage storageImage;
     VkImageView storageImageView;
     VkDeviceMemory storageImageMemory;
@@ -138,6 +145,7 @@ void VKRT_draw(VKRT* vkrt);
 void VKRT_addMesh(VKRT* vkrt, const char* path);
 void VKRT_addMaterial(VKRT* vkrt, Material* material);
 void VKRT_updateTLAS(VKRT* vkrt);
+void VKRT_pollCameraMovement(VKRT* vkrt);
 
 #define COUNT_OF(x) ((sizeof(x) / sizeof(0 [x])) / ((size_t)(!(sizeof(x) % sizeof(0 [x])))))
 

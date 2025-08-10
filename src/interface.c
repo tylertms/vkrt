@@ -59,7 +59,7 @@ void drawInterface(VKRT* vkrt) {
     cImGui_ImplVulkan_NewFrame();
     ImGui_NewFrame();
 
-    handleCameraMovement(vkrt);
+    pollCameraMovement(vkrt);
 
     bool open = true;
     ImGui_Begin("Statistics", &open, ImGuiWindowFlags_NoTitleBar);
@@ -78,7 +78,7 @@ void drawInterface(VKRT* vkrt) {
     ImGui_Render();
 }
 
-void handleCameraMovement(VKRT* vkrt) {
+void pollCameraMovement(VKRT* vkrt) {
     const float panSpeed = 0.0015f;
     const float orbitSpeed = 0.004f;
     const float zoomSpeed = -0.1f;
