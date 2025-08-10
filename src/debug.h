@@ -1,5 +1,5 @@
 #pragma once
-#include "main.h"
+#include "vkrt.h"
 
 #include <stdio.h>
 #include <stdint.h>

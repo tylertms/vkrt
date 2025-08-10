@@ -1,5 +1,5 @@
 #pragma once
-#include "main.h"
+#include "vkrt.h"
 
 void setupImGui(VKRT* vkrt);
 void deinitImGui(VKRT* vkrt);

@@ -1,5 +1,5 @@
 #pragma once
-#include "main.h"
+#include "vkrt.h"
 
 void createCommandPool(VKRT* vkrt);
 void createCommandBuffers(VKRT* vkrt);

@@ -1,5 +1,5 @@
 #pragma once
-#include "main.h"
+#include "vkrt.h"
 
 void createShaderBindingTable(VKRT* vkrt);
 void createBottomLevelAccelerationStructure(VKRT* vkrt, Mesh* mesh);

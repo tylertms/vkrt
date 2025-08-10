@@ -1,5 +1,5 @@
 #pragma once
-#include "main.h"
+#include "vkrt.h"
 
 #define NUM_EXTENSIONS 5
 extern const char* deviceExtensions[NUM_EXTENSIONS];

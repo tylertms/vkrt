@@ -1,4 +1,4 @@
 #pragma once
-#include "main.h"
+#include "vkrt.h"
 
 void createInstance(VKRT* vkrt);

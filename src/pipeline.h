@@ -1,5 +1,5 @@
 #pragma once
-#include "main.h"
+#include "vkrt.h"
 
 void createRayTracingPipeline(VKRT* vkrt);
 void createSyncObjects(VKRT* vkrt);
