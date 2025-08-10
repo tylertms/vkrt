@@ -87,6 +87,8 @@ void recreateSwapChain(VKRT* vkrt) {
     updateDescriptorSet(vkrt);
     createFramebuffers(vkrt);
     updateMatricesFromCamera(vkrt);
+
+    vkrt->sceneData->frame = -1;
 }
 
 void cleanupSwapChain(VKRT* vkrt) {
