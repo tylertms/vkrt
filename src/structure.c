@@ -2,6 +2,7 @@
 #include "buffer.h"
 #include "command.h"
 #include "device.h"
+#include "object.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -285,11 +286,11 @@ void createTopLevelAccelerationStructure(VKRT* vkrt) {
     VkAccelerationStructureInstanceKHR* instances = (VkAccelerationStructureInstanceKHR*)malloc(sizeof(VkAccelerationStructureInstanceKHR) * instanceCount);
     MeshInfo* meshInfos = (MeshInfo*)malloc(sizeof(MeshInfo) * instanceCount);
 
-    for (uint32_t i = 0; i < instanceCount; ++i) {
+    for (uint32_t i = 0; i < instanceCount; i++) {
         VkAccelerationStructureInstanceKHR inst = {0};
-        inst.transform.matrix[0][0] = 1.0f;
-        inst.transform.matrix[1][1] = 1.0f;
-        inst.transform.matrix[2][2] = 1.0f;
+
+        MeshInfo meshInfo = vkrt->meshes[i].info;
+        inst.transform = meshTransformTLAS(&meshInfo);
         inst.instanceCustomIndex = i;
         inst.mask = 0xFF;
         inst.instanceShaderBindingTableRecordOffset = 0;
@@ -297,7 +298,7 @@ void createTopLevelAccelerationStructure(VKRT* vkrt) {
         inst.accelerationStructureReference = vkrt->meshes[i].bottomLevelAccelerationStructure.deviceAddress;
 
         instances[i] = inst;
-        meshInfos[i] = vkrt->meshes[i].info;
+        meshInfos[i] = meshInfo;
     }
 
     VkBufferCreateInfo instanceBufferCreateInfo = {0};

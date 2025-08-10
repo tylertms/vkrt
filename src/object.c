@@ -128,6 +128,11 @@ void loadObject(VKRT* vkrt, const char* filename) {
     meshInfo->vertexBase = vkrt->vertexData.count;
     meshInfo->indexBase = vkrt->indexData.count;
 
+    vec3 scale = {1.f, 1.f, 1.f};
+    memcpy(&meshInfo->scale, &scale, sizeof(vec3));
+    memset(&meshInfo->rotation, 0, sizeof(vec3));
+    memset(&meshInfo->position, 0, sizeof(vec3));
+
     vkrt->vertexData.deviceAddress = appendBufferFromHostData(vkrt, vertices, 
         numVertices * sizeof(Vertex), 
         VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, 
@@ -149,6 +154,29 @@ void loadObject(VKRT* vkrt, const char* filename) {
     cgltf_free(data);
 
     createBottomLevelAccelerationStructure(vkrt, &vkrt->meshes[meshIndex]);
+}
+
+VkTransformMatrixKHR meshTransformTLAS(MeshInfo* meshInfo) {
+    vec3 rotation = {
+        glm_rad(meshInfo->rotation[0]),
+        glm_rad(meshInfo->rotation[1]),
+        glm_rad(meshInfo->rotation[2])
+    };
+
+    mat4 matrix;
+    glm_mat4_identity(matrix);
+    glm_translate(matrix, meshInfo->position);
+    glm_rotate(matrix, rotation[2], (vec3){0.f, 0.f, 1.f});
+    glm_rotate(matrix, rotation[1], (vec3){0.f, 1.f, 0.f});
+    glm_rotate(matrix, rotation[0], (vec3){1.f, 0.f, 0.f});
+    glm_scale(matrix, meshInfo->scale);
+
+    VkTransformMatrixKHR transform = {0};
+    for (int r = 0; r < 3; ++r)
+        for (int c = 0; c < 4; ++c)
+            transform.matrix[r][c] = matrix[c][r];
+
+    return transform;
 }
 
 void addMaterial(VKRT* vkrt, Material* material) {
