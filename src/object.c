@@ -78,12 +78,15 @@ void loadObject(VKRT* vkrt, const char* filename) {
                 cgltf_accessor_read_float(posAcc, i, pos, 3);
                 cgltf_accessor_read_float(normAcc, i, norm, 3);
                 Vertex* V = &vertices[vertexBase + i];
-                V->position[0] = pos[0];
-                V->position[1] = pos[1];
-                V->position[2] = -pos[2];
-                V->normal[0] = -norm[0];
-                V->normal[1] = -norm[1];
-                V->normal[2] = -norm[2];
+                
+                // Transform coordinates: +y -> -z, +z -> +x, +x -> +y
+                V->position[0] = -pos[2];  // new x = -old z
+                V->position[1] = pos[0];   // new y = old x
+                V->position[2] = pos[1];  // new z = -old y
+                
+                V->normal[0] = -norm[2];   // new x = -old z
+                V->normal[1] = norm[0];    // new y = old x
+                V->normal[2] = -norm[1];   // new z = -old y
             }
 
             cgltf_accessor* idxAcc = prim->indices;
@@ -119,10 +122,11 @@ void loadObject(VKRT* vkrt, const char* filename) {
     vkrt->meshData.count++;
     vkrt->meshes = realloc(vkrt->meshes, vkrt->meshData.count * sizeof(Mesh));
 
-    vkrt->meshes[meshIndex].info.vertexCount = (uint32_t)numVertices;
-    vkrt->meshes[meshIndex].info.indexCount = (uint32_t)numIndices;
-    vkrt->meshes[meshIndex].info.vertexBase = vkrt->vertexData.count;
-    vkrt->meshes[meshIndex].info.indexBase = vkrt->indexData.count;
+    MeshInfo* meshInfo = &vkrt->meshes[meshIndex].info;
+    meshInfo->vertexCount = (uint32_t)numVertices;
+    meshInfo->indexCount = (uint32_t)numIndices;
+    meshInfo->vertexBase = vkrt->vertexData.count;
+    meshInfo->indexBase = vkrt->indexData.count;
 
     vkrt->vertexData.deviceAddress = appendBufferFromHostData(vkrt, vertices, 
         numVertices * sizeof(Vertex), 

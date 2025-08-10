@@ -6,5 +6,6 @@ void deinitImGui(VKRT* vkrt);
 void drawInterface(VKRT* vkrt);
 void handleCameraMovement(VKRT* vkrt);
 void setupSceneUniform(VKRT* vkrt);
+void resetSceneFrame(VKRT* vkrt);
 void updateMatricesFromCamera(VKRT* vkrt);
 void setDarkTheme();

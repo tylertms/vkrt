@@ -284,20 +284,12 @@ void initializeFrameTimers(VKRT* vkrt) {
 }
 
 void recordFrameTime(VKRT* vkrt) {
-    if (vkrt->paused) {
-        uint64_t now = getMicroseconds();
-        vkrt->previousTime = now;
-        vkrt->currentTime = now;
-        vkrt->lastFrameTimeReported = now;
-        vkrt->tempFrameCount = 0;
-        return;
-    }
-
     vkrt->previousTime = vkrt->currentTime;
     vkrt->currentTime = getMicroseconds();
     vkrt->frameTimes[vkrt->frameTimeStartIndex] = (vkrt->currentTime - vkrt->previousTime) / 1000.0f;
     vkrt->frameTimeStartIndex = (vkrt->frameTimeStartIndex + 1) % COUNT_OF(vkrt->frameTimes);
     vkrt->tempFrameCount++;
+    vkrt->sceneData->frame++;
 
     uint64_t elapsed = vkrt->currentTime - vkrt->lastFrameTimeReported;
     const uint64_t oneSecondUs = 1000000ULL;
