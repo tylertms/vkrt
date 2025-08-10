@@ -122,12 +122,12 @@ typedef struct Vertex {
     float normal[4];
 } Vertex;
 
-VKRT* VKRT_Create(void);
-void VKRT_Destroy(VKRT* vkrt);
-void VKRT_SetRGEN(VKRT* vkrt, const char* path);
-void VKRT_SetRMISS(VKRT* vkrt, const char* path);
-void VKRT_SetRCHIT(VKRT* vkrt, const char* path);
-int VKRT_Run(VKRT* vkrt);
+int VKRT_init(VKRT* vkrt);
+void VKRT_deinit(VKRT* vkrt);
+int VKRT_shouldDeinit(VKRT* vkrt);
+void VKRT_poll(VKRT* vkrt);
+void VKRT_draw(VKRT* vkrt);
+void VKRT_addMesh(VKRT* vkrt, const char* path);
 
 #define COUNT_OF(x) ((sizeof(x) / sizeof(0 [x])) / ((size_t)(!(sizeof(x) % sizeof(0 [x])))))
 

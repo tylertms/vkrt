@@ -39,7 +39,6 @@ dcimgui = static_library(
 
 # Library sources (everything except main.c)
 sources = [
-    'src/api.c',
     'src/app.c',
     'src/buffer.c',
     'src/command.c',
@@ -53,6 +52,7 @@ sources = [
     'src/surface.c',
     'src/swapchain.c',
     'src/validation.c',
+    'src/vkrt.c'
 ]
 
 # Example application entry point
