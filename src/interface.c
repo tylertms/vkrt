@@ -59,6 +59,8 @@ void drawInterface(VKRT* vkrt) {
     cImGui_ImplVulkan_NewFrame();
     ImGui_NewFrame();
 
+    handleCameraMovement(vkrt);
+
     bool open = true;
     ImGui_Begin("Statistics", &open, ImGuiWindowFlags_NoTitleBar);
 
@@ -72,9 +74,6 @@ void drawInterface(VKRT* vkrt) {
     if (ImGui_Checkbox("V-Sync", (bool*)&vkrt->vsync)) {
         vkrt->framebufferResized = VK_TRUE;
     }
-
-    handleCameraMovement(vkrt);
-
     ImGui_End();
     ImGui_Render();
 }
@@ -82,7 +81,7 @@ void drawInterface(VKRT* vkrt) {
 void handleCameraMovement(VKRT* vkrt) {
     const float panSpeed = 0.0015f;
     const float orbitSpeed = 0.004f;
-    const float zoomSpeed = 0.2f;
+    const float zoomSpeed = -0.1f;
     const float minDist = 0.001f, maxDist = 10000.0f;
 
     ImGuiIO* io = ImGui_GetIO();
@@ -95,17 +94,20 @@ void handleCameraMovement(VKRT* vkrt) {
     vec3 worldUp = {0.0f, 0.0f, 1.0f};
     vec3 right, up;
     glm_vec3_cross(viewDir, worldUp, right);
+
     if (glm_vec3_norm(right) < 1e-6f) {
         right[0] = 0.0f; right[1] = 1.0f; right[2] = 0.0f;
     } else {
         glm_vec3_normalize(right);
     }
+
     glm_vec3_cross(right, viewDir, up);
     glm_vec3_normalize(up);
 
     if (ImGui_IsMouseDragging(ImGuiMouseButton_Right, -1.0f)) {
         float dx = io->MouseDelta.x;
         float dy = io->MouseDelta.y;
+
         vec3 move, tmp;
         glm_vec3_scale(right, -dx * panSpeed * dist, move);
         glm_vec3_scale(up,    -dy * panSpeed * dist, tmp);
@@ -124,7 +126,7 @@ void handleCameraMovement(VKRT* vkrt) {
         const float EPS = 0.001f;
 
         float yaw = atan2f(viewDir[1], viewDir[0]);
-        float xyLen = sqrtf(viewDir[0]*viewDir[0] + viewDir[1]*viewDir[1]);
+        float xyLen = sqrtf(viewDir[0] * viewDir[0] + viewDir[1] * viewDir[1]);
         float pitch = atan2f(viewDir[2], xyLen);
 
         yaw -= dx * orbitSpeed;
@@ -148,10 +150,8 @@ void handleCameraMovement(VKRT* vkrt) {
 
     float scroll = io->MouseWheel;
     if (scroll != 0.0f) {
-        float newDist = glm_clamp(dist - scroll * zoomSpeed, minDist, maxDist);
-        vec3 offset;
-        glm_vec3_scale(viewDir, newDist, offset);
-        glm_vec3_sub(vkrt->camera.target, offset, vkrt->camera.pos);
+        glm_vec3_scale(viewDir, scroll * zoomSpeed, viewDir);
+        glm_vec3_sub(vkrt->camera.pos, viewDir, vkrt->camera.pos);
         updateMatricesFromCamera(vkrt);
     }
 }
@@ -161,7 +161,7 @@ void setupSceneUniform(VKRT* vkrt) {
         .width = WIDTH, .height = HEIGHT,
         .nearZ = 0.001f, .farZ = 10000.0f,
         .vfov = 40.0f,
-        .pos = {0.5f, 0.0f, 0.0f},
+        .pos = {-0.5f, 0.2f, -0.2f},
         .target = {0.0f, 0.0f, 0.0f},
         .up = {0.0f, 0.0f, 1.0f}
     };
