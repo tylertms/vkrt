@@ -125,7 +125,7 @@ void updateDescriptorSet(VKRT* vkrt) {
     storageImageWrite.pImageInfo = &storageImageInfo;
 
     VkDescriptorBufferInfo vertexBufferInfo = {0};
-    vertexBufferInfo.buffer = vkrt->vertexBuffer;
+    vertexBufferInfo.buffer = vkrt->vertexData.buffer;
     vertexBufferInfo.offset = 0;
     vertexBufferInfo.range = VK_WHOLE_SIZE;
 
@@ -139,7 +139,7 @@ void updateDescriptorSet(VKRT* vkrt) {
     vertexBufferWrite.pBufferInfo = &vertexBufferInfo;
 
     VkDescriptorBufferInfo indexBufferInfo = {0};
-    indexBufferInfo.buffer = vkrt->indexBuffer;
+    indexBufferInfo.buffer = vkrt->indexData.buffer;
     indexBufferInfo.offset = 0;
     indexBufferInfo.range = VK_WHOLE_SIZE;
 
@@ -167,7 +167,7 @@ void updateDescriptorSet(VKRT* vkrt) {
     sceneUniformWrite.pBufferInfo = &sceneUniformInfo;
 
     VkDescriptorBufferInfo meshInfo = {0};
-    meshInfo.buffer = vkrt->meshInfoBuffer;
+    meshInfo.buffer = vkrt->meshData.buffer;
     meshInfo.offset = 0;
     meshInfo.range = VK_WHOLE_SIZE;
 

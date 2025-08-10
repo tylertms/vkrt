@@ -78,18 +78,18 @@ void deinit(VKRT* vkrt) {
     vkDestroyBuffer(vkrt->device, vkrt->topLevelAccelerationStructure.buffer, NULL);
     vkFreeMemory(vkrt->device, vkrt->topLevelAccelerationStructure.memory, NULL);
 
-    for (uint32_t i = 0; i < vkrt->meshCount; i++) {
+    for (uint32_t i = 0; i < vkrt->meshData.count; i++) {
         pvkDestroyAccelerationStructureKHR(vkrt->device, vkrt->meshes[i].bottomLevelAccelerationStructure.structure, NULL);
         vkDestroyBuffer(vkrt->device, vkrt->meshes[i].bottomLevelAccelerationStructure.buffer, NULL);
         vkFreeMemory(vkrt->device, vkrt->meshes[i].bottomLevelAccelerationStructure.memory, NULL);
     }
 
-    vkDestroyBuffer(vkrt->device, vkrt->vertexBuffer, NULL);
-    vkFreeMemory(vkrt->device, vkrt->vertexBufferMemory, NULL);
-    vkDestroyBuffer(vkrt->device, vkrt->indexBuffer, NULL);
-    vkFreeMemory(vkrt->device, vkrt->indexBufferMemory, NULL);
-    vkDestroyBuffer(vkrt->device, vkrt->meshInfoBuffer, NULL);
-    vkFreeMemory(vkrt->device, vkrt->meshInfoMemory, NULL);
+    vkDestroyBuffer(vkrt->device, vkrt->vertexData.buffer, NULL);
+    vkFreeMemory(vkrt->device, vkrt->vertexData.memory, NULL);
+    vkDestroyBuffer(vkrt->device, vkrt->indexData.buffer, NULL);
+    vkFreeMemory(vkrt->device, vkrt->indexData.memory, NULL);
+    vkDestroyBuffer(vkrt->device, vkrt->meshData.buffer, NULL);
+    vkFreeMemory(vkrt->device, vkrt->meshData.memory, NULL);
 
     vkDestroyBuffer(vkrt->device, vkrt->uniformBuffer, NULL);
     vkFreeMemory(vkrt->device, vkrt->uniformBufferMemory, NULL);

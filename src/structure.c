@@ -88,11 +88,11 @@ void createBottomLevelAccelerationStructure(VKRT* vkrt, Mesh* mesh) {
     VkAccelerationStructureGeometryTrianglesDataKHR accelerationStructureGeometryTrianglesData = {0};
     accelerationStructureGeometryTrianglesData.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
     accelerationStructureGeometryTrianglesData.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
-    accelerationStructureGeometryTrianglesData.vertexData.deviceAddress = vkrt->vertexBufferDeviceAddress;
+    accelerationStructureGeometryTrianglesData.vertexData.deviceAddress = vkrt->vertexData.deviceAddress;
     accelerationStructureGeometryTrianglesData.vertexStride = sizeof(Vertex);
     accelerationStructureGeometryTrianglesData.maxVertex = mesh->info.vertexBase + mesh->info.vertexCount - 1;
     accelerationStructureGeometryTrianglesData.indexType = VK_INDEX_TYPE_UINT32;
-    accelerationStructureGeometryTrianglesData.indexData.deviceAddress = vkrt->indexBufferDeviceAddress;
+    accelerationStructureGeometryTrianglesData.indexData.deviceAddress = vkrt->indexData.deviceAddress;
     accelerationStructureGeometryTrianglesData.transformData.deviceAddress = 0;
 
     VkAccelerationStructureGeometryKHR accelerationStructureGeometry = {0};
@@ -269,19 +269,19 @@ void createTopLevelAccelerationStructure(VKRT* vkrt) {
         vkrt->topLevelAccelerationStructure.memory = VK_NULL_HANDLE;
     }
 
-    if (vkrt->meshInfoBuffer) {
-        vkDestroyBuffer(vkrt->device, vkrt->meshInfoBuffer, NULL);
-        vkrt->meshInfoBuffer = VK_NULL_HANDLE;
+    if (vkrt->meshData.buffer) {
+        vkDestroyBuffer(vkrt->device, vkrt->meshData.buffer, NULL);
+        vkrt->meshData.buffer = VK_NULL_HANDLE;
     }
 
-    if (vkrt->meshInfoMemory) {
-        vkFreeMemory(vkrt->device, vkrt->meshInfoMemory, NULL);
-        vkrt->meshInfoMemory = VK_NULL_HANDLE;
+    if (vkrt->meshData.memory) {
+        vkFreeMemory(vkrt->device, vkrt->meshData.memory, NULL);
+        vkrt->meshData.memory = VK_NULL_HANDLE;
     }
 
     QueueFamily indices = findQueueFamilies(vkrt);
 
-    uint32_t instanceCount = vkrt->meshCount;
+    uint32_t instanceCount = vkrt->meshData.count;
     VkAccelerationStructureInstanceKHR* instances = (VkAccelerationStructureInstanceKHR*)malloc(sizeof(VkAccelerationStructureInstanceKHR) * instanceCount);
     MeshInfo* meshInfos = (MeshInfo*)malloc(sizeof(MeshInfo) * instanceCount);
 
@@ -359,8 +359,8 @@ void createTopLevelAccelerationStructure(VKRT* vkrt) {
     vkUnmapMemory(vkrt->device, stagingMeshInfoMem);
     free(meshInfos);
 
-    createBuffer(vkrt, meshInfoSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vkrt->meshInfoBuffer, &vkrt->meshInfoMemory);
-    copyBuffer(vkrt, stagingMeshInfo, vkrt->meshInfoBuffer, meshInfoSize);
+    createBuffer(vkrt, meshInfoSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vkrt->meshData.buffer, &vkrt->meshData.memory);
+    copyBuffer(vkrt, stagingMeshInfo, vkrt->meshData.buffer, meshInfoSize);
     vkDestroyBuffer(vkrt->device, stagingMeshInfo, NULL);
     vkFreeMemory(vkrt->device, stagingMeshInfoMem, NULL);
 

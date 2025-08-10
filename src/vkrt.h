@@ -47,6 +47,13 @@ typedef struct Mesh {
     AccelerationStructure bottomLevelAccelerationStructure;
 } Mesh;
 
+typedef struct Buffer {
+    VkBuffer buffer;
+    VkDeviceMemory memory;
+    VkDeviceAddress deviceAddress;
+    uint32_t count;
+} Buffer;
+
 typedef struct VKRT {
     GLFWwindow* window;
     ImGuiContext* imguiContext;
@@ -88,19 +95,11 @@ typedef struct VKRT {
     VkImage storageImage;
     VkImageView storageImageView;
     VkDeviceMemory storageImageMemory;
-    uint32_t meshCount;
     Mesh* meshes;
     AccelerationStructure topLevelAccelerationStructure;
-    VkBuffer vertexBuffer;
-    VkDeviceMemory vertexBufferMemory;
-    VkDeviceAddress vertexBufferDeviceAddress;
-    uint32_t totalVertexCount;
-    VkBuffer indexBuffer;
-    VkDeviceMemory indexBufferMemory;
-    VkDeviceAddress indexBufferDeviceAddress;
-    uint32_t totalIndexCount;
-    VkBuffer meshInfoBuffer;
-    VkDeviceMemory meshInfoMemory;
+    Buffer vertexData;
+    Buffer indexData;
+    Buffer meshData;
     uint32_t frameCount;
     uint32_t tempFrameCount;
     uint64_t previousTime;
