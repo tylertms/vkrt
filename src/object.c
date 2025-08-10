@@ -162,7 +162,7 @@ void addMaterial(VKRT* vkrt, Material* material) {
         sizeof(Material), 
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, 
         &vkrt->materialData.buffer, &vkrt->materialData.memory, 
-        vkrt->materialData.count * sizeof(Material));
+        materialIndex * sizeof(Material));
 }
 
 void createUniformBuffer(VKRT* vkrt) {
