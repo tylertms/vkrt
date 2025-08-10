@@ -3,14 +3,16 @@
 extern "C" {
 #endif
 
+#include "main.h"
+
 typedef struct VKRT VKRT;
 
-VKRT* vkrt_create(void);
-void  vkrt_destroy(VKRT* vkrt);
-void  vkrt_set_rgen(VKRT* vkrt, const char* path);
-void  vkrt_set_rmiss(VKRT* vkrt, const char* path);
-void  vkrt_set_rchit(VKRT* vkrt, const char* path);
-int   vkrt_run(VKRT* vkrt);
+VKRT* VKRT_Create(void);
+void VKRT_Destroy(VKRT* vkrt);
+void VKRT_SetRGEN(VKRT* vkrt, const char* path);
+void VKRT_SetRMISS(VKRT* vkrt, const char* path);
+void VKRT_SetRCHIT(VKRT* vkrt, const char* path);
+int VKRT_Run(VKRT* vkrt);
 
 #ifdef __cplusplus
 }

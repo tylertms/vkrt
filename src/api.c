@@ -1,45 +1,45 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "vkrt.h"
 #include "app.h"
+#include "vkrt.h"
 
-static void vkrt_free_str(char **p) {
+static void VKRT_freeStr(char **p) {
     if (*p) { free(*p); *p = NULL; }
 }
 
-VKRT* vkrt_create(void) {
+VKRT* VKRT_Create(void) {
     VKRT* vkrt = (VKRT*)calloc(1, sizeof(VKRT));
     return vkrt;
 }
 
-void vkrt_destroy(VKRT* vkrt) {
+void VKRT_Destroy(VKRT* vkrt) {
     if (!vkrt) return;
-    vkrt_free_str(&vkrt->rgenPath);
-    vkrt_free_str(&vkrt->rmissPath);
-    vkrt_free_str(&vkrt->rchitPath);
+    VKRT_freeStr(&vkrt->rgenPath);
+    VKRT_freeStr(&vkrt->rmissPath);
+    VKRT_freeStr(&vkrt->rchitPath);
     free(vkrt);
 }
 
-void vkrt_set_rgen(VKRT* vkrt, const char* path) {
+void VKRT_SetRGEN(VKRT* vkrt, const char* path) {
     if (!vkrt) return;
-    vkrt_free_str(&vkrt->rgenPath);
+    VKRT_freeStr(&vkrt->rgenPath);
     vkrt->rgenPath = strdup(path);
 }
 
-void vkrt_set_rmiss(VKRT* vkrt, const char* path) {
+void VKRT_SetRMISS(VKRT* vkrt, const char* path) {
     if (!vkrt) return;
-    vkrt_free_str(&vkrt->rmissPath);
+    VKRT_freeStr(&vkrt->rmissPath);
     vkrt->rmissPath = strdup(path);
 }
 
-void vkrt_set_rchit(VKRT* vkrt, const char* path) {
+void VKRT_SetRCHIT(VKRT* vkrt, const char* path) {
     if (!vkrt) return;
-    vkrt_free_str(&vkrt->rchitPath);
+    VKRT_freeStr(&vkrt->rchitPath);
     vkrt->rchitPath = strdup(path);
 }
 
-int vkrt_run(VKRT* vkrt) {
+int VKRT_Run(VKRT* vkrt) {
     if (!vkrt) return -1;
     run(vkrt);
     return 0;

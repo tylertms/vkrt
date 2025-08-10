@@ -1,5 +1,5 @@
 #pragma once
-#include "vkrt.h"
+#include "main.h"
 
 extern const char* validationLayers[];
 extern const uint32_t numValidationLayers;

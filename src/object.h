@@ -1,5 +1,5 @@
 #pragma once
-#include "vkrt.h"
+#include "main.h"
 
 void loadObject(VKRT* vkrt, const char* filename);
 void createUniformBuffer(VKRT* vkrt);

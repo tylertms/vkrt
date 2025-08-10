@@ -1,5 +1,5 @@
 #pragma once
-#include "vkrt.h"
+#include "main.h"
 
 typedef struct SwapChainSupportDetails {
     VkSurfaceCapabilitiesKHR capabilities;

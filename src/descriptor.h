@@ -1,5 +1,5 @@
 #pragma once
-#include "vkrt.h"
+#include "main.h"
 
 void createDescriptorSetLayout(VKRT* vkrt);
 void createDescriptorPool(VKRT* vkrt);

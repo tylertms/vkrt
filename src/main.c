@@ -1,5 +1,5 @@
 #include "app.h"
-#include "vkrt.h"
+#include "main.h"
 
 #include <stdlib.h>
 
