@@ -36,8 +36,7 @@ dcimgui = static_library(
     ),
 )
 
-glslc = find_program('glslc')
-
+# Library sources (everything except main.c)
 sources = [
     'src/app.c',
     'src/buffer.c',
@@ -46,7 +45,6 @@ sources = [
     'src/device.c',
     'src/instance.c',
     'src/interface.c',
-    'src/main.c',
     'src/object.c',
     'src/pipeline.c',
     'src/structure.c',
@@ -55,28 +53,15 @@ sources = [
     'src/validation.c',
 ]
 
-shader_inputs = [
-    'src/shaders/main.rchit',
-    'src/shaders/main.rgen',
-    'src/shaders/main.rmiss',
+# Example application entry point
+example_sources = [
+    'src/main.c',
 ]
-
-shader_targets = []
-foreach shader_in : shader_inputs
-    basename = shader_in.split('.')[-1]
-    shader_target = custom_target(
-        'compile_' + basename,
-        input: shader_in,
-        output: basename + '.spv',
-        command: [glslc, '@INPUT@', '--target-env=vulkan1.4', '-O', '-o', '@OUTPUT@'],
-        build_by_default: true,
-    )
-    shader_targets += shader_target
-endforeach
 
 c_args = ['-D_GNU_SOURCE']
 
-executable(
+# Build the reusable library
+vkrtlib = static_library(
     'vkrt',
     sources,
     c_args: c_args,
@@ -85,3 +70,44 @@ executable(
     link_with: [dcimgui],
     link_language: 'cpp'
 )
+
+# Exported dependency for parent projects (e.g., parallax)
+vkrt_dep = declare_dependency(
+    link_with: [vkrtlib, dcimgui],
+    include_directories: incs,
+    dependencies: deps
+)
+
+# Keep original shaders + executable for standalone usage (toggle with -Dbuild_examples=false)
+if get_option('build_examples')
+    glslc = find_program('glslc')
+
+    shader_inputs = [
+        'src/shaders/main.rchit',
+        'src/shaders/main.rgen',
+        'src/shaders/main.rmiss',
+    ]
+
+    shader_targets = []
+    foreach shader_in : shader_inputs
+        basename = shader_in.split('.')[-1]
+        shader_target = custom_target(
+            'compile_' + basename,
+            input: shader_in,
+            output: basename + '.spv',
+            command: [glslc, '@INPUT@', '--target-env=vulkan1.4', '-O', '-o', '@OUTPUT@'],
+            build_by_default: true,
+        )
+        shader_targets += shader_target
+    endforeach
+
+    executable(
+        'vkrt',
+        example_sources,
+        c_args: c_args,
+        include_directories: incs,
+        dependencies: deps,
+        link_with: [dcimgui, vkrtlib],
+        link_language: 'cpp'
+    )
+endif
