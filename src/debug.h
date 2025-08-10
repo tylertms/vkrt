@@ -37,7 +37,7 @@ static inline void printMesh(const Mesh* m) {
            m->info.vertexCount, m->info.vertexBase, m->info.indexCount, m->info.indexBase);
 }
 
-static inline void printSceneUniform(const SceneUniform* u) {
+static inline void printSceneUniform(const SceneData* u) {
     printf("SceneUniform{\n  viewInverse=\n"); printMat4(u->viewInverse);
     printf("  projInverse=\n");                printMat4(u->projInverse);
     printf("}\n");

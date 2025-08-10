@@ -89,8 +89,8 @@ void deinit(VKRT* vkrt) {
     vkDestroyBuffer(vkrt->device, vkrt->meshData.buffer, NULL);
     vkFreeMemory(vkrt->device, vkrt->meshData.memory, NULL);
 
-    vkDestroyBuffer(vkrt->device, vkrt->uniformBuffer, NULL);
-    vkFreeMemory(vkrt->device, vkrt->uniformBufferMemory, NULL);
+    vkDestroyBuffer(vkrt->device, vkrt->sceneDataBuffer, NULL);
+    vkFreeMemory(vkrt->device, vkrt->sceneDataMemory, NULL);
 
     vkDestroyDescriptorPool(vkrt->device, vkrt->descriptorPool, NULL);
     vkDestroyDescriptorSetLayout(vkrt->device, vkrt->descriptorSetLayout, NULL);

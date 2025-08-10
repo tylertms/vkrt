@@ -14,16 +14,24 @@ extern "C" {
 
 #define MAX_FRAMES_IN_FLIGHT 2
 
-typedef struct SceneUniform {
+typedef struct SceneData {
     mat4 viewInverse;
     mat4 projInverse;
-} SceneUniform;
+    uint32_t frame;
+} SceneData;
 
 typedef struct Camera {
     vec3 pos, target, up;
     uint32_t width, height;
     float nearZ, farZ, vfov;
 } Camera;
+
+typedef struct Material {
+    vec3 color;
+    float roughness;
+    vec3 emissiveColor;
+    float emissiveIntensity;
+} Material;
 
 typedef struct AccelerationStructure {
     VkAccelerationStructureKHR structure;
@@ -92,19 +100,20 @@ typedef struct VKRT {
     VkBuffer shaderBindingTableBuffer;
     VkDeviceMemory shaderBindingTableMemory;
     VkStridedDeviceAddressRegionKHR shaderBindingTables[4];
-    VkBuffer uniformBuffer;
-    VkDeviceMemory uniformBufferMemory;
-    SceneUniform* uniformBufferMapped;
+    VkBuffer sceneDataBuffer;
+    VkDeviceMemory sceneDataMemory;
+    SceneData* sceneData;
     Camera camera;
     VkImage storageImage;
     VkImageView storageImageView;
     VkDeviceMemory storageImageMemory;
     Mesh* meshes;
+    Material* materials;
     AccelerationStructure topLevelAccelerationStructure;
     Buffer vertexData;
     Buffer indexData;
     Buffer meshData;
-    uint32_t frameCount;
+    Buffer materialData;
     uint32_t tempFrameCount;
     uint64_t previousTime;
     uint64_t currentTime;
@@ -114,7 +123,6 @@ typedef struct VKRT {
     float frameTimes[128];
     uint8_t frameTimeStartIndex;
     uint8_t vsync;
-    uint8_t paused;
 } VKRT;
 
 typedef struct Vertex {

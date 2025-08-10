@@ -3,10 +3,23 @@
 
 layout(binding = 0, set = 0) uniform accelerationStructureEXT topLevelAS;
 layout(binding = 1, set = 0, rgba32f) uniform image2D image;
+
 layout(binding = 4, set = 0) uniform SceneUniform {
     mat4 viewInverse;
     mat4 projInverse;
+    uint frame;
 } cam;
+
+struct Material {
+    vec3 color;
+    float roughness;
+    vec3 emissiveColor;
+    float emissiveStrength;
+};
+
+layout(set = 0, binding = 6, std430) readonly buffer MaterialBuffer {
+    Material materials[];
+} materialBuffer;
 
 layout(location = 0) rayPayloadEXT vec3 hitValue;
 

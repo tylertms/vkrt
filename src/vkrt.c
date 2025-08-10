@@ -36,3 +36,8 @@ void VKRT_addMesh(VKRT* vkrt, const char* path) {
     if (!vkrt || !path) return;
     loadObject(vkrt, path);
 }
+
+void VKRT_addMaterial(VKRT* vkrt, Material* material) {
+    if (!vkrt || !material) return;
+    addMaterial(vkrt, material);
+}

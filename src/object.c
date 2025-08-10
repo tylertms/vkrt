@@ -147,11 +147,25 @@ void loadObject(VKRT* vkrt, const char* filename) {
     createBottomLevelAccelerationStructure(vkrt, &vkrt->meshes[meshIndex]);
 }
 
+void addMaterial(VKRT* vkrt, Material* material) {
+    size_t materialIndex = vkrt->materialData.count;
+    vkrt->materialData.count++;
+    vkrt->materials = realloc(vkrt->materials, vkrt->materialData.count * sizeof(Material));
+    vkrt->materials[materialIndex] = *material;
+
+    // Append the material data to the buffer
+    vkrt->materialData.deviceAddress = appendBufferFromHostData(vkrt, &vkrt->materials[materialIndex], 
+        sizeof(Material), 
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, 
+        &vkrt->materialData.buffer, &vkrt->materialData.memory, 
+        vkrt->materialData.count * sizeof(Material));
+}
+
 void createUniformBuffer(VKRT* vkrt) {
-    VkDeviceSize uniformBufferSize = sizeof(SceneUniform);
-    createBuffer(vkrt, uniformBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &vkrt->uniformBuffer, &vkrt->uniformBufferMemory);
-    vkMapMemory(vkrt->device, vkrt->uniformBufferMemory, 0, uniformBufferSize, 0, (void**)&vkrt->uniformBufferMapped);
-    memset(vkrt->uniformBufferMapped, 0, uniformBufferSize);
+    VkDeviceSize uniformBufferSize = sizeof(SceneData);
+    createBuffer(vkrt, uniformBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &vkrt->sceneDataBuffer, &vkrt->sceneDataMemory);
+    vkMapMemory(vkrt->device, vkrt->sceneDataMemory, 0, uniformBufferSize, 0, (void**)&vkrt->sceneData);
+    memset(vkrt->sceneData, 0, uniformBufferSize);
 }
 
 static int get_exe_dir(char* out, size_t sz) {
