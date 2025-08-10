@@ -88,6 +88,8 @@ void deinit(VKRT* vkrt) {
     vkFreeMemory(vkrt->device, vkrt->indexData.memory, NULL);
     vkDestroyBuffer(vkrt->device, vkrt->meshData.buffer, NULL);
     vkFreeMemory(vkrt->device, vkrt->meshData.memory, NULL);
+    vkDestroyBuffer(vkrt->device, vkrt->materialData.buffer, NULL);
+    vkFreeMemory(vkrt->device, vkrt->materialData.memory, NULL);
 
     vkDestroyBuffer(vkrt->device, vkrt->sceneDataBuffer, NULL);
     vkFreeMemory(vkrt->device, vkrt->sceneDataMemory, NULL);
