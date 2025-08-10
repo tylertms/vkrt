@@ -4,6 +4,7 @@
 #include "app.h"
 #include "command.h"
 #include "object.h"
+#include "structure.h"
 #include "vkrt.h"
 
 int VKRT_init(VKRT *vkrt) {
@@ -40,4 +41,9 @@ void VKRT_addMesh(VKRT* vkrt, const char* path) {
 void VKRT_addMaterial(VKRT* vkrt, Material* material) {
     if (!vkrt || !material) return;
     addMaterial(vkrt, material);
+}
+
+void VKRT_updateTLAS(VKRT* vkrt) {
+    if (!vkrt) return;
+    createTopLevelAccelerationStructure(vkrt);
 }

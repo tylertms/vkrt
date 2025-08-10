@@ -137,6 +137,7 @@ void VKRT_poll(VKRT* vkrt);
 void VKRT_draw(VKRT* vkrt);
 void VKRT_addMesh(VKRT* vkrt, const char* path);
 void VKRT_addMaterial(VKRT* vkrt, Material* material);
+void VKRT_updateTLAS(VKRT* vkrt);
 
 #define COUNT_OF(x) ((sizeof(x) / sizeof(0 [x])) / ((size_t)(!(sizeof(x) % sizeof(0 [x])))))
 
