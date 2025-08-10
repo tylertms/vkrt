@@ -78,6 +78,7 @@ typedef struct VKRT {
     VkDescriptorSet descriptorSet;
     VkPipelineLayout pipelineLayout;
     VkPipeline rayTracingPipeline;
+    char *rgenPath, *rmissPath, *rchitPath;
     VkCommandPool commandPool;
     VkCommandBuffer commandBuffers[MAX_FRAMES_IN_FLIGHT];
     VkSemaphore imageAvailableSemaphores[MAX_FRAMES_IN_FLIGHT];

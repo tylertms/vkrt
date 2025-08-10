@@ -7,6 +7,7 @@ project(
 cc = meson.get_compiler('c')
 
 incs = include_directories(
+    'include',
     'external/glfw3/include',
     'external/imgui/include',
     'external/cglm/include',
@@ -38,6 +39,7 @@ dcimgui = static_library(
 
 # Library sources (everything except main.c)
 sources = [
+    'src/api.c',
     'src/app.c',
     'src/buffer.c',
     'src/command.c',
