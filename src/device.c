@@ -263,7 +263,9 @@ void recordFrameTime(VKRT* vkrt, uint64_t startTime) {
     uint64_t currentTime = getMicroseconds();
     float frameTime = (currentTime - startTime) / 1000.0f;
 
-    if (vkrt->sceneData->frameNumber == 2) {
+    if (vkrt->sceneData->frameNumber > 4) {
+        vkrt->sceneData->samplesPerPixel = glm_clamp((uint32_t)(vkrt->maxFPSFrameTime / frameTime) * vkrt->sceneData->samplesPerPixel, 0, 1024);
+    } else if (vkrt->sceneData->frameNumber == 2) {
         // On the 2nd frame (offset to allow steady frametime), log the start time
         vkrt->lastFirstFrameTime = currentTime;
     } else if (vkrt->sceneData->frameNumber == 4) {
@@ -272,8 +274,6 @@ void recordFrameTime(VKRT* vkrt, uint64_t startTime) {
         // by comparing the rendering frametime and the actual display frametime
         vkrt->maxFPSFrameTime = (currentTime - vkrt->lastFirstFrameTime) / 2 / 1000.0f;
     }
-
-    vkrt->sceneData->samplesPerPixel = (vkrt->maxFPSFrameTime / frameTime);
 
     vkrt->frameTimes[vkrt->frameTimeStartIndex] = frameTime;
     vkrt->frameTimeStartIndex = (vkrt->frameTimeStartIndex + 1) % COUNT_OF(vkrt->frameTimes);

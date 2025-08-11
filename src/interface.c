@@ -74,6 +74,7 @@ void drawInterface(VKRT* vkrt) {
     if (ImGui_Checkbox("V-Sync", (bool*)&vkrt->vsync)) {
         vkrt->framebufferResized = VK_TRUE;
     }
+    
     ImGui_End();
     ImGui_Render();
 }
