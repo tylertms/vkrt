@@ -18,6 +18,7 @@ typedef struct SceneData {
     mat4 viewInverse;
     mat4 projInverse;
     uint32_t frameNumber;
+    uint32_t totalSamples;
     uint32_t samplesPerPixel;
     uint32_t maxRayDepth;
 } SceneData;

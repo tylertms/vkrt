@@ -8,6 +8,7 @@ layout(binding = 4, set = 0) uniform SceneUniform {
     mat4 viewInverse;
     mat4 projInverse;
     uint frameNumber;
+    uint totalSamples;
     uint samplesPerPixel;
     uint maxRayDepth;
 } cam;

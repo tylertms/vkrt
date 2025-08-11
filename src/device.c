@@ -293,13 +293,14 @@ void recordFrameTime(VKRT* vkrt, uint64_t startTime) {
         vkrt->sceneData->samplesPerPixel = calculatedSPP;
     }
 
-    float weight = 1.f / (min(1 + frameNumber, COUNT_OF(vkrt->frametimes)));
+    float weight = 1.f / (min(1 + max(0, frameNumber), COUNT_OF(vkrt->frametimes)));
     vkrt->averageFrametime = vkrt->averageFrametime * (1 - weight) + vkrt->displayTimeMs * weight;
     vkrt->framesPerSecond = (uint32_t)(1000.0f / vkrt->displayTimeMs);
 
     vkrt->frametimes[vkrt->frametimeStartIndex] = vkrt->displayTimeMs;
     vkrt->frametimeStartIndex = (vkrt->frametimeStartIndex + 1) % COUNT_OF(vkrt->frametimes);
     vkrt->sceneData->frameNumber++;
+    vkrt->sceneData->totalSamples += vkrt->sceneData->samplesPerPixel;
 }
 
 #if defined(_WIN32) || defined(_WIN64)

@@ -74,11 +74,11 @@ void drawInterface(VKRT* vkrt) {
     }
 
     ImGui_NewLine();
-    ImGui_Text("FPS:                %6d FPS", vkrt->framesPerSecond);
+    ImGui_Text("FPS:                %6d", vkrt->framesPerSecond);
     ImGui_Text("Render time:        %6.3f ms", vkrt->renderTimeMs);
     ImGui_Text("Frame time:         %6.3f ms", vkrt->displayTimeMs);
     ImGui_Text("Average frame time: %6.3f ms", vkrt->averageFrametime);
-    ImGui_Text("Samples per pixel:  %6d SPP", vkrt->sceneData->samplesPerPixel);
+    ImGui_Text("Samples per pixel:  %6d", vkrt->sceneData->samplesPerPixel);
     ImGui_NewLine();
 
     ImGui_PlotLinesEx("##", vkrt->frametimes, COUNT_OF(vkrt->frametimes), (int)vkrt->frametimeStartIndex, "", 0.0f, 2 * vkrt->averageFrametime, (ImVec2){160.0f, 40.0f}, sizeof(float));
@@ -178,17 +178,15 @@ void setupSceneUniform(VKRT* vkrt) {
         .target = {0.0f, 0.0f, 0.0f},
         .up = {0.0f, 0.0f, 1.0f}
     };
-
-    vkrt->sceneData->maxRayDepth = 16;
-    vkrt->sceneData->samplesPerPixel = 1;
-    vkrt->sceneData->frameNumber = 0;
-
+    resetSceneFrame(vkrt);
     updateMatricesFromCamera(vkrt);
 }
 
 void resetSceneFrame(VKRT* vkrt) {
-    vkrt->sceneData->frameNumber = 0;
+    vkrt->sceneData->maxRayDepth = 16;
     vkrt->sceneData->samplesPerPixel = 1;
+    vkrt->sceneData->frameNumber = 0;
+    vkrt->sceneData->totalSamples = 0;
 
     vkrt->averageFrametime = 0.0f;
     vkrt->frametimeStartIndex = 0;
