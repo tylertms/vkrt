@@ -9,7 +9,7 @@
 #include <stdint.h>
 #include <math.h>
 
-void setupImGui(VKRT* vkrt) {
+void initImGui(VKRT* vkrt) {
     vkrt->imguiContext = ImGui_CreateContext(NULL);
 
     ImGuiIO* io = ImGui_GetIO();

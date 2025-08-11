@@ -66,9 +66,9 @@ typedef struct Buffer {
 } Buffer;
 
 typedef struct Interface {
-    void (*init)(VKRT* vkrt);
-    void (*deinit)(VKRT* vkrt);
-    void (*draw)(VKRT* vkrt);
+    void (*init)(void* vkrt);
+    void (*deinit)(void* vkrt);
+    void (*draw)(void* vkrt);
 } Interface;
 
 typedef struct VKRT {
