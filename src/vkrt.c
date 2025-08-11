@@ -15,6 +15,13 @@ int VKRT_init(VKRT *vkrt) {
     return 0;
 }
 
+void VKRT_registerGUI(VKRT* vkrt, void (*init)(void*), void (*deinit)(void*), void (*draw)(void*)) {
+    if (!vkrt) return;
+    vkrt->interface.init = init;
+    vkrt->interface.deinit = deinit;
+    vkrt->interface.draw = draw;
+}
+
 void VKRT_deinit(VKRT *vkrt) {
     if (!vkrt) return;
     vkDeviceWaitIdle(vkrt->device);

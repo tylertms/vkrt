@@ -138,6 +138,7 @@ typedef struct Vertex {
 } Vertex;
 
 int VKRT_init(VKRT* vkrt);
+void VKRT_registerGUI(VKRT* vkrt, void (*init)(void*), void (*deinit)(void*), void (*draw)(void*));
 void VKRT_deinit(VKRT* vkrt);
 int VKRT_shouldDeinit(VKRT* vkrt);
 void VKRT_poll(VKRT* vkrt);
