@@ -65,10 +65,9 @@ void drawInterface(VKRT* vkrt) {
     ImGui_Begin("Statistics", &open, ImGuiWindowFlags_NoTitleBar);
 
     ImGui_Text("Device: %s", vkrt->deviceName);
-    ImGui_Text("Frame rate:%10d FPS", vkrt->averageFPS);
-    ImGui_Text("Frame time:%10.3f ms", vkrt->averageFrametime);
-    ImGui_Text("Frame count: %d", vkrt->sceneData->frameNumber);
-    ImGui_Text("Samples per pixel: %d", vkrt->sceneData->samplesPerPixel);
+    ImGui_Text("Frame rate:           %6d FPS", vkrt->averageFPS);
+    ImGui_Text("Frame time (Display): %6.3f ms", vkrt->maxFPSFrameTime);
+    ImGui_Text("Frame time (Render):  %6.3f ms", vkrt->frameTimes[vkrt->frameTimeStartIndex]);
 
     ImGui_PlotLinesEx("##", vkrt->frameTimes, COUNT_OF(vkrt->frameTimes), (int)vkrt->frameTimeStartIndex, "", 0.0f, 2 * vkrt->averageFrametime, (ImVec2){160.0f, 40.0f}, sizeof(float));
 
