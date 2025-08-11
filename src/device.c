@@ -285,11 +285,14 @@ void recordFrameTime(VKRT* vkrt, uint64_t startTime) {
     vkrt->renderTimeMs = (float)((ts[1] - ts[0]) * vkrt->timestampPeriod / 1e6);
 
     uint32_t frameNumber = vkrt->sceneData->frameNumber;
-    if (frameNumber > 3 && frameNumber % 2 == 0) {
-        vkrt->sceneData->samplesPerPixel = (uint32_t)glm_clamp(vkrt->displayTimeMs / vkrt->renderTimeMs * vkrt->sceneData->samplesPerPixel, 1, 1024);
+    uint32_t calculatedSPP = (uint32_t)glm_clamp(vkrt->displayTimeMs / vkrt->renderTimeMs * vkrt->sceneData->samplesPerPixel, 1, 1024);
+    uint32_t currentSPP = vkrt->sceneData->samplesPerPixel;
+    float diff = (float)(calculatedSPP - currentSPP) / currentSPP;
+
+    if (frameNumber > 3 && diff > 0.1f) {
+        vkrt->sceneData->samplesPerPixel = calculatedSPP;
     }
 
-    // rolling frametime average
     float weight = 1.f / (min(1 + frameNumber, COUNT_OF(vkrt->frametimes)));
     vkrt->averageFrametime = vkrt->averageFrametime * (1 - weight) + vkrt->displayTimeMs * weight;
     vkrt->framesPerSecond = (uint32_t)(1000.0f / vkrt->displayTimeMs);
