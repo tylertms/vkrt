@@ -86,8 +86,8 @@ void recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
 
     vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-    if (vkrt->interface.draw) {
-        vkrt->interface.draw(vkrt);
+    if (vkrt->gui.draw) {
+        vkrt->gui.draw(vkrt);
     } else {
         drawInterface(vkrt);
     }
@@ -111,7 +111,10 @@ void drawFrame(VKRT* vkrt) {
         createTopLevelAccelerationStructure(vkrt);
         updateDescriptorSet(vkrt);
         vkrt->topLevelAccelerationStructure.needsRebuild = 0;
+        resetSceneFrame(vkrt);
     }
+
+    uint64_t currentTime = getMicroseconds();
 
     uint32_t imageIndex;
     VkResult result = vkAcquireNextImageKHR(vkrt->device, vkrt->swapChain, UINT64_MAX, vkrt->imageAvailableSemaphores[vkrt->currentFrame], VK_NULL_HANDLE, &imageIndex);
@@ -148,6 +151,8 @@ void drawFrame(VKRT* vkrt) {
         exit(EXIT_FAILURE);
     }
 
+    recordFrameTime(vkrt, currentTime);
+
     VkPresentInfoKHR presentInfo = {0};
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     presentInfo.waitSemaphoreCount = 1;
@@ -164,8 +169,6 @@ void drawFrame(VKRT* vkrt) {
         perror("ERROR: Failed to present draw queue");
         exit(EXIT_FAILURE);
     }
-
-    recordFrameTime(vkrt);
 
     vkQueueWaitIdle(vkrt->presentQueue);
     vkrt->currentFrame = (vkrt->currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;

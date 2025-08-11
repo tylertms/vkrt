@@ -56,19 +56,18 @@ void initVulkan(VKRT* vkrt) {
     createShaderBindingTable(vkrt);
     createCommandBuffers(vkrt);
     createSyncObjects(vkrt);
-    initializeFrameTimers(vkrt);
     setupSceneUniform(vkrt);
 
-    if (vkrt->interface.init) {
-        vkrt->interface.init(vkrt);
+    if (vkrt->gui.init) {
+        vkrt->gui.init(vkrt);
     } else {
         initImGui(vkrt);
     }
 }
 
 void deinit(VKRT* vkrt) {
-    if (vkrt->interface.deinit) {
-        vkrt->interface.deinit(vkrt);
+    if (vkrt->gui.deinit) {
+        vkrt->gui.deinit(vkrt);
     } else {
         deinitImGui(vkrt);
     }

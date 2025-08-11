@@ -17,7 +17,9 @@ extern "C" {
 typedef struct SceneData {
     mat4 viewInverse;
     mat4 projInverse;
-    uint32_t frame;
+    uint32_t frameNumber;
+    uint32_t samplesPerPixel;
+    uint32_t maxRayDepth;
 } SceneData;
 
 typedef struct Camera {
@@ -116,7 +118,7 @@ typedef struct VKRT {
     VkDeviceMemory sceneDataMemory;
     SceneData* sceneData;
     Camera camera;
-    Interface interface;
+    Interface gui;
     VkImage storageImage;
     VkImageView storageImageView;
     VkDeviceMemory storageImageMemory;
@@ -128,10 +130,10 @@ typedef struct VKRT {
     Buffer meshData;
     Buffer materialData;
     uint32_t tempFrameCount;
-    uint64_t previousTime;
-    uint64_t currentTime;
+    uint64_t lastFirstFrameTime;
     uint64_t lastFrameTimeReported;
     uint32_t averageFPS;
+    float maxFPSFrameTime;
     float averageFrametime;
     float frameTimes[128];
     uint8_t frameTimeStartIndex;

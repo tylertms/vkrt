@@ -259,6 +259,42 @@ uint32_t findMemoryType(VKRT* vkrt, uint32_t typeFilter, VkMemoryPropertyFlags p
     exit(EXIT_FAILURE);
 }
 
+void recordFrameTime(VKRT* vkrt, uint64_t startTime) {
+    uint64_t currentTime = getMicroseconds();
+    float frameTime = (currentTime - startTime) / 1000.0f;
+
+    if (vkrt->sceneData->frameNumber == 2) {
+        // On the 2nd frame (offset to allow steady frametime), log the start time
+        vkrt->lastFirstFrameTime = currentTime;
+    } else if (vkrt->sceneData->frameNumber == 4) {
+        // On the 4th frame, use that to calculate the actual displayed frametime (includes VSYNC)
+        // This gives us the ability to calculate a samples-per-pixel that doesn't change display frametime
+        // by comparing the rendering frametime and the actual display frametime
+        vkrt->maxFPSFrameTime = (currentTime - vkrt->lastFirstFrameTime) / 2 / 1000.0f;
+    }
+
+    vkrt->sceneData->samplesPerPixel = (vkrt->maxFPSFrameTime / frameTime);
+
+    vkrt->frameTimes[vkrt->frameTimeStartIndex] = frameTime;
+    vkrt->frameTimeStartIndex = (vkrt->frameTimeStartIndex + 1) % COUNT_OF(vkrt->frameTimes);
+    vkrt->tempFrameCount++;
+    vkrt->sceneData->frameNumber++;
+
+    uint64_t elapsed = currentTime - vkrt->lastFrameTimeReported;
+    const uint64_t oneSecondUs = 1000000ULL;
+
+    if (elapsed >= oneSecondUs) {
+        float seconds = (float)elapsed / 1e6f;
+        uint32_t fps = (uint32_t)(vkrt->tempFrameCount / seconds + 0.5f);
+        float avgFrameMs = (seconds * 1e3f) / vkrt->tempFrameCount;
+
+        vkrt->averageFPS = fps;
+        vkrt->averageFrametime = avgFrameMs;
+        vkrt->tempFrameCount = 0;
+        vkrt->lastFrameTimeReported = currentTime;
+    }
+}
+
 #if defined(_WIN32) || defined(_WIN64)
     #include <windows.h>
     uint64_t getMicroseconds() {
@@ -275,34 +311,3 @@ uint32_t findMemoryType(VKRT* vkrt, uint32_t typeFilter, VkMemoryPropertyFlags p
         return (uint64_t)ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
     }
 #endif
-
-void initializeFrameTimers(VKRT* vkrt) {
-    uint64_t currentTime = getMicroseconds();
-    vkrt->previousTime = currentTime;
-    vkrt->currentTime = currentTime;
-    vkrt->lastFrameTimeReported = currentTime;
-    vkrt->tempFrameCount = 0;
-}
-
-void recordFrameTime(VKRT* vkrt) {
-    vkrt->previousTime = vkrt->currentTime;
-    vkrt->currentTime = getMicroseconds();
-    vkrt->frameTimes[vkrt->frameTimeStartIndex] = (vkrt->currentTime - vkrt->previousTime) / 1000.0f;
-    vkrt->frameTimeStartIndex = (vkrt->frameTimeStartIndex + 1) % COUNT_OF(vkrt->frameTimes);
-    vkrt->tempFrameCount++;
-    vkrt->sceneData->frame++;
-
-    uint64_t elapsed = vkrt->currentTime - vkrt->lastFrameTimeReported;
-    const uint64_t oneSecondUs = 1000000ULL;
-
-    if (elapsed >= oneSecondUs) {
-        float seconds = (float)elapsed / 1e6f;
-        uint32_t fps = (uint32_t)(vkrt->tempFrameCount / seconds + 0.5f);
-        float avgFrameMs = (seconds * 1e3f) / vkrt->tempFrameCount;
-
-        vkrt->averageFPS = fps;
-        vkrt->averageFrametime = avgFrameMs;
-        vkrt->tempFrameCount = 0;
-        vkrt->lastFrameTimeReported = vkrt->currentTime;
-    }
-}

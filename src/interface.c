@@ -67,7 +67,8 @@ void drawInterface(VKRT* vkrt) {
     ImGui_Text("Device: %s", vkrt->deviceName);
     ImGui_Text("Frame rate:%10d FPS", vkrt->averageFPS);
     ImGui_Text("Frame time:%10.3f ms", vkrt->averageFrametime);
-    ImGui_Text("Frame count: %d", vkrt->sceneData->frame);
+    ImGui_Text("Frame count: %d", vkrt->sceneData->frameNumber);
+    ImGui_Text("Samples per pixel: %d", vkrt->sceneData->samplesPerPixel);
 
     ImGui_PlotLinesEx("##", vkrt->frameTimes, COUNT_OF(vkrt->frameTimes), (int)vkrt->frameTimeStartIndex, "", 0.0f, 2 * vkrt->averageFrametime, (ImVec2){160.0f, 40.0f}, sizeof(float));
 
@@ -166,11 +167,16 @@ void setupSceneUniform(VKRT* vkrt) {
         .up = {0.0f, 0.0f, 1.0f}
     };
 
+    vkrt->sceneData->maxRayDepth = 16;
+    vkrt->sceneData->samplesPerPixel = 1;
+    vkrt->sceneData->frameNumber = 0;
+
     updateMatricesFromCamera(vkrt);
 }
 
 void resetSceneFrame(VKRT* vkrt) {
-    vkrt->sceneData->frame = 0;
+    vkrt->sceneData->frameNumber = 0;
+    vkrt->sceneData->samplesPerPixel = 1;
 }
 
 void updateMatricesFromCamera(VKRT* vkrt) {

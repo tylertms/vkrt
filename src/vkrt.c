@@ -17,9 +17,9 @@ int VKRT_init(VKRT *vkrt) {
 
 void VKRT_registerGUI(VKRT* vkrt, void (*init)(void*), void (*deinit)(void*), void (*draw)(void*)) {
     if (!vkrt) return;
-    vkrt->interface.init = init;
-    vkrt->interface.deinit = deinit;
-    vkrt->interface.draw = draw;
+    vkrt->gui.init = init;
+    vkrt->gui.deinit = deinit;
+    vkrt->gui.draw = draw;
 }
 
 void VKRT_deinit(VKRT *vkrt) {
