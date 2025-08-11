@@ -153,6 +153,23 @@ void createLogicalDevice(VKRT* vkrt) {
     free(queueCreateInfos);
 }
 
+void createQueryPool(VKRT* vkrt) {
+    VkQueryPoolCreateInfo qp = {
+        .sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
+        .queryType = VK_QUERY_TYPE_TIMESTAMP,
+        .queryCount = MAX_FRAMES_IN_FLIGHT * 2
+    };
+
+    if (vkCreateQueryPool(vkrt->device, &qp, NULL, &vkrt->timestampPool) != VK_SUCCESS) {
+        perror("ERROR: Failed to create timestamp query pool");
+        exit(EXIT_FAILURE);
+    }
+
+    VkPhysicalDeviceProperties deviceProperties = {0};
+    vkGetPhysicalDeviceProperties(vkrt->physicalDevice, &deviceProperties);
+    vkrt->timestampPeriod = deviceProperties.limits.timestampPeriod;
+}
+
 QueueFamily findQueueFamilies(VKRT* vkrt) {
     QueueFamily indices;
     indices.graphics = -1;
@@ -261,38 +278,25 @@ uint32_t findMemoryType(VKRT* vkrt, uint32_t typeFilter, VkMemoryPropertyFlags p
 
 void recordFrameTime(VKRT* vkrt, uint64_t startTime) {
     uint64_t currentTime = getMicroseconds();
-    float frameTime = (currentTime - startTime) / 1000.0f;
+    vkrt->displayTimeMs = (currentTime - startTime) / 1000.0f;
 
-    if (vkrt->sceneData->frameNumber > 4) {
-        vkrt->sceneData->samplesPerPixel = glm_clamp((uint32_t)(vkrt->maxFPSFrameTime / frameTime) * vkrt->sceneData->samplesPerPixel, 0, 1024);
-    } else if (vkrt->sceneData->frameNumber == 2) {
-        // On the 2nd frame (offset to allow steady frametime), log the start time
-        vkrt->lastFirstFrameTime = currentTime;
-    } else if (vkrt->sceneData->frameNumber == 4) {
-        // On the 4th frame, use that to calculate the actual displayed frametime (includes VSYNC)
-        // This gives us the ability to calculate a samples-per-pixel that doesn't change display frametime
-        // by comparing the rendering frametime and the actual display frametime
-        vkrt->maxFPSFrameTime = (currentTime - vkrt->lastFirstFrameTime) / 2 / 1000.0f;
+    uint64_t ts[2];
+    vkGetQueryPoolResults(vkrt->device, vkrt->timestampPool, vkrt->currentFrame * 2, 2, sizeof(ts), ts, sizeof(uint64_t), VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
+    vkrt->renderTimeMs = (float)((ts[1] - ts[0]) * vkrt->timestampPeriod / 1e6);
+
+    uint32_t frameNumber = vkrt->sceneData->frameNumber;
+    if (frameNumber > 3 && frameNumber % 2 == 0) {
+        vkrt->sceneData->samplesPerPixel = (uint32_t)glm_clamp(vkrt->displayTimeMs / vkrt->renderTimeMs * vkrt->sceneData->samplesPerPixel, 1, 1024);
     }
 
-    vkrt->frameTimes[vkrt->frameTimeStartIndex] = frameTime;
-    vkrt->frameTimeStartIndex = (vkrt->frameTimeStartIndex + 1) % COUNT_OF(vkrt->frameTimes);
-    vkrt->tempFrameCount++;
+    // rolling frametime average
+    float weight = 1.f / (min(1 + frameNumber, COUNT_OF(vkrt->frametimes)));
+    vkrt->averageFrametime = vkrt->averageFrametime * (1 - weight) + vkrt->displayTimeMs * weight;
+    vkrt->framesPerSecond = (uint32_t)(1000.0f / vkrt->displayTimeMs);
+
+    vkrt->frametimes[vkrt->frametimeStartIndex] = vkrt->displayTimeMs;
+    vkrt->frametimeStartIndex = (vkrt->frametimeStartIndex + 1) % COUNT_OF(vkrt->frametimes);
     vkrt->sceneData->frameNumber++;
-
-    uint64_t elapsed = currentTime - vkrt->lastFrameTimeReported;
-    const uint64_t oneSecondUs = 1000000ULL;
-
-    if (elapsed >= oneSecondUs) {
-        float seconds = (float)elapsed / 1e6f;
-        uint32_t fps = (uint32_t)(vkrt->tempFrameCount / seconds + 0.5f);
-        float avgFrameMs = (seconds * 1e3f) / vkrt->tempFrameCount;
-
-        vkrt->averageFPS = fps;
-        vkrt->averageFrametime = avgFrameMs;
-        vkrt->tempFrameCount = 0;
-        vkrt->lastFrameTimeReported = currentTime;
-    }
 }
 
 #if defined(_WIN32) || defined(_WIN64)

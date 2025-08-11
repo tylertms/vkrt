@@ -55,6 +55,11 @@ void recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
         exit(EXIT_FAILURE);
     }
 
+    uint32_t qbase = vkrt->currentFrame * 2;
+    vkCmdResetQueryPool(commandBuffer, vkrt->timestampPool, qbase, 2);
+
+    vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, vkrt->timestampPool, qbase);
+
     transitionImageLayout(commandBuffer, destImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, vkrt->rayTracingPipeline);
@@ -97,6 +102,8 @@ void recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
 
     transitionImageLayout(commandBuffer, sourceImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
 
+    vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, vkrt->timestampPool, qbase + 1);
+
     if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
         perror("ERROR: Failed to end command buffer");
         exit(EXIT_FAILURE);
@@ -106,6 +113,8 @@ void recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
 void drawFrame(VKRT* vkrt) {
     vkWaitForFences(vkrt->device, 1, &vkrt->inFlightFences[vkrt->currentFrame], VK_TRUE, UINT64_MAX);
 
+    uint64_t currentTime = getMicroseconds();
+
     if (vkrt->topLevelAccelerationStructure.needsRebuild) {
         vkDeviceWaitIdle(vkrt->device);
         createTopLevelAccelerationStructure(vkrt);
@@ -113,8 +122,6 @@ void drawFrame(VKRT* vkrt) {
         vkrt->topLevelAccelerationStructure.needsRebuild = 0;
         resetSceneFrame(vkrt);
     }
-
-    uint64_t currentTime = getMicroseconds();
 
     uint32_t imageIndex;
     VkResult result = vkAcquireNextImageKHR(vkrt->device, vkrt->swapChain, UINT64_MAX, vkrt->imageAvailableSemaphores[vkrt->currentFrame], VK_NULL_HANDLE, &imageIndex);
@@ -151,8 +158,6 @@ void drawFrame(VKRT* vkrt) {
         exit(EXIT_FAILURE);
     }
 
-    recordFrameTime(vkrt, currentTime);
-
     VkPresentInfoKHR presentInfo = {0};
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     presentInfo.waitSemaphoreCount = 1;
@@ -169,6 +174,8 @@ void drawFrame(VKRT* vkrt) {
         perror("ERROR: Failed to present draw queue");
         exit(EXIT_FAILURE);
     }
+
+    recordFrameTime(vkrt, currentTime);
 
     vkQueueWaitIdle(vkrt->presentQueue);
     vkrt->currentFrame = (vkrt->currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;

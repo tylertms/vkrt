@@ -42,6 +42,7 @@ void initVulkan(VKRT* vkrt) {
     createSurface(vkrt);
     pickPhysicalDevice(vkrt);
     createLogicalDevice(vkrt);
+    createQueryPool(vkrt);
     createSwapChain(vkrt);
     createImageViews(vkrt);
     createRenderPass(vkrt);
@@ -116,6 +117,8 @@ void deinit(VKRT* vkrt) {
 
     vkFreeCommandBuffers(vkrt->device, vkrt->commandPool, COUNT_OF(vkrt->commandBuffers), vkrt->commandBuffers);
     vkDestroyCommandPool(vkrt->device, vkrt->commandPool, NULL);
+
+    vkDestroyQueryPool(vkrt->device, vkrt->timestampPool, NULL);
 
     vkDestroyDevice(vkrt->device, NULL);
 

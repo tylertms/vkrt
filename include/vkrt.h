@@ -9,8 +9,8 @@ extern "C" {
 #include "cglm.h"
 #include "dcimgui.h"
 
-#define WIDTH 800
-#define HEIGHT 600
+#define WIDTH 1600
+#define HEIGHT 900
 
 #define MAX_FRAMES_IN_FLIGHT 2
 
@@ -88,6 +88,8 @@ typedef struct VKRT {
     char deviceName[256];
     VkQueue graphicsQueue;
     VkQueue presentQueue;
+    VkQueryPool timestampPool;
+    float timestampPeriod;
     QueueFamily indices;
     VkSurfaceKHR surface;
     VkSwapchainKHR swapChain;
@@ -129,14 +131,12 @@ typedef struct VKRT {
     Buffer indexData;
     Buffer meshData;
     Buffer materialData;
-    uint32_t tempFrameCount;
-    uint64_t lastFirstFrameTime;
-    uint64_t lastFrameTimeReported;
-    uint32_t averageFPS;
-    float maxFPSFrameTime;
+    uint32_t framesPerSecond;
+    uint8_t frametimeStartIndex;
     float averageFrametime;
-    float frameTimes[128];
-    uint8_t frameTimeStartIndex;
+    float frametimes[128];
+    float displayTimeMs;
+    float renderTimeMs;
     uint8_t vsync;
 } VKRT;
 

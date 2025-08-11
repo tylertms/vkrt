@@ -6,6 +6,7 @@ extern const char* deviceExtensions[NUM_EXTENSIONS];
 
 void pickPhysicalDevice(VKRT* vkrt);
 void createLogicalDevice(VKRT* vkrt);
+void createQueryPool(VKRT* vkrt);
 int32_t isDeviceSuitable(VKRT* vkrt);
 VkBool32 isQueueFamilyComplete(QueueFamily indices);
 QueueFamily findQueueFamilies(VKRT* vkrt);

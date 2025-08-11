@@ -61,21 +61,34 @@ void drawInterface(VKRT* vkrt) {
 
     pollCameraMovement(vkrt);
 
+    ImGui_PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f);
+    ImGui_PushStyleVar(ImGuiStyleVar_GrabRounding, 10.0f);
     bool open = true;
     ImGui_Begin("Statistics", &open, ImGuiWindowFlags_NoTitleBar);
 
     ImGui_Text("Device: %s", vkrt->deviceName);
-    ImGui_Text("Frame rate:           %6d FPS", vkrt->averageFPS);
-    ImGui_Text("Frame time (Display): %6.3f ms", vkrt->maxFPSFrameTime);
-    ImGui_Text("Frame time (Render):  %6.3f ms", vkrt->frameTimes[vkrt->frameTimeStartIndex]);
-
-    ImGui_PlotLinesEx("##", vkrt->frameTimes, COUNT_OF(vkrt->frameTimes), (int)vkrt->frameTimeStartIndex, "", 0.0f, 2 * vkrt->averageFrametime, (ImVec2){160.0f, 40.0f}, sizeof(float));
+    ImGui_Text("Resolution: %dx%d", vkrt->camera.width, vkrt->camera.height);
 
     if (ImGui_Checkbox("V-Sync", (bool*)&vkrt->vsync)) {
         vkrt->framebufferResized = VK_TRUE;
     }
-    
+
+    ImGui_NewLine();
+    ImGui_Text("FPS:                %6d FPS", vkrt->framesPerSecond);
+    ImGui_Text("Render time:        %6.3f ms", vkrt->renderTimeMs);
+    ImGui_Text("Frame time:         %6.3f ms", vkrt->displayTimeMs);
+    ImGui_Text("Average frame time: %6.3f ms", vkrt->averageFrametime);
+    ImGui_Text("Samples per pixel:  %6d SPP", vkrt->sceneData->samplesPerPixel);
+    ImGui_NewLine();
+
+    ImGui_PlotLinesEx("##", vkrt->frametimes, COUNT_OF(vkrt->frametimes), (int)vkrt->frametimeStartIndex, "", 0.0f, 2 * vkrt->averageFrametime, (ImVec2){160.0f, 40.0f}, sizeof(float));
+
     ImGui_End();
+
+    ImGui_PopStyleVar();
+    ImGui_PopStyleVar();
+
+
     ImGui_Render();
 }
 
@@ -177,6 +190,10 @@ void setupSceneUniform(VKRT* vkrt) {
 void resetSceneFrame(VKRT* vkrt) {
     vkrt->sceneData->frameNumber = 0;
     vkrt->sceneData->samplesPerPixel = 1;
+
+    vkrt->averageFrametime = 0.0f;
+    vkrt->frametimeStartIndex = 0;
+    memset(vkrt->frametimes, 0, sizeof(vkrt->frametimes));
 }
 
 void updateMatricesFromCamera(VKRT* vkrt) {
@@ -194,6 +211,7 @@ void updateMatricesFromCamera(VKRT* vkrt) {
 
 void setDarkTheme() {
     ImGuiStyle* style = ImGui_GetStyle();
+
     ImVec4* colors = style->Colors;
 
     const ImVec4 almostBlack = (ImVec4){0.05f, 0.05f, 0.05f, 1.00f};
@@ -204,11 +222,11 @@ void setDarkTheme() {
 
     colors[ImGuiCol_Text] = textColor;
     colors[ImGuiCol_TextDisabled] = (ImVec4){0.50f, 0.50f, 0.50f, 1.00f};
-    colors[ImGuiCol_WindowBg] = almostBlack;
+    colors[ImGuiCol_WindowBg] = (ImVec4){0.05f, 0.05f, 0.05f, 0.60f};
     colors[ImGuiCol_ChildBg] = darkGray;
     colors[ImGuiCol_PopupBg] = almostBlack;
     colors[ImGuiCol_Border] = midGray;
-    colors[ImGuiCol_FrameBg] = midGray;
+    colors[ImGuiCol_FrameBg] = (ImVec4){0.05f, 0.05f, 0.05f, 0.60f};
     colors[ImGuiCol_FrameBgHovered] = lightGray;
     colors[ImGuiCol_FrameBgActive] = lightGray;
     colors[ImGuiCol_TitleBg] = darkGray;
