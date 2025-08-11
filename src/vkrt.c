@@ -60,3 +60,7 @@ void VKRT_pollCameraMovement(VKRT* vkrt) {
     if (!vkrt) return;
     pollCameraMovement(vkrt);
 }
+
+void VKRT_setDarkTheme() {
+    setDarkTheme();
+}

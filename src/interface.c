@@ -88,7 +88,6 @@ void drawInterface(VKRT* vkrt) {
     ImGui_PopStyleVar();
     ImGui_PopStyleVar();
 
-
     ImGui_Render();
 }
 
