@@ -71,6 +71,11 @@ typedef struct Interface {
     void (*draw)(void* vkrt);
 } Interface;
 
+typedef struct QueueFamily {
+    int32_t graphics;
+    int32_t present;
+} QueueFamily;
+
 typedef struct VKRT {
     GLFWwindow* window;
     ImGuiContext* imguiContext;
@@ -81,6 +86,7 @@ typedef struct VKRT {
     char deviceName[256];
     VkQueue graphicsQueue;
     VkQueue presentQueue;
+    QueueFamily indices;
     VkSurfaceKHR surface;
     VkSwapchainKHR swapChain;
     VkImage* swapChainImages;

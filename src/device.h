@@ -4,11 +4,6 @@
 #define NUM_EXTENSIONS 5
 extern const char* deviceExtensions[NUM_EXTENSIONS];
 
-typedef struct QueueFamily {
-    int32_t graphics;
-    int32_t present;
-} QueueFamily;
-
 void pickPhysicalDevice(VKRT* vkrt);
 void createLogicalDevice(VKRT* vkrt);
 int32_t isDeviceSuitable(VKRT* vkrt);

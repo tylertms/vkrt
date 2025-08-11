@@ -32,7 +32,7 @@ void initImGui(VKRT* vkrt) {
     imGuiVulkanInitInfo.PhysicalDevice = vkrt->physicalDevice;
     imGuiVulkanInitInfo.Device = vkrt->device;
     imGuiVulkanInitInfo.Queue = vkrt->graphicsQueue;
-    imGuiVulkanInitInfo.QueueFamily = findQueueFamilies(vkrt).graphics;
+    imGuiVulkanInitInfo.QueueFamily = vkrt->indices.graphics;
     imGuiVulkanInitInfo.PipelineCache = VK_NULL_HANDLE;
     imGuiVulkanInitInfo.DescriptorPool = vkrt->descriptorPool;
     imGuiVulkanInitInfo.Allocator = VK_NULL_HANDLE;

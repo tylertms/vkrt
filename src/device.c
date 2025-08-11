@@ -68,6 +68,7 @@ void pickPhysicalDevice(VKRT* vkrt) {
 
 void createLogicalDevice(VKRT* vkrt) {
     QueueFamily indices = findQueueFamilies(vkrt);
+    vkrt->indices = indices;
 
     float queuePriority = 1.0f;
     uint32_t uniqueQueueFamilies[2] = {indices.graphics, indices.present};
