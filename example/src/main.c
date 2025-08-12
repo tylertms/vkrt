@@ -14,7 +14,7 @@ int main() {
         return EXIT_FAILURE;
     }
 
-    VKRT_registerGUI(&vkrt, initGUI, deinitGUI, drawGUI);
+    //VKRT_registerGUI(&vkrt, initGUI, deinitGUI, drawGUI);
 
     VKRT_addMesh(&vkrt, "assets/models/sphere.glb");
     VKRT_addMesh(&vkrt, "assets/models/dragon.glb");
