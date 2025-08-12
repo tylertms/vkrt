@@ -8,8 +8,6 @@
 #include "structure.h"
 #include "vkrt.h"
 
-#include "dcimgui_impl_vulkan.h"
-
 int VKRT_init(VKRT *vkrt) {
     if (!vkrt) return -1;
     initWindow(vkrt);

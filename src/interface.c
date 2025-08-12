@@ -1,11 +1,6 @@
 #include "interface.h"
 #include "device.h"
 
-#include "dcimgui.h"
-#include "dcimgui_impl_glfw.h"
-#include "dcimgui_impl_vulkan.h"
-#include "dcimgui_internal.h"
-
 #include <stdint.h>
 #include <math.h>
 

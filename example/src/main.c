@@ -1,10 +1,5 @@
 #include "vkrt.h"
-
 #include <stdlib.h>
-#include "dcimgui.h"
-#include "dcimgui_impl_glfw.h"
-#include "dcimgui_impl_vulkan.h"
-#include "dcimgui_internal.h"
 
 void initGUI(VKRT* vkrt);
 void deinitGUI(VKRT* vkrt);

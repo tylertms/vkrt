@@ -6,11 +6,6 @@
 #include "structure.h"
 #include "swapchain.h"
 
-#include "dcimgui.h"
-#include "dcimgui_impl_glfw.h"
-#include "dcimgui_impl_vulkan.h"
-#include "dcimgui_internal.h"
-
 #include <stdio.h>
 #include <stdlib.h>
 

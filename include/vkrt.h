@@ -8,6 +8,9 @@ extern "C" {
 
 #include "cglm.h"
 #include "dcimgui.h"
+#include "dcimgui_impl_glfw.h"
+#include "dcimgui_impl_vulkan.h"
+#include "dcimgui_internal.h"
 
 #define WIDTH 1600
 #define HEIGHT 900
