@@ -6,7 +6,7 @@ project('vkrt-example', ['c', 'cpp'],
   ],
 )
 
-vkrt_dep = dependency('vkrt', fallback: ['vkrt', 'vkrt_dep'])
+vkrt_dep = dependency('vkrt')
 glslc = find_program('glslc')
 
 shader_inputs = [
