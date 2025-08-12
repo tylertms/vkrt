@@ -75,25 +75,23 @@ void recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
 
     vkCmdBlitImage(commandBuffer, sourceImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, destImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
 
+    VkRenderPassBeginInfo renderPassBeginInfo = {0};
+    renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    renderPassBeginInfo.renderPass = vkrt->renderPass;
+    renderPassBeginInfo.framebuffer = vkrt->framebuffers[imageIndex];
+    renderPassBeginInfo.renderArea.offset = (VkOffset2D){0, 0};
+    renderPassBeginInfo.renderArea.extent = extent;
+    renderPassBeginInfo.clearValueCount = 0;
+    renderPassBeginInfo.pClearValues = NULL;
+
+    vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+
     if (vkrt->gui.draw) {
-        VkRenderPassBeginInfo renderPassBeginInfo = {0};
-        renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassBeginInfo.renderPass = vkrt->renderPass;
-        renderPassBeginInfo.framebuffer = vkrt->framebuffers[imageIndex];
-        renderPassBeginInfo.renderArea.offset = (VkOffset2D){0, 0};
-        renderPassBeginInfo.renderArea.extent = extent;
-        renderPassBeginInfo.clearValueCount = 0;
-        renderPassBeginInfo.pClearValues = NULL;
-
-        vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-
         vkrt->gui.draw(vkrt);
         cImGui_ImplVulkan_RenderDrawData(ImGui_GetDrawData(), commandBuffer);
-
-        vkCmdEndRenderPass(commandBuffer);
-
     }
 
+    vkCmdEndRenderPass(commandBuffer);
 
     transitionImageLayout(commandBuffer, sourceImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
 

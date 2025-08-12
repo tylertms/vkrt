@@ -58,11 +58,10 @@ void initVulkan(VKRT* vkrt) {
     createCommandBuffers(vkrt);
     createSyncObjects(vkrt);
     setupSceneUniform(vkrt);
-    printf("BEFORE INIT GUI\n");
+    
     if (vkrt->gui.init) {
         vkrt->gui.init(vkrt);
     }
-    printf("AFTER INIT GUI\n");
 }
 
 void deinit(VKRT* vkrt) {
