@@ -84,6 +84,12 @@ void pollCameraMovement(VKRT* vkrt) {
 
 void recordFrameTime(VKRT* vkrt) {
     uint64_t currentTime = getMicroseconds();
+
+    if (vkrt->lastFrameTimestamp == 0) {
+        vkrt->lastFrameTimestamp = currentTime;
+        return;
+    }
+
     vkrt->displayTimeMs = (currentTime - vkrt->lastFrameTimestamp) / 1000.0f;
     vkrt->lastFrameTimestamp = currentTime;
 
@@ -91,7 +97,7 @@ void recordFrameTime(VKRT* vkrt) {
     vkGetQueryPoolResults(vkrt->device, vkrt->timestampPool, vkrt->currentFrame * 2, 2, sizeof(ts), ts, sizeof(uint64_t), VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
     vkrt->renderTimeMs = (float)((ts[1] - ts[0]) * vkrt->timestampPeriod / 1e6);
 
-    uint32_t frameNumber = vkrt->sceneData->frameNumber;
+    int32_t frameNumber = vkrt->sceneData->frameNumber;
     uint32_t calculatedSPP = (uint32_t)glm_clamp(vkrt->displayTimeMs / vkrt->renderTimeMs * vkrt->sceneData->samplesPerPixel, 1, 1024);
     uint32_t currentSPP = vkrt->sceneData->samplesPerPixel;
     float diff = (float)(calculatedSPP - currentSPP) / currentSPP;

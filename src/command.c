@@ -106,8 +106,6 @@ void recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
 void drawFrame(VKRT* vkrt) {
     vkWaitForFences(vkrt->device, 1, &vkrt->inFlightFences[vkrt->currentFrame], VK_TRUE, UINT64_MAX);
 
-    uint64_t currentTime = getMicroseconds();
-
     if (vkrt->topLevelAccelerationStructure.needsRebuild) {
         vkDeviceWaitIdle(vkrt->device);
         createTopLevelAccelerationStructure(vkrt);
@@ -168,7 +166,7 @@ void drawFrame(VKRT* vkrt) {
         exit(EXIT_FAILURE);
     }
 
-    recordFrameTime(vkrt, currentTime);
+    recordFrameTime(vkrt);
 
     vkQueueWaitIdle(vkrt->presentQueue);
     vkrt->currentFrame = (vkrt->currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
