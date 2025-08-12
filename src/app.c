@@ -61,16 +61,12 @@ void initVulkan(VKRT* vkrt) {
 
     if (vkrt->gui.init) {
         vkrt->gui.init(vkrt);
-    } else {
-        initImGui(vkrt);
     }
 }
 
 void deinit(VKRT* vkrt) {
     if (vkrt->gui.deinit) {
         vkrt->gui.deinit(vkrt);
-    } else {
-        deinitImGui(vkrt);
     }
 
     cleanupSwapChain(vkrt);
@@ -131,18 +127,4 @@ void deinit(VKRT* vkrt) {
 
     glfwDestroyWindow(vkrt->window);
     glfwTerminate();
-}
-
-void run(VKRT* vkrt) {
-    initWindow(vkrt);
-    initVulkan(vkrt);
-
-    while (!glfwWindowShouldClose(vkrt->window)) {
-        glfwPollEvents();
-        drawFrame(vkrt);
-    }
-
-    vkDeviceWaitIdle(vkrt->device);
-
-    deinit(vkrt);
 }

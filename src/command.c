@@ -93,8 +93,6 @@ void recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
 
     if (vkrt->gui.draw) {
         vkrt->gui.draw(vkrt);
-    } else {
-        drawInterface(vkrt);
     }
 
     cImGui_ImplVulkan_RenderDrawData(ImGui_GetDrawData(), commandBuffer);

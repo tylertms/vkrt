@@ -157,6 +157,7 @@ void VKRT_addMaterial(VKRT* vkrt, Material* material);
 void VKRT_updateTLAS(VKRT* vkrt);
 void VKRT_pollCameraMovement(VKRT* vkrt);
 void VKRT_setDarkTheme();
+void VKRT_setDefaultStyle();
 
 #define COUNT_OF(x) ((sizeof(x) / sizeof(0 [x])) / ((size_t)(!(sizeof(x) % sizeof(0 [x])))))
 

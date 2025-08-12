@@ -1,0 +1,4 @@
+[wrap-git]
+directory = vkrt
+url = https://github.com/tylertms/vkrt.git
+revision = master

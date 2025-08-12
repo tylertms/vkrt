@@ -1,1 +1,1 @@
-option('build_examples', type: 'boolean', value: true, description: 'Build vkrt demo executable and shaders')
+option('build_example', type: 'boolean', value: true, description: 'Build vkrt demo executable and shaders')

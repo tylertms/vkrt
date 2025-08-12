@@ -8,6 +8,8 @@
 #include "structure.h"
 #include "vkrt.h"
 
+#include "dcimgui_impl_vulkan.h"
+
 int VKRT_init(VKRT *vkrt) {
     if (!vkrt) return -1;
     initWindow(vkrt);
@@ -63,4 +65,27 @@ void VKRT_pollCameraMovement(VKRT* vkrt) {
 
 void VKRT_setDarkTheme() {
     setDarkTheme();
+}
+
+void VKRT_setDefaultStyle() {
+    setDefaultStyle();
+}
+
+void VKRT_getImGuiVulkanInitInfo(VKRT* vkrt, ImGui_ImplVulkan_InitInfo* info) {
+    if (!info) return;
+
+    info->Instance = vkrt->instance;
+    info->PhysicalDevice = vkrt->physicalDevice;
+    info->Device = vkrt->device;
+    info->Queue = vkrt->graphicsQueue;
+    info->QueueFamily = vkrt->indices.graphics;
+    info->PipelineCache = VK_NULL_HANDLE;
+    info->DescriptorPool = vkrt->descriptorPool;
+    info->Allocator = VK_NULL_HANDLE;
+    uint32_t imgCount = (uint32_t)vkrt->swapChainImageCount;
+    uint32_t minImgCount = (imgCount > 1u) ? (imgCount - 1u) : imgCount;
+    info->MinImageCount = minImgCount;
+    info->ImageCount = imgCount;
+    info->CheckVkResultFn = VK_NULL_HANDLE;
+    info->RenderPass = vkrt->renderPass;
 }
