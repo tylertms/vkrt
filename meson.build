@@ -45,12 +45,11 @@ dcimgui = static_library('dcimgui',
     'external/imgui/src/imgui_tables.cpp',
     'external/imgui/src/imgui_widgets.cpp',
   ),
-  install: true
+  cpp_args: ['-w']
 )
 
 # ----- VKRT sources -----
 sources = files(
-  'src/app.c',
   'src/buffer.c',
   'src/command.c',
   'src/descriptor.c',
@@ -68,16 +67,17 @@ sources = files(
   'src/vkrt.c',
 )
 
-# ----- VKRT shaders -----
-shader_sources = files(
+# ----- Shader sources -----
+shader_sources = [
   'shaders/main.rchit',
   'shaders/main.rgen',
   'shaders/main.rmiss'
-)
+]
 
+# ----- Shader targets -----
 shader_targets = []
 foreach shader_file : shader_sources
-    basename = shader_file.full_path().split('.')[-1]
+    basename = shader_file.split('.')[-1]
     shader_target = custom_target(
         'compile_' + basename,
         input: shader_file,
@@ -88,7 +88,7 @@ foreach shader_file : shader_sources
     shader_targets += shader_target
 endforeach
 
-
+# ----- VKRT executable -----
 executable('vkrt',
   c_args: c_args,
   sources: sources,

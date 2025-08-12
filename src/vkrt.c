@@ -1,17 +1,57 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "app.h"
 #include "command.h"
-#include "scene.h"
+#include "descriptor.h"
+#include "device.h"
+#include "instance.h"
 #include "object.h"
+#include "scene.h"
 #include "structure.h"
+#include "surface.h"
+#include "swapchain.h"
+#include "pipeline.h"
+#include "validation.h"
 #include "vkrt.h"
 
 int VKRT_init(VKRT *vkrt) {
     if (!vkrt) return -1;
-    initWindow(vkrt);
-    initVulkan(vkrt);
+
+    glfwInit();
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
+
+    vkrt->vsync = 1;
+    vkrt->window = glfwCreateWindow(WIDTH, HEIGHT, "VKRT", 0, 0);
+    glfwSetWindowUserPointer(vkrt->window, vkrt);
+    glfwSetFramebufferSizeCallback(vkrt->window, VKRT_framebufferResizedCallback);
+
+    createInstance(vkrt);
+    setupDebugMessenger(vkrt);
+    createSurface(vkrt);
+    pickPhysicalDevice(vkrt);
+    createLogicalDevice(vkrt);
+    createQueryPool(vkrt);
+    createSwapChain(vkrt);
+    createImageViews(vkrt);
+    createRenderPass(vkrt);
+    createFramebuffers(vkrt);
+    createCommandPool(vkrt);
+    createDescriptorSetLayout(vkrt);
+    createRayTracingPipeline(vkrt);
+    createStorageImage(vkrt);
+    createUniformBuffer(vkrt);
+    createDescriptorPool(vkrt);
+    createDescriptorSet(vkrt);
+    createShaderBindingTable(vkrt);
+    createCommandBuffers(vkrt);
+    createSyncObjects(vkrt);
+    setupSceneUniform(vkrt);
+    
+    if (vkrt->gui.init) {
+        vkrt->gui.init(vkrt);
+    }
+
     return 0;
 }
 
@@ -24,8 +64,69 @@ void VKRT_registerGUI(VKRT* vkrt, void (*init)(void*), void (*deinit)(void*), vo
 
 void VKRT_deinit(VKRT *vkrt) {
     if (!vkrt) return;
+
     vkDeviceWaitIdle(vkrt->device);
-    deinit(vkrt);
+
+    if (vkrt->gui.deinit) {
+        vkrt->gui.deinit(vkrt);
+    }
+
+    cleanupSwapChain(vkrt);
+
+    vkDestroyRenderPass(vkrt->device, vkrt->renderPass, NULL);
+
+    vkDestroyBuffer(vkrt->device, vkrt->shaderBindingTableBuffer, NULL);
+    vkFreeMemory(vkrt->device, vkrt->shaderBindingTableMemory, NULL);
+
+    PFN_vkDestroyAccelerationStructureKHR pvkDestroyAccelerationStructureKHR = (PFN_vkDestroyAccelerationStructureKHR)vkGetDeviceProcAddr(vkrt->device, "vkDestroyAccelerationStructureKHR");
+    pvkDestroyAccelerationStructureKHR(vkrt->device, vkrt->topLevelAccelerationStructure.structure, NULL);
+    vkDestroyBuffer(vkrt->device, vkrt->topLevelAccelerationStructure.buffer, NULL);
+    vkFreeMemory(vkrt->device, vkrt->topLevelAccelerationStructure.memory, NULL);
+
+    for (uint32_t i = 0; i < vkrt->meshData.count; i++) {
+        pvkDestroyAccelerationStructureKHR(vkrt->device, vkrt->meshes[i].bottomLevelAccelerationStructure.structure, NULL);
+        vkDestroyBuffer(vkrt->device, vkrt->meshes[i].bottomLevelAccelerationStructure.buffer, NULL);
+        vkFreeMemory(vkrt->device, vkrt->meshes[i].bottomLevelAccelerationStructure.memory, NULL);
+    }
+
+    vkDestroyBuffer(vkrt->device, vkrt->vertexData.buffer, NULL);
+    vkFreeMemory(vkrt->device, vkrt->vertexData.memory, NULL);
+    vkDestroyBuffer(vkrt->device, vkrt->indexData.buffer, NULL);
+    vkFreeMemory(vkrt->device, vkrt->indexData.memory, NULL);
+    vkDestroyBuffer(vkrt->device, vkrt->meshData.buffer, NULL);
+    vkFreeMemory(vkrt->device, vkrt->meshData.memory, NULL);
+
+    vkDestroyBuffer(vkrt->device, vkrt->sceneDataBuffer, NULL);
+    vkFreeMemory(vkrt->device, vkrt->sceneDataMemory, NULL);
+
+    vkDestroyDescriptorPool(vkrt->device, vkrt->descriptorPool, NULL);
+    vkDestroyDescriptorSetLayout(vkrt->device, vkrt->descriptorSetLayout, NULL);
+
+    vkDestroyPipeline(vkrt->device, vkrt->rayTracingPipeline, NULL);
+    vkDestroyPipelineLayout(vkrt->device, vkrt->pipelineLayout, NULL);
+
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        vkDestroySemaphore(vkrt->device, vkrt->imageAvailableSemaphores[i], NULL);
+        vkDestroySemaphore(vkrt->device, vkrt->renderFinishedSemaphores[i], NULL);
+        vkDestroyFence(vkrt->device, vkrt->inFlightFences[i], NULL);
+    }
+
+    vkFreeCommandBuffers(vkrt->device, vkrt->commandPool, COUNT_OF(vkrt->commandBuffers), vkrt->commandBuffers);
+    vkDestroyCommandPool(vkrt->device, vkrt->commandPool, NULL);
+
+    vkDestroyQueryPool(vkrt->device, vkrt->timestampPool, NULL);
+
+    vkDestroyDevice(vkrt->device, NULL);
+
+    if (enableValidationLayers) {
+        DestroyDebugUtilsMessengerEXT(vkrt->instance, vkrt->debugMessenger, NULL);
+    }
+
+    vkDestroySurfaceKHR(vkrt->instance, vkrt->surface, NULL);
+    vkDestroyInstance(vkrt->instance, NULL);
+
+    glfwDestroyWindow(vkrt->window);
+    glfwTerminate();
 }
 
 int VKRT_shouldDeinit(VKRT* vkrt) {
@@ -44,11 +145,6 @@ void VKRT_draw(VKRT* vkrt) {
 void VKRT_addMesh(VKRT* vkrt, const char* path) {
     if (!vkrt || !path) return;
     loadObject(vkrt, path);
-}
-
-void VKRT_addMaterial(VKRT* vkrt, Material* material) {
-    if (!vkrt || !material) return;
-    addMaterial(vkrt, material);
 }
 
 void VKRT_updateTLAS(VKRT* vkrt) {
@@ -82,4 +178,12 @@ void VKRT_getImGuiVulkanInitInfo(VKRT* vkrt, ImGui_ImplVulkan_InitInfo* info) {
     info->ImageCount = imgCount;
     info->CheckVkResultFn = VK_NULL_HANDLE;
     info->RenderPass = vkrt->renderPass;
+}
+
+static void VKRT_framebufferResizedCallback(GLFWwindow* window, int width, int height) {
+    (void)width;
+    (void)height;
+
+    VKRT* vkrt = (VKRT*)glfwGetWindowUserPointer(window);
+    vkrt->framebufferResized = VK_TRUE;
 }

@@ -16,7 +16,6 @@ struct MeshInfo {
     vec3 scale;
     uint indexBase;
     uint indexCount;
-    uint materialIndex;
 };
 
 layout(set = 0, binding = 2, std430) readonly buffer VertexBuffer {

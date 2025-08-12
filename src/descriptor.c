@@ -40,20 +40,13 @@ void createDescriptorSetLayout(VKRT* vkrt) {
     meshInfoLayoutBinding.descriptorCount = 1;
     meshInfoLayoutBinding.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
 
-    VkDescriptorSetLayoutBinding materialBufferLayoutBinding = {0};
-    materialBufferLayoutBinding.binding = 6;
-    materialBufferLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    materialBufferLayoutBinding.descriptorCount = 1;
-    materialBufferLayoutBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
-
     VkDescriptorSetLayoutBinding bindings[] = {
         accelerationStructureLayoutBinding,
         storageImageLayoutBinding,
         vertexBufferLayoutBinding,
         indexBufferLayoutBinding,
         sceneDataLayoutBinding,
-        meshInfoLayoutBinding,
-        materialBufferLayoutBinding
+        meshInfoLayoutBinding
     };
 
     VkDescriptorSetLayoutCreateInfo descriptorSetlayoutCreateInfo = {0};
@@ -188,20 +181,6 @@ void updateDescriptorSet(VKRT* vkrt) {
     meshInfoWrite.descriptorCount = 1;
     meshInfoWrite.pBufferInfo = &meshInfo;
 
-    VkDescriptorBufferInfo materialBufferInfo = {0};
-    materialBufferInfo.buffer = vkrt->materialData.buffer;
-    materialBufferInfo.offset = 0;
-    materialBufferInfo.range = VK_WHOLE_SIZE;
-
-    VkWriteDescriptorSet materialBufferWrite = {0};
-    materialBufferWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    materialBufferWrite.dstSet = vkrt->descriptorSet;
-    materialBufferWrite.dstBinding = 6;
-    materialBufferWrite.dstArrayElement = 0;
-    materialBufferWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    materialBufferWrite.descriptorCount = 1;
-    materialBufferWrite.pBufferInfo = &materialBufferInfo;
-
     VkWriteDescriptorSet writeDescriptorSets[] = {
         accelerationStructureWrite,
         storageImageWrite,
@@ -209,7 +188,6 @@ void updateDescriptorSet(VKRT* vkrt) {
         indexBufferWrite,
         sceneDataWrite,
         meshInfoWrite,
-        materialBufferWrite
     };
 
     vkUpdateDescriptorSets(vkrt->device, COUNT_OF(writeDescriptorSets), writeDescriptorSets, 0, VK_NULL_HANDLE);

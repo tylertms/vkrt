@@ -180,20 +180,6 @@ VkTransformMatrixKHR meshTransformTLAS(MeshInfo* meshInfo) {
     return transform;
 }
 
-void addMaterial(VKRT* vkrt, Material* material) {
-    size_t materialIndex = vkrt->materialData.count;
-    vkrt->materialData.count++;
-    vkrt->materials = realloc(vkrt->materials, vkrt->materialData.count * sizeof(Material));
-    vkrt->materials[materialIndex] = *material;
-
-    // Append the material data to the buffer
-    vkrt->materialData.deviceAddress = appendBufferFromHostData(vkrt, &vkrt->materials[materialIndex], 
-        sizeof(Material), 
-        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, 
-        &vkrt->materialData.buffer, &vkrt->materialData.memory, 
-        materialIndex * sizeof(Material));
-}
-
 void createUniformBuffer(VKRT* vkrt) {
     VkDeviceSize uniformBufferSize = sizeof(SceneData);
     createBuffer(vkrt, uniformBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &vkrt->sceneDataBuffer, &vkrt->sceneDataMemory);

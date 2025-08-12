@@ -21,9 +21,6 @@ typedef struct SceneData {
     mat4 viewInverse;
     mat4 projInverse;
     uint32_t frameNumber;
-    uint32_t totalSamples;
-    uint32_t samplesPerPixel;
-    uint32_t maxRayDepth;
 } SceneData;
 
 typedef struct Camera {
@@ -32,12 +29,10 @@ typedef struct Camera {
     float nearZ, farZ, vfov;
 } Camera;
 
-typedef struct Material {
-    vec3 color;
-    float roughness;
-    vec3 emissiveColor;
-    float emissiveIntensity;
-} Material;
+typedef struct Vertex {
+    vec4 position;
+    vec4 normal;
+} Vertex;
 
 typedef struct AccelerationStructure {
     VkAccelerationStructureKHR structure;
@@ -55,8 +50,7 @@ typedef struct MeshInfo {
     vec3 scale;
     uint32_t indexBase;
     uint32_t indexCount;
-    uint32_t materialIndex;
-    uint64_t padding;
+    uint32_t padding[3];
 } MeshInfo;
 
 typedef struct Mesh {
@@ -129,12 +123,10 @@ typedef struct VKRT {
     VkImageView storageImageView;
     VkDeviceMemory storageImageMemory;
     Mesh* meshes;
-    Material* materials;
     AccelerationStructure topLevelAccelerationStructure;
     Buffer vertexData;
     Buffer indexData;
     Buffer meshData;
-    Buffer materialData;
     uint32_t framesPerSecond;
     uint64_t lastFrameTimestamp;
     uint8_t frametimeStartIndex;
@@ -145,11 +137,6 @@ typedef struct VKRT {
     uint8_t vsync;
 } VKRT;
 
-typedef struct Vertex {
-    float position[4];
-    float normal[4];
-} Vertex;
-
 int VKRT_init(VKRT* vkrt);
 void VKRT_registerGUI(VKRT* vkrt, void (*init)(void*), void (*deinit)(void*), void (*draw)(void*));
 void VKRT_deinit(VKRT* vkrt);
@@ -157,11 +144,11 @@ int VKRT_shouldDeinit(VKRT* vkrt);
 void VKRT_poll(VKRT* vkrt);
 void VKRT_draw(VKRT* vkrt);
 void VKRT_addMesh(VKRT* vkrt, const char* path);
-void VKRT_addMaterial(VKRT* vkrt, Material* material);
 void VKRT_updateTLAS(VKRT* vkrt);
 void VKRT_pollCameraMovement(VKRT* vkrt);
 void VKRT_setDefaultStyle();
 void VKRT_getImGuiVulkanInitInfo(VKRT* vkrt, ImGui_ImplVulkan_InitInfo* info);
+static void VKRT_framebufferResizedCallback(GLFWwindow* window, int width, int height);
 
 #define COUNT_OF(x) ((sizeof(x) / sizeof(0 [x])) / ((size_t)(!(sizeof(x) % sizeof(0 [x])))))
 
