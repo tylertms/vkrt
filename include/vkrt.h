@@ -136,6 +136,7 @@ typedef struct VKRT {
     Buffer meshData;
     Buffer materialData;
     uint32_t framesPerSecond;
+    uint64_t lastFrameTimestamp;
     uint8_t frametimeStartIndex;
     float averageFrametime;
     float frametimes[128];

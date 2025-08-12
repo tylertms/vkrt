@@ -4,6 +4,7 @@
 #define NUM_EXTENSIONS 5
 extern const char* deviceExtensions[NUM_EXTENSIONS];
 
+uint64_t getMicroseconds();
 void pickPhysicalDevice(VKRT* vkrt);
 void createLogicalDevice(VKRT* vkrt);
 void createQueryPool(VKRT* vkrt);
@@ -12,5 +13,3 @@ VkBool32 isQueueFamilyComplete(QueueFamily indices);
 QueueFamily findQueueFamilies(VKRT* vkrt);
 VkBool32 extensionsSupported(VkPhysicalDevice device);
 uint32_t findMemoryType(VKRT* vkrt, uint32_t typeFilter, VkMemoryPropertyFlags properties);
-void recordFrameTime(VKRT* vkrt, uint64_t startTime);
-uint64_t getMicroseconds();

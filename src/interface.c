@@ -82,6 +82,34 @@ void pollCameraMovement(VKRT* vkrt) {
     }
 }
 
+void recordFrameTime(VKRT* vkrt) {
+    uint64_t currentTime = getMicroseconds();
+    vkrt->displayTimeMs = (currentTime - vkrt->lastFrameTimestamp) / 1000.0f;
+    vkrt->lastFrameTimestamp = currentTime;
+
+    uint64_t ts[2];
+    vkGetQueryPoolResults(vkrt->device, vkrt->timestampPool, vkrt->currentFrame * 2, 2, sizeof(ts), ts, sizeof(uint64_t), VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
+    vkrt->renderTimeMs = (float)((ts[1] - ts[0]) * vkrt->timestampPeriod / 1e6);
+
+    uint32_t frameNumber = vkrt->sceneData->frameNumber;
+    uint32_t calculatedSPP = (uint32_t)glm_clamp(vkrt->displayTimeMs / vkrt->renderTimeMs * vkrt->sceneData->samplesPerPixel, 1, 1024);
+    uint32_t currentSPP = vkrt->sceneData->samplesPerPixel;
+    float diff = (float)(calculatedSPP - currentSPP) / currentSPP;
+
+    if (frameNumber > 3 && diff > 0.1f) {
+        vkrt->sceneData->samplesPerPixel = calculatedSPP;
+    }
+
+    float weight = 1.f / (min(1 + max(0, frameNumber), COUNT_OF(vkrt->frametimes)));
+    vkrt->averageFrametime = vkrt->averageFrametime * (1 - weight) + vkrt->displayTimeMs * weight;
+    vkrt->framesPerSecond = (uint32_t)(1000.0f / vkrt->displayTimeMs);
+
+    vkrt->frametimes[vkrt->frametimeStartIndex] = vkrt->displayTimeMs;
+    vkrt->frametimeStartIndex = (vkrt->frametimeStartIndex + 1) % COUNT_OF(vkrt->frametimes);
+    vkrt->sceneData->frameNumber++;
+    vkrt->sceneData->totalSamples += vkrt->sceneData->samplesPerPixel;
+}
+
 void setupSceneUniform(VKRT* vkrt) {
     vkrt->camera = (Camera){
         .width = WIDTH, .height = HEIGHT,

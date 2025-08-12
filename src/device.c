@@ -22,6 +22,23 @@ const VkPhysicalDeviceType rankedDeviceTypes[4] = {
     VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU
 };
 
+#if defined(_WIN32) || defined(_WIN64)
+    #include <windows.h>
+    uint64_t getMicroseconds() {
+        LARGE_INTEGER frequency, counter;
+        QueryPerformanceFrequency(&frequency);
+        QueryPerformanceCounter(&counter);
+        return (uint64_t)(counter.QuadPart * 1000000 / frequency.QuadPart);
+    }
+#else
+    #include <time.h>
+    uint64_t getMicroseconds() {
+        struct timespec ts;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        return (uint64_t)ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
+    }
+#endif
+
 void pickPhysicalDevice(VKRT* vkrt) {
     vkrt->physicalDevice = VK_NULL_HANDLE;
 
@@ -275,47 +292,3 @@ uint32_t findMemoryType(VKRT* vkrt, uint32_t typeFilter, VkMemoryPropertyFlags p
     perror("ERROR: Failed to find suitable memory type");
     exit(EXIT_FAILURE);
 }
-
-void recordFrameTime(VKRT* vkrt, uint64_t startTime) {
-    uint64_t currentTime = getMicroseconds();
-    vkrt->displayTimeMs = (currentTime - startTime) / 1000.0f;
-
-    uint64_t ts[2];
-    vkGetQueryPoolResults(vkrt->device, vkrt->timestampPool, vkrt->currentFrame * 2, 2, sizeof(ts), ts, sizeof(uint64_t), VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
-    vkrt->renderTimeMs = (float)((ts[1] - ts[0]) * vkrt->timestampPeriod / 1e6);
-
-    uint32_t frameNumber = vkrt->sceneData->frameNumber;
-    uint32_t calculatedSPP = (uint32_t)glm_clamp(vkrt->displayTimeMs / vkrt->renderTimeMs * vkrt->sceneData->samplesPerPixel, 1, 1024);
-    uint32_t currentSPP = vkrt->sceneData->samplesPerPixel;
-    float diff = (float)(calculatedSPP - currentSPP) / currentSPP;
-
-    if (frameNumber > 3 && diff > 0.1f) {
-        vkrt->sceneData->samplesPerPixel = calculatedSPP;
-    }
-
-    float weight = 1.f / (min(1 + max(0, frameNumber), COUNT_OF(vkrt->frametimes)));
-    vkrt->averageFrametime = vkrt->averageFrametime * (1 - weight) + vkrt->displayTimeMs * weight;
-    vkrt->framesPerSecond = (uint32_t)(1000.0f / vkrt->displayTimeMs);
-
-    vkrt->frametimes[vkrt->frametimeStartIndex] = vkrt->displayTimeMs;
-    vkrt->frametimeStartIndex = (vkrt->frametimeStartIndex + 1) % COUNT_OF(vkrt->frametimes);
-    vkrt->sceneData->frameNumber++;
-    vkrt->sceneData->totalSamples += vkrt->sceneData->samplesPerPixel;
-}
-
-#if defined(_WIN32) || defined(_WIN64)
-    #include <windows.h>
-    uint64_t getMicroseconds() {
-        LARGE_INTEGER frequency, counter;
-        QueryPerformanceFrequency(&frequency);
-        QueryPerformanceCounter(&counter);
-        return (uint64_t)(counter.QuadPart * 1000000 / frequency.QuadPart);
-    }
-#else
-    #include <time.h>
-    uint64_t getMicroseconds() {
-        struct timespec ts;
-        clock_gettime(CLOCK_MONOTONIC, &ts);
-        return (uint64_t)ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
-    }
-#endif
