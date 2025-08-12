@@ -1,5 +1,5 @@
 project('vkrt', ['c', 'cpp'],
-  version: '0.1.0',
+  version: '1.0',
   default_options: [
     'c_std=c11',
     'cpp_std=c++17',
@@ -7,9 +7,13 @@ project('vkrt', ['c', 'cpp'],
   ],
 )
 
+cc = meson.get_compiler('c')
+c_args = ['-D_GNU_SOURCE']
+
+glslc = find_program('glslc', required: true)
+
 # ----- Includes -----
-incs = include_directories(
-  'include',
+includes = include_directories(
   'external/glfw3/include',
   'external/imgui/include',
   'external/cglm/include',
@@ -18,16 +22,16 @@ incs = include_directories(
 )
 
 # ----- Dependencies -----
-deps = [
+dependencies = [
   dependency('vulkan'),
   dependency('glfw3', static: true),
-  dependency('rt', required: false), # ignored on platforms without librt
+  dependency('rt', required: false),
 ]
 
 # ----- Dear ImGui bridge (static) -----
 dcimgui = static_library('dcimgui',
-  include_directories: incs,
-  dependencies: deps,
+  include_directories: includes,
+  dependencies: dependencies,
   sources: files(
     'external/imgui/src/dcimgui.cpp',
     'external/imgui/src/dcimgui_impl_glfw.cpp',
@@ -45,16 +49,18 @@ dcimgui = static_library('dcimgui',
 )
 
 # ----- VKRT sources -----
-vkrt_src = files(
+sources = files(
   'src/app.c',
   'src/buffer.c',
   'src/command.c',
   'src/descriptor.c',
   'src/device.c',
+  'src/gui.c',
   'src/instance.c',
-  'src/interface.c',
+  'src/main.c',
   'src/object.c',
   'src/pipeline.c',
+  'src/scene.c',
   'src/structure.c',
   'src/surface.c',
   'src/swapchain.c',
@@ -62,31 +68,32 @@ vkrt_src = files(
   'src/vkrt.c',
 )
 
-vkrtlib = static_library('vkrt',
-  vkrt_src,
-  c_args: ['-D_GNU_SOURCE'],
-  include_directories: incs,
-  dependencies: deps,
-  link_with: dcimgui,
-  link_language: 'cpp',
-  install: true
+# ----- VKRT shaders -----
+shader_sources = files(
+  'shaders/main.rchit',
+  'shaders/main.rgen',
+  'shaders/main.rmiss'
 )
 
-vkrt_dep = declare_dependency(
-  link_with: [vkrtlib, dcimgui],
-  include_directories: incs,
-  dependencies: deps
-)
+shader_targets = []
+foreach shader_file : shader_sources
+    basename = shader_file.full_path().split('.')[-1]
+    shader_target = custom_target(
+        'compile_' + basename,
+        input: shader_file,
+        output: basename + '.spv',
+        command: [glslc, '@INPUT@', '--target-env=vulkan1.4', '-O', '-o', '@OUTPUT@'],
+        build_by_default: true,
+    )
+    shader_targets += shader_target
+endforeach
 
-meson.override_dependency('vkrt', vkrt_dep)
 
-install_subdir('include', install_dir: get_option('includedir'))
-
-pkgconfig = import('pkgconfig')
-pkgconfig.generate(
-  name: 'vkrt',
-  description: 'Vulkan ray tracing toolkit',
-  version: meson.project_version(),
-  libraries: vkrtlib,
-  subdirs: 'include'
+executable('vkrt',
+  c_args: c_args,
+  sources: sources,
+  dependencies: dependencies,
+  include_directories: includes,
+  link_with: [dcimgui],
+  link_language: 'cpp'
 )

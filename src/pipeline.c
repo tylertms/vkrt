@@ -18,9 +18,9 @@ void createRayTracingPipeline(VKRT* vkrt) {
 
     size_t rayGenLen, closestHitLen, missLen;
 
-    const char* rayGenCode = readFile("./main.rgen.spv", &rayGenLen);
-    const char* closestHitCode = readFile("./main.rchit.spv", &closestHitLen);
-    const char* missCode = readFile("./main.rmiss.spv", &missLen);
+    const char* rayGenCode = readFile("./rgen.spv", &rayGenLen);
+    const char* closestHitCode = readFile("./rchit.spv", &closestHitLen);
+    const char* missCode = readFile("./rmiss.spv", &missLen);
 
     VkShaderModule rayGenModule = createShaderModule(vkrt, rayGenCode, rayGenLen);
     VkShaderModule closestHitModule = createShaderModule(vkrt, closestHitCode, closestHitLen);

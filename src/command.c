@@ -2,7 +2,7 @@
 #include "buffer.h"
 #include "descriptor.h"
 #include "device.h"
-#include "interface.h"
+#include "scene.h"
 #include "structure.h"
 #include "swapchain.h"
 

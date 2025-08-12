@@ -3,7 +3,7 @@
 
 #include "app.h"
 #include "command.h"
-#include "interface.h"
+#include "scene.h"
 #include "object.h"
 #include "structure.h"
 #include "vkrt.h"

@@ -2,7 +2,7 @@
 #include "command.h"
 #include "descriptor.h"
 #include "device.h"
-#include "interface.h"
+#include "scene.h"
 
 #include <stdio.h>
 #include <stdlib.h>
