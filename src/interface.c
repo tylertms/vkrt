@@ -98,11 +98,11 @@ void recordFrameTime(VKRT* vkrt) {
     vkrt->renderTimeMs = (float)((ts[1] - ts[0]) * vkrt->timestampPeriod / 1e6);
 
     int32_t frameNumber = vkrt->sceneData->frameNumber;
-    uint32_t calculatedSPP = (uint32_t)glm_clamp(vkrt->displayTimeMs / vkrt->renderTimeMs * vkrt->sceneData->samplesPerPixel, 1, 1024);
+    uint32_t calculatedSPP = (uint32_t)glm_clamp(vkrt->averageFrametime / vkrt->renderTimeMs * vkrt->sceneData->samplesPerPixel, 1, 1024);
     uint32_t currentSPP = vkrt->sceneData->samplesPerPixel;
     float diff = (float)(calculatedSPP - currentSPP) / currentSPP;
 
-    if (frameNumber > 3 && diff > 0.1f) {
+    if (frameNumber > 4 && frameNumber % 8 == 0 && diff > 0.2f) {
         vkrt->sceneData->samplesPerPixel = calculatedSPP;
     }
 
