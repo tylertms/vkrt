@@ -159,7 +159,6 @@ void VKRT_addMesh(VKRT* vkrt, const char* path);
 void VKRT_addMaterial(VKRT* vkrt, Material* material);
 void VKRT_updateTLAS(VKRT* vkrt);
 void VKRT_pollCameraMovement(VKRT* vkrt);
-void VKRT_setDarkTheme();
 void VKRT_setDefaultStyle();
 void VKRT_getImGuiVulkanInitInfo(VKRT* vkrt, ImGui_ImplVulkan_InitInfo* info);
 

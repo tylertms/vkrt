@@ -119,8 +119,15 @@ void updateMatricesFromCamera(VKRT* vkrt) {
     resetSceneFrame(vkrt);
 }
 
-void setDarkTheme() {
+void setDefaultStyle() {
     ImGuiStyle* style = ImGui_GetStyle();
+    style->WindowRounding = 2;
+    style->GrabRounding = 2;
+    style->FrameRounding = 2;
+    style->FrameBorderSize = 0;
+    style->WindowBorderSize = 0;
+    style->DockingSeparatorSize = 1;
+    style->WindowPadding = (ImVec2){8, 5};
 
     ImVec4* colors = style->Colors;
 

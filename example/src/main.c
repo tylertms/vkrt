@@ -35,7 +35,6 @@ void initGUI(VKRT* vkrt) {
     ImGuiIO* io = ImGui_GetIO();
     io->ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
-    VKRT_setDarkTheme();
     VKRT_setDefaultStyle();
 
     cImGui_ImplGlfw_InitForVulkan(vkrt->window, true);

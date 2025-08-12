@@ -5,4 +5,4 @@ void pollCameraMovement(VKRT* vkrt);
 void setupSceneUniform(VKRT* vkrt);
 void resetSceneFrame(VKRT* vkrt);
 void updateMatricesFromCamera(VKRT* vkrt);
-void setDarkTheme();
+void setDefaultStyle();
