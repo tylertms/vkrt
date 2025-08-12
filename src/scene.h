@@ -3,7 +3,8 @@
 
 void pollCameraMovement(VKRT* vkrt);
 void recordFrameTime(VKRT* vkrt);
-void setupSceneUniform(VKRT* vkrt);
-void resetSceneFrame(VKRT* vkrt);
+void createSceneUniform(VKRT* vkrt);
+void resetSceneData(VKRT* vkrt);
 void updateMatricesFromCamera(VKRT* vkrt);
+VkTransformMatrixKHR getMeshTransform(MeshInfo* meshInfo);
 void setDefaultStyle();

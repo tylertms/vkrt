@@ -150,43 +150,6 @@ void loadObject(VKRT* vkrt, const char* filename) {
     createBottomLevelAccelerationStructure(vkrt, &vkrt->meshes[meshIndex]);
 }
 
-VkTransformMatrixKHR meshTransformTLAS(MeshInfo* meshInfo) {
-    vec3 scale;
-    glm_vec3_copy(meshInfo->scale, scale);
-    scale[1] = -scale[1];
-
-    vec3 position;
-    glm_vec3_copy(meshInfo->position, position);
-
-    vec3 rotation = {
-        glm_rad(meshInfo->rotation[0] - 90),
-        glm_rad(meshInfo->rotation[1]),
-        glm_rad(meshInfo->rotation[2] - 90)
-    };
-
-    mat4 matrix;
-    glm_mat4_identity(matrix);
-    glm_translate(matrix, position);
-    glm_rotate(matrix, rotation[2], (vec3){0.f, 0.f, 1.f});
-    glm_rotate(matrix, rotation[1], (vec3){0.f, 1.f, 0.f});
-    glm_rotate(matrix, rotation[0], (vec3){1.f, 0.f, 0.f});
-    glm_scale(matrix, scale);
-
-    VkTransformMatrixKHR transform = {0};
-    for (int r = 0; r < 3; ++r)
-        for (int c = 0; c < 4; ++c)
-            transform.matrix[r][c] = matrix[c][r];
-
-    return transform;
-}
-
-void createUniformBuffer(VKRT* vkrt) {
-    VkDeviceSize uniformBufferSize = sizeof(SceneData);
-    createBuffer(vkrt, uniformBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &vkrt->sceneDataBuffer, &vkrt->sceneDataMemory);
-    vkMapMemory(vkrt->device, vkrt->sceneDataMemory, 0, uniformBufferSize, 0, (void**)&vkrt->sceneData);
-    memset(vkrt->sceneData, 0, uniformBufferSize);
-}
-
 static int get_exe_dir(char* out, size_t sz) {
 #if defined(_WIN32)
     DWORD len = GetModuleFileNameA(NULL, out, (DWORD)sz);

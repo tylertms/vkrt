@@ -1,8 +1,10 @@
 #include "scene.h"
+#include "buffer.h"
 #include "device.h"
 
-#include <stdint.h>
 #include <math.h>
+#include <stdint.h>
+#include <string.h>
 
 void pollCameraMovement(VKRT* vkrt) {
     const float panSpeed = 0.0015f;
@@ -104,9 +106,16 @@ void recordFrameTime(VKRT* vkrt) {
     vkrt->framesPerSecond = (uint32_t)(1000.0f / vkrt->displayTimeMs);
     vkrt->frametimes[vkrt->frametimeStartIndex] = vkrt->displayTimeMs;
     vkrt->frametimeStartIndex = (vkrt->frametimeStartIndex + 1) % COUNT_OF(vkrt->frametimes);
+
+    vkrt->sceneData->frameNumber++;
 }
 
-void setupSceneUniform(VKRT* vkrt) {
+void createSceneUniform(VKRT* vkrt) {
+    VkDeviceSize uniformBufferSize = sizeof(SceneData);
+    createBuffer(vkrt, uniformBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &vkrt->sceneDataBuffer, &vkrt->sceneDataMemory);
+    vkMapMemory(vkrt->device, vkrt->sceneDataMemory, 0, uniformBufferSize, 0, (void**)&vkrt->sceneData);
+    memset(vkrt->sceneData, 0, uniformBufferSize);
+
     vkrt->camera = (Camera){
         .width = WIDTH, .height = HEIGHT,
         .nearZ = 0.001f, .farZ = 10000.0f,
@@ -115,15 +124,8 @@ void setupSceneUniform(VKRT* vkrt) {
         .target = {0.0f, 0.0f, 0.0f},
         .up = {0.0f, 0.0f, 1.0f}
     };
-    resetSceneFrame(vkrt);
-    updateMatricesFromCamera(vkrt);
-}
 
-void resetSceneFrame(VKRT* vkrt) {
-    vkrt->sceneData->frameNumber = 0;
-    vkrt->averageFrametime = 0.0f;
-    vkrt->frametimeStartIndex = 0;
-    memset(vkrt->frametimes, 0, sizeof(vkrt->frametimes));
+    updateMatricesFromCamera(vkrt);
 }
 
 void updateMatricesFromCamera(VKRT* vkrt) {
@@ -136,7 +138,44 @@ void updateMatricesFromCamera(VKRT* vkrt) {
     glm_mat4_inv(view, vkrt->sceneData->viewInverse);
     glm_mat4_inv(proj, vkrt->sceneData->projInverse);
 
-    resetSceneFrame(vkrt);
+    resetSceneData(vkrt);
+}
+
+void resetSceneData(VKRT* vkrt) {
+    vkrt->sceneData->frameNumber = 0;
+    vkrt->averageFrametime = 0.0f;
+    vkrt->frametimeStartIndex = 0;
+    memset(vkrt->frametimes, 0, sizeof(vkrt->frametimes));
+}
+
+VkTransformMatrixKHR getMeshTransform(MeshInfo* meshInfo) {
+    vec3 scale;
+    glm_vec3_copy(meshInfo->scale, scale);
+    scale[1] = -scale[1];
+
+    vec3 position;
+    glm_vec3_copy(meshInfo->position, position);
+
+    vec3 rotation = {
+        glm_rad(meshInfo->rotation[0] - 90),
+        glm_rad(meshInfo->rotation[1]),
+        glm_rad(meshInfo->rotation[2] - 90)
+    };
+
+    mat4 matrix;
+    glm_mat4_identity(matrix);
+    glm_translate(matrix, position);
+    glm_rotate(matrix, rotation[2], (vec3){0.f, 0.f, 1.f});
+    glm_rotate(matrix, rotation[1], (vec3){0.f, 1.f, 0.f});
+    glm_rotate(matrix, rotation[0], (vec3){1.f, 0.f, 0.f});
+    glm_scale(matrix, scale);
+
+    VkTransformMatrixKHR transform = {0};
+    for (int r = 0; r < 3; ++r)
+        for (int c = 0; c < 4; ++c)
+            transform.matrix[r][c] = matrix[c][r];
+
+    return transform;
 }
 
 void setDefaultStyle() {

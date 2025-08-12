@@ -111,7 +111,7 @@ void drawFrame(VKRT* vkrt) {
         createTopLevelAccelerationStructure(vkrt);
         updateDescriptorSet(vkrt);
         vkrt->topLevelAccelerationStructure.needsRebuild = 0;
-        resetSceneFrame(vkrt);
+        resetSceneData(vkrt);
     }
 
     uint32_t imageIndex;

@@ -2,7 +2,7 @@
 #include "buffer.h"
 #include "command.h"
 #include "device.h"
-#include "object.h"
+#include "scene.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -290,7 +290,7 @@ void createTopLevelAccelerationStructure(VKRT* vkrt) {
         VkAccelerationStructureInstanceKHR inst = {0};
 
         MeshInfo meshInfo = vkrt->meshes[i].info;
-        inst.transform = meshTransformTLAS(&meshInfo);
+        inst.transform = getMeshTransform(&meshInfo);
         inst.instanceCustomIndex = i;
         inst.mask = 0xFF;
         inst.instanceShaderBindingTableRecordOffset = 0;

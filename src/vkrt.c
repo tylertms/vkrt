@@ -40,13 +40,12 @@ int VKRT_init(VKRT *vkrt) {
     createDescriptorSetLayout(vkrt);
     createRayTracingPipeline(vkrt);
     createStorageImage(vkrt);
-    createUniformBuffer(vkrt);
+    createSceneUniform(vkrt);
     createDescriptorPool(vkrt);
     createDescriptorSet(vkrt);
     createShaderBindingTable(vkrt);
     createCommandBuffers(vkrt);
     createSyncObjects(vkrt);
-    setupSceneUniform(vkrt);
     
     if (vkrt->gui.init) {
         vkrt->gui.init(vkrt);
