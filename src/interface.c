@@ -155,12 +155,12 @@ void updateMatricesFromCamera(VKRT* vkrt) {
 
 void setDefaultStyle() {
     ImGuiStyle* style = ImGui_GetStyle();
-    style->WindowRounding = 2;
-    style->GrabRounding = 2;
-    style->FrameRounding = 2;
-    style->FrameBorderSize = 0;
-    style->WindowBorderSize = 0;
-    style->DockingSeparatorSize = 1;
+    style->WindowRounding = 8.0f;
+    style->GrabRounding = 8.0f;
+    style->FrameRounding = 4.0f;
+    style->FrameBorderSize = 0.0f;
+    style->WindowBorderSize = 0.0f;
+    style->DockingSeparatorSize = 1.0f;
     style->WindowPadding = (ImVec2){8, 5};
 
     ImVec4* colors = style->Colors;

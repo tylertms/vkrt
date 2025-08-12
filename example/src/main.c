@@ -86,6 +86,10 @@ void drawGUI(VKRT* vkrt) {
     // The VKRT struct holds several auto-updating statistics,
     // including FPS, render time (GPU), display time (total), etc.
     {
+        ImGui_PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
+        ImGui_PushStyleVar(ImGuiStyleVar_GrabRounding, 8.0f);
+        ImGui_PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
+
         bool open = true;
         ImGui_Begin("Statistics", &open, ImGuiWindowFlags_NoTitleBar);
 
@@ -104,6 +108,8 @@ void drawGUI(VKRT* vkrt) {
         ImGui_NewLine();
 
         ImGui_PlotLinesEx("##", vkrt->frametimes, COUNT_OF(vkrt->frametimes), (int)vkrt->frametimeStartIndex, "", 0.0f, 2 * vkrt->averageFrametime, (ImVec2){160.0f, 40.0f}, sizeof(float));
+
+        ImGui_PopStyleVarEx(3);
     }
 
     ImGui_End();
