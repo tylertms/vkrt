@@ -1,7 +1,6 @@
 #include "vkrt.h"
 
 #include <stdlib.h>
-
 #include "dcimgui.h"
 #include "dcimgui_impl_glfw.h"
 #include "dcimgui_impl_vulkan.h"
@@ -49,7 +48,7 @@ void initGUI(VKRT* vkrt) {
     ImGui_ImplVulkan_InitInfo imGuiVulkanInitInfo = {0};
     VKRT_getImGuiVulkanInitInfo(vkrt, &imGuiVulkanInitInfo);
     cImGui_ImplVulkan_Init(&imGuiVulkanInitInfo);
-    
+
     cImGui_ImplVulkan_CreateFontsTexture();
 }
 
