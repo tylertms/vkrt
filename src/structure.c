@@ -378,7 +378,9 @@ void createTopLevelAccelerationStructure(VKRT* vkrt) {
     VkAccelerationStructureBuildGeometryInfoKHR accelerationStructureBuildGeometryInfo = {0};
     accelerationStructureBuildGeometryInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
     accelerationStructureBuildGeometryInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
-    accelerationStructureBuildGeometryInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+    accelerationStructureBuildGeometryInfo.flags =
+        VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR |
+        VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR;
     accelerationStructureBuildGeometryInfo.geometryCount = 1;
     accelerationStructureBuildGeometryInfo.pGeometries = &accelerationStructureGeometry;
 
@@ -435,9 +437,15 @@ void createTopLevelAccelerationStructure(VKRT* vkrt) {
     accelerationStructureBuildGeometryInfo.srcAccelerationStructure = (mode == VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR) ? vkrt->topLevelAccelerationStructure.structure : VK_NULL_HANDLE;
     accelerationStructureBuildGeometryInfo.dstAccelerationStructure = vkrt->topLevelAccelerationStructure.structure;
 
+    VkDeviceSize scratchSize = (mode == VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR)
+                                   ? accelerationStructureBuildSizesInfo.buildScratchSize
+                                   : accelerationStructureBuildSizesInfo.updateScratchSize;
+    if (scratchSize == 0)
+        scratchSize = 1;
+
     VkBufferCreateInfo scratchBufferCreateInfo = {0};
     scratchBufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    scratchBufferCreateInfo.size = (mode == VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR) ? accelerationStructureBuildSizesInfo.buildScratchSize : accelerationStructureBuildSizesInfo.updateScratchSize;
+    scratchBufferCreateInfo.size = scratchSize;
     scratchBufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
     scratchBufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     scratchBufferCreateInfo.queueFamilyIndexCount = 1;
