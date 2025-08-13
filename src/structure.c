@@ -89,6 +89,19 @@ void createBottomLevelAccelerationStructure(VKRT* vkrt, uint32_t meshIndex) {
     Mesh* mesh = &vkrt->meshes[meshIndex];
     MeshInfo* info = &((MeshInfo*)vkrt->meshData.host)[meshIndex];
 
+    PFN_vkDestroyAccelerationStructureKHR pDestroy =
+        (PFN_vkDestroyAccelerationStructureKHR)vkGetDeviceProcAddr(
+            vkrt->device, "vkDestroyAccelerationStructureKHR");
+    if (mesh->bottomLevelAccelerationStructure.structure) {
+        pDestroy(vkrt->device, mesh->bottomLevelAccelerationStructure.structure, NULL);
+        vkDestroyBuffer(vkrt->device, mesh->bottomLevelAccelerationStructure.buffer, NULL);
+        vkFreeMemory(vkrt->device, mesh->bottomLevelAccelerationStructure.memory, NULL);
+        mesh->bottomLevelAccelerationStructure.structure = VK_NULL_HANDLE;
+        mesh->bottomLevelAccelerationStructure.buffer = VK_NULL_HANDLE;
+        mesh->bottomLevelAccelerationStructure.memory = VK_NULL_HANDLE;
+        mesh->bottomLevelAccelerationStructure.deviceAddress = 0;
+    }
+
     VkAccelerationStructureGeometryTrianglesDataKHR accelerationStructureGeometryTrianglesData = {0};
     accelerationStructureGeometryTrianglesData.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
     accelerationStructureGeometryTrianglesData.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;

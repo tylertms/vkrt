@@ -136,8 +136,11 @@ void drawFrame(VKRT* vkrt) {
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = signalSemaphores;
 
-    if (vkQueueSubmit(vkrt->graphicsQueue, 1, &submitInfo, vkrt->inFlightFences[vkrt->currentFrame]) != VK_SUCCESS) {
-        perror("ERROR: Failed to submit draw queue");
+    VkResult submitResult =
+        vkQueueSubmit(vkrt->graphicsQueue, 1, &submitInfo,
+                       vkrt->inFlightFences[vkrt->currentFrame]);
+    if (submitResult != VK_SUCCESS) {
+        fprintf(stderr, "ERROR: Failed to submit draw queue: %d\n", submitResult);
         exit(EXIT_FAILURE);
     }
 

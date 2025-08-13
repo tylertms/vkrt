@@ -22,12 +22,14 @@ static void rebuildGeometryBuffers(VKRT* vkrt) {
             vkFreeMemory(vkrt->device, vkrt->vertexData.memory, NULL);
             vkrt->vertexData.buffer = VK_NULL_HANDLE;
             vkrt->vertexData.memory = VK_NULL_HANDLE;
+            vkrt->vertexData.deviceAddress = 0;
         }
         if (vkrt->indexData.buffer) {
             vkDestroyBuffer(vkrt->device, vkrt->indexData.buffer, NULL);
             vkFreeMemory(vkrt->device, vkrt->indexData.memory, NULL);
             vkrt->indexData.buffer = VK_NULL_HANDLE;
             vkrt->indexData.memory = VK_NULL_HANDLE;
+            vkrt->indexData.deviceAddress = 0;
         }
         vkrt->vertexData.count = 0;
         vkrt->indexData.count = 0;
@@ -66,6 +68,12 @@ static void rebuildGeometryBuffers(VKRT* vkrt) {
                                                                  (VkDeviceSize)vkrt->indexData.count * vkrt->indexData.stride,
                                                                  VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                                                                  &vkrt->indexData.buffer, &vkrt->indexData.memory);
+    }
+}
+
+static void rebuildBottomLevelAccelerationStructures(VKRT* vkrt) {
+    for (uint32_t i = 0; i < vkrt->meshData.count; i++) {
+        createBottomLevelAccelerationStructure(vkrt, i);
     }
 }
 
@@ -218,10 +226,9 @@ void VKRT_draw(VKRT* vkrt) {
 void VKRT_addMesh(VKRT* vkrt, const char* path) {
     if (!vkrt || !path)
         return;
-    uint32_t meshIndex = vkrt->meshData.count;
     loadObject(vkrt, path);
     rebuildGeometryBuffers(vkrt);
-    createBottomLevelAccelerationStructure(vkrt, meshIndex);
+    rebuildBottomLevelAccelerationStructures(vkrt);
     VKRT_updateTLAS(vkrt);
     updateDescriptorSet(vkrt);
 }
@@ -304,6 +311,7 @@ void VKRT_removeMesh(VKRT* vkrt, const char* name) {
     }
 
     rebuildGeometryBuffers(vkrt);
+    rebuildBottomLevelAccelerationStructures(vkrt);
     VKRT_updateTLAS(vkrt);
     updateDescriptorSet(vkrt);
 }
