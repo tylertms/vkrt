@@ -106,14 +106,6 @@ void recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
 void drawFrame(VKRT* vkrt) {
     vkWaitForFences(vkrt->device, 1, &vkrt->inFlightFences[vkrt->currentFrame], VK_TRUE, UINT64_MAX);
 
-    if (vkrt->topLevelAccelerationStructure.needsRebuild) {
-        vkDeviceWaitIdle(vkrt->device);
-        createTopLevelAccelerationStructure(vkrt);
-        updateDescriptorSet(vkrt);
-        vkrt->topLevelAccelerationStructure.needsRebuild = 0;
-        resetSceneData(vkrt);
-    }
-
     uint32_t imageIndex;
     VkResult result = vkAcquireNextImageKHR(vkrt->device, vkrt->swapChain, UINT64_MAX, vkrt->imageAvailableSemaphores[vkrt->currentFrame], VK_NULL_HANDLE, &imageIndex);
 

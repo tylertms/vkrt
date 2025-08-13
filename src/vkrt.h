@@ -39,6 +39,7 @@ typedef struct AccelerationStructure {
     VkDeviceMemory memory;
     VkBuffer buffer;
     VkDeviceAddress deviceAddress;
+    VkDeviceSize size;
     uint8_t needsRebuild;
 } AccelerationStructure;
 
@@ -54,15 +55,17 @@ typedef struct MeshInfo {
 } MeshInfo;
 
 typedef struct Mesh {
-    MeshInfo info;
     AccelerationStructure bottomLevelAccelerationStructure;
+    char name[64];
 } Mesh;
 
 typedef struct Buffer {
     VkBuffer buffer;
     VkDeviceMemory memory;
     VkDeviceAddress deviceAddress;
+    void* host;
     uint32_t count;
+    VkDeviceSize stride;
 } Buffer;
 
 typedef struct Interface {
@@ -144,6 +147,7 @@ int VKRT_shouldDeinit(VKRT* vkrt);
 void VKRT_poll(VKRT* vkrt);
 void VKRT_draw(VKRT* vkrt);
 void VKRT_addMesh(VKRT* vkrt, const char* path);
+void VKRT_removeMesh(VKRT* vkrt, const char* name);
 void VKRT_updateTLAS(VKRT* vkrt);
 void VKRT_pollCameraMovement(VKRT* vkrt);
 void VKRT_setDefaultStyle();

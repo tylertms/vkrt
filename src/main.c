@@ -18,6 +18,7 @@ int main() {
     // Add meshes - BLAS/TLAS auto-updated
     VKRT_addMesh(&vkrt, "assets/models/sphere.glb");
     VKRT_addMesh(&vkrt, "assets/models/dragon.glb");
+    VKRT_removeMesh(&vkrt, "sphere");
 
     // Main loop, waiting for window to close
     while (!VKRT_shouldDeinit(&vkrt)) {

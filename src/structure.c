@@ -85,13 +85,16 @@ void createShaderBindingTable(VKRT* vkrt) {
     vkrt->shaderBindingTables[3].size = 0;
 }
 
-void createBottomLevelAccelerationStructure(VKRT* vkrt, Mesh* mesh) {
+void createBottomLevelAccelerationStructure(VKRT* vkrt, uint32_t meshIndex) {
+    Mesh* mesh = &vkrt->meshes[meshIndex];
+    MeshInfo* info = &((MeshInfo*)vkrt->meshData.host)[meshIndex];
+
     VkAccelerationStructureGeometryTrianglesDataKHR accelerationStructureGeometryTrianglesData = {0};
     accelerationStructureGeometryTrianglesData.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
     accelerationStructureGeometryTrianglesData.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
     accelerationStructureGeometryTrianglesData.vertexData.deviceAddress = vkrt->vertexData.deviceAddress;
     accelerationStructureGeometryTrianglesData.vertexStride = sizeof(Vertex);
-    accelerationStructureGeometryTrianglesData.maxVertex = mesh->info.vertexBase + mesh->info.vertexCount - 1;
+    accelerationStructureGeometryTrianglesData.maxVertex = info->vertexBase + info->vertexCount - 1;
     accelerationStructureGeometryTrianglesData.indexType = VK_INDEX_TYPE_UINT32;
     accelerationStructureGeometryTrianglesData.indexData.deviceAddress = vkrt->indexData.deviceAddress;
     accelerationStructureGeometryTrianglesData.transformData.deviceAddress = 0;
@@ -113,7 +116,7 @@ void createBottomLevelAccelerationStructure(VKRT* vkrt, Mesh* mesh) {
     accelerationStructureBuildGeometryInfo.dstAccelerationStructure = VK_NULL_HANDLE;
     accelerationStructureBuildGeometryInfo.scratchData.deviceAddress = 0;
 
-    uint32_t primitiveCount = mesh->info.indexCount / 3;
+    uint32_t primitiveCount = info->indexCount / 3;
     VkAccelerationStructureBuildSizesInfoKHR accelerationStructureBuildSizesInfo = {0};
     accelerationStructureBuildSizesInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
 
@@ -228,8 +231,8 @@ void createBottomLevelAccelerationStructure(VKRT* vkrt, Mesh* mesh) {
 
     VkAccelerationStructureBuildRangeInfoKHR accelerationStructureBuildRangeInfo = {0};
     accelerationStructureBuildRangeInfo.primitiveCount = primitiveCount;
-    accelerationStructureBuildRangeInfo.primitiveOffset = (uint32_t)(mesh->info.indexBase * sizeof(uint32_t));
-    accelerationStructureBuildRangeInfo.firstVertex = mesh->info.vertexBase;
+    accelerationStructureBuildRangeInfo.primitiveOffset = (uint32_t)(info->indexBase * sizeof(uint32_t));
+    accelerationStructureBuildRangeInfo.firstVertex = info->vertexBase;
     accelerationStructureBuildRangeInfo.transformOffset = 0;
     const VkAccelerationStructureBuildRangeInfoKHR* pBuildRangeInfo = &accelerationStructureBuildRangeInfo;
 
@@ -254,51 +257,45 @@ void createBottomLevelAccelerationStructure(VKRT* vkrt, Mesh* mesh) {
 
     vkDestroyBuffer(vkrt->device, scratchBuffer, NULL);
     vkFreeMemory(vkrt->device, scratchDeviceMemory, NULL);
-
-    vkrt->topLevelAccelerationStructure.needsRebuild = 1;
 }
 
 void createTopLevelAccelerationStructure(VKRT* vkrt) {
-    if (vkrt->topLevelAccelerationStructure.structure) {    
-        PFN_vkDestroyAccelerationStructureKHR pvkDestroyAccelerationStructureKHR = (PFN_vkDestroyAccelerationStructureKHR)vkGetDeviceProcAddr(vkrt->device, "vkDestroyAccelerationStructureKHR");
-        pvkDestroyAccelerationStructureKHR(vkrt->device, vkrt->topLevelAccelerationStructure.structure, NULL);
-        vkDestroyBuffer(vkrt->device, vkrt->topLevelAccelerationStructure.buffer, NULL);
-        vkFreeMemory(vkrt->device, vkrt->topLevelAccelerationStructure.memory, NULL);
-        
-        vkrt->topLevelAccelerationStructure.structure = VK_NULL_HANDLE;
-        vkrt->topLevelAccelerationStructure.buffer = VK_NULL_HANDLE;
-        vkrt->topLevelAccelerationStructure.memory = VK_NULL_HANDLE;
-    }
-
-    if (vkrt->meshData.buffer) {
-        vkDestroyBuffer(vkrt->device, vkrt->meshData.buffer, NULL);
-        vkrt->meshData.buffer = VK_NULL_HANDLE;
-    }
-
-    if (vkrt->meshData.memory) {
-        vkFreeMemory(vkrt->device, vkrt->meshData.memory, NULL);
-        vkrt->meshData.memory = VK_NULL_HANDLE;
-    }
-
     QueueFamily indices = findQueueFamilies(vkrt);
-
     uint32_t instanceCount = vkrt->meshData.count;
-    VkAccelerationStructureInstanceKHR* instances = (VkAccelerationStructureInstanceKHR*)malloc(sizeof(VkAccelerationStructureInstanceKHR) * instanceCount);
-    MeshInfo* meshInfos = (MeshInfo*)malloc(sizeof(MeshInfo) * instanceCount);
 
+    if (instanceCount == 0) {
+        PFN_vkDestroyAccelerationStructureKHR pDestroy = (PFN_vkDestroyAccelerationStructureKHR)vkGetDeviceProcAddr(vkrt->device, "vkDestroyAccelerationStructureKHR");
+        if (vkrt->topLevelAccelerationStructure.structure) {
+            pDestroy(vkrt->device, vkrt->topLevelAccelerationStructure.structure, NULL);
+            vkDestroyBuffer(vkrt->device, vkrt->topLevelAccelerationStructure.buffer, NULL);
+            vkFreeMemory(vkrt->device, vkrt->topLevelAccelerationStructure.memory, NULL);
+            vkrt->topLevelAccelerationStructure.structure = VK_NULL_HANDLE;
+            vkrt->topLevelAccelerationStructure.buffer = VK_NULL_HANDLE;
+            vkrt->topLevelAccelerationStructure.memory = VK_NULL_HANDLE;
+            vkrt->topLevelAccelerationStructure.deviceAddress = 0;
+            vkrt->topLevelAccelerationStructure.size = 0;
+        }
+        if (vkrt->meshData.buffer) {
+            vkDestroyBuffer(vkrt->device, vkrt->meshData.buffer, NULL);
+            vkFreeMemory(vkrt->device, vkrt->meshData.memory, NULL);
+            vkrt->meshData.buffer = VK_NULL_HANDLE;
+            vkrt->meshData.memory = VK_NULL_HANDLE;
+        }
+        return;
+    }
+
+    VkAccelerationStructureInstanceKHR* instances = malloc(sizeof(*instances) * instanceCount);
+    MeshInfo* meshInfos = (MeshInfo*)vkrt->meshData.host;
     for (uint32_t i = 0; i < instanceCount; i++) {
+        MeshInfo meshInfo = meshInfos[i];
         VkAccelerationStructureInstanceKHR inst = {0};
-
-        MeshInfo meshInfo = vkrt->meshes[i].info;
         inst.transform = getMeshTransform(&meshInfo);
         inst.instanceCustomIndex = i;
         inst.mask = 0xFF;
         inst.instanceShaderBindingTableRecordOffset = 0;
         inst.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
         inst.accelerationStructureReference = vkrt->meshes[i].bottomLevelAccelerationStructure.deviceAddress;
-
         instances[i] = inst;
-        meshInfos[i] = meshInfo;
     }
 
     VkBufferCreateInfo instanceBufferCreateInfo = {0};
@@ -310,14 +307,10 @@ void createTopLevelAccelerationStructure(VKRT* vkrt) {
     instanceBufferCreateInfo.pQueueFamilyIndices = (uint32_t*)&indices.graphics;
 
     VkBuffer instanceBuffer;
-    if (vkCreateBuffer(vkrt->device, &instanceBufferCreateInfo, NULL, &instanceBuffer) != VK_SUCCESS) {
-        perror("ERROR: Failed to create instance buffer");
-        exit(EXIT_FAILURE);
-    }
-
-    VkMemoryRequirements instanceMemoryRequirements = {0};
+    vkCreateBuffer(vkrt->device, &instanceBufferCreateInfo, NULL, &instanceBuffer);
+    VkMemoryRequirements instanceMemoryRequirements;
     vkGetBufferMemoryRequirements(vkrt->device, instanceBuffer, &instanceMemoryRequirements);
-    VkPhysicalDeviceMemoryProperties physicalDeviceMemoryProperties = {0};
+    VkPhysicalDeviceMemoryProperties physicalDeviceMemoryProperties;
     vkGetPhysicalDeviceMemoryProperties(vkrt->physicalDevice, &physicalDeviceMemoryProperties);
 
     uint32_t instanceMemoryTypeIndex = UINT32_MAX;
@@ -339,27 +332,27 @@ void createTopLevelAccelerationStructure(VKRT* vkrt) {
     instanceMemoryAllocateInfo.memoryTypeIndex = instanceMemoryTypeIndex;
 
     VkDeviceMemory instanceMemory;
-    if (vkAllocateMemory(vkrt->device, &instanceMemoryAllocateInfo, NULL, &instanceMemory) != VK_SUCCESS) {
-        perror("ERROR: allocate instance memory");
-        exit(EXIT_FAILURE);
-    }
+    vkAllocateMemory(vkrt->device, &instanceMemoryAllocateInfo, NULL, &instanceMemory);
     vkBindBufferMemory(vkrt->device, instanceBuffer, instanceMemory, 0);
 
-    void* mapped;
+    void* mapped = NULL;
     vkMapMemory(vkrt->device, instanceMemory, 0, instanceMemoryRequirements.size, 0, &mapped);
-    memcpy(mapped, instances, sizeof(VkAccelerationStructureInstanceKHR) * instanceCount);
+    memcpy(mapped, instances, sizeof(*instances) * instanceCount);
     vkUnmapMemory(vkrt->device, instanceMemory);
     free(instances);
 
-    VkDeviceSize meshInfoSize = sizeof(MeshInfo) * instanceCount;
+    VkDeviceSize meshInfoSize = (VkDeviceSize)instanceCount * vkrt->meshData.stride;
     VkBuffer stagingMeshInfo;
     VkDeviceMemory stagingMeshInfoMem;
     createBuffer(vkrt, meshInfoSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingMeshInfo, &stagingMeshInfoMem);
     vkMapMemory(vkrt->device, stagingMeshInfoMem, 0, meshInfoSize, 0, &mapped);
     memcpy(mapped, meshInfos, (size_t)meshInfoSize);
     vkUnmapMemory(vkrt->device, stagingMeshInfoMem);
-    free(meshInfos);
 
+    if (vkrt->meshData.buffer) {
+        vkDestroyBuffer(vkrt->device, vkrt->meshData.buffer, NULL);
+        vkFreeMemory(vkrt->device, vkrt->meshData.memory, NULL);
+    }
     createBuffer(vkrt, meshInfoSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vkrt->meshData.buffer, &vkrt->meshData.memory);
     copyBuffer(vkrt, stagingMeshInfo, vkrt->meshData.buffer, meshInfoSize);
     vkDestroyBuffer(vkrt->device, stagingMeshInfo, NULL);
@@ -386,79 +379,73 @@ void createTopLevelAccelerationStructure(VKRT* vkrt) {
     accelerationStructureBuildGeometryInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
     accelerationStructureBuildGeometryInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
     accelerationStructureBuildGeometryInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
-    accelerationStructureBuildGeometryInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
     accelerationStructureBuildGeometryInfo.geometryCount = 1;
     accelerationStructureBuildGeometryInfo.pGeometries = &accelerationStructureGeometry;
-    accelerationStructureBuildGeometryInfo.srcAccelerationStructure = VK_NULL_HANDLE;
-    accelerationStructureBuildGeometryInfo.dstAccelerationStructure = VK_NULL_HANDLE;
-    accelerationStructureBuildGeometryInfo.scratchData.deviceAddress = 0;
 
     VkAccelerationStructureBuildSizesInfoKHR accelerationStructureBuildSizesInfo = {0};
     accelerationStructureBuildSizesInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
     PFN_vkGetAccelerationStructureBuildSizesKHR pvkGetAccelerationStructureBuildSizesKHR = (PFN_vkGetAccelerationStructureBuildSizesKHR)vkGetDeviceProcAddr(vkrt->device, "vkGetAccelerationStructureBuildSizesKHR");
     pvkGetAccelerationStructureBuildSizesKHR(vkrt->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &accelerationStructureBuildGeometryInfo, &instanceCount, &accelerationStructureBuildSizesInfo);
 
-    VkBufferCreateInfo tlasBufferCreateInfo = {0};
-    tlasBufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    tlasBufferCreateInfo.size = accelerationStructureBuildSizesInfo.accelerationStructureSize;
-    tlasBufferCreateInfo.usage = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
-    tlasBufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    tlasBufferCreateInfo.queueFamilyIndexCount = 1;
-    tlasBufferCreateInfo.pQueueFamilyIndices = (uint32_t*)&indices.graphics;
-
-    if (vkCreateBuffer(vkrt->device, &tlasBufferCreateInfo, NULL, &vkrt->topLevelAccelerationStructure.buffer) != VK_SUCCESS) {
-        perror("ERROR: Failed to create TLAS buffer");
-        exit(EXIT_FAILURE);
-    }
-    VkMemoryRequirements bufferMemoryRequirements = {0};
-    vkGetBufferMemoryRequirements(vkrt->device, vkrt->topLevelAccelerationStructure.buffer, &bufferMemoryRequirements);
-
-    uint32_t tlasMemoryTypeIndex = UINT32_MAX;
-    for (uint32_t i = 0; i < physicalDeviceMemoryProperties.memoryTypeCount; i++) {
-        if ((bufferMemoryRequirements.memoryTypeBits & (1u << i)) && (physicalDeviceMemoryProperties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) {
-            tlasMemoryTypeIndex = i;
-            break;
+    VkBuildAccelerationStructureModeKHR mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR;
+    if (vkrt->topLevelAccelerationStructure.structure == VK_NULL_HANDLE || accelerationStructureBuildSizesInfo.accelerationStructureSize > vkrt->topLevelAccelerationStructure.size) {
+        PFN_vkDestroyAccelerationStructureKHR pDestroy = (PFN_vkDestroyAccelerationStructureKHR)vkGetDeviceProcAddr(vkrt->device, "vkDestroyAccelerationStructureKHR");
+        if (vkrt->topLevelAccelerationStructure.structure) {
+            pDestroy(vkrt->device, vkrt->topLevelAccelerationStructure.structure, NULL);
+            vkDestroyBuffer(vkrt->device, vkrt->topLevelAccelerationStructure.buffer, NULL);
+            vkFreeMemory(vkrt->device, vkrt->topLevelAccelerationStructure.memory, NULL);
         }
+        VkBufferCreateInfo tlasBufferCreateInfo = {0};
+        tlasBufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        tlasBufferCreateInfo.size = accelerationStructureBuildSizesInfo.accelerationStructureSize;
+        tlasBufferCreateInfo.usage = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+        tlasBufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        tlasBufferCreateInfo.queueFamilyIndexCount = 1;
+        tlasBufferCreateInfo.pQueueFamilyIndices = (uint32_t*)&indices.graphics;
+        vkCreateBuffer(vkrt->device, &tlasBufferCreateInfo, NULL, &vkrt->topLevelAccelerationStructure.buffer);
+        VkMemoryRequirements bufferMemoryRequirements;
+        vkGetBufferMemoryRequirements(vkrt->device, vkrt->topLevelAccelerationStructure.buffer, &bufferMemoryRequirements);
+        uint32_t tlasMemoryTypeIndex = UINT32_MAX;
+        for (uint32_t i = 0; i < physicalDeviceMemoryProperties.memoryTypeCount; i++) {
+            if ((bufferMemoryRequirements.memoryTypeBits & (1u << i)) && (physicalDeviceMemoryProperties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) {
+                tlasMemoryTypeIndex = i;
+                break;
+            }
+        }
+        VkMemoryAllocateInfo bufferMemoryAllocateInfo = {0};
+        bufferMemoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        bufferMemoryAllocateInfo.pNext = &memoryAllocateFlagsInfo;
+        bufferMemoryAllocateInfo.allocationSize = bufferMemoryRequirements.size;
+        bufferMemoryAllocateInfo.memoryTypeIndex = tlasMemoryTypeIndex;
+        vkAllocateMemory(vkrt->device, &bufferMemoryAllocateInfo, NULL, &vkrt->topLevelAccelerationStructure.memory);
+        vkBindBufferMemory(vkrt->device, vkrt->topLevelAccelerationStructure.buffer, vkrt->topLevelAccelerationStructure.memory, 0);
+        VkAccelerationStructureCreateInfoKHR accelerationStructureCreateInfo = {0};
+        accelerationStructureCreateInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
+        accelerationStructureCreateInfo.buffer = vkrt->topLevelAccelerationStructure.buffer;
+        accelerationStructureCreateInfo.offset = 0;
+        accelerationStructureCreateInfo.size = accelerationStructureBuildSizesInfo.accelerationStructureSize;
+        accelerationStructureCreateInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+        PFN_vkCreateAccelerationStructureKHR pvkCreateAccelerationStructureKHR = (PFN_vkCreateAccelerationStructureKHR)vkGetDeviceProcAddr(vkrt->device, "vkCreateAccelerationStructureKHR");
+        pvkCreateAccelerationStructureKHR(vkrt->device, &accelerationStructureCreateInfo, NULL, &vkrt->topLevelAccelerationStructure.structure);
+        vkrt->topLevelAccelerationStructure.size = accelerationStructureBuildSizesInfo.accelerationStructureSize;
+        mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
     }
 
-    VkMemoryAllocateInfo bufferMemoryAllocateInfo = {0};
-    bufferMemoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    bufferMemoryAllocateInfo.pNext = &memoryAllocateFlagsInfo;
-    bufferMemoryAllocateInfo.allocationSize = bufferMemoryRequirements.size;
-    bufferMemoryAllocateInfo.memoryTypeIndex = tlasMemoryTypeIndex;
-
-    if (vkAllocateMemory(vkrt->device, &bufferMemoryAllocateInfo, NULL, &vkrt->topLevelAccelerationStructure.memory) != VK_SUCCESS) {
-        perror("ERROR: allocate top level acceleration structure memory");
-        exit(EXIT_FAILURE);
-    }
-    vkBindBufferMemory(vkrt->device, vkrt->topLevelAccelerationStructure.buffer, vkrt->topLevelAccelerationStructure.memory, 0);
-
-    VkAccelerationStructureCreateInfoKHR accelerationStructureCreateInfo = {0};
-    accelerationStructureCreateInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
-    accelerationStructureCreateInfo.buffer = vkrt->topLevelAccelerationStructure.buffer;
-    accelerationStructureCreateInfo.offset = 0;
-    accelerationStructureCreateInfo.size = accelerationStructureBuildSizesInfo.accelerationStructureSize;
-    accelerationStructureCreateInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
-
-    PFN_vkCreateAccelerationStructureKHR pvkCreateAccelerationStructureKHR = (PFN_vkCreateAccelerationStructureKHR)vkGetDeviceProcAddr(vkrt->device, "vkCreateAccelerationStructureKHR");
-    if (pvkCreateAccelerationStructureKHR(vkrt->device, &accelerationStructureCreateInfo, NULL, &vkrt->topLevelAccelerationStructure.structure) != VK_SUCCESS) {
-        perror("ERROR: Failed to create TLAS");
-        exit(EXIT_FAILURE);
-    };
+    accelerationStructureBuildGeometryInfo.mode = mode;
+    accelerationStructureBuildGeometryInfo.srcAccelerationStructure = (mode == VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR) ? vkrt->topLevelAccelerationStructure.structure : VK_NULL_HANDLE;
+    accelerationStructureBuildGeometryInfo.dstAccelerationStructure = vkrt->topLevelAccelerationStructure.structure;
 
     VkBufferCreateInfo scratchBufferCreateInfo = {0};
     scratchBufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    scratchBufferCreateInfo.size = accelerationStructureBuildSizesInfo.buildScratchSize;
+    scratchBufferCreateInfo.size = (mode == VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR) ? accelerationStructureBuildSizesInfo.buildScratchSize : accelerationStructureBuildSizesInfo.updateScratchSize;
     scratchBufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
     scratchBufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     scratchBufferCreateInfo.queueFamilyIndexCount = 1;
     scratchBufferCreateInfo.pQueueFamilyIndices = (uint32_t*)&indices.graphics;
-
     VkBuffer scratchBuffer;
     vkCreateBuffer(vkrt->device, &scratchBufferCreateInfo, NULL, &scratchBuffer);
-    VkMemoryRequirements scratchBufferMemoryRequirements = {0};
+    VkMemoryRequirements scratchBufferMemoryRequirements;
     vkGetBufferMemoryRequirements(vkrt->device, scratchBuffer, &scratchBufferMemoryRequirements);
-
     uint32_t scratchMemoryType = UINT32_MAX;
     for (uint32_t i = 0; i < physicalDeviceMemoryProperties.memoryTypeCount; i++) {
         if ((scratchBufferMemoryRequirements.memoryTypeBits & (1u << i)) && (physicalDeviceMemoryProperties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) {
@@ -466,13 +453,11 @@ void createTopLevelAccelerationStructure(VKRT* vkrt) {
             break;
         }
     }
-
     VkMemoryAllocateInfo scratchMemoryAllocateInfo = {0};
     scratchMemoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     scratchMemoryAllocateInfo.pNext = &memoryAllocateFlagsInfo;
     scratchMemoryAllocateInfo.allocationSize = scratchBufferMemoryRequirements.size;
     scratchMemoryAllocateInfo.memoryTypeIndex = scratchMemoryType;
-
     VkDeviceMemory scratchDeviceMemory;
     vkAllocateMemory(vkrt->device, &scratchMemoryAllocateInfo, NULL, &scratchDeviceMemory);
     vkBindBufferMemory(vkrt->device, scratchBuffer, scratchDeviceMemory, 0);
@@ -480,9 +465,7 @@ void createTopLevelAccelerationStructure(VKRT* vkrt) {
     VkBufferDeviceAddressInfo scratchBufferDeviceAddressInfo = {0};
     scratchBufferDeviceAddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
     scratchBufferDeviceAddressInfo.buffer = scratchBuffer;
-
     VkDeviceAddress scratchBufferDeviceAddress = pvkGetBufferDeviceAddressKHR(vkrt->device, &scratchBufferDeviceAddressInfo);
-    accelerationStructureBuildGeometryInfo.dstAccelerationStructure = vkrt->topLevelAccelerationStructure.structure;
     accelerationStructureBuildGeometryInfo.scratchData.deviceAddress = scratchBufferDeviceAddress;
 
     VkAccelerationStructureBuildRangeInfoKHR accelerationStructureBuildRangeInfo = {0};

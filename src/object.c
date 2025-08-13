@@ -1,6 +1,7 @@
 #include "object.h"
-#include "buffer.h"
-#include "structure.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define CGLTF_IMPLEMENTATION
 #include "cgltf.h"
@@ -14,6 +15,43 @@
 #include <limits.h>
 #include <unistd.h>
 #endif
+
+static void generateMeshName(VKRT* vkrt, uint32_t existingCount, const char* filename, char out[64]) {
+    const char* base = filename;
+    const char* slash = strrchr(filename, '/');
+#ifdef _WIN32
+    const char* bslash = strrchr(filename, '\\');
+    if (bslash && (!slash || bslash > slash))
+        slash = bslash;
+#endif
+    if (slash)
+        base = slash + 1;
+    const char* dot = strrchr(base, '.');
+    size_t len = dot ? (size_t)(dot - base) : strlen(base);
+    if (len > 63)
+        len = 63;
+    memcpy(out, base, len);
+    out[len] = '\0';
+
+    char candidate[64];
+    strcpy(candidate, out);
+    int suffix = 1;
+    while (1) {
+        int collision = 0;
+        for (uint32_t i = 0; i < existingCount; i++) {
+            if (strcmp(vkrt->meshes[i].name, candidate) == 0) {
+                collision = 1;
+                break;
+            }
+        }
+        if (!collision) {
+            strncpy(out, candidate, 64);
+            break;
+        }
+        snprintf(candidate, sizeof(candidate), "%.*s_%d", (int)len, out, suffix++);
+        candidate[63] = '\0';
+    }
+}
 
 void loadObject(VKRT* vkrt, const char* filename) {
     cgltf_options options = {0};
@@ -111,43 +149,34 @@ void loadObject(VKRT* vkrt, const char* filename) {
         }
     }
 
-    uint32_t meshIndex = vkrt->meshData.count;
-
-    vkrt->meshData.count++;
+    uint32_t meshIndex = vkrt->meshData.count++;
     vkrt->meshes = realloc(vkrt->meshes, vkrt->meshData.count * sizeof(Mesh));
+    memset(&vkrt->meshes[meshIndex], 0, sizeof(Mesh));
+    generateMeshName(vkrt, meshIndex, filename, vkrt->meshes[meshIndex].name);
 
-    MeshInfo* meshInfo = &vkrt->meshes[meshIndex].info;
+    vkrt->meshData.host = realloc(vkrt->meshData.host, vkrt->meshData.count * vkrt->meshData.stride);
+    MeshInfo* meshInfos = (MeshInfo*)vkrt->meshData.host;
+    MeshInfo* meshInfo = &meshInfos[meshIndex];
     meshInfo->vertexCount = (uint32_t)numVertices;
     meshInfo->indexCount = (uint32_t)numIndices;
-    meshInfo->vertexBase = vkrt->vertexData.count;
-    meshInfo->indexBase = vkrt->indexData.count;
-
+    memset(&meshInfo->position, 0, sizeof(vec3));
+    memset(&meshInfo->rotation, 0, sizeof(vec3));
     vec3 scale = {1.f, 1.f, 1.f};
     memcpy(&meshInfo->scale, &scale, sizeof(vec3));
-    memset(&meshInfo->rotation, 0, sizeof(vec3));
-    memset(&meshInfo->position, 0, sizeof(vec3));
 
-    vkrt->vertexData.deviceAddress = appendBufferFromHostData(vkrt, vertices, 
-        numVertices * sizeof(Vertex), 
-        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, 
-        &vkrt->vertexData.buffer, &vkrt->vertexData.memory, 
-        vkrt->vertexData.count * sizeof(Vertex));
-
-
-    vkrt->indexData.deviceAddress = appendBufferFromHostData(vkrt, indices, 
-        numIndices * sizeof(uint32_t),
-        VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-        &vkrt->indexData.buffer, &vkrt->indexData.memory,
-        vkrt->indexData.count * sizeof(uint32_t));
-
+    size_t vOffset = (size_t)vkrt->vertexData.count * vkrt->vertexData.stride;
+    vkrt->vertexData.host = realloc(vkrt->vertexData.host, vOffset + numVertices * vkrt->vertexData.stride);
+    memcpy((uint8_t*)vkrt->vertexData.host + vOffset, vertices, numVertices * vkrt->vertexData.stride);
     vkrt->vertexData.count += (uint32_t)numVertices;
+
+    size_t iOffset = (size_t)vkrt->indexData.count * vkrt->indexData.stride;
+    vkrt->indexData.host = realloc(vkrt->indexData.host, iOffset + numIndices * vkrt->indexData.stride);
+    memcpy((uint8_t*)vkrt->indexData.host + iOffset, indices, numIndices * vkrt->indexData.stride);
     vkrt->indexData.count += (uint32_t)numIndices;
 
     free(vertices);
     free(indices);
     cgltf_free(data);
-
-    createBottomLevelAccelerationStructure(vkrt, &vkrt->meshes[meshIndex]);
 }
 
 static int get_exe_dir(char* out, size_t sz) {
