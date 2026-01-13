@@ -100,7 +100,7 @@ void recordFrameTime(VKRT* vkrt) {
     vkrt->renderTimeMs = (float)((ts[1] - ts[0]) * vkrt->timestampPeriod / 1e6);
 
     int32_t frameNumber = vkrt->sceneData->frameNumber++;
-    float weight = 1.f / (min(1 + max(0, frameNumber), COUNT_OF(vkrt->frametimes)));
+    float weight = 1.f / (MIN(1 + MAX(0, frameNumber), COUNT_OF(vkrt->frametimes)));
 
     vkrt->averageFrametime = vkrt->averageFrametime * (1 - weight) + vkrt->displayTimeMs * weight;
     vkrt->framesPerSecond = (uint32_t)(1000.0f / vkrt->displayTimeMs);

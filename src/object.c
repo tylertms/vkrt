@@ -188,11 +188,11 @@ FILE* fopen_exe_relative(const char* relpath, const char* mode) {
         return NULL;
     }
 
-    strncat_s(buf, sizeof buf, "/", _TRUNCATE);
-    strncat_s(buf, sizeof buf, relpath, _TRUNCATE);
+    size_t dirlen = strlen(buf);
+    snprintf(buf + dirlen, sizeof buf - dirlen, "/%s", relpath);
 
-    FILE* file = NULL;
-    if (fopen_s(&file, buf, mode) != 0) {
+    FILE* file = fopen(buf, mode);
+    if (!file) {
         return NULL;
     }
 

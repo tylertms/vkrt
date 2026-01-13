@@ -65,10 +65,12 @@ typedef struct Buffer {
     uint32_t count;
 } Buffer;
 
+struct VKRT;
+
 typedef struct Interface {
-    void (*init)(void* vkrt);
-    void (*deinit)(void* vkrt);
-    void (*draw)(void* vkrt);
+    void (*init)(struct VKRT* vkrt);
+    void (*deinit)(struct VKRT* vkrt);
+    void (*draw)(struct VKRT* vkrt);
 } Interface;
 
 typedef struct QueueFamily {
@@ -138,7 +140,7 @@ typedef struct VKRT {
 } VKRT;
 
 int VKRT_init(VKRT* vkrt);
-void VKRT_registerGUI(VKRT* vkrt, void (*init)(void*), void (*deinit)(void*), void (*draw)(void*));
+void VKRT_registerGUI(VKRT* vkrt, void (*init)(VKRT*), void (*deinit)(VKRT*), void (*draw)(VKRT*));
 void VKRT_deinit(VKRT* vkrt);
 int VKRT_shouldDeinit(VKRT* vkrt);
 void VKRT_poll(VKRT* vkrt);
@@ -151,6 +153,8 @@ void VKRT_getImGuiVulkanInitInfo(VKRT* vkrt, ImGui_ImplVulkan_InitInfo* info);
 static void VKRT_framebufferResizedCallback(GLFWwindow* window, int width, int height);
 
 #define COUNT_OF(x) ((sizeof(x) / sizeof(0 [x])) / ((size_t)(!(sizeof(x) % sizeof(0 [x])))))
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
 
 #ifdef __cplusplus
 }
