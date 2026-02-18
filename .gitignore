@@ -1,0 +1,3 @@
+.vscode/
+/subprojects/*
+!/subprojects/*.wrap
