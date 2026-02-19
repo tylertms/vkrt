@@ -6,8 +6,8 @@
 #include "dcimgui_internal.h"
 #include "editor_state.h"
 #include "editor_theme.h"
-#include "scene_controller.h"
 #include "tinyfiledialogs.h"
+#include "IBMPlexMono_Regular.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -98,7 +98,6 @@ static void drawPerformanceSection(const VKRT* runtime) {
     ImGui_Text("FPS:                %6d", runtime->state.framesPerSecond);
     ImGui_Text("Render time:        %6.3f ms", runtime->state.renderTimeMs);
     ImGui_Text("Frame time:         %6.3f ms", runtime->state.displayTimeMs);
-    ImGui_Text("Average frame time: %6.3f ms", runtime->state.averageFrametime);
     ImGui_PlotLinesEx("##frametimes", runtime->state.frametimes, COUNT_OF(runtime->state.frametimes),
                       (int)runtime->state.frametimeStartIndex, "", 0.0f,
                       2 * runtime->state.averageFrametime, (ImVec2){220.0f, 60.0f}, sizeof(float));
@@ -120,7 +119,7 @@ static void drawMeshInspector(VKRT* runtime, EditorState* state) {
 
         ImGui_PushIDInt((int)meshIndex);
         bool visible = true;
-        bool open = ImGui_CollapsingHeaderBoolPtr(header, &visible, ImGuiTreeNodeFlags_DefaultOpen);
+        bool open = ImGui_CollapsingHeaderBoolPtr(header, &visible, ImGuiTreeNodeFlags_None);
         if (!visible) {
             state->pendingMeshRemovalIndex = meshIndex;
             ImGui_PopID();
@@ -202,9 +201,11 @@ static void applyCameraInput(VKRT* runtime, bool viewportHovered) {
 
 void editorUIInitialize(VKRT* runtime, void* userData) {
     (void)userData;
-
     ImGui_CreateContext(NULL);
-    ImGui_GetIO()->ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+
+    ImGuiIO* io = ImGui_GetIO();
+    io->ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    ImFontAtlas_AddFontFromMemoryTTF(io->Fonts, (void*)IBMPlexMono_Regular, IBMPlexMono_Regular_len, 22.0, NULL, NULL);
     editorThemeApplyDefault();
 
     cImGui_ImplGlfw_InitForVulkan(runtime->runtime.window, true);
