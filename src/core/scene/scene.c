@@ -1,6 +1,6 @@
 #include "scene.h"
 #include "buffer.h"
-#include "device.h"
+#include "debug.h"
 
 #include <math.h>
 #include <stdint.h>

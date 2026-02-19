@@ -10,7 +10,7 @@ layout(set = 0, binding = 4) uniform SceneUniform {
     mat4 viewInverse;
     mat4 projInverse;
     uint frameNumber;
-    uvec4 viewportRect; // x, y, width, height in framebuffer pixels
+    uvec4 viewportRect;
 } scene;
 
 void main()  {

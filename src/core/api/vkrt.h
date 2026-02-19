@@ -18,7 +18,7 @@ typedef struct SceneData {
     mat4 projInverse;
     uint32_t frameNumber;
     uint32_t padding0[3];
-    uint32_t viewportRect[4]; // x, y, width, height in framebuffer pixels
+    uint32_t viewportRect[4];
 } SceneData;
 
 typedef struct Camera {

@@ -1,18 +1,26 @@
 #include "scene_controller.h"
 
 #include "mesh_asset_loader.h"
+#include "debug.h"
 
 #include <stdint.h>
+#include <stdio.h>
 
 void sceneControllerImportMesh(VKRT* runtime, EditorState* state, const char* path) {
     if (!path || !path[0]) return;
 
+    uint64_t startTime = getMicroseconds();
     uint32_t meshCountBeforeImport = VKRT_getMeshCount(runtime);
     meshAssetLoadFromFile(runtime, path);
 
     if (VKRT_getMeshCount(runtime) > meshCountBeforeImport) {
         editorStateSetMeshName(state, path, meshCountBeforeImport);
     }
+
+    printf("[INFO]: Mesh import complete. File: %s, Total Meshes: %u, in %.3f ms\n",
+        path,
+        VKRT_getMeshCount(runtime),
+        (double)(getMicroseconds() - startTime) / 1e3);
 }
 
 void sceneControllerApplyPendingActions(VKRT* runtime, EditorState* state) {

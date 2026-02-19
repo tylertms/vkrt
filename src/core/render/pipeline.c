@@ -1,10 +1,13 @@
 #include "pipeline.h"
 #include "io.h"
+#include "debug.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 
 void createRayTracingPipeline(VKRT* vkrt) {
+    uint64_t startTime = getMicroseconds();
+
     VkPipelineLayoutCreateInfo pipelineLayoutInfo = {0};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = 1;
@@ -102,6 +105,11 @@ void createRayTracingPipeline(VKRT* vkrt) {
     vkDestroyShaderModule(vkrt->core.device, rayGenModule, NULL);
     vkDestroyShaderModule(vkrt->core.device, closestHitModule, NULL);
     vkDestroyShaderModule(vkrt->core.device, missModule, NULL);
+
+    printf("[INFO]: Ray tracing pipeline created. Shader Stages: %u, Shader Groups: %u, in %.3f ms\n",
+        (uint32_t)COUNT_OF(shaderStages),
+        (uint32_t)COUNT_OF(shaderGroups),
+        (double)(getMicroseconds() - startTime) / 1e3);
 }
 
 void createSyncObjects(VKRT* vkrt) {

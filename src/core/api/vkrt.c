@@ -9,6 +9,7 @@
 #include "surface.h"
 #include "swapchain.h"
 #include "validation.h"
+#include "debug.h"
 #include "vkrt.h"
 
 #include <stdio.h>
@@ -16,6 +17,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+
+static void logStepTime(const char* stepName, uint64_t startTime) {
+    printf("[INFO]: %s in %.3f ms\n", stepName, (double)(getMicroseconds() - startTime) / 1e3);
+}
 
 static void destroyMeshAccelerationStructure(VKRT* vkrt, Mesh* mesh) {
     if (!vkrt || !vkrt->core.device || !mesh) return;
@@ -54,9 +59,16 @@ static void destroyMeshBLAS(VKRT* vkrt) {
 static void rebuildMeshBuffersAndStructures(VKRT* vkrt) {
     if (!vkrt) return;
 
+    uint64_t startTime = getMicroseconds();
+    uint64_t waitIdleStartTime = startTime;
     vkDeviceWaitIdle(vkrt->core.device);
+    uint64_t waitIdleTime = getMicroseconds() - waitIdleStartTime;
 
+    uint64_t destroyBlasStartTime = getMicroseconds();
     destroyMeshBLAS(vkrt);
+    uint64_t destroyBlasTime = getMicroseconds() - destroyBlasStartTime;
+
+    uint64_t destroyBuffersStartTime = getMicroseconds();
 
     if (vkrt->core.vertexData.buffer != VK_NULL_HANDLE) {
         vkDestroyBuffer(vkrt->core.device, vkrt->core.vertexData.buffer, NULL);
@@ -80,6 +92,7 @@ static void rebuildMeshBuffersAndStructures(VKRT* vkrt) {
     vkrt->core.indexData.count = 0;
     vkrt->core.vertexData.deviceAddress = 0;
     vkrt->core.indexData.deviceAddress = 0;
+    uint64_t destroyBuffersTime = getMicroseconds() - destroyBuffersStartTime;
 
     uint32_t meshCount = vkrt->core.meshData.count;
     uint32_t totalVertexCount = 0;
@@ -91,7 +104,13 @@ static void rebuildMeshBuffersAndStructures(VKRT* vkrt) {
         totalIndexCount += vkrt->core.meshes[i].info.indexCount;
     }
 
+    uint64_t packMeshDataTime = 0;
+    uint64_t uploadMeshDataTime = 0;
+    uint64_t buildBlasTime = 0;
+    uint64_t syncInstancesTime = 0;
+
     if (meshCount > 0) {
+        uint64_t packMeshDataStartTime = getMicroseconds();
         Vertex* packedVertices = (Vertex*)malloc((size_t)totalVertexCount * sizeof(Vertex));
         uint32_t* packedIndices = (uint32_t*)malloc((size_t)totalIndexCount * sizeof(uint32_t));
         if (!packedVertices || !packedIndices) {
@@ -118,7 +137,9 @@ static void rebuildMeshBuffersAndStructures(VKRT* vkrt) {
             vertexBase += mesh->info.vertexCount;
             indexBase += mesh->info.indexCount;
         }
+        packMeshDataTime = getMicroseconds() - packMeshDataStartTime;
 
+        uint64_t uploadMeshDataStartTime = getMicroseconds();
         vkrt->core.vertexData.deviceAddress = createBufferFromHostData(vkrt, packedVertices,
             (VkDeviceSize)totalVertexCount * sizeof(Vertex),
             VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
@@ -128,6 +149,7 @@ static void rebuildMeshBuffersAndStructures(VKRT* vkrt) {
             (VkDeviceSize)totalIndexCount * sizeof(uint32_t),
             VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
             &vkrt->core.indexData.buffer, &vkrt->core.indexData.memory);
+        uploadMeshDataTime = getMicroseconds() - uploadMeshDataStartTime;
 
         free(packedVertices);
         free(packedIndices);
@@ -135,12 +157,15 @@ static void rebuildMeshBuffersAndStructures(VKRT* vkrt) {
         vkrt->core.vertexData.count = totalVertexCount;
         vkrt->core.indexData.count = totalIndexCount;
 
+        uint64_t buildBlasStartTime = getMicroseconds();
         for (uint32_t i = 0; i < meshCount; i++) {
             Mesh* mesh = &vkrt->core.meshes[i];
             if (!mesh->ownsGeometry) continue;
             createBottomLevelAccelerationStructure(vkrt, mesh);
         }
+        buildBlasTime = getMicroseconds() - buildBlasStartTime;
 
+        uint64_t syncInstancesStartTime = getMicroseconds();
         for (uint32_t i = 0; i < meshCount; i++) {
             Mesh* mesh = &vkrt->core.meshes[i];
             if (mesh->ownsGeometry) continue;
@@ -150,12 +175,44 @@ static void rebuildMeshBuffersAndStructures(VKRT* vkrt) {
             mesh->info.indexBase = source->info.indexBase;
             mesh->bottomLevelAccelerationStructure.deviceAddress = source->bottomLevelAccelerationStructure.deviceAddress;
         }
+        syncInstancesTime = getMicroseconds() - syncInstancesStartTime;
     }
 
+    uint64_t rebuildTlasStartTime = getMicroseconds();
     createTopLevelAccelerationStructure(vkrt);
+    uint64_t rebuildTlasTime = getMicroseconds() - rebuildTlasStartTime;
+
+    uint64_t descriptorUpdateStartTime = getMicroseconds();
     updateDescriptorSet(vkrt);
+    uint64_t descriptorUpdateTime = getMicroseconds() - descriptorUpdateStartTime;
+
+    uint64_t resetSceneStartTime = getMicroseconds();
     vkrt->core.topLevelAccelerationStructure.needsRebuild = 0;
     resetSceneData(vkrt);
+    uint64_t resetSceneTime = getMicroseconds() - resetSceneStartTime;
+
+    uint32_t uniqueGeometryCount = 0;
+    for (uint32_t i = 0; i < meshCount; i++) {
+        if (vkrt->core.meshes[i].ownsGeometry) uniqueGeometryCount++;
+    }
+
+    printf("[INFO]: Scene geometry rebuilt. Meshes: %u, Unique Geometry: %u, Vertices: %u, Indices: %u, in %.3f ms\n",
+        meshCount,
+        uniqueGeometryCount,
+        totalVertexCount,
+        totalIndexCount,
+        (double)(getMicroseconds() - startTime) / 1e3);
+    printf("[INFO]: Scene geometry rebuild breakdown. Device Wait: %.3f ms, BLAS Cleanup: %.3f ms, Buffer Cleanup: %.3f ms, Data Packing: %.3f ms, Buffer Upload: %.3f ms, BLAS Build: %.3f ms, Instance Sync: %.3f ms, TLAS Build: %.3f ms, Descriptor Update: %.3f ms, Scene Reset: %.3f ms\n",
+        (double)waitIdleTime / 1e3,
+        (double)destroyBlasTime / 1e3,
+        (double)destroyBuffersTime / 1e3,
+        (double)packMeshDataTime / 1e3,
+        (double)uploadMeshDataTime / 1e3,
+        (double)buildBlasTime / 1e3,
+        (double)syncInstancesTime / 1e3,
+        (double)rebuildTlasTime / 1e3,
+        (double)descriptorUpdateTime / 1e3,
+        (double)resetSceneTime / 1e3);
 }
 
 void VKRT_defaultCreateInfo(VKRT_CreateInfo* createInfo) {
@@ -177,12 +234,16 @@ void VKRT_defaultCreateInfo(VKRT_CreateInfo* createInfo) {
 int VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInfo) {
     if (!vkrt || !createInfo) return -1;
 
+    uint64_t initStartTime = getMicroseconds();
+    uint64_t stepStartTime = initStartTime;
+
     if (!glfwInit()) {
         perror("[ERROR]: Failed to initialize GLFW");
         return -1;
     }
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
+    logStepTime("GLFW setup complete", stepStartTime);
 
     vkrt->runtime.vsync = createInfo->vsync;
     vkrt->core.shaders = createInfo->shaders;
@@ -196,6 +257,7 @@ int VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInfo) {
     if (!vkrt->core.shaders.rmissPath) vkrt->core.shaders.rmissPath = "./rmiss.spv";
     if (!vkrt->core.shaders.rchitPath) vkrt->core.shaders.rchitPath = "./rchit.spv";
 
+    stepStartTime = getMicroseconds();
     vkrt->runtime.window = glfwCreateWindow((int)width, (int)height, title, 0, 0);
     if (!vkrt->runtime.window) {
         perror("[ERROR]: Failed to create GLFW window");
@@ -205,32 +267,80 @@ int VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInfo) {
 
     glfwSetWindowUserPointer(vkrt->runtime.window, vkrt);
     glfwSetFramebufferSizeCallback(vkrt->runtime.window, VKRT_framebufferResizedCallback);
+    logStepTime("Window setup complete", stepStartTime);
 
+    stepStartTime = getMicroseconds();
     createInstance(vkrt);
+    logStepTime("Vulkan instance created", stepStartTime);
+
+    stepStartTime = getMicroseconds();
     setupDebugMessenger(vkrt);
+    logStepTime("Debug messenger setup complete", stepStartTime);
+
+    stepStartTime = getMicroseconds();
     createSurface(vkrt);
+    logStepTime("Surface created", stepStartTime);
+
+    stepStartTime = getMicroseconds();
     pickPhysicalDevice(vkrt);
+    logStepTime("Physical device selection complete", stepStartTime);
+
+    stepStartTime = getMicroseconds();
     createLogicalDevice(vkrt);
+    logStepTime("Logical device created", stepStartTime);
+
+    stepStartTime = getMicroseconds();
     createQueryPool(vkrt);
+    logStepTime("Query pool created", stepStartTime);
+
+    stepStartTime = getMicroseconds();
     createSwapChain(vkrt);
     createImageViews(vkrt);
     createRenderPass(vkrt);
     createFramebuffers(vkrt);
+    logStepTime("Swapchain and framebuffers ready", stepStartTime);
+
+    stepStartTime = getMicroseconds();
     createCommandPool(vkrt);
     createDescriptorSetLayout(vkrt);
+    logStepTime("Command pool and descriptor layout ready", stepStartTime);
+
+    stepStartTime = getMicroseconds();
     createRayTracingPipeline(vkrt);
+    logStepTime("Ray tracing pipeline ready", stepStartTime);
+
+    stepStartTime = getMicroseconds();
     createStorageImage(vkrt);
+    logStepTime("Storage image ready", stepStartTime);
+
+    stepStartTime = getMicroseconds();
     createSceneUniform(vkrt);
+    logStepTime("Scene uniform ready", stepStartTime);
+
+    stepStartTime = getMicroseconds();
     createDescriptorPool(vkrt);
+    logStepTime("Descriptor pool ready", stepStartTime);
+
+    stepStartTime = getMicroseconds();
     createDescriptorSet(vkrt);
+    logStepTime("Descriptor set ready", stepStartTime);
+
+    stepStartTime = getMicroseconds();
     createShaderBindingTable(vkrt);
+    logStepTime("Shader binding table ready", stepStartTime);
+
+    stepStartTime = getMicroseconds();
     createCommandBuffers(vkrt);
     createSyncObjects(vkrt);
+    logStepTime("Command buffers and sync objects ready", stepStartTime);
 
+    stepStartTime = getMicroseconds();
     if (vkrt->appHooks.init) {
         vkrt->appHooks.init(vkrt, vkrt->appHooks.userData);
     }
+    logStepTime("Application initialization complete", stepStartTime);
 
+    printf("[INFO]: VKRT initialization complete in %.3f ms\n", (double)(getMicroseconds() - initStartTime) / 1e3);
     return 0;
 }
 
@@ -248,20 +358,36 @@ void VKRT_registerAppHooks(VKRT* vkrt, VKRT_AppHooks hooks) {
 void VKRT_deinit(VKRT* vkrt) {
     if (!vkrt) return;
 
-    vkDeviceWaitIdle(vkrt->core.device);
+    uint64_t deinitStartTime = getMicroseconds();
+    uint64_t stepStartTime = deinitStartTime;
 
+    vkDeviceWaitIdle(vkrt->core.device);
+    logStepTime("Device idle wait complete", stepStartTime);
+
+    stepStartTime = getMicroseconds();
     if (vkrt->appHooks.deinit) {
         vkrt->appHooks.deinit(vkrt, vkrt->appHooks.userData);
     }
+    logStepTime("Application shutdown complete", stepStartTime);
 
+    stepStartTime = getMicroseconds();
     cleanupSwapChain(vkrt);
+    logStepTime("Swapchain cleanup complete", stepStartTime);
 
+    stepStartTime = getMicroseconds();
     vkDestroyRenderPass(vkrt->core.device, vkrt->runtime.renderPass, NULL);
 
     vkDestroyBuffer(vkrt->core.device, vkrt->core.shaderBindingTableBuffer, NULL);
     vkFreeMemory(vkrt->core.device, vkrt->core.shaderBindingTableMemory, NULL);
+    logStepTime("Render pass and shader binding table cleanup complete", stepStartTime);
 
+    stepStartTime = getMicroseconds();
     PFN_vkDestroyAccelerationStructureKHR pvkDestroyAccelerationStructureKHR = (PFN_vkDestroyAccelerationStructureKHR)vkGetDeviceProcAddr(vkrt->core.device, "vkDestroyAccelerationStructureKHR");
+    if (!pvkDestroyAccelerationStructureKHR) {
+        perror("[ERROR]: Failed to load vkDestroyAccelerationStructureKHR during shutdown");
+        exit(EXIT_FAILURE);
+    }
+
     pvkDestroyAccelerationStructureKHR(vkrt->core.device, vkrt->core.topLevelAccelerationStructure.structure, NULL);
     vkDestroyBuffer(vkrt->core.device, vkrt->core.topLevelAccelerationStructure.buffer, NULL);
     vkFreeMemory(vkrt->core.device, vkrt->core.topLevelAccelerationStructure.memory, NULL);
@@ -277,7 +403,9 @@ void VKRT_deinit(VKRT* vkrt) {
     }
     free(vkrt->core.meshes);
     vkrt->core.meshes = NULL;
+    logStepTime("Acceleration structures and mesh sources cleaned", stepStartTime);
 
+    stepStartTime = getMicroseconds();
     vkDestroyBuffer(vkrt->core.device, vkrt->core.vertexData.buffer, NULL);
     vkFreeMemory(vkrt->core.device, vkrt->core.vertexData.memory, NULL);
     vkDestroyBuffer(vkrt->core.device, vkrt->core.indexData.buffer, NULL);
@@ -287,13 +415,17 @@ void VKRT_deinit(VKRT* vkrt) {
 
     vkDestroyBuffer(vkrt->core.device, vkrt->core.sceneDataBuffer, NULL);
     vkFreeMemory(vkrt->core.device, vkrt->core.sceneDataMemory, NULL);
+    logStepTime("Scene and mesh buffer cleanup complete", stepStartTime);
 
+    stepStartTime = getMicroseconds();
     vkDestroyDescriptorPool(vkrt->core.device, vkrt->core.descriptorPool, NULL);
     vkDestroyDescriptorSetLayout(vkrt->core.device, vkrt->core.descriptorSetLayout, NULL);
 
     vkDestroyPipeline(vkrt->core.device, vkrt->core.rayTracingPipeline, NULL);
     vkDestroyPipelineLayout(vkrt->core.device, vkrt->core.pipelineLayout, NULL);
+    logStepTime("Descriptor and pipeline cleanup complete", stepStartTime);
 
+    stepStartTime = getMicroseconds();
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         vkDestroySemaphore(vkrt->core.device, vkrt->runtime.imageAvailableSemaphores[i], NULL);
         vkDestroyFence(vkrt->core.device, vkrt->runtime.inFlightFences[i], NULL);
@@ -303,12 +435,16 @@ void VKRT_deinit(VKRT* vkrt) {
         vkDestroySemaphore(vkrt->core.device, vkrt->runtime.renderFinishedSemaphores[i], NULL);
     }
     free(vkrt->runtime.renderFinishedSemaphores);
+    logStepTime("Synchronization object cleanup complete", stepStartTime);
 
+    stepStartTime = getMicroseconds();
     vkFreeCommandBuffers(vkrt->core.device, vkrt->runtime.commandPool, COUNT_OF(vkrt->runtime.commandBuffers), vkrt->runtime.commandBuffers);
     vkDestroyCommandPool(vkrt->core.device, vkrt->runtime.commandPool, NULL);
 
     vkDestroyQueryPool(vkrt->core.device, vkrt->runtime.timestampPool, NULL);
+    logStepTime("Command and query resource cleanup complete", stepStartTime);
 
+    stepStartTime = getMicroseconds();
     vkDestroyDevice(vkrt->core.device, NULL);
 
     if (enableValidationLayers) {
@@ -317,9 +453,14 @@ void VKRT_deinit(VKRT* vkrt) {
 
     vkDestroySurfaceKHR(vkrt->core.instance, vkrt->runtime.surface, NULL);
     vkDestroyInstance(vkrt->core.instance, NULL);
+    logStepTime("Vulkan device and instance shutdown complete", stepStartTime);
 
+    stepStartTime = getMicroseconds();
     glfwDestroyWindow(vkrt->runtime.window);
     glfwTerminate();
+    logStepTime("GLFW shutdown complete", stepStartTime);
+
+    printf("[INFO]: VKRT deinitialization complete in %.3f ms\n", (double)(getMicroseconds() - deinitStartTime) / 1e3);
 }
 
 int VKRT_shouldDeinit(VKRT* vkrt) {
@@ -372,15 +513,14 @@ void VKRT_beginFrame(VKRT* vkrt) {
 
 void VKRT_updateScene(VKRT* vkrt) {
     if (!vkrt || !vkrt->runtime.frameAcquired) return;
-
     if (!vkrt->core.descriptorSetReady && descriptorResourcesReady(vkrt)) {
         updateDescriptorSet(vkrt);
     }
+
 }
 
 void VKRT_trace(VKRT* vkrt) {
     if (!vkrt || !vkrt->runtime.frameAcquired) return;
-
     vkResetFences(vkrt->core.device, 1, &vkrt->runtime.inFlightFences[vkrt->runtime.currentFrame]);
 
     vkResetCommandBuffer(vkrt->runtime.commandBuffers[vkrt->runtime.currentFrame], 0);
@@ -410,7 +550,6 @@ void VKRT_trace(VKRT* vkrt) {
 
 void VKRT_present(VKRT* vkrt) {
     if (!vkrt || !vkrt->runtime.frameSubmitted) return;
-
     VkSemaphore signalSemaphores[] = {vkrt->runtime.renderFinishedSemaphores[vkrt->runtime.frameImageIndex]};
 
     VkPresentInfoKHR presentInfo = {0};
@@ -460,6 +599,7 @@ void VKRT_draw(VKRT* vkrt) {
 void VKRT_uploadMeshData(VKRT* vkrt, const Vertex* vertices, size_t vertexCount, const uint32_t* indices, size_t indexCount) {
     if (!vkrt || !vertices || !indices || vertexCount == 0 || indexCount == 0) return;
 
+    uint64_t startTime = getMicroseconds();
     vkDeviceWaitIdle(vkrt->core.device);
 
     if (vertexCount > UINT32_MAX || indexCount > UINT32_MAX) {
@@ -530,11 +670,18 @@ void VKRT_uploadMeshData(VKRT* vkrt, const Vertex* vertices, size_t vertexCount,
 
     vkrt->core.meshData.count = newCount;
     rebuildMeshBuffersAndStructures(vkrt);
+    printf("[INFO]: Mesh upload complete. Total Meshes: %u, Vertices: %zu, Indices: %zu, Reused Geometry: %s, in %.3f ms\n",
+        vkrt->core.meshData.count,
+        vertexCount,
+        indexCount,
+        duplicateIndex == UINT32_MAX ? "No" : "Yes",
+        (double)(getMicroseconds() - startTime) / 1e3);
 }
 
 int VKRT_removeMesh(VKRT* vkrt, uint32_t meshIndex) {
     if (!vkrt || meshIndex >= vkrt->core.meshData.count) return -1;
 
+    uint64_t startTime = getMicroseconds();
     vkDeviceWaitIdle(vkrt->core.device);
     Mesh* removed = &vkrt->core.meshes[meshIndex];
 
@@ -594,6 +741,10 @@ int VKRT_removeMesh(VKRT* vkrt, uint32_t meshIndex) {
     }
 
     rebuildMeshBuffersAndStructures(vkrt);
+    printf("[INFO]: Mesh removal complete. Removed Index: %u, Remaining Meshes: %u, in %.3f ms\n",
+        meshIndex,
+        vkrt->core.meshData.count,
+        (double)(getMicroseconds() - startTime) / 1e3);
     return 0;
 }
 

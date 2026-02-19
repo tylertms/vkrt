@@ -6,6 +6,7 @@
 #include "dcimgui_internal.h"
 #include "editor_state.h"
 #include "editor_theme.h"
+#include "debug.h"
 #include "tinyfiledialogs.h"
 #include "IBMPlexMono_Regular.h"
 
@@ -236,9 +237,22 @@ void editorUIShutdown(VKRT* runtime, void* userData) {
     (void)runtime;
     (void)userData;
 
+    uint64_t shutdownStartTime = getMicroseconds();
+
+    uint64_t vulkanShutdownStartTime = getMicroseconds();
     cImGui_ImplVulkan_Shutdown();
+    double vulkanShutdownMs = (double)(getMicroseconds() - vulkanShutdownStartTime) / 1e3;
+
+    uint64_t glfwShutdownStartTime = getMicroseconds();
     cImGui_ImplGlfw_Shutdown();
+    double glfwShutdownMs = (double)(getMicroseconds() - glfwShutdownStartTime) / 1e3;
+
+    printf("[INFO]: UI backends shut down. Vulkan: %.3f ms, GLFW: %.3f ms\n", vulkanShutdownMs, glfwShutdownMs);
+    printf("[INFO]: Destroying UI context\n");
+
     ImGui_DestroyContext(NULL);
+
+    printf("[INFO]: UI shutdown complete in %.3f ms\n", (double)(getMicroseconds() - shutdownStartTime) / 1e3);
 }
 
 void editorUIDraw(VKRT* runtime, VkCommandBuffer commandBuffer, void* userData) {

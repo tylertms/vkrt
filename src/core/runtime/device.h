@@ -1,10 +1,10 @@
 #pragma once
+
 #include "vkrt.h"
 
 #define NUM_EXTENSIONS 5
 extern const char* deviceExtensions[NUM_EXTENSIONS];
 
-uint64_t getMicroseconds();
 void pickPhysicalDevice(VKRT* vkrt);
 void createLogicalDevice(VKRT* vkrt);
 void createQueryPool(VKRT* vkrt);

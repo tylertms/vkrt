@@ -3,6 +3,7 @@
 #include "command.h"
 #include "device.h"
 #include "scene.h"
+#include "debug.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -86,7 +87,7 @@ void createShaderBindingTable(VKRT* vkrt) {
     vkrt->core.shaderBindingTables[3].stride = 0;
     vkrt->core.shaderBindingTables[3].size = 0;
 
-    printf("[INFO]: Created shader binding table in %.3f ms\n", (getMicroseconds() - startTime) / 1e3);
+    printf("[INFO]: Shader binding table created in %.3f ms\n", (double)(getMicroseconds() - startTime) / 1e3);
 }
 
 void createBottomLevelAccelerationStructure(VKRT* vkrt, Mesh* mesh) {
@@ -263,10 +264,17 @@ void createBottomLevelAccelerationStructure(VKRT* vkrt, Mesh* mesh) {
 
     vkrt->core.topLevelAccelerationStructure.needsRebuild = 1;
 
-    printf("[INFO]: Created BLAS in %.3f ms\n", (getMicroseconds() - startTime) / 1e3);
+    printf("[INFO]: BLAS created. Vertex Base: %u, Index Base: %u, Vertex Count: %u, Index Count: %u, in %.3f ms\n",
+        mesh->info.vertexBase,
+        mesh->info.indexBase,
+        mesh->info.vertexCount,
+        mesh->info.indexCount,
+        (double)(getMicroseconds() - startTime) / 1e3);
 }
 
 void createTopLevelAccelerationStructure(VKRT* vkrt) {
+    uint64_t startTime = getMicroseconds();
+
     if (vkrt->core.topLevelAccelerationStructure.structure) {
         PFN_vkDestroyAccelerationStructureKHR pvkDestroyAccelerationStructureKHR = (PFN_vkDestroyAccelerationStructureKHR)vkGetDeviceProcAddr(vkrt->core.device, "vkDestroyAccelerationStructureKHR");
         pvkDestroyAccelerationStructureKHR(vkrt->core.device, vkrt->core.topLevelAccelerationStructure.structure, NULL);
@@ -291,6 +299,7 @@ void createTopLevelAccelerationStructure(VKRT* vkrt) {
     uint32_t instanceCount = vkrt->core.meshData.count;
     if (instanceCount == 0) {
         vkrt->core.topLevelAccelerationStructure.deviceAddress = 0;
+        printf("[INFO]: TLAS created. Instances: 0, in %.3f ms\n", (double)(getMicroseconds() - startTime) / 1e3);
         return;
     }
 
@@ -526,4 +535,6 @@ void createTopLevelAccelerationStructure(VKRT* vkrt) {
     vkFreeMemory(vkrt->core.device, instanceMemory, NULL);
     vkDestroyBuffer(vkrt->core.device, scratchBuffer, NULL);
     vkFreeMemory(vkrt->core.device, scratchDeviceMemory, NULL);
+
+    printf("[INFO]: TLAS created. Instances: %u, in %.3f ms\n", instanceCount, (double)(getMicroseconds() - startTime) / 1e3);
 }

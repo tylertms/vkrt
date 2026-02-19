@@ -1,8 +1,27 @@
 #pragma once
+
 #include "vkrt.h"
 
-#include <stdio.h>
 #include <stdint.h>
+#include <stdio.h>
+
+#if defined(_WIN32) || defined(_WIN64)
+#include <windows.h>
+static inline uint64_t getMicroseconds(void) {
+    LARGE_INTEGER frequency;
+    LARGE_INTEGER counter;
+    QueryPerformanceFrequency(&frequency);
+    QueryPerformanceCounter(&counter);
+    return (uint64_t)(counter.QuadPart * 1000000 / frequency.QuadPart);
+}
+#else
+#include <time.h>
+static inline uint64_t getMicroseconds(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
+}
+#endif
 
 static inline void dumpStructHex(const void* p, size_t n) {
     const uint8_t* b = (const uint8_t*)p;

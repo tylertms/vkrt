@@ -3,7 +3,6 @@
 #include "validation.h"
 
 #include <stdio.h>
-#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -21,23 +20,6 @@ const VkPhysicalDeviceType rankedDeviceTypes[4] = {
     VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU,
     VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU
 };
-
-#if defined(_WIN32) || defined(_WIN64)
-    #include <windows.h>
-    uint64_t getMicroseconds() {
-        LARGE_INTEGER frequency, counter;
-        QueryPerformanceFrequency(&frequency);
-        QueryPerformanceCounter(&counter);
-        return (uint64_t)(counter.QuadPart * 1000000 / frequency.QuadPart);
-    }
-#else
-    #include <time.h>
-    uint64_t getMicroseconds() {
-        struct timespec ts;
-        clock_gettime(CLOCK_MONOTONIC, &ts);
-        return (uint64_t)ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
-    }
-#endif
 
 void pickPhysicalDevice(VKRT* vkrt) {
     vkrt->core.physicalDevice = VK_NULL_HANDLE;
