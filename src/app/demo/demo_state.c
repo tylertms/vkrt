@@ -60,6 +60,8 @@ void deinitDemoGUIState(DemoGUIState* state) {
 
     state->meshLabels = NULL;
     state->meshLabelCount = 0;
+
+    demoGUIClearPendingAddPath(state);
 }
 
 void demoGUIOnMeshAdded(DemoGUIState* state, const char* filename, uint32_t meshIndex) {
@@ -89,6 +91,21 @@ void demoGUIOnMeshRemoved(DemoGUIState* state, uint32_t removedIndex) {
 
     char** shrunk = (char**)realloc(state->meshLabels, (size_t)state->meshLabelCount * sizeof(char*));
     if (shrunk) state->meshLabels = shrunk;
+}
+
+void demoGUIQueueAddMeshPath(DemoGUIState* state, const char* path) {
+    if (!state) return;
+
+    demoGUIClearPendingAddPath(state);
+    if (!path || !path[0]) return;
+
+    state->pendingAddPath = copyString(path);
+}
+
+void demoGUIClearPendingAddPath(DemoGUIState* state) {
+    if (!state || !state->pendingAddPath) return;
+    free(state->pendingAddPath);
+    state->pendingAddPath = NULL;
 }
 
 const char* demoGUIGetMeshLabel(const DemoGUIState* state, uint32_t meshIndex) {

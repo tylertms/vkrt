@@ -4,10 +4,23 @@
 #include "dcimgui_impl_glfw.h"
 #include "dcimgui_impl_vulkan.h"
 #include "dcimgui_internal.h"
-#include "object.h"
-
 #include <math.h>
 #include <stdio.h>
+
+#include "tinyfiledialogs.h"
+
+static const char* openMeshFileDialog(void) {
+    const char* filters[] = {"*.glb", "*.gltf"};
+    return tinyfd_openFileDialog(
+        "Select mesh",
+        "assets/models",
+        2,
+        filters,
+        "glTF files",
+        0
+    );
+}
+
 // Called after all of Vulkan has been initialized
 void initGUI(VKRT* vkrt, void* userData) {
     (void)userData;
@@ -142,16 +155,10 @@ void drawGUI(VKRT* vkrt, VkCommandBuffer commandBuffer, void* userData) {
     ImGui_Text("Meshes");
 
     if (ImGui_ButtonEx("+ Add Mesh", (ImVec2){-1.0f, 0.0f})) {
-        ImGui_OpenPopup("add_mesh_popup", ImGuiPopupFlags_None);
-    }
-    if (ImGui_BeginPopup("add_mesh_popup", ImGuiWindowFlags_None)) {
-        if (ImGui_MenuItem("Sphere")) {
-            guiState->pendingAddSphere = 1;
+        const char* selectedPath = openMeshFileDialog();
+        if (selectedPath && selectedPath[0]) {
+            demoGUIQueueAddMeshPath(guiState, selectedPath);
         }
-        if (ImGui_MenuItem("Dragon")) {
-            guiState->pendingAddDragon = 1;
-        }
-        ImGui_EndPopup();
     }
 
     uint32_t meshCount = VKRT_getMeshCount(vkrt);

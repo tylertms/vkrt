@@ -10,6 +10,7 @@ project('vkrt', ['c', 'cpp'],
 cc = meson.get_compiler('c')
 c_args = ['-D_GNU_SOURCE']
 
+
 glslc = find_program('glslc', required: true)
 
 # ----- Includes -----
@@ -19,6 +20,7 @@ includes = include_directories(
   'external/imgui/icons',
   'external/cglm/include',
   'external/cgltf/include',
+  'external/tinyfiledialogs',
   'src/core/api',
   'src/core/runtime',
   'src/core/render',
@@ -89,7 +91,9 @@ executable('vkrt',
     'src/app/demo/main.c',
     'src/app/demo/gui.c',
     'src/app/demo/demo_state.c',
+    'src/app/demo/demo_actions.c',
     'src/app/importers/object.c',
+    'external/tinyfiledialogs/tinyfiledialogs.c',
   ),
   dependencies: dependencies,
   include_directories: includes,
