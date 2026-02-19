@@ -48,7 +48,7 @@ static int get_exe_dir(char* out, size_t sz) {
 static FILE* fopen_exe_relative(const char* relpath, const char* mode) {
     char buf[4096];
     if (get_exe_dir(buf, sizeof buf) < 0) {
-        perror("ERROR: cannot get exe path");
+        perror("[ERROR]: cannot get exe path");
         return NULL;
     }
 
@@ -61,7 +61,7 @@ static FILE* fopen_exe_relative(const char* relpath, const char* mode) {
 const char* readFile(const char* filename, size_t* fileSize) {
     FILE* file = fopen_exe_relative(filename, "rb");
     if (!file) {
-        perror("ERROR: Failed to open file");
+        perror("[ERROR]: Failed to open file");
         exit(EXIT_FAILURE);
     }
     fseek(file, 0, SEEK_END);
@@ -70,7 +70,7 @@ const char* readFile(const char* filename, size_t* fileSize) {
 
     char* buffer = malloc(*fileSize);
     if (!buffer) {
-        perror("ERROR: Failed to allocate memory!");
+        perror("[ERROR]: Failed to allocate memory!");
         fclose(file);
         exit(EXIT_FAILURE);
     }

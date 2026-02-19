@@ -37,7 +37,7 @@ static void ensureMeshSlotCount(EditorState* state, uint32_t requiredCount) {
 
     char** resized = (char**)realloc(state->meshNames, (size_t)requiredCount * sizeof(char*));
     if (!resized) {
-        perror("ERROR: Failed to resize mesh label list");
+        perror("[ERROR]: Failed to resize mesh label list");
         exit(EXIT_FAILURE);
     }
 

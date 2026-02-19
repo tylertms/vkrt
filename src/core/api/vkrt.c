@@ -97,7 +97,7 @@ static void rebuildMeshBuffersAndStructures(VKRT* vkrt) {
         if (!packedVertices || !packedIndices) {
             free(packedVertices);
             free(packedIndices);
-            perror("ERROR: Failed to allocate packed mesh buffers");
+            perror("[ERROR]: Failed to allocate packed mesh buffers");
             exit(EXIT_FAILURE);
         }
 
@@ -178,7 +178,7 @@ int VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInfo) {
     if (!vkrt || !createInfo) return -1;
 
     if (!glfwInit()) {
-        perror("ERROR: Failed to initialize GLFW");
+        perror("[ERROR]: Failed to initialize GLFW");
         return -1;
     }
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -198,7 +198,7 @@ int VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInfo) {
 
     vkrt->runtime.window = glfwCreateWindow((int)width, (int)height, title, 0, 0);
     if (!vkrt->runtime.window) {
-        perror("ERROR: Failed to create GLFW window");
+        perror("[ERROR]: Failed to create GLFW window");
         glfwTerminate();
         return -1;
     }
@@ -363,7 +363,7 @@ void VKRT_beginFrame(VKRT* vkrt) {
     }
 
     if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
-        perror("ERROR: Failed to acquire next swapchain image");
+        perror("[ERROR]: Failed to acquire next swapchain image");
         exit(EXIT_FAILURE);
     }
 
@@ -401,7 +401,7 @@ void VKRT_trace(VKRT* vkrt) {
     submitInfo.pSignalSemaphores = signalSemaphores;
 
     if (vkQueueSubmit(vkrt->core.graphicsQueue, 1, &submitInfo, vkrt->runtime.inFlightFences[vkrt->runtime.currentFrame]) != VK_SUCCESS) {
-        perror("ERROR: Failed to submit draw queue");
+        perror("[ERROR]: Failed to submit draw queue");
         exit(EXIT_FAILURE);
     }
 
@@ -429,7 +429,7 @@ void VKRT_present(VKRT* vkrt) {
     }
 
     if (result != VK_SUCCESS) {
-        perror("ERROR: Failed to present draw queue");
+        perror("[ERROR]: Failed to present draw queue");
         exit(EXIT_FAILURE);
     }
 
@@ -463,14 +463,14 @@ void VKRT_uploadMeshData(VKRT* vkrt, const Vertex* vertices, size_t vertexCount,
     vkDeviceWaitIdle(vkrt->core.device);
 
     if (vertexCount > UINT32_MAX || indexCount > UINT32_MAX) {
-        perror("ERROR: Mesh too large");
+        perror("[ERROR]: Mesh too large");
         return;
     }
 
     uint32_t newCount = vkrt->core.meshData.count + 1;
     Mesh* resized = (Mesh*)realloc(vkrt->core.meshes, (size_t)newCount * sizeof(Mesh));
     if (!resized) {
-        perror("ERROR: Failed to grow mesh list");
+        perror("[ERROR]: Failed to grow mesh list");
         return;
     }
 
@@ -509,7 +509,7 @@ void VKRT_uploadMeshData(VKRT* vkrt, const Vertex* vertices, size_t vertexCount,
             free(mesh->indices);
             mesh->vertices = NULL;
             mesh->indices = NULL;
-            perror("ERROR: Failed to allocate mesh host data");
+            perror("[ERROR]: Failed to allocate mesh host data");
             return;
         }
 

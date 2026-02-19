@@ -55,7 +55,7 @@ void createDescriptorSetLayout(VKRT* vkrt) {
     descriptorSetlayoutCreateInfo.pBindings = bindings;
 
     if (vkCreateDescriptorSetLayout(vkrt->core.device, &descriptorSetlayoutCreateInfo, NULL, &vkrt->core.descriptorSetLayout) != VK_SUCCESS) {
-        perror("ERROR: Failed to create descriptor set layout");
+        perror("[ERROR]: Failed to create descriptor set layout");
         exit(EXIT_FAILURE);
     }
 }
@@ -77,7 +77,7 @@ void createDescriptorPool(VKRT* vkrt) {
     descriptorPoolCreateInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
 
     if (vkCreateDescriptorPool(vkrt->core.device, &descriptorPoolCreateInfo, NULL, &vkrt->core.descriptorPool) != VK_SUCCESS) {
-        perror("ERROR: Failed to create descriptor pool");
+        perror("[ERROR]: Failed to create descriptor pool");
         exit(EXIT_FAILURE);
     }
 }
@@ -90,7 +90,7 @@ void createDescriptorSet(VKRT* vkrt) {
     descriptorSetAllocateInfo.pSetLayouts = &vkrt->core.descriptorSetLayout;
 
     if (vkAllocateDescriptorSets(vkrt->core.device, &descriptorSetAllocateInfo, &vkrt->core.descriptorSet) != VK_SUCCESS) {
-        perror("ERROR: Failed to allocate descriptor sets");
+        perror("[ERROR]: Failed to allocate descriptor sets");
         exit(EXIT_FAILURE);
     }
 

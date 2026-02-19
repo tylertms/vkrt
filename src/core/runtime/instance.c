@@ -6,7 +6,7 @@
 
 void createInstance(VKRT* vkrt) {
     if (enableValidationLayers && !checkValidationLayerSupport()) {
-        perror("ERROR: Validation layers requested but not available");
+        perror("[ERROR]: Validation layers requested but not available");
         exit(EXIT_FAILURE);
     }
 
@@ -42,7 +42,7 @@ void createInstance(VKRT* vkrt) {
     }
 
     if (vkCreateInstance(&instanceCreateInfo, 0, &vkrt->core.instance) != VK_SUCCESS) {
-        perror("ERROR: Failed to create instance");
+        perror("[ERROR]: Failed to create instance");
         free(extensions);
         exit(EXIT_FAILURE);
     }

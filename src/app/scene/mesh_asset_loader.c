@@ -59,7 +59,7 @@ static uint32_t readIndexValue(const cgltf_accessor* accessor, const uint8_t* ba
         return value;
     }
 
-    fprintf(stderr, "ERROR: Unsupported index component type %u\n", accessor->component_type);
+    fprintf(stderr, "[ERROR]: Unsupported index component type %u\n", accessor->component_type);
     exit(EXIT_FAILURE);
 }
 
@@ -99,8 +99,14 @@ static ParsedMeshData parseMeshData(const cgltf_data* data) {
                 cgltf_accessor_read_float(normalAccessor, vertexOffset, normal, 3);
 
                 Vertex* destination = &parsed.vertices[vertexBase + vertexOffset];
-                memcpy(destination->position, position, sizeof(position));
-                memcpy(destination->normal, normal, sizeof(normal));
+                memset(destination, 0, sizeof(*destination));
+                destination->position[0] = position[0];
+                destination->position[1] = position[1];
+                destination->position[2] = position[2];
+                destination->position[3] = 1.0f;
+                destination->normal[0] = normal[0];
+                destination->normal[1] = normal[1];
+                destination->normal[2] = normal[2];
             }
 
             cgltf_accessor* indexAccessor = primitive->indices;
@@ -127,13 +133,13 @@ void meshAssetLoadFromFile(VKRT* runtime, const char* filePath) {
     cgltf_data* data = NULL;
 
     if (cgltf_parse_file(&options, filePath, &data) != cgltf_result_success) {
-        fprintf(stderr, "ERROR: Failed to parse GLTF '%s'\n", filePath);
+        fprintf(stderr, "[ERROR]: Failed to parse GLTF '%s'\n", filePath);
         exit(EXIT_FAILURE);
     }
 
     if (cgltf_load_buffers(&options, data, filePath) != cgltf_result_success) {
         cgltf_free(data);
-        fprintf(stderr, "ERROR: Failed to load buffers for '%s'\n", filePath);
+        fprintf(stderr, "[ERROR]: Failed to load buffers for '%s'\n", filePath);
         exit(EXIT_FAILURE);
     }
 

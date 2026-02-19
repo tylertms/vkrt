@@ -46,7 +46,7 @@ void pickPhysicalDevice(VKRT* vkrt) {
     vkEnumeratePhysicalDevices(vkrt->core.instance, &deviceCount, NULL);
 
     if (deviceCount == 0) {
-        perror("ERROR: Failed to find a GPU with Vulkan support");
+        perror("[ERROR]: Failed to find a GPU with Vulkan support");
         exit(EXIT_FAILURE);
     }
 
@@ -67,7 +67,7 @@ void pickPhysicalDevice(VKRT* vkrt) {
     }
 
     if (bestDevice < 0) {
-        perror("ERROR: Failed to find a suitable GPU");
+        perror("[ERROR]: Failed to find a suitable GPU");
         free(devices);
         exit(EXIT_FAILURE);
     }
@@ -77,7 +77,7 @@ void pickPhysicalDevice(VKRT* vkrt) {
     VkPhysicalDeviceProperties deviceProperties = {0};
     vkGetPhysicalDeviceProperties(vkrt->core.physicalDevice, &deviceProperties);
 
-    printf("INFO: Using device [%s].\n", deviceProperties.deviceName);
+    printf("[INFO]: Using device [%s].\n", deviceProperties.deviceName);
     snprintf(vkrt->core.deviceName, COUNT_OF(vkrt->core.deviceName), "%s", deviceProperties.deviceName);
     free(devices);
 }
@@ -155,7 +155,7 @@ void createLogicalDevice(VKRT* vkrt) {
     }
 
     if (vkCreateDevice(vkrt->core.physicalDevice, &createInfo, NULL, &vkrt->core.device) != VK_SUCCESS) {
-        perror("ERROR: Failed to create logical device");
+        perror("[ERROR]: Failed to create logical device");
         exit(EXIT_FAILURE);
     }
 
@@ -173,7 +173,7 @@ void createQueryPool(VKRT* vkrt) {
     };
 
     if (vkCreateQueryPool(vkrt->core.device, &qp, NULL, &vkrt->runtime.timestampPool) != VK_SUCCESS) {
-        perror("ERROR: Failed to create timestamp query pool");
+        perror("[ERROR]: Failed to create timestamp query pool");
         exit(EXIT_FAILURE);
     }
 
@@ -303,6 +303,6 @@ uint32_t findMemoryType(VKRT* vkrt, uint32_t typeFilter, VkMemoryPropertyFlags p
         }
     }
 
-    perror("ERROR: Failed to find suitable memory type");
+    perror("[ERROR]: Failed to find suitable memory type");
     exit(EXIT_FAILURE);
 }

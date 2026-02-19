@@ -92,7 +92,6 @@ executable('vkrt',
   c_args: c_args,
   sources: files(
     'src/app/main.c',
-    'src/app/app.c',
     'src/app/state/editor_state.c',
     'src/app/scene/mesh_asset_loader.c',
     'src/app/scene/scene_controller.c',

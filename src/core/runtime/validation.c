@@ -92,7 +92,7 @@ void setupDebugMessenger(VKRT* vkrt) {
     populateDebugMessengerCreateInfo(&createInfo);
 
     if (CreateDebugUtilsMessengerEXT(vkrt->core.instance, &createInfo, 0, &vkrt->core.debugMessenger) != VK_SUCCESS) {
-        perror("ERROR: Failed to set up debug messenger");
+        perror("[ERROR]: Failed to set up debug messenger");
         exit(EXIT_FAILURE);
     }
 }
@@ -116,15 +116,15 @@ void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT
 const char* severityString(VkDebugUtilsMessageSeverityFlagBitsEXT severity) {
     switch (severity) {
     case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
-        return "VERBOSE";
+        return "[VERBOSE]";
     case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
-        return "INFO";
+        return "[INFO]";
     case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
-        return "ERROR";
+        return "[ERROR]";
     case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
-        return "WARNING";
+        return "[WARNING]";
     default:
-        return "OTHER";
+        return "[OTHER]";
     }
 }
 
