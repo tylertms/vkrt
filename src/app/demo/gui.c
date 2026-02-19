@@ -192,9 +192,9 @@ void drawGUI(VKRT* vkrt, VkCommandBuffer commandBuffer, void* userData) {
         float scale[3] = {meshInfo->scale[0], meshInfo->scale[1], meshInfo->scale[2]};
 
         bool transformChanged = false;
-        transformChanged |= ImGui_DragFloat3Ex("Translate", position, 0.01f, 0.0f, 0.0f, "%.3f", ImGuiSliderFlags_None);
+        transformChanged |= ImGui_DragFloat3Ex("Translate", position, 0.001f, 0.0f, 0.0f, "%.3f", ImGuiSliderFlags_None);
         transformChanged |= ImGui_DragFloat3Ex("Rotate", rotation, 0.05f, 0.0f, 0.0f, "%.2f", ImGuiSliderFlags_None);
-        transformChanged |= ImGui_DragFloat3Ex("Scale", scale, 0.01f, 0.001f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        transformChanged |= ImGui_DragFloat3Ex("Scale", scale, 0.001f, 0.001f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
 
         if (transformChanged) {
             for (int axis = 0; axis < 3; axis++) {
