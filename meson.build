@@ -26,8 +26,10 @@ includes = include_directories(
   'src/core/render',
   'src/core/scene',
   'src/core/util',
-  'src/app/demo',
-  'src/app/importers',
+  'src/app',
+  'src/app/state',
+  'src/app/scene',
+  'src/app/ui',
   is_system: true
 )
 
@@ -84,15 +86,17 @@ vkrt = static_library('vkrt_core',
   link_language: 'cpp'
 )
 
-# ----- Demo executable -----
+# ----- App executable -----
 executable('vkrt',
   c_args: c_args,
   sources: files(
-    'src/app/demo/main.c',
-    'src/app/demo/gui.c',
-    'src/app/demo/demo_state.c',
-    'src/app/demo/demo_actions.c',
-    'src/app/importers/object.c',
+    'src/app/main.c',
+    'src/app/app.c',
+    'src/app/state/editor_state.c',
+    'src/app/scene/mesh_asset_loader.c',
+    'src/app/scene/scene_controller.c',
+    'src/app/ui/editor_theme.c',
+    'src/app/ui/editor_ui.c',
     'external/tinyfiledialogs/tinyfiledialogs.c',
   ),
   dependencies: dependencies,
