@@ -16,6 +16,7 @@ glslc = find_program('glslc', required: true)
 includes = include_directories(
   'external/glfw3/include',
   'external/imgui/include',
+  'external/imgui/icons',
   'external/cglm/include',
   'external/cgltf/include',
   'src/core/api',
@@ -87,6 +88,7 @@ executable('vkrt',
   sources: files(
     'src/app/demo/main.c',
     'src/app/demo/gui.c',
+    'src/app/demo/demo_state.c',
     'src/app/importers/object.c',
   ),
   dependencies: dependencies,

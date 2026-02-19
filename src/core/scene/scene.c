@@ -128,6 +128,11 @@ void createSceneUniform(VKRT* vkrt) {
         .up = {0.0f, 0.0f, 1.0f}
     };
 
+    vkrt->core.sceneData->viewportRect[0] = 0;
+    vkrt->core.sceneData->viewportRect[1] = 0;
+    vkrt->core.sceneData->viewportRect[2] = vkrt->state.camera.width;
+    vkrt->core.sceneData->viewportRect[3] = vkrt->state.camera.height;
+
     updateMatricesFromCamera(vkrt);
 }
 

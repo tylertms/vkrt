@@ -47,11 +47,9 @@ void main() {
 
     float u = barycentrics.x;
     float v = barycentrics.y;
-    vec3 localNormal = normalize(normal0 * (1.0 - u - v) + normal1 * u + normal2 * v);
 
-    mat3 normalMatrix = transpose(mat3(gl_WorldToObject3x4EXT));
-    vec3 worldNormal = normalize(normalMatrix * localNormal);
+    vec3 localNormal = normalize(normal0 * (1.0 - u - v) + normal1 * u + normal2 * v);
+    vec3 worldNormal = normalize(localNormal * mat3(gl_ObjectToWorld3x4EXT));
 
     color = worldNormal * 0.5 + 0.5;
 }
-

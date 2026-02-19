@@ -17,6 +17,8 @@ typedef struct SceneData {
     mat4 viewInverse;
     mat4 projInverse;
     uint32_t frameNumber;
+    uint32_t padding0[3];
+    uint32_t viewportRect[4]; // x, y, width, height in framebuffer pixels
 } SceneData;
 
 typedef struct Camera {
@@ -205,6 +207,7 @@ void VKRT_invalidateAccumulation(VKRT* vkrt);
 
 uint32_t VKRT_getMeshCount(const VKRT* vkrt);
 int VKRT_setMeshTransform(VKRT* vkrt, uint32_t meshIndex, vec3 position, vec3 rotation, vec3 scale);
+void VKRT_setRenderViewport(VKRT* vkrt, uint32_t x, uint32_t y, uint32_t width, uint32_t height);
 void VKRT_cameraSetPose(VKRT* vkrt, vec3 position, vec3 target, vec3 up, float vfov);
 void VKRT_cameraGetPose(const VKRT* vkrt, vec3 position, vec3 target, vec3 up, float* vfov);
 void VKRT_framebufferResizedCallback(GLFWwindow* window, int width, int height);

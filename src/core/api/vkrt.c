@@ -460,6 +460,8 @@ void VKRT_draw(VKRT* vkrt) {
 void VKRT_uploadMeshData(VKRT* vkrt, const Vertex* vertices, size_t vertexCount, const uint32_t* indices, size_t indexCount) {
     if (!vkrt || !vertices || !indices || vertexCount == 0 || indexCount == 0) return;
 
+    vkDeviceWaitIdle(vkrt->core.device);
+
     if (vertexCount > UINT32_MAX || indexCount > UINT32_MAX) {
         perror("ERROR: Mesh too large");
         return;
@@ -629,6 +631,47 @@ int VKRT_setMeshTransform(VKRT* vkrt, uint32_t meshIndex, vec3 position, vec3 ro
     return 0;
 }
 
+void VKRT_setRenderViewport(VKRT* vkrt, uint32_t x, uint32_t y, uint32_t width, uint32_t height) {
+    if (!vkrt || !vkrt->core.sceneData) return;
+
+    uint32_t fullWidth = vkrt->runtime.swapChainExtent.width;
+    uint32_t fullHeight = vkrt->runtime.swapChainExtent.height;
+
+    if (width == 0 || height == 0 || fullWidth == 0 || fullHeight == 0) {
+        x = 0;
+        y = 0;
+        width = fullWidth;
+        height = fullHeight;
+    }
+
+    if (width <= 1 || height <= 1) {
+        x = 0;
+        y = 0;
+        width = fullWidth;
+        height = fullHeight;
+    }
+
+    if (x >= fullWidth) x = fullWidth - 1;
+    if (y >= fullHeight) y = fullHeight - 1;
+    if (x + width > fullWidth) width = fullWidth - x;
+    if (y + height > fullHeight) height = fullHeight - y;
+
+    uint32_t* rect = vkrt->core.sceneData->viewportRect;
+    if (rect[0] == x && rect[1] == y && rect[2] == width && rect[3] == height &&
+        vkrt->state.camera.width == width && vkrt->state.camera.height == height) {
+        return;
+    }
+
+    rect[0] = x;
+    rect[1] = y;
+    rect[2] = width;
+    rect[3] = height;
+
+    vkrt->state.camera.width = width;
+    vkrt->state.camera.height = height;
+    updateMatricesFromCamera(vkrt);
+}
+
 void VKRT_cameraSetPose(VKRT* vkrt, vec3 position, vec3 target, vec3 up, float vfov) {
     if (!vkrt) return;
 
@@ -643,9 +686,9 @@ void VKRT_cameraSetPose(VKRT* vkrt, vec3 position, vec3 target, vec3 up, float v
 void VKRT_cameraGetPose(const VKRT* vkrt, vec3 position, vec3 target, vec3 up, float* vfov) {
     if (!vkrt) return;
 
-    if (position) glm_vec3_copy(vkrt->state.camera.pos, position);
-    if (target) glm_vec3_copy(vkrt->state.camera.target, target);
-    if (up) glm_vec3_copy(vkrt->state.camera.up, up);
+    if (position) memcpy(position, vkrt->state.camera.pos, sizeof(vec3));
+    if (target) memcpy(target, vkrt->state.camera.target, sizeof(vec3));
+    if (up) memcpy(up, vkrt->state.camera.up, sizeof(vec3));
     if (vfov) *vfov = vkrt->state.camera.vfov;
 }
 

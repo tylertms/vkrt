@@ -110,7 +110,7 @@ void recreateSwapChain(VKRT* vkrt) {
 
     updateDescriptorSet(vkrt);
     createFramebuffers(vkrt);
-    updateMatricesFromCamera(vkrt);
+    VKRT_setRenderViewport(vkrt, 0, 0, vkrt->runtime.swapChainExtent.width, vkrt->runtime.swapChainExtent.height);
 
     vkrt->core.sceneData->frameNumber = -1;
 }

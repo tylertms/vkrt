@@ -4,7 +4,10 @@
 #include "dcimgui_impl_glfw.h"
 #include "dcimgui_impl_vulkan.h"
 #include "dcimgui_internal.h"
+#include "object.h"
 
+#include <math.h>
+#include <stdio.h>
 // Called after all of Vulkan has been initialized
 void initGUI(VKRT* vkrt, void* userData) {
     (void)userData;
@@ -48,11 +51,165 @@ void deinitGUI(VKRT* vkrt, void* userData) {
 }
 
 void drawGUI(VKRT* vkrt, VkCommandBuffer commandBuffer, void* userData) {
-    (void)userData;
+    DemoGUIState* guiState = (DemoGUIState*)userData;
 
     cImGui_ImplGlfw_NewFrame();
     cImGui_ImplVulkan_NewFrame();
     ImGui_NewFrame();
+
+    const ImGuiViewport* mainViewport = ImGui_GetMainViewport();
+    ImGuiID dockspaceID = ImGui_GetID("MainDockSpace");
+
+    ImGui_SetNextWindowPos(mainViewport->Pos, ImGuiCond_Always);
+    ImGui_SetNextWindowSize(mainViewport->Size, ImGuiCond_Always);
+    ImGui_SetNextWindowViewport(mainViewport->ID);
+
+    ImGuiWindowFlags dockHostFlags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
+                                     ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                                     ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus |
+                                     ImGuiWindowFlags_NoBackground;
+
+    ImGui_PushStyleVarImVec2(ImGuiStyleVar_WindowPadding, (ImVec2){0.0f, 0.0f});
+    ImGui_PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    ImGui_Begin("MainDockHost", NULL, dockHostFlags);
+    ImGui_PopStyleVarEx(2);
+
+    ImGui_DockSpaceEx(dockspaceID, (ImVec2){0.0f, 0.0f}, ImGuiDockNodeFlags_None, NULL);
+
+    static int dockLayoutInitialized = 0;
+    if (!dockLayoutInitialized) {
+        dockLayoutInitialized = 1;
+
+        ImGui_DockBuilderRemoveNode(dockspaceID);
+        ImGui_DockBuilderAddNodeEx(dockspaceID, ImGuiDockNodeFlags_DockSpace);
+        ImGui_DockBuilderSetNodeSize(dockspaceID, mainViewport->Size);
+
+        ImGuiID sceneDockID = 0;
+        ImGuiID viewportDockID = dockspaceID;
+        ImGui_DockBuilderSplitNode(dockspaceID, ImGuiDir_Left, 0.24f, &sceneDockID, &viewportDockID);
+        ImGui_DockBuilderDockWindow("Scene", sceneDockID);
+        ImGui_DockBuilderDockWindow("Viewport", viewportDockID);
+        ImGui_DockBuilderFinish(dockspaceID);
+    }
+
+    ImGui_End();
+
+    ImGui_PushStyleVarImVec2(ImGuiStyleVar_WindowPadding, (ImVec2){0.0f, 0.0f});
+    ImGui_Begin("Viewport", NULL, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoBackground);
+    bool viewportHovered = ImGui_IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows);
+
+    ImVec2 contentPos = ImGui_GetCursorScreenPos();
+    ImVec2 contentAvail = ImGui_GetContentRegionAvail();
+    ImVec2 fbScale = ImGui_GetIO()->DisplayFramebufferScale;
+
+    float viewportX0 = floorf(contentPos.x * fbScale.x);
+    float viewportY0 = floorf(contentPos.y * fbScale.y);
+    float viewportX1 = ceilf((contentPos.x + contentAvail.x) * fbScale.x);
+    float viewportY1 = ceilf((contentPos.y + contentAvail.y) * fbScale.y);
+
+    float viewportW = viewportX1 - viewportX0;
+    float viewportH = viewportY1 - viewportY0;
+
+    uint32_t renderX = viewportW > 0.0f ? (uint32_t)viewportX0 : 0;
+    uint32_t renderY = viewportH > 0.0f ? (uint32_t)viewportY0 : 0;
+    uint32_t renderW = viewportW > 1.0f ? (uint32_t)viewportW : 1;
+    uint32_t renderH = viewportH > 1.0f ? (uint32_t)viewportH : 1;
+    VKRT_setRenderViewport(vkrt, renderX, renderY, renderW, renderH);
+
+    ImGui_End();
+    ImGui_PopStyleVar();
+
+    ImGui_PushStyleColorImVec4(ImGuiCol_WindowBg, (ImVec4){0.08f, 0.08f, 0.08f, 1.00f});
+    ImGui_Begin("Scene", NULL, 0);
+    ImGui_PopStyleColor();
+
+    ImGui_Text("Device: %s", vkrt->core.deviceName);
+    ImGui_Text("Resolution: %dx%d", vkrt->state.camera.width, vkrt->state.camera.height);
+
+    if (ImGui_Checkbox("V-Sync", (bool*)&vkrt->runtime.vsync)) {
+        vkrt->runtime.framebufferResized = VK_TRUE;
+    }
+
+    ImGui_Separator();
+    ImGui_Text("FPS:                %6d", vkrt->state.framesPerSecond);
+    ImGui_Text("Render time:        %6.3f ms", vkrt->state.renderTimeMs);
+    ImGui_Text("Frame time:         %6.3f ms", vkrt->state.displayTimeMs);
+    ImGui_Text("Average frame time: %6.3f ms", vkrt->state.averageFrametime);
+
+    ImGui_PlotLinesEx("##frametimes", vkrt->state.frametimes, COUNT_OF(vkrt->state.frametimes), (int)vkrt->state.frametimeStartIndex, "", 0.0f, 2 * vkrt->state.averageFrametime, (ImVec2){220.0f, 60.0f}, sizeof(float));
+
+    ImGui_Separator();
+    ImGui_Text("Meshes");
+
+    if (ImGui_ButtonEx("+ Add Mesh", (ImVec2){-1.0f, 0.0f})) {
+        ImGui_OpenPopup("add_mesh_popup", ImGuiPopupFlags_None);
+    }
+    if (ImGui_BeginPopup("add_mesh_popup", ImGuiWindowFlags_None)) {
+        if (ImGui_MenuItem("Sphere")) {
+            guiState->pendingAddSphere = 1;
+        }
+        if (ImGui_MenuItem("Dragon")) {
+            guiState->pendingAddDragon = 1;
+        }
+        ImGui_EndPopup();
+    }
+
+    uint32_t meshCount = VKRT_getMeshCount(vkrt);
+    if (meshCount == 0) {
+        ImGui_TextDisabled("No meshes loaded");
+    }
+
+    for (uint32_t i = 0; i < meshCount;) {
+        Mesh* mesh = &vkrt->core.meshes[i];
+        MeshInfo* meshInfo = &mesh->info;
+
+        char header[160] = {0};
+        snprintf(header, sizeof(header), "Mesh %u (%s)", i, demoGUIGetMeshLabel(guiState, i));
+
+        ImGui_PushIDInt((int)i);
+        bool visible = true;
+        bool open = ImGui_CollapsingHeaderBoolPtr(header, &visible, ImGuiTreeNodeFlags_DefaultOpen);
+        if (!visible) {
+            guiState->pendingRemoveIndex = i;
+            ImGui_PopID();
+            i++;
+            continue;
+        }
+
+        if (!mesh->ownsGeometry && mesh->geometrySource < meshCount) {
+            ImGui_SameLine();
+            ImGui_TextDisabled("-> %u", mesh->geometrySource);
+        }
+
+        if (!open) {
+            ImGui_PopID();
+            i++;
+            continue;
+        }
+
+        float position[3] = {meshInfo->position[0], meshInfo->position[1], meshInfo->position[2]};
+        float rotation[3] = {meshInfo->rotation[0], meshInfo->rotation[1], meshInfo->rotation[2]};
+        float scale[3] = {meshInfo->scale[0], meshInfo->scale[1], meshInfo->scale[2]};
+
+        bool transformChanged = false;
+        transformChanged |= ImGui_DragFloat3Ex("Translate", position, 0.01f, 0.0f, 0.0f, "%.3f", ImGuiSliderFlags_None);
+        transformChanged |= ImGui_DragFloat3Ex("Rotate", rotation, 0.05f, 0.0f, 0.0f, "%.2f", ImGuiSliderFlags_None);
+        transformChanged |= ImGui_DragFloat3Ex("Scale", scale, 0.01f, 0.001f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+
+        if (transformChanged) {
+            for (int axis = 0; axis < 3; axis++) {
+                rotation[axis] = fmodf(rotation[axis], 360.0f);
+                if (rotation[axis] < -180.0f) rotation[axis] += 360.0f;
+                if (rotation[axis] >= 180.0f) rotation[axis] -= 360.0f;
+            }
+
+            VKRT_setMeshTransform(vkrt, i, position, rotation, scale);
+        }
+
+        ImGui_PopID();
+        i++;
+    }
+    ImGui_End();
 
     ImGuiIO* io = ImGui_GetIO();
     VKRT_CameraInput cameraInput = {
@@ -61,40 +218,12 @@ void drawGUI(VKRT* vkrt, VkCommandBuffer commandBuffer, void* userData) {
         .panDx = io->MouseDelta.x,
         .panDy = io->MouseDelta.y,
         .scroll = io->MouseWheel,
-        .orbiting = ImGui_IsMouseDragging(ImGuiMouseButton_Left, -1.0f),
-        .panning = ImGui_IsMouseDragging(ImGuiMouseButton_Right, -1.0f),
-        .captureMouse = io->WantCaptureMouse,
+        .orbiting = viewportHovered && ImGui_IsMouseDragging(ImGuiMouseButton_Left, -1.0f),
+        .panning = viewportHovered && ImGui_IsMouseDragging(ImGuiMouseButton_Right, -1.0f),
+        .captureMouse = !viewportHovered,
     };
     VKRT_applyCameraInput(vkrt, &cameraInput);
 
-    {
-        ImGui_PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-        ImGui_PushStyleVar(ImGuiStyleVar_GrabRounding, 8.0f);
-        ImGui_PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
-
-        bool open = true;
-        ImGui_Begin("Statistics", &open, ImGuiWindowFlags_NoTitleBar);
-
-        ImGui_Text("Device: %s", vkrt->core.deviceName);
-        ImGui_Text("Resolution: %dx%d", vkrt->state.camera.width, vkrt->state.camera.height);
-
-        if (ImGui_Checkbox("V-Sync", (bool*)&vkrt->runtime.vsync)) {
-            vkrt->runtime.framebufferResized = VK_TRUE;
-        }
-
-        ImGui_NewLine();
-        ImGui_Text("FPS:                %6d", vkrt->state.framesPerSecond);
-        ImGui_Text("Render time:        %6.3f ms", vkrt->state.renderTimeMs);
-        ImGui_Text("Frame time:         %6.3f ms", vkrt->state.displayTimeMs);
-        ImGui_Text("Average frame time: %6.3f ms", vkrt->state.averageFrametime);
-        ImGui_NewLine();
-
-        ImGui_PlotLinesEx("##", vkrt->state.frametimes, COUNT_OF(vkrt->state.frametimes), (int)vkrt->state.frametimeStartIndex, "", 0.0f, 2 * vkrt->state.averageFrametime, (ImVec2){160.0f, 40.0f}, sizeof(float));
-
-        ImGui_PopStyleVarEx(3);
-    }
-
-    ImGui_End();
     ImGui_Render();
     cImGui_ImplVulkan_RenderDrawData(ImGui_GetDrawData(), commandBuffer);
 }
