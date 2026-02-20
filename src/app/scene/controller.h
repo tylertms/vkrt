@@ -1,6 +1,6 @@
 #pragma once
 
-#include "editor_state.h"
+#include "state.h"
 #include "vkrt.h"
 
 void sceneControllerImportMesh(VKRT* runtime, EditorState* state, const char* path);

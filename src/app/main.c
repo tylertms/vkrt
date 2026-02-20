@@ -1,6 +1,6 @@
-#include "editor_state.h"
-#include "editor_ui.h"
-#include "scene_controller.h"
+#include "state.h"
+#include "editor.h"
+#include "controller.h"
 #include "vkrt.h"
 
 #include <stdio.h>

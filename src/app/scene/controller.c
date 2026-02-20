@@ -1,6 +1,6 @@
-#include "scene_controller.h"
+#include "controller.h"
 
-#include "mesh_asset_loader.h"
+#include "loader.h"
 #include "debug.h"
 
 #include <stdint.h>

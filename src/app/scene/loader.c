@@ -1,4 +1,4 @@
-#include "mesh_asset_loader.h"
+#include "loader.h"
 
 #define CGLTF_IMPLEMENTATION
 #include "cgltf.h"
