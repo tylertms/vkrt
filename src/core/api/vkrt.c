@@ -56,6 +56,46 @@ static void destroyMeshBLAS(VKRT* vkrt) {
     }
 }
 
+
+static void rebuildMaterialBuffer(VKRT* vkrt) {
+    if (!vkrt) return;
+
+    vkDeviceWaitIdle(vkrt->core.device);
+
+    if (vkrt->core.materialData.buffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(vkrt->core.device, vkrt->core.materialData.buffer, NULL);
+        vkrt->core.materialData.buffer = VK_NULL_HANDLE;
+    }
+    if (vkrt->core.materialData.memory != VK_NULL_HANDLE) {
+        vkFreeMemory(vkrt->core.device, vkrt->core.materialData.memory, NULL);
+        vkrt->core.materialData.memory = VK_NULL_HANDLE;
+    }
+
+    uint32_t materialCount = vkrt->core.meshData.count;
+    vkrt->core.materialData.count = materialCount;
+    vkrt->core.materialData.deviceAddress = 0;
+    if (materialCount == 0) return;
+
+    MaterialData* materials = (MaterialData*)malloc((size_t)materialCount * sizeof(MaterialData));
+    if (!materials) {
+        perror("[ERROR]: Failed to allocate material buffer");
+        exit(EXIT_FAILURE);
+    }
+
+    for (uint32_t i = 0; i < materialCount; i++) {
+        vkrt->core.meshes[i].info.materialIndex = i;
+        materials[i] = vkrt->core.meshes[i].material;
+    }
+
+    vkrt->core.materialData.deviceAddress = createBufferFromHostData(vkrt, materials,
+        (VkDeviceSize)materialCount * sizeof(MaterialData),
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+        &vkrt->core.materialData.buffer,
+        &vkrt->core.materialData.memory);
+
+    free(materials);
+}
+
 static void rebuildMeshBuffersAndStructures(VKRT* vkrt) {
     if (!vkrt) return;
 
@@ -177,6 +217,8 @@ static void rebuildMeshBuffersAndStructures(VKRT* vkrt) {
         }
         syncInstancesTime = getMicroseconds() - syncInstancesStartTime;
     }
+
+    rebuildMaterialBuffer(vkrt);
 
     uint64_t rebuildTlasStartTime = getMicroseconds();
     createTopLevelAccelerationStructure(vkrt);
@@ -412,6 +454,8 @@ void VKRT_deinit(VKRT* vkrt) {
     vkFreeMemory(vkrt->core.device, vkrt->core.indexData.memory, NULL);
     vkDestroyBuffer(vkrt->core.device, vkrt->core.meshData.buffer, NULL);
     vkFreeMemory(vkrt->core.device, vkrt->core.meshData.memory, NULL);
+    vkDestroyBuffer(vkrt->core.device, vkrt->core.materialData.buffer, NULL);
+    vkFreeMemory(vkrt->core.device, vkrt->core.materialData.memory, NULL);
 
     vkDestroyBuffer(vkrt->core.device, vkrt->core.sceneDataBuffer, NULL);
     vkFreeMemory(vkrt->core.device, vkrt->core.sceneDataMemory, NULL);
@@ -513,10 +557,6 @@ void VKRT_beginFrame(VKRT* vkrt) {
 
 void VKRT_updateScene(VKRT* vkrt) {
     if (!vkrt || !vkrt->runtime.frameAcquired) return;
-    if (!vkrt->core.descriptorSetReady && descriptorResourcesReady(vkrt)) {
-        updateDescriptorSet(vkrt);
-    }
-
 }
 
 void VKRT_trace(VKRT* vkrt) {
@@ -579,7 +619,13 @@ void VKRT_endFrame(VKRT* vkrt) {
     if (!vkrt) return;
 
     if (vkrt->runtime.framePresented) {
+        uint32_t renderedSPP = vkrt->core.sceneData->samplesPerPixel;
         recordFrameTime(vkrt);
+        if (vkrt->core.descriptorSetReady) {
+            vkrt->state.accumulationFrame = vkrt->core.sceneData->frameNumber + 1;
+            vkrt->state.totalSamples += renderedSPP;
+            vkrt->core.sceneData->frameNumber++;
+        }
     }
 
     if (vkrt->runtime.frameSubmitted) {
@@ -662,6 +708,14 @@ void VKRT_uploadMeshData(VKRT* vkrt, const Vertex* vertices, size_t vertexCount,
 
     mesh->info.vertexCount = (uint32_t)vertexCount;
     mesh->info.indexCount = (uint32_t)indexCount;
+    mesh->info.materialIndex = newIndex;
+
+    mesh->material = (MaterialData){
+        .baseColor = {1.0f, 1.0f, 1.0f},
+        .roughness = 0.5f,
+        .emissionColor = {1.0f, 1.0f, 1.0f},
+        .emissionStrength = 0.0f,
+    };
 
     vec3 scale = {1.f, 1.f, 1.f};
     memcpy(&mesh->info.scale, &scale, sizeof(vec3));
@@ -782,6 +836,18 @@ int VKRT_setMeshTransform(VKRT* vkrt, uint32_t meshIndex, vec3 position, vec3 ro
     return 0;
 }
 
+
+int VKRT_setMeshMaterial(VKRT* vkrt, uint32_t meshIndex, const MaterialData* material) {
+    if (!vkrt || !material || meshIndex >= vkrt->core.meshData.count) return -1;
+
+    vkrt->core.meshes[meshIndex].material = *material;
+    rebuildMaterialBuffer(vkrt);
+    vkDeviceWaitIdle(vkrt->core.device);
+    updateDescriptorSet(vkrt);
+    resetSceneData(vkrt);
+    return 0;
+}
+
 void VKRT_setRenderViewport(VKRT* vkrt, uint32_t x, uint32_t y, uint32_t width, uint32_t height) {
     if (!vkrt || !vkrt->core.sceneData) return;
 
@@ -849,4 +915,5 @@ void VKRT_framebufferResizedCallback(GLFWwindow* window, int width, int height) 
 
     VKRT* vkrt = (VKRT*)glfwGetWindowUserPointer(window);
     vkrt->runtime.framebufferResized = VK_TRUE;
+    if (vkrt->core.sceneData) resetSceneData(vkrt);
 }

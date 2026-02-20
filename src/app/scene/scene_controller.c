@@ -44,4 +44,26 @@ void sceneControllerApplyPendingActions(VKRT* runtime, EditorState* state) {
 void sceneControllerLoadDefaultAssets(VKRT* runtime, EditorState* state) {
     sceneControllerImportMesh(runtime, state, "assets/models/sphere.glb");
     sceneControllerImportMesh(runtime, state, "assets/models/dragon.glb");
+
+    MaterialData sphereMaterial = {
+        .baseColor = {1.0f, 1.0f, 1.0f},
+        .roughness = 0.35f,
+        .emissionColor = {1.0f, 0.95f, 0.85f},
+        .emissionStrength = 6.0f,
+    };
+
+    MaterialData dragonMaterial = {
+        .baseColor = {0.72f, 0.18f, 0.16f},
+        .roughness = 0.65f,
+        .emissionColor = {1.0f, 1.0f, 1.0f},
+        .emissionStrength = 0.0f,
+    };
+
+    if (VKRT_getMeshCount(runtime) > 0) {
+        VKRT_setMeshMaterial(runtime, 0, &sphereMaterial);
+    }
+
+    if (VKRT_getMeshCount(runtime) > 1) {
+        VKRT_setMeshMaterial(runtime, 1, &dragonMaterial);
+    }
 }

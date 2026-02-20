@@ -18,6 +18,15 @@ static const char* openMeshImportDialog(void) {
     return tinyfd_openFileDialog("Import mesh", "assets/models", 2, filters, "glTF files", 0);
 }
 
+static void applyUIScale(GLFWwindow* window) {
+    float scaleX = 1.0f;
+    float scaleY = 1.0f;
+    glfwGetWindowContentScale(window, &scaleX, &scaleY);
+    float scale = 1.0f;
+    if (scaleX > 1.0f || scaleY > 1.0f) scale = (scaleX + scaleY) * 0.5f;
+    ImGui_GetIO()->FontGlobalScale = scale;
+}
+
 static void initializeDockLayout(void) {
     static bool isInitialized = false;
     if (isInitialized) return;
@@ -94,11 +103,30 @@ static bool drawViewportWindow(VKRT* runtime) {
     return viewportHovered;
 }
 
-static void drawPerformanceSection(const VKRT* runtime) {
+static void drawPerformanceSection(VKRT* runtime) {
     ImGui_Separator();
-    ImGui_Text("FPS:                %6d", runtime->state.framesPerSecond);
+    ImGui_Text("FPS: %d | Frame: %.3f ms", runtime->state.framesPerSecond, runtime->state.displayTimeMs);
     ImGui_Text("Render time:        %6.3f ms", runtime->state.renderTimeMs);
-    ImGui_Text("Frame time:         %6.3f ms", runtime->state.displayTimeMs);
+    ImGui_Text("Accum frame: %u", runtime->state.accumulationFrame);
+    ImGui_Text("Total samples:      %6llu", (unsigned long long)runtime->state.totalSamples);
+    ImGui_Text("Samples / pixel:    %6u", runtime->state.samplesPerPixel);
+
+    bool autoSPP = runtime->state.autoSamplesPerPixel != 0;
+    if (ImGui_Checkbox("Auto SPP", &autoSPP)) {
+        runtime->state.autoSamplesPerPixel = autoSPP ? 1 : 0;
+        VKRT_invalidateAccumulation(runtime);
+    }
+
+    if (!autoSPP) {
+        int spp = (int)runtime->state.samplesPerPixel;
+        if (ImGui_SliderIntEx("SPP", &spp, 1, 4096, "%d", ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_Logarithmic)) {
+            runtime->state.samplesPerPixel = (uint32_t)spp;
+            VKRT_invalidateAccumulation(runtime);
+        }
+    } else {
+        ImGui_Text("Auto tuning frames left: %u", runtime->state.sampleTuningFrames);
+    }
+
     ImGui_PlotLinesEx("##frametimes", runtime->state.frametimes, COUNT_OF(runtime->state.frametimes),
                       (int)runtime->state.frametimeStartIndex, "", 0.0f,
                       2 * runtime->state.averageFrametime, (ImVec2){220.0f, 60.0f}, sizeof(float));
@@ -155,6 +183,17 @@ static void drawMeshInspector(VKRT* runtime, EditorState* state) {
             VKRT_setMeshTransform(runtime, meshIndex, position, rotation, scale);
         }
 
+        MaterialData material = mesh->material;
+        bool materialChanged = false;
+        materialChanged |= ImGui_ColorEdit3("Base Color", material.baseColor, ImGuiColorEditFlags_Float);
+        materialChanged |= ImGui_DragFloatEx("Roughness", &material.roughness, 0.005f, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        materialChanged |= ImGui_ColorEdit3("Emission Color", material.emissionColor, ImGuiColorEditFlags_Float);
+        materialChanged |= ImGui_DragFloatEx("Emission Strength", &material.emissionStrength, 0.01f, 0.0f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+
+        if (materialChanged) {
+            VKRT_setMeshMaterial(runtime, meshIndex, &material);
+        }
+
         ImGui_PopID();
     }
 }
@@ -208,6 +247,7 @@ void editorUIInitialize(VKRT* runtime, void* userData) {
     io->ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     ImFontAtlas_AddFontFromMemoryTTF(io->Fonts, (void*)IBMPlexMono_Regular, IBMPlexMono_Regular_len, 22.0, NULL, NULL);
     editorThemeApplyDefault();
+    applyUIScale(runtime->runtime.window);
 
     cImGui_ImplGlfw_InitForVulkan(runtime->runtime.window, true);
 
@@ -261,6 +301,7 @@ void editorUIDraw(VKRT* runtime, VkCommandBuffer commandBuffer, void* userData) 
     cImGui_ImplGlfw_NewFrame();
     cImGui_ImplVulkan_NewFrame();
     ImGui_NewFrame();
+    applyUIScale(runtime->runtime.window);
 
     drawWorkspaceDockspace();
     bool viewportHovered = drawViewportWindow(runtime);

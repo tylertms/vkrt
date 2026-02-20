@@ -112,7 +112,7 @@ void recreateSwapChain(VKRT* vkrt) {
     createFramebuffers(vkrt);
     VKRT_setRenderViewport(vkrt, 0, 0, vkrt->runtime.swapChainExtent.width, vkrt->runtime.swapChainExtent.height);
 
-    vkrt->core.sceneData->frameNumber = -1;
+    resetSceneData(vkrt);
 }
 
 void cleanupSwapChain(VKRT* vkrt) {
@@ -126,9 +126,17 @@ void cleanupSwapChain(VKRT* vkrt) {
     free(vkrt->runtime.swapChainImageViews);
     free(vkrt->runtime.swapChainImages);
 
-    vkDestroyImageView(vkrt->core.device, vkrt->core.storageImageView, NULL);
-    vkDestroyImage(vkrt->core.device, vkrt->core.storageImage, NULL);
-    vkFreeMemory(vkrt->core.device, vkrt->core.storageImageMemory, NULL);
+    for (uint32_t i = 0; i < 2; i++) {
+        vkDestroyImageView(vkrt->core.device, vkrt->core.accumulationImageViews[i], NULL);
+        vkDestroyImage(vkrt->core.device, vkrt->core.accumulationImages[i], NULL);
+        vkFreeMemory(vkrt->core.device, vkrt->core.accumulationImageMemories[i], NULL);
+        vkrt->core.accumulationImageViews[i] = VK_NULL_HANDLE;
+        vkrt->core.accumulationImages[i] = VK_NULL_HANDLE;
+        vkrt->core.accumulationImageMemories[i] = VK_NULL_HANDLE;
+    }
+    vkrt->core.storageImageView = VK_NULL_HANDLE;
+    vkrt->core.storageImage = VK_NULL_HANDLE;
+    vkrt->core.storageImageMemory = VK_NULL_HANDLE;
 }
 
 void createImageViews(VKRT* vkrt) {

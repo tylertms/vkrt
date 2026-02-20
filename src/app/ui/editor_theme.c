@@ -24,10 +24,10 @@ void editorThemeApplyDefault(void) {
     colors[ImGuiCol_WindowBg] = (ImVec4){0.05f, 0.05f, 0.05f, 0.60f};
     colors[ImGuiCol_ChildBg] = darkGray;
     colors[ImGuiCol_PopupBg] = almostBlack;
-    colors[ImGuiCol_Border] = midGray;
-    colors[ImGuiCol_FrameBg] = (ImVec4){0.05f, 0.05f, 0.05f, 0.60f};
-    colors[ImGuiCol_FrameBgHovered] = lightGray;
-    colors[ImGuiCol_FrameBgActive] = lightGray;
+    colors[ImGuiCol_Border] = (ImVec4){0.32f, 0.32f, 0.32f, 1.00f};
+    colors[ImGuiCol_FrameBg] = (ImVec4){0.18f, 0.18f, 0.18f, 1.00f};
+    colors[ImGuiCol_FrameBgHovered] = (ImVec4){0.28f, 0.28f, 0.28f, 1.00f};
+    colors[ImGuiCol_FrameBgActive] = (ImVec4){0.34f, 0.34f, 0.34f, 1.00f};
     colors[ImGuiCol_TitleBg] = darkGray;
     colors[ImGuiCol_TitleBgActive] = midGray;
     colors[ImGuiCol_TitleBgCollapsed] = almostBlack;

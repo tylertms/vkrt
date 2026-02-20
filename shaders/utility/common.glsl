@@ -19,7 +19,7 @@ struct Payload {
     vec3 point;
     bool didHit;
     vec3 normal;
-    Material material;
+    uint materialIndex;
 };
 
 vec3 toneMapACES(vec3 x) {

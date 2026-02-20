@@ -17,19 +17,24 @@ struct MeshInfo {
     vec3 scale;
     uint indexBase;
     uint indexCount;
+    uint materialIndex;
 };
 
-layout(set = 0, binding = 2, std430) readonly buffer VertexBuffer {
+layout(set = 0, binding = 3, std430) readonly buffer VertexBuffer {
     Vertex vertices[];
 } vertexBuffer;
 
-layout(set = 0, binding = 3, std430) readonly buffer IndexBuffer {
+layout(set = 0, binding = 4, std430) readonly buffer IndexBuffer {
     uint indices[];
 } indexBuffer;
 
-layout(set = 0, binding = 5, std430) readonly buffer MeshInfoBuffer {
+layout(set = 0, binding = 6, std430) readonly buffer MeshInfoBuffer {
     MeshInfo infos[];
 } meshInfo;
+
+layout(set = 0, binding = 7, std430) readonly buffer MaterialBuffer {
+    Material materials[];
+} materialBuffer;
 
 hitAttributeEXT vec2 barycentrics;
 
@@ -46,19 +51,17 @@ void main() {
     vec3 normal1 = vertexBuffer.vertices[index1].normal;
     vec3 normal2 = vertexBuffer.vertices[index2].normal;
 
-    vec3 pos0 = vertexBuffer.vertices[index0].pos;
-    vec3 pos1 = vertexBuffer.vertices[index1].pos;
-    vec3 pos2 = vertexBuffer.vertices[index2].pos;
-
     float u = barycentrics.x;
     float v = barycentrics.y;
 
     vec3 localNormal = normalize(normal0 * (1.0 - u - v) + normal1 * u + normal2 * v);
-    vec3 localPos = normalize(pos0 * (1.0 - u - v) + pos1 * u + pos2 * v);
     vec3 worldNormal = normalize(localNormal * mat3(gl_ObjectToWorld3x4EXT));
-    vec3 worldPos = normalize(localPos * mat3(gl_ObjectToWorld3x4EXT));
+    vec3 worldPos = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
+
+    uint materialIndex = meshInfo.infos[instance].materialIndex;
 
     payload.point = worldPos;
     payload.didHit = true;
     payload.normal = worldNormal;
+    payload.materialIndex = materialIndex;
 }

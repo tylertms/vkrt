@@ -16,37 +16,51 @@ void createDescriptorSetLayout(VKRT* vkrt) {
     storageImageLayoutBinding.descriptorCount = 1;
     storageImageLayoutBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
 
+    VkDescriptorSetLayoutBinding accumulationWriteLayoutBinding = {0};
+    accumulationWriteLayoutBinding.binding = 2;
+    accumulationWriteLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    accumulationWriteLayoutBinding.descriptorCount = 1;
+    accumulationWriteLayoutBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+
     VkDescriptorSetLayoutBinding vertexBufferLayoutBinding = {0};
-    vertexBufferLayoutBinding.binding = 2;
+    vertexBufferLayoutBinding.binding = 3;
     vertexBufferLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     vertexBufferLayoutBinding.descriptorCount = 1;
     vertexBufferLayoutBinding.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
 
     VkDescriptorSetLayoutBinding indexBufferLayoutBinding = {0};
-    indexBufferLayoutBinding.binding = 3;
+    indexBufferLayoutBinding.binding = 4;
     indexBufferLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     indexBufferLayoutBinding.descriptorCount = 1;
     indexBufferLayoutBinding.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
 
     VkDescriptorSetLayoutBinding sceneDataLayoutBinding = {0};
-    sceneDataLayoutBinding.binding = 4;
+    sceneDataLayoutBinding.binding = 5;
     sceneDataLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     sceneDataLayoutBinding.descriptorCount = 1;
     sceneDataLayoutBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
 
     VkDescriptorSetLayoutBinding meshInfoLayoutBinding = {0};
-    meshInfoLayoutBinding.binding = 5;
+    meshInfoLayoutBinding.binding = 6;
     meshInfoLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     meshInfoLayoutBinding.descriptorCount = 1;
     meshInfoLayoutBinding.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
 
+    VkDescriptorSetLayoutBinding materialLayoutBinding = {0};
+    materialLayoutBinding.binding = 7;
+    materialLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    materialLayoutBinding.descriptorCount = 1;
+    materialLayoutBinding.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+
     VkDescriptorSetLayoutBinding bindings[] = {
         accelerationStructureLayoutBinding,
         storageImageLayoutBinding,
+        accumulationWriteLayoutBinding,
         vertexBufferLayoutBinding,
         indexBufferLayoutBinding,
         sceneDataLayoutBinding,
-        meshInfoLayoutBinding
+        meshInfoLayoutBinding,
+        materialLayoutBinding
     };
 
     VkDescriptorSetLayoutCreateInfo descriptorSetlayoutCreateInfo = {0};
@@ -63,8 +77,8 @@ void createDescriptorSetLayout(VKRT* vkrt) {
 void createDescriptorPool(VKRT* vkrt) {
     VkDescriptorPoolSize poolSizes[] = {
         {VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1},
-        {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1},
-        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 4},
+        {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 2},
+        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 5},
         {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1},
         {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1}
     };
@@ -104,7 +118,8 @@ VkBool32 descriptorResourcesReady(VKRT* vkrt) {
     return vkrt->core.topLevelAccelerationStructure.structure != VK_NULL_HANDLE &&
            vkrt->core.vertexData.buffer != VK_NULL_HANDLE &&
            vkrt->core.indexData.buffer != VK_NULL_HANDLE &&
-           vkrt->core.meshData.buffer != VK_NULL_HANDLE;
+           vkrt->core.meshData.buffer != VK_NULL_HANDLE &&
+           vkrt->core.materialData.buffer != VK_NULL_HANDLE;
 }
 
 void updateDescriptorSet(VKRT* vkrt) {
@@ -128,7 +143,7 @@ void updateDescriptorSet(VKRT* vkrt) {
     accelerationStructureWrite.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
 
     VkDescriptorImageInfo storageImageInfo = {0};
-    storageImageInfo.imageView = vkrt->core.storageImageView;
+    storageImageInfo.imageView = vkrt->core.accumulationImageViews[vkrt->core.accumulationReadIndex];
     storageImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 
     VkWriteDescriptorSet storageImageWrite = {0};
@@ -148,7 +163,7 @@ void updateDescriptorSet(VKRT* vkrt) {
     VkWriteDescriptorSet vertexBufferWrite = {0};
     vertexBufferWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     vertexBufferWrite.dstSet = vkrt->core.descriptorSet;
-    vertexBufferWrite.dstBinding = 2;
+    vertexBufferWrite.dstBinding = 3;
     vertexBufferWrite.dstArrayElement = 0;
     vertexBufferWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     vertexBufferWrite.descriptorCount = 1;
@@ -162,7 +177,7 @@ void updateDescriptorSet(VKRT* vkrt) {
     VkWriteDescriptorSet indexBufferWrite = {0};
     indexBufferWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     indexBufferWrite.dstSet = vkrt->core.descriptorSet;
-    indexBufferWrite.dstBinding = 3;
+    indexBufferWrite.dstBinding = 4;
     indexBufferWrite.dstArrayElement = 0;
     indexBufferWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     indexBufferWrite.descriptorCount = 1;
@@ -176,7 +191,7 @@ void updateDescriptorSet(VKRT* vkrt) {
     VkWriteDescriptorSet sceneDataWrite = {0};
     sceneDataWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     sceneDataWrite.dstSet = vkrt->core.descriptorSet;
-    sceneDataWrite.dstBinding = 4;
+    sceneDataWrite.dstBinding = 5;
     sceneDataWrite.dstArrayElement = 0;
     sceneDataWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     sceneDataWrite.descriptorCount = 1;
@@ -190,19 +205,48 @@ void updateDescriptorSet(VKRT* vkrt) {
     VkWriteDescriptorSet meshInfoWrite = {0};
     meshInfoWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     meshInfoWrite.dstSet = vkrt->core.descriptorSet;
-    meshInfoWrite.dstBinding = 5;
+    meshInfoWrite.dstBinding = 6;
     meshInfoWrite.dstArrayElement = 0;
     meshInfoWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     meshInfoWrite.descriptorCount = 1;
     meshInfoWrite.pBufferInfo = &meshInfo;
 
+    VkDescriptorBufferInfo materialInfo = {0};
+    materialInfo.buffer = vkrt->core.materialData.buffer;
+    materialInfo.offset = 0;
+    materialInfo.range = VK_WHOLE_SIZE;
+
+    VkWriteDescriptorSet materialWrite = {0};
+    materialWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    materialWrite.dstSet = vkrt->core.descriptorSet;
+    materialWrite.dstBinding = 7;
+    materialWrite.dstArrayElement = 0;
+    materialWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    materialWrite.descriptorCount = 1;
+    materialWrite.pBufferInfo = &materialInfo;
+
+    VkDescriptorImageInfo accumulationWriteInfo = {0};
+    accumulationWriteInfo.imageView = vkrt->core.accumulationImageViews[vkrt->core.accumulationWriteIndex];
+    accumulationWriteInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+    VkWriteDescriptorSet accumulationWrite = {0};
+    accumulationWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    accumulationWrite.dstSet = vkrt->core.descriptorSet;
+    accumulationWrite.dstBinding = 2;
+    accumulationWrite.dstArrayElement = 0;
+    accumulationWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    accumulationWrite.descriptorCount = 1;
+    accumulationWrite.pImageInfo = &accumulationWriteInfo;
+
     VkWriteDescriptorSet writeDescriptorSets[] = {
         accelerationStructureWrite,
         storageImageWrite,
+        accumulationWrite,
         vertexBufferWrite,
         indexBufferWrite,
         sceneDataWrite,
         meshInfoWrite,
+        materialWrite,
     };
 
     vkUpdateDescriptorSets(vkrt->core.device, COUNT_OF(writeDescriptorSets), writeDescriptorSets, 0, VK_NULL_HANDLE);

@@ -17,7 +17,8 @@ typedef struct SceneData {
     mat4 viewInverse;
     mat4 projInverse;
     uint32_t frameNumber;
-    uint32_t padding0[3];
+    uint32_t samplesPerPixel;
+    uint32_t padding0[2];
     uint32_t viewportRect[4];
 } SceneData;
 
@@ -73,11 +74,20 @@ typedef struct MeshInfo {
     vec3 scale;
     uint32_t indexBase;
     uint32_t indexCount;
-    uint32_t padding[3];
+    uint32_t materialIndex;
+    uint32_t padding[2];
 } MeshInfo;
+
+typedef struct MaterialData {
+    vec3 baseColor;
+    float roughness;
+    vec3 emissionColor;
+    float emissionStrength;
+} MaterialData;
 
 typedef struct Mesh {
     MeshInfo info;
+    MaterialData material;
     AccelerationStructure bottomLevelAccelerationStructure;
     Vertex* vertices;
     uint32_t* indices;
@@ -128,11 +138,17 @@ typedef struct VKRT_Core {
     VkImage storageImage;
     VkImageView storageImageView;
     VkDeviceMemory storageImageMemory;
+    VkImage accumulationImages[2];
+    VkImageView accumulationImageViews[2];
+    VkDeviceMemory accumulationImageMemories[2];
+    uint32_t accumulationReadIndex;
+    uint32_t accumulationWriteIndex;
     Mesh* meshes;
     AccelerationStructure topLevelAccelerationStructure;
     Buffer vertexData;
     Buffer indexData;
     Buffer meshData;
+    Buffer materialData;
     VkBool32 descriptorSetReady;
     char deviceName[256];
     VKRT_ShaderConfig shaders;
@@ -174,6 +190,16 @@ typedef struct VKRT_PublicState {
     float frametimes[128];
     float displayTimeMs;
     float renderTimeMs;
+    uint32_t accumulationFrame;
+    uint32_t samplesPerPixel;
+    uint64_t totalSamples;
+    uint8_t autoSamplesPerPixel;
+    uint8_t sampleTuningFrames;
+    uint8_t autoAdjustCooldown;
+    float tuningRenderSumMs;
+    float tuningFrameSumMs;
+    float smoothedRenderMs;
+    float smoothedFrameMs;
 } VKRT_PublicState;
 
 typedef struct VKRT {
@@ -207,6 +233,7 @@ void VKRT_invalidateAccumulation(VKRT* vkrt);
 
 uint32_t VKRT_getMeshCount(const VKRT* vkrt);
 int VKRT_setMeshTransform(VKRT* vkrt, uint32_t meshIndex, vec3 position, vec3 rotation, vec3 scale);
+int VKRT_setMeshMaterial(VKRT* vkrt, uint32_t meshIndex, const MaterialData* material);
 void VKRT_setRenderViewport(VKRT* vkrt, uint32_t x, uint32_t y, uint32_t width, uint32_t height);
 void VKRT_cameraSetPose(VKRT* vkrt, vec3 position, vec3 target, vec3 up, float vfov);
 void VKRT_cameraGetPose(const VKRT* vkrt, vec3 position, vec3 target, vec3 up, float* vfov);

@@ -6,33 +6,28 @@
 layout(location = 0) rayPayloadEXT Payload payload;
 
 layout(set = 0, binding = 0) uniform accelerationStructureEXT topLevelAS;
-layout(set = 0, binding = 1, rgba32f) uniform image2D image;
+layout(set = 0, binding = 1, rgba32f) uniform image2D accumulationReadImage;
+layout(set = 0, binding = 2, rgba32f) uniform image2D accumulationWriteImage;
 
-layout(set = 0, binding = 4) uniform SceneUniform {
+layout(set = 0, binding = 5) uniform SceneUniform {
     mat4 viewInverse;
     mat4 projInverse;
     uint frameNumber;
+    uint samplesPerPixel;
+    uvec2 padding;
     uvec4 viewportRect;
 } scene;
 
-void main()  {
-    ivec2 pixel = ivec2(gl_LaunchIDEXT.xy);
+layout(set = 0, binding = 7, std430) readonly buffer MaterialBuffer {
+    Material materials[];
+} materialBuffer;
+
+vec3 traceSample(ivec2 pixel, inout uint state) {
     ivec2 viewportOrigin = ivec2(scene.viewportRect.xy);
     ivec2 viewportSize = ivec2(scene.viewportRect.zw);
-    uint state =  (pixel.y * 814793u + pixel.x * 27u) ^ (scene.frameNumber * 102943u) ^ scene.frameNumber;
 
-    if (viewportSize.x <= 0 || viewportSize.y <= 0) {
-        imageStore(image, pixel, vec4(0.0, 0.0, 0.0, 0.0));
-        return;
-    }
-
-    ivec2 viewportMax = viewportOrigin + viewportSize;
-    if (pixel.x < viewportOrigin.x || pixel.y < viewportOrigin.y || pixel.x >= viewportMax.x || pixel.y >= viewportMax.y) {
-        imageStore(image, pixel, vec4(0.0, 0.0, 0.0, 0.0));
-        return;
-    }
-
-    vec2 viewportPixel = vec2(pixel - viewportOrigin) + vec2(0.5);
+    vec2 jitter = vec2(rand(state), rand(state));
+    vec2 viewportPixel = vec2(pixel - viewportOrigin) + jitter;
     vec2 inUV = viewportPixel / vec2(viewportSize);
     vec2 d = inUV * 2.0 - 1.0;
 
@@ -46,10 +41,45 @@ void main()  {
     vec3 radiance = vec3(0.0);
 
     for (uint i = 0; i < MAX_BOUNCES; i++) {
+        payload.didHit = false;
         traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, 0xFF, 0, 0, 0, ray.origin, 0.001, ray.dir, 10000.0, 0);
-        if (!payload.didHit) break;
-        evalBSDF(payload, ray, radiance, throughput, state);
+        if (!payload.didHit) {
+            break;
+        }
+        Material material = materialBuffer.materials[payload.materialIndex];
+        evalBSDF(payload, material, ray, radiance, throughput, state);
     }
 
-    imageStore(image, pixel, vec4(radiance, 0.0));
+    return radiance;
+}
+
+void main() {
+    ivec2 pixel = ivec2(gl_LaunchIDEXT.xy);
+    ivec2 viewportOrigin = ivec2(scene.viewportRect.xy);
+    ivec2 viewportSize = ivec2(scene.viewportRect.zw);
+
+    if (viewportSize.x <= 0 || viewportSize.y <= 0) {
+        imageStore(accumulationWriteImage, pixel, vec4(0.0));
+        return;
+    }
+
+    ivec2 viewportMax = viewportOrigin + viewportSize;
+    if (pixel.x < viewportOrigin.x || pixel.y < viewportOrigin.y || pixel.x >= viewportMax.x || pixel.y >= viewportMax.y) {
+        imageStore(accumulationWriteImage, pixel, vec4(0.0));
+        return;
+    }
+
+    uint spp = max(scene.samplesPerPixel, 1u);
+    uint state = (pixel.y * 814793u + pixel.x * 27u) ^ ((scene.frameNumber + 1u) * 102943u);
+
+    vec3 frameRadiance = vec3(0.0);
+    for (uint sampleIndex = 0; sampleIndex < spp; sampleIndex++) {
+        frameRadiance += traceSample(pixel, state);
+    }
+    frameRadiance /= float(spp);
+
+    vec3 previous = imageLoad(accumulationReadImage, pixel).rgb;
+    float frameWeight = float(scene.frameNumber);
+    vec3 accumulated = (previous * frameWeight + frameRadiance) / float(scene.frameNumber + 1u);
+    imageStore(accumulationWriteImage, pixel, vec4(accumulated, 1.0));
 }
