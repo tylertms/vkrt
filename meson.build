@@ -1,4 +1,4 @@
-project('vkrt', ['c', 'cpp'],
+project('vkspt', ['c', 'cpp'],
   version: '1.0',
   default_options: [
     'c_std=c11',
@@ -26,7 +26,7 @@ includes = include_directories(
   'src/core/runtime',
   'src/core/render',
   'src/core/scene',
-  'src/core/util',
+  'src/core/utility',
   'src/app',
   'src/app/state',
   'src/app/scene',
@@ -75,7 +75,7 @@ vkrt_sources = files(
   'src/core/runtime/swapchain.c',
   'src/core/runtime/validation.c',
   'src/core/api/vkrt.c',
-  'src/core/util/io.c',
+  'src/core/utility/io.c',
 )
 
 vkrt = static_library('vkrt_core',
@@ -88,7 +88,7 @@ vkrt = static_library('vkrt_core',
 )
 
 # ----- App executable -----
-executable('vkrt',
+executable('vkspt',
   c_args: c_args,
   sources: files(
     'src/app/main.c',
