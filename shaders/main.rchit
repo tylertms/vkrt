@@ -20,19 +20,19 @@ struct MeshInfo {
     uint materialIndex;
 };
 
-layout(set = 0, binding = 3, std430) readonly buffer VertexBuffer {
+layout(set = 0, binding = 4, std430) readonly buffer VertexBuffer {
     Vertex vertices[];
 } vertexBuffer;
 
-layout(set = 0, binding = 4, std430) readonly buffer IndexBuffer {
+layout(set = 0, binding = 5, std430) readonly buffer IndexBuffer {
     uint indices[];
 } indexBuffer;
 
-layout(set = 0, binding = 6, std430) readonly buffer MeshInfoBuffer {
+layout(set = 0, binding = 7, std430) readonly buffer MeshInfoBuffer {
     MeshInfo infos[];
 } meshInfo;
 
-layout(set = 0, binding = 7, std430) readonly buffer MaterialBuffer {
+layout(set = 0, binding = 8, std430) readonly buffer MaterialBuffer {
     Material materials[];
 } materialBuffer;
 

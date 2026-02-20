@@ -8,17 +8,19 @@ layout(location = 0) rayPayloadEXT Payload payload;
 layout(set = 0, binding = 0) uniform accelerationStructureEXT topLevelAS;
 layout(set = 0, binding = 1, rgba32f) uniform image2D accumulationReadImage;
 layout(set = 0, binding = 2, rgba32f) uniform image2D accumulationWriteImage;
+layout(set = 0, binding = 3, rgba32f) uniform image2D outputImage;
 
-layout(set = 0, binding = 5) uniform SceneUniform {
+layout(set = 0, binding = 6) uniform SceneUniform {
     mat4 viewInverse;
     mat4 projInverse;
     uint frameNumber;
     uint samplesPerPixel;
-    uvec2 padding;
+    uint maxBounces;
+    uint toneMappingMode;
     uvec4 viewportRect;
 } scene;
 
-layout(set = 0, binding = 7, std430) readonly buffer MaterialBuffer {
+layout(set = 0, binding = 8, std430) readonly buffer MaterialBuffer {
     Material materials[];
 } materialBuffer;
 
@@ -40,7 +42,7 @@ vec3 traceSample(ivec2 pixel, inout uint state) {
     vec3 throughput = vec3(1.0);
     vec3 radiance = vec3(0.0);
 
-    for (uint i = 0; i < MAX_BOUNCES; i++) {
+    for (uint i = 0; i < max(scene.maxBounces, 1u); i++) {
         payload.didHit = false;
         traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, 0xFF, 0, 0, 0, ray.origin, 0.001, ray.dir, 10000.0, 0);
         if (!payload.didHit) {
@@ -60,12 +62,14 @@ void main() {
 
     if (viewportSize.x <= 0 || viewportSize.y <= 0) {
         imageStore(accumulationWriteImage, pixel, vec4(0.0));
+        imageStore(outputImage, pixel, vec4(0.0));
         return;
     }
 
     ivec2 viewportMax = viewportOrigin + viewportSize;
     if (pixel.x < viewportOrigin.x || pixel.y < viewportOrigin.y || pixel.x >= viewportMax.x || pixel.y >= viewportMax.y) {
         imageStore(accumulationWriteImage, pixel, vec4(0.0));
+        imageStore(outputImage, pixel, vec4(0.0));
         return;
     }
 
@@ -81,5 +85,12 @@ void main() {
     vec3 previous = imageLoad(accumulationReadImage, pixel).rgb;
     float frameWeight = float(scene.frameNumber);
     vec3 accumulated = (previous * frameWeight + frameRadiance) / float(scene.frameNumber + 1u);
+
+    vec3 mapped = accumulated;
+    if (scene.toneMappingMode == 1u) {
+        mapped = toneMapACES(mapped);
+    }
+
     imageStore(accumulationWriteImage, pixel, vec4(accumulated, 1.0));
+    imageStore(outputImage, pixel, vec4(mapped, 1.0));
 }

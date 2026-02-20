@@ -74,7 +74,10 @@ static void rebuildMaterialBuffer(VKRT* vkrt) {
     uint32_t materialCount = vkrt->core.meshData.count;
     vkrt->core.materialData.count = materialCount;
     vkrt->core.materialData.deviceAddress = 0;
-    if (materialCount == 0) return;
+    if (materialCount == 0) {
+        vkrt->core.materialDataDirty = VK_FALSE;
+        return;
+    }
 
     MaterialData* materials = (MaterialData*)malloc((size_t)materialCount * sizeof(MaterialData));
     if (!materials) {
@@ -94,6 +97,7 @@ static void rebuildMaterialBuffer(VKRT* vkrt) {
         &vkrt->core.materialData.memory);
 
     free(materials);
+    vkrt->core.materialDataDirty = VK_FALSE;
 }
 
 static void rebuildMeshBuffersAndStructures(VKRT* vkrt) {
@@ -557,6 +561,11 @@ void VKRT_beginFrame(VKRT* vkrt) {
 
 void VKRT_updateScene(VKRT* vkrt) {
     if (!vkrt || !vkrt->runtime.frameAcquired) return;
+
+    if (vkrt->core.materialDataDirty) {
+        rebuildMaterialBuffer(vkrt);
+        updateDescriptorSet(vkrt);
+    }
 }
 
 void VKRT_trace(VKRT* vkrt) {
@@ -841,9 +850,7 @@ int VKRT_setMeshMaterial(VKRT* vkrt, uint32_t meshIndex, const MaterialData* mat
     if (!vkrt || !material || meshIndex >= vkrt->core.meshData.count) return -1;
 
     vkrt->core.meshes[meshIndex].material = *material;
-    rebuildMaterialBuffer(vkrt);
-    vkDeviceWaitIdle(vkrt->core.device);
-    updateDescriptorSet(vkrt);
+    vkrt->core.materialDataDirty = VK_TRUE;
     resetSceneData(vkrt);
     return 0;
 }
@@ -915,5 +922,4 @@ void VKRT_framebufferResizedCallback(GLFWwindow* window, int width, int height) 
 
     VKRT* vkrt = (VKRT*)glfwGetWindowUserPointer(window);
     vkrt->runtime.framebufferResized = VK_TRUE;
-    if (vkrt->core.sceneData) resetSceneData(vkrt);
 }

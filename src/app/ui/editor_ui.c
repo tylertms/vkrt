@@ -18,14 +18,6 @@ static const char* openMeshImportDialog(void) {
     return tinyfd_openFileDialog("Import mesh", "assets/models", 2, filters, "glTF files", 0);
 }
 
-static void applyUIScale(GLFWwindow* window) {
-    float scaleX = 1.0f;
-    float scaleY = 1.0f;
-    glfwGetWindowContentScale(window, &scaleX, &scaleY);
-    float scale = 1.0f;
-    if (scaleX > 1.0f || scaleY > 1.0f) scale = (scaleX + scaleY) * 0.5f;
-    ImGui_GetIO()->FontGlobalScale = scale;
-}
 
 static void initializeDockLayout(void) {
     static bool isInitialized = false;
@@ -105,26 +97,30 @@ static bool drawViewportWindow(VKRT* runtime) {
 
 static void drawPerformanceSection(VKRT* runtime) {
     ImGui_Separator();
-    ImGui_Text("FPS: %d | Frame: %.3f ms", runtime->state.framesPerSecond, runtime->state.displayTimeMs);
-    ImGui_Text("Render time:        %6.3f ms", runtime->state.renderTimeMs);
-    ImGui_Text("Accum frame: %u", runtime->state.accumulationFrame);
-    ImGui_Text("Total samples:      %6llu", (unsigned long long)runtime->state.totalSamples);
-    ImGui_Text("Samples / pixel:    %6u", runtime->state.samplesPerPixel);
+    ImGui_Text("FPS:            %6u", runtime->state.framesPerSecond);
+    ImGui_Text("Frames:         %6u", runtime->state.accumulationFrame);
+    ImGui_Text("Frame time:     %6.3f ms", runtime->state.displayFrameTimeMs);
+    ImGui_Text("Render time:    %6.3f ms", runtime->state.displayRenderTimeMs);
+    ImGui_Text("Total samples:  %6llu", (unsigned long long)runtime->state.totalSamples);
+    ImGui_Text("Samples / px:   %6u", runtime->state.samplesPerPixel);
 
-    bool autoSPP = runtime->state.autoSamplesPerPixel != 0;
-    if (ImGui_Checkbox("Auto SPP", &autoSPP)) {
-        runtime->state.autoSamplesPerPixel = autoSPP ? 1 : 0;
+    int spp = (int)runtime->state.samplesPerPixel;
+    if (ImGui_SliderIntEx("SPP", &spp, 1, 2048, "%d", ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_Logarithmic)) {
+        runtime->state.samplesPerPixel = (uint32_t)spp;
         VKRT_invalidateAccumulation(runtime);
     }
 
-    if (!autoSPP) {
-        int spp = (int)runtime->state.samplesPerPixel;
-        if (ImGui_SliderIntEx("SPP", &spp, 1, 4096, "%d", ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_Logarithmic)) {
-            runtime->state.samplesPerPixel = (uint32_t)spp;
-            VKRT_invalidateAccumulation(runtime);
-        }
-    } else {
-        ImGui_Text("Auto tuning frames left: %u", runtime->state.sampleTuningFrames);
+    int maxBounces = (int)runtime->state.maxBounces;
+    if (ImGui_SliderIntEx("Max bounces", &maxBounces, 1, 64, "%d", ImGuiSliderFlags_AlwaysClamp)) {
+        runtime->state.maxBounces = (uint32_t)maxBounces;
+        VKRT_invalidateAccumulation(runtime);
+    }
+
+    const char* toneMappingLabels[] = {"None", "ACES"};
+    int toneMappingMode = (int)runtime->state.toneMappingMode;
+    if (ImGui_ComboCharEx("Tone mapping", &toneMappingMode, toneMappingLabels, 2, 2)) {
+        runtime->state.toneMappingMode = (VKRT_ToneMappingMode)toneMappingMode;
+        VKRT_invalidateAccumulation(runtime);
     }
 
     ImGui_PlotLinesEx("##frametimes", runtime->state.frametimes, COUNT_OF(runtime->state.frametimes),
@@ -247,8 +243,6 @@ void editorUIInitialize(VKRT* runtime, void* userData) {
     io->ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     ImFontAtlas_AddFontFromMemoryTTF(io->Fonts, (void*)IBMPlexMono_Regular, IBMPlexMono_Regular_len, 22.0, NULL, NULL);
     editorThemeApplyDefault();
-    applyUIScale(runtime->runtime.window);
-
     cImGui_ImplGlfw_InitForVulkan(runtime->runtime.window, true);
 
     uint32_t imageCount = (uint32_t)runtime->runtime.swapChainImageCount;
@@ -301,7 +295,6 @@ void editorUIDraw(VKRT* runtime, VkCommandBuffer commandBuffer, void* userData) 
     cImGui_ImplGlfw_NewFrame();
     cImGui_ImplVulkan_NewFrame();
     ImGui_NewFrame();
-    applyUIScale(runtime->runtime.window);
 
     drawWorkspaceDockspace();
     bool viewportHovered = drawViewportWindow(runtime);

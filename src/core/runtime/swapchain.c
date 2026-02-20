@@ -134,9 +134,18 @@ void cleanupSwapChain(VKRT* vkrt) {
         vkrt->core.accumulationImages[i] = VK_NULL_HANDLE;
         vkrt->core.accumulationImageMemories[i] = VK_NULL_HANDLE;
     }
-    vkrt->core.storageImageView = VK_NULL_HANDLE;
-    vkrt->core.storageImage = VK_NULL_HANDLE;
-    vkrt->core.storageImageMemory = VK_NULL_HANDLE;
+    if (vkrt->core.storageImageView != VK_NULL_HANDLE) {
+        vkDestroyImageView(vkrt->core.device, vkrt->core.storageImageView, NULL);
+        vkrt->core.storageImageView = VK_NULL_HANDLE;
+    }
+    if (vkrt->core.storageImage != VK_NULL_HANDLE) {
+        vkDestroyImage(vkrt->core.device, vkrt->core.storageImage, NULL);
+        vkrt->core.storageImage = VK_NULL_HANDLE;
+    }
+    if (vkrt->core.storageImageMemory != VK_NULL_HANDLE) {
+        vkFreeMemory(vkrt->core.device, vkrt->core.storageImageMemory, NULL);
+        vkrt->core.storageImageMemory = VK_NULL_HANDLE;
+    }
 }
 
 void createImageViews(VKRT* vkrt) {

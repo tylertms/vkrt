@@ -98,68 +98,12 @@ void recordFrameTime(VKRT* vkrt) {
     vkGetQueryPoolResults(vkrt->core.device, vkrt->runtime.timestampPool, vkrt->runtime.currentFrame * 2, 2, sizeof(ts), ts, sizeof(uint64_t), VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
     vkrt->state.renderTimeMs = (float)((ts[1] - ts[0]) * vkrt->runtime.timestampPeriod / 1e6);
 
-    if (vkrt->state.autoSamplesPerPixel && vkrt->state.renderTimeMs > 0.0f && vkrt->state.displayTimeMs > 0.0f) {
-        const float alpha = 0.15f;
-        const float budgetUtilization = 0.95f;
-        if (vkrt->state.smoothedRenderMs <= 0.0f) {
-            vkrt->state.smoothedRenderMs = vkrt->state.renderTimeMs;
-            vkrt->state.smoothedFrameMs = vkrt->state.displayTimeMs;
-        } else {
-            vkrt->state.smoothedRenderMs = vkrt->state.smoothedRenderMs * (1.0f - alpha) + vkrt->state.renderTimeMs * alpha;
-            vkrt->state.smoothedFrameMs = vkrt->state.smoothedFrameMs * (1.0f - alpha) + vkrt->state.displayTimeMs * alpha;
-        }
+    const float displaySmoothing = 0.12f;
+    if (vkrt->state.displayFrameTimeMs <= 0.0f) vkrt->state.displayFrameTimeMs = vkrt->state.displayTimeMs;
+    else vkrt->state.displayFrameTimeMs = vkrt->state.displayFrameTimeMs * (1.0f - displaySmoothing) + vkrt->state.displayTimeMs * displaySmoothing;
 
-        if (vkrt->state.sampleTuningFrames > 0) {
-            vkrt->state.tuningRenderSumMs += vkrt->state.renderTimeMs;
-            vkrt->state.tuningFrameSumMs += vkrt->state.displayTimeMs;
-            vkrt->state.sampleTuningFrames--;
-
-            if (vkrt->state.sampleTuningFrames == 0) {
-                float avgRenderMs = vkrt->state.tuningRenderSumMs / 12.0f;
-                float avgFrameMs = vkrt->state.tuningFrameSumMs / 12.0f;
-                float ratio = (avgFrameMs * budgetUtilization) / avgRenderMs;
-                if (ratio < 1.0f) ratio = 1.0f;
-                if (ratio > 4096.0f) ratio = 4096.0f;
-                uint32_t tunedSPP = (uint32_t)(ratio + 0.5f);
-                if (tunedSPP < 1) tunedSPP = 1;
-                vkrt->state.samplesPerPixel = tunedSPP;
-                vkrt->core.sceneData->samplesPerPixel = tunedSPP;
-                vkrt->state.autoAdjustCooldown = 6;
-            }
-        } else {
-            if (vkrt->state.autoAdjustCooldown > 0) {
-                vkrt->state.autoAdjustCooldown--;
-            } else {
-                float targetRatio = (vkrt->state.smoothedFrameMs * budgetUtilization) / vkrt->state.smoothedRenderMs;
-                if (targetRatio < 0.1f) targetRatio = 0.1f;
-                if (targetRatio > 8.0f) targetRatio = 8.0f;
-
-                float current = (float)vkrt->state.samplesPerPixel;
-                float target = current * targetRatio;
-                if (target < 1.0f) target = 1.0f;
-                if (target > 4096.0f) target = 4096.0f;
-
-                float next = current;
-                if (target < current) {
-                    next = current * 0.80f;
-                    if (next < target) next = target;
-                } else if (target > current) {
-                    next = current * 1.12f;
-                    if (next > target) next = target;
-                }
-
-                uint32_t tunedSPP = (uint32_t)(next + 0.5f);
-                if (tunedSPP < 1) tunedSPP = 1;
-                if (tunedSPP > 4096) tunedSPP = 4096;
-
-                if (tunedSPP != vkrt->state.samplesPerPixel) {
-                    vkrt->state.samplesPerPixel = tunedSPP;
-                    vkrt->core.sceneData->samplesPerPixel = tunedSPP;
-                    vkrt->state.autoAdjustCooldown = 2;
-                }
-            }
-        }
-    }
+    if (vkrt->state.displayRenderTimeMs <= 0.0f) vkrt->state.displayRenderTimeMs = vkrt->state.renderTimeMs;
+    else vkrt->state.displayRenderTimeMs = vkrt->state.displayRenderTimeMs * (1.0f - displaySmoothing) + vkrt->state.renderTimeMs * displaySmoothing;
 
     size_t n = (size_t)(vkrt->state.accumulationFrame + 1);
     size_t cap = COUNT_OF(vkrt->state.frametimes);
@@ -167,9 +111,9 @@ void recordFrameTime(VKRT* vkrt) {
 
     float weight = 1.0f / (float)n;
 
-    vkrt->state.averageFrametime = vkrt->state.averageFrametime * (1.0f - weight) + vkrt->state.displayTimeMs * weight;
-    vkrt->state.framesPerSecond = (uint32_t)(1000.0f / vkrt->state.displayTimeMs);
-    vkrt->state.frametimes[vkrt->state.frametimeStartIndex] = vkrt->state.displayTimeMs;
+    vkrt->state.averageFrametime = vkrt->state.averageFrametime * (1.0f - weight) + vkrt->state.displayFrameTimeMs * weight;
+    vkrt->state.framesPerSecond = (uint32_t)(1000.0f / vkrt->state.displayFrameTimeMs);
+    vkrt->state.frametimes[vkrt->state.frametimeStartIndex] = vkrt->state.displayFrameTimeMs;
     vkrt->state.frametimeStartIndex = (vkrt->state.frametimeStartIndex + 1) % COUNT_OF(vkrt->state.frametimes);
 }
 
@@ -178,8 +122,9 @@ void createSceneUniform(VKRT* vkrt) {
     createBuffer(vkrt, uniformBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &vkrt->core.sceneDataBuffer, &vkrt->core.sceneDataMemory);
     vkMapMemory(vkrt->core.device, vkrt->core.sceneDataMemory, 0, uniformBufferSize, 0, (void**)&vkrt->core.sceneData);
     memset(vkrt->core.sceneData, 0, uniformBufferSize);
-    vkrt->state.samplesPerPixel = 1;
-    vkrt->state.autoSamplesPerPixel = 1;
+    vkrt->state.samplesPerPixel = 8;
+    vkrt->state.maxBounces = 8;
+    vkrt->state.toneMappingMode = VKRT_TONE_MAPPING_ACES;
 
     vkrt->state.camera = (Camera){
         .width = WIDTH, .height = HEIGHT,
@@ -189,6 +134,9 @@ void createSceneUniform(VKRT* vkrt) {
         .target = {0.0f, 0.0f, 0.0f},
         .up = {0.0f, 0.0f, 1.0f}
     };
+
+    vkrt->core.sceneData->maxBounces = vkrt->state.maxBounces;
+    vkrt->core.sceneData->toneMappingMode = vkrt->state.toneMappingMode;
 
     vkrt->core.sceneData->viewportRect[0] = 0;
     vkrt->core.sceneData->viewportRect[1] = 0;
@@ -214,22 +162,16 @@ void updateMatricesFromCamera(VKRT* vkrt) {
 void resetSceneData(VKRT* vkrt) {
     vkrt->core.sceneData->frameNumber = 0;
     vkrt->core.sceneData->samplesPerPixel = vkrt->state.samplesPerPixel;
+    vkrt->core.sceneData->maxBounces = vkrt->state.maxBounces;
+    vkrt->core.sceneData->toneMappingMode = vkrt->state.toneMappingMode;
     vkrt->state.accumulationFrame = 0;
     vkrt->state.totalSamples = 0;
     vkrt->state.averageFrametime = 0.0f;
     vkrt->state.frametimeStartIndex = 0;
-    vkrt->state.sampleTuningFrames = vkrt->state.autoSamplesPerPixel ? 12 : 0;
-    vkrt->state.autoAdjustCooldown = 0;
-    vkrt->state.tuningRenderSumMs = 0.0f;
-    vkrt->state.tuningFrameSumMs = 0.0f;
-    vkrt->state.smoothedRenderMs = 0.0f;
-    vkrt->state.smoothedFrameMs = 0.0f;
-    if (vkrt->state.autoSamplesPerPixel) {
-        vkrt->state.samplesPerPixel = 1;
-        vkrt->core.sceneData->samplesPerPixel = 1;
-    }
+    vkrt->core.accumulationNeedsReset = VK_TRUE;
     memset(vkrt->state.frametimes, 0, sizeof(vkrt->state.frametimes));
 }
+
 
 VkTransformMatrixKHR getMeshTransform(MeshInfo* meshInfo) {
     vec3 scale;

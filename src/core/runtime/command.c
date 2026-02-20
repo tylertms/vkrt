@@ -41,6 +41,7 @@ void recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
     VkExtent2D extent = vkrt->runtime.swapChainExtent;
     VkImage accumulationReadImage = vkrt->core.accumulationImages[vkrt->core.accumulationReadIndex];
     VkImage accumulationWriteImage = vkrt->core.accumulationImages[vkrt->core.accumulationWriteIndex];
+    VkImage outputImage = vkrt->core.storageImage;
     VkImage destImage = vkrt->runtime.swapChainImages[imageIndex];
 
     VkCommandBufferBeginInfo commandBufferBeginInfo = {0};
@@ -58,7 +59,28 @@ void recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
 
     transitionImageLayout(commandBuffer, destImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
+    VkImageSubresourceRange clearRange = {0};
+    clearRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    clearRange.baseMipLevel = 0;
+    clearRange.levelCount = 1;
+    clearRange.baseArrayLayer = 0;
+    clearRange.layerCount = 1;
+
     if (vkrt->core.descriptorSetReady) {
+        if (vkrt->core.accumulationNeedsReset) {
+            VkClearColorValue clearZero = {.float32 = {0.0f, 0.0f, 0.0f, 0.0f}};
+            transitionImageLayout(commandBuffer, accumulationReadImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+            transitionImageLayout(commandBuffer, accumulationWriteImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+            transitionImageLayout(commandBuffer, outputImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+            vkCmdClearColorImage(commandBuffer, accumulationReadImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearZero, 1, &clearRange);
+            vkCmdClearColorImage(commandBuffer, accumulationWriteImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearZero, 1, &clearRange);
+            vkCmdClearColorImage(commandBuffer, outputImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearZero, 1, &clearRange);
+            transitionImageLayout(commandBuffer, accumulationReadImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+            transitionImageLayout(commandBuffer, accumulationWriteImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+            transitionImageLayout(commandBuffer, outputImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+            vkrt->core.accumulationNeedsReset = VK_FALSE;
+        }
+
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, vkrt->core.rayTracingPipeline);
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, vkrt->core.pipelineLayout, 0, 1, &vkrt->core.descriptorSet, 0, NULL);
 
@@ -67,6 +89,7 @@ void recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
 
         transitionImageLayout(commandBuffer, accumulationWriteImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
         transitionImageLayout(commandBuffer, accumulationReadImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+        transitionImageLayout(commandBuffer, outputImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 
         VkImageBlit blit = (VkImageBlit){0};
         blit.srcSubresource = (VkImageSubresourceLayers){VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
@@ -76,7 +99,7 @@ void recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
         blit.dstOffsets[0] = (VkOffset3D){0, 0, 0};
         blit.dstOffsets[1] = (VkOffset3D){(int32_t)extent.width, (int32_t)extent.height, 1};
 
-        vkCmdBlitImage(commandBuffer, accumulationWriteImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, destImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
+        vkCmdBlitImage(commandBuffer, outputImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, destImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
 
         VkImageCopy copyRegion = {0};
         copyRegion.srcSubresource = (VkImageSubresourceLayers){VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
@@ -85,12 +108,6 @@ void recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
         vkCmdCopyImage(commandBuffer, accumulationWriteImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, accumulationReadImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
     } else {
         VkClearColorValue clearColor = {.float32 = {0.02f, 0.02f, 0.025f, 1.0f}};
-        VkImageSubresourceRange clearRange = {0};
-        clearRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        clearRange.baseMipLevel = 0;
-        clearRange.levelCount = 1;
-        clearRange.baseArrayLayer = 0;
-        clearRange.layerCount = 1;
         vkCmdClearColorImage(commandBuffer, destImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &clearRange);
     }
 
@@ -114,6 +131,7 @@ void recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
     if (vkrt->core.descriptorSetReady) {
         transitionImageLayout(commandBuffer, accumulationReadImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
         transitionImageLayout(commandBuffer, accumulationWriteImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+        transitionImageLayout(commandBuffer, outputImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
     }
 
     vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, vkrt->runtime.timestampPool, qbase + 1);
@@ -325,12 +343,50 @@ void createStorageImage(VKRT* vkrt) {
 
     vkrt->core.accumulationReadIndex = 0;
     vkrt->core.accumulationWriteIndex = 1;
-    vkrt->core.storageImage = vkrt->core.accumulationImages[1];
-    vkrt->core.storageImageView = vkrt->core.accumulationImageViews[1];
-    vkrt->core.storageImageMemory = vkrt->core.accumulationImageMemories[1];
+    vkrt->core.accumulationNeedsReset = VK_TRUE;
+
+    if (vkCreateImage(vkrt->core.device, &imageCreateInfo, NULL, &vkrt->core.storageImage) != VK_SUCCESS) {
+        perror("[ERROR]: Failed to create output image");
+        exit(EXIT_FAILURE);
+    }
+
+    VkMemoryRequirements outputMemoryRequirements;
+    vkGetImageMemoryRequirements(vkrt->core.device, vkrt->core.storageImage, &outputMemoryRequirements);
+
+    VkMemoryAllocateInfo outputMemoryAllocateInfo = {0};
+    outputMemoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    outputMemoryAllocateInfo.allocationSize = outputMemoryRequirements.size;
+    outputMemoryAllocateInfo.memoryTypeIndex = findMemoryType(vkrt, outputMemoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+    if (vkAllocateMemory(vkrt->core.device, &outputMemoryAllocateInfo, NULL, &vkrt->core.storageImageMemory) != VK_SUCCESS) {
+        perror("[ERROR]: Failed to allocate output image memory");
+        exit(EXIT_FAILURE);
+    }
+
+    if (vkBindImageMemory(vkrt->core.device, vkrt->core.storageImage, vkrt->core.storageImageMemory, 0) != VK_SUCCESS) {
+        perror("[ERROR]: Failed to bind output image memory");
+        exit(EXIT_FAILURE);
+    }
+
+    VkImageViewCreateInfo outputImageViewCreateInfo = {0};
+    outputImageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    outputImageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    outputImageViewCreateInfo.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+    outputImageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    outputImageViewCreateInfo.subresourceRange.baseMipLevel = 0;
+    outputImageViewCreateInfo.subresourceRange.levelCount = 1;
+    outputImageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
+    outputImageViewCreateInfo.subresourceRange.layerCount = 1;
+    outputImageViewCreateInfo.image = vkrt->core.storageImage;
+
+    if (vkCreateImageView(vkrt->core.device, &outputImageViewCreateInfo, NULL, &vkrt->core.storageImageView) != VK_SUCCESS) {
+        perror("[ERROR]: Failed to create output image view");
+        exit(EXIT_FAILURE);
+    }
 
     VkCommandBuffer commandBuffer = beginSingleTimeCommands(vkrt);
     transitionImageLayout(commandBuffer, vkrt->core.accumulationImages[0], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
     transitionImageLayout(commandBuffer, vkrt->core.accumulationImages[1], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+    transitionImageLayout(commandBuffer, vkrt->core.storageImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
     endSingleTimeCommands(vkrt, commandBuffer);
 }

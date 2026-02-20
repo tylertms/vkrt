@@ -18,9 +18,15 @@ typedef struct SceneData {
     mat4 projInverse;
     uint32_t frameNumber;
     uint32_t samplesPerPixel;
-    uint32_t padding0[2];
+    uint32_t maxBounces;
+    uint32_t toneMappingMode;
     uint32_t viewportRect[4];
 } SceneData;
+
+typedef enum VKRT_ToneMappingMode {
+    VKRT_TONE_MAPPING_NONE = 0,
+    VKRT_TONE_MAPPING_ACES = 1,
+} VKRT_ToneMappingMode;
 
 typedef struct Camera {
     vec3 pos, target, up;
@@ -143,12 +149,14 @@ typedef struct VKRT_Core {
     VkDeviceMemory accumulationImageMemories[2];
     uint32_t accumulationReadIndex;
     uint32_t accumulationWriteIndex;
+    VkBool32 accumulationNeedsReset;
     Mesh* meshes;
     AccelerationStructure topLevelAccelerationStructure;
     Buffer vertexData;
     Buffer indexData;
     Buffer meshData;
     Buffer materialData;
+    VkBool32 materialDataDirty;
     VkBool32 descriptorSetReady;
     char deviceName[256];
     VKRT_ShaderConfig shaders;
@@ -193,13 +201,10 @@ typedef struct VKRT_PublicState {
     uint32_t accumulationFrame;
     uint32_t samplesPerPixel;
     uint64_t totalSamples;
-    uint8_t autoSamplesPerPixel;
-    uint8_t sampleTuningFrames;
-    uint8_t autoAdjustCooldown;
-    float tuningRenderSumMs;
-    float tuningFrameSumMs;
-    float smoothedRenderMs;
-    float smoothedFrameMs;
+    float displayRenderTimeMs;
+    float displayFrameTimeMs;
+    uint32_t maxBounces;
+    VKRT_ToneMappingMode toneMappingMode;
 } VKRT_PublicState;
 
 typedef struct VKRT {
