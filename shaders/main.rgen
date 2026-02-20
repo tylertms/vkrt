@@ -74,7 +74,8 @@ void main() {
     }
 
     uint spp = max(scene.samplesPerPixel, 1u);
-    uint state = (pixel.y * 814793u + pixel.x * 27u) ^ ((scene.frameNumber + 1u) * 102943u);
+    vec4 previous = imageLoad(accumulationReadImage, pixel);
+    uint state = (pixel.y * 814793u + pixel.x * 27u) ^ ((uint(previous.a) + 1u) * 102943u);
 
     vec3 frameRadiance = vec3(0.0);
     for (uint sampleIndex = 0; sampleIndex < spp; sampleIndex++) {
@@ -82,15 +83,14 @@ void main() {
     }
     frameRadiance /= float(spp);
 
-    vec3 previous = imageLoad(accumulationReadImage, pixel).rgb;
-    float frameWeight = float(scene.frameNumber);
-    vec3 accumulated = (previous * frameWeight + frameRadiance) / float(scene.frameNumber + 1u);
+    float frameWeight = previous.a;
+    vec3 accumulated = (previous.rgb * frameWeight + frameRadiance) / (frameWeight + 1.0);
 
     vec3 mapped = accumulated;
     if (scene.toneMappingMode == 1u) {
         mapped = toneMapACES(mapped);
     }
 
-    imageStore(accumulationWriteImage, pixel, vec4(accumulated, 1.0));
+    imageStore(accumulationWriteImage, pixel, vec4(accumulated, frameWeight + 1.0));
     imageStore(outputImage, pixel, vec4(mapped, 1.0));
 }

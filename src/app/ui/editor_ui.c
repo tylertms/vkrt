@@ -97,12 +97,12 @@ static bool drawViewportWindow(VKRT* runtime) {
 
 static void drawPerformanceSection(VKRT* runtime) {
     ImGui_Separator();
-    ImGui_Text("FPS:            %6u", runtime->state.framesPerSecond);
-    ImGui_Text("Frames:         %6u", runtime->state.accumulationFrame);
-    ImGui_Text("Frame time:     %6.3f ms", runtime->state.displayFrameTimeMs);
-    ImGui_Text("Render time:    %6.3f ms", runtime->state.displayRenderTimeMs);
-    ImGui_Text("Total samples:  %6llu", (unsigned long long)runtime->state.totalSamples);
-    ImGui_Text("Samples / px:   %6u", runtime->state.samplesPerPixel);
+    ImGui_Text("FPS:          %8u", runtime->state.framesPerSecond);
+    ImGui_Text("Frames:       %8u", runtime->state.accumulationFrame);
+    ImGui_Text("Frame (ms):   %8.3f ms", runtime->state.displayFrameTimeMs);
+    ImGui_Text("Render (ms):  %8.3f ms", runtime->state.displayRenderTimeMs);
+    ImGui_Text("Samples:  %12llu", (unsigned long long)runtime->state.totalSamples);
+    ImGui_Text("Samples / px: %8u", runtime->state.samplesPerPixel);
 
     int spp = (int)runtime->state.samplesPerPixel;
     if (ImGui_SliderIntEx("SPP", &spp, 1, 2048, "%d", ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_Logarithmic)) {
@@ -122,10 +122,6 @@ static void drawPerformanceSection(VKRT* runtime) {
         runtime->state.toneMappingMode = (VKRT_ToneMappingMode)toneMappingMode;
         VKRT_invalidateAccumulation(runtime);
     }
-
-    ImGui_PlotLinesEx("##frametimes", runtime->state.frametimes, COUNT_OF(runtime->state.frametimes),
-                      (int)runtime->state.frametimeStartIndex, "", 0.0f,
-                      2 * runtime->state.averageFrametime, (ImVec2){220.0f, 60.0f}, sizeof(float));
 }
 
 static void drawMeshInspector(VKRT* runtime, EditorState* state) {

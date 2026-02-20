@@ -630,7 +630,7 @@ void VKRT_endFrame(VKRT* vkrt) {
     if (vkrt->runtime.framePresented) {
         uint32_t renderedSPP = vkrt->core.sceneData->samplesPerPixel;
         recordFrameTime(vkrt);
-        if (vkrt->core.descriptorSetReady) {
+        if (vkrt->core.descriptorSetReady && !vkrt->core.accumulationNeedsReset) {
             vkrt->state.accumulationFrame = vkrt->core.sceneData->frameNumber + 1;
             vkrt->state.totalSamples += renderedSPP;
             vkrt->core.sceneData->frameNumber++;

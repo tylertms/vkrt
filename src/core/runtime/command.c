@@ -68,6 +68,9 @@ void recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
 
     if (vkrt->core.descriptorSetReady) {
         if (vkrt->core.accumulationNeedsReset) {
+            vkrt->core.sceneData->frameNumber = 0;
+            vkrt->state.accumulationFrame = 0;
+            vkrt->state.totalSamples = 0;
             VkClearColorValue clearZero = {.float32 = {0.0f, 0.0f, 0.0f, 0.0f}};
             transitionImageLayout(commandBuffer, accumulationReadImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
             transitionImageLayout(commandBuffer, accumulationWriteImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
