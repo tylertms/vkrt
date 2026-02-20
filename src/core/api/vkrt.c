@@ -847,14 +847,18 @@ void VKRT_setSamplesPerPixel(VKRT* vkrt, uint32_t samplesPerPixel) {
 void VKRT_setAutoSPPEnabled(VKRT* vkrt, uint8_t enabled) {
     if (!vkrt) return;
     vkrt->state.autoSPPEnabled = enabled ? 1 : 0;
-    vkrt->runtime.autoSPPFastFrames = 0;
-    vkrt->runtime.autoSPPSlowFrames = 0;
-    vkrt->runtime.autoSPPCooldownFrames = 0;
 }
 
 
 void VKRT_setAutoSPPTargetFPS(VKRT* vkrt, uint32_t targetFPS) {
     if (!vkrt) return;
+
+    if (targetFPS == 0) {
+        float hz = vkrt->runtime.displayRefreshHz;
+        if (hz <= 0.0f) hz = 60.0f;
+        targetFPS = (uint32_t)(hz + 0.5f);
+    }
+
     if (targetFPS < 30) targetFPS = 30;
     if (targetFPS > 360) targetFPS = 360;
     vkrt->state.autoSPPTargetFps = targetFPS;

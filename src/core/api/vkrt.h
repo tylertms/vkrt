@@ -189,9 +189,6 @@ typedef struct VKRT_Runtime {
     VkBool32 framePresented;
     VkPresentModeKHR presentMode;
     float displayRefreshHz;
-    uint32_t autoSPPFastFrames;
-    uint32_t autoSPPSlowFrames;
-    uint32_t autoSPPCooldownFrames;
 } VKRT_Runtime;
 
 typedef struct VKRT_PublicState {

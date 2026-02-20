@@ -6,27 +6,6 @@
 #include <stdint.h>
 #include <string.h>
 
-static uint32_t nextSPPStep(uint32_t current, uint8_t increase, uint8_t strongDrop) {
-    static const uint32_t ladder[] = {
-        1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384, 512, 768, 1024, 1536, 2048
-    };
-
-    size_t index = 0;
-    while (index + 1 < COUNT_OF(ladder) && ladder[index] < current) {
-        index++;
-    }
-
-    if (increase) {
-        if (index + 1 < COUNT_OF(ladder)) index++;
-    } else {
-        size_t step = strongDrop ? 2 : 1;
-        if (index > step) index -= step;
-        else index = 0;
-    }
-
-    return ladder[index];
-}
-
 void applyCameraInput(VKRT* vkrt, const VKRT_CameraInput* input) {
     if (!vkrt || !input) return;
     const float panSpeed = 0.0015f;
@@ -147,11 +126,13 @@ void createSceneUniform(VKRT* vkrt) {
     vkrt->state.maxBounces = 8;
     vkrt->state.toneMappingMode = VKRT_TONE_MAPPING_ACES;
     vkrt->state.autoSPPEnabled = 1;
-    vkrt->state.autoSPPTargetFps = 120;
+    float refreshHz = vkrt->runtime.displayRefreshHz;
+    if (refreshHz <= 0.0f) refreshHz = 60.0f;
+    uint32_t targetFps = (uint32_t)(refreshHz + 0.5f);
+    if (targetFps < 30) targetFps = 30;
+    if (targetFps > 360) targetFps = 360;
+    vkrt->state.autoSPPTargetFps = targetFps;
     vkrt->state.autoSPPTargetFrameMs = 1000.0f / (float)vkrt->state.autoSPPTargetFps;
-    vkrt->runtime.autoSPPFastFrames = 0;
-    vkrt->runtime.autoSPPSlowFrames = 0;
-    vkrt->runtime.autoSPPCooldownFrames = 0;
 
     vkrt->state.camera = (Camera){
         .width = WIDTH, .height = HEIGHT,
@@ -194,63 +175,39 @@ void resetSceneData(VKRT* vkrt) {
     vkrt->state.totalSamples = 0;
     vkrt->state.averageFrametime = 0.0f;
     vkrt->state.frametimeStartIndex = 0;
-    vkrt->runtime.autoSPPFastFrames = 0;
-    vkrt->runtime.autoSPPSlowFrames = 0;
-    vkrt->runtime.autoSPPCooldownFrames = 0;
     vkrt->core.accumulationNeedsReset = VK_TRUE;
     memset(vkrt->state.frametimes, 0, sizeof(vkrt->state.frametimes));
 }
-
-
-
 
 void updateAutoSPP(VKRT* vkrt) {
     if (!vkrt || !vkrt->state.autoSPPEnabled) return;
 
     float targetMs = vkrt->state.autoSPPTargetFrameMs;
-    if (targetMs <= 0.0f) targetMs = 1000.0f / (float)(vkrt->state.autoSPPTargetFps ? vkrt->state.autoSPPTargetFps : 120);
-    if (targetMs < 1.0f) targetMs = 1.0f;
+    if (targetMs <= 0.0f) {
+        uint32_t targetFps = vkrt->state.autoSPPTargetFps ? vkrt->state.autoSPPTargetFps : 60;
+        targetMs = 1000.0f / (float)targetFps;
+    }
 
     float controlMs = vkrt->state.displayRenderTimeMs > 0.0f ? vkrt->state.displayRenderTimeMs : vkrt->state.displayFrameTimeMs;
     if (controlMs <= 0.0f) return;
 
-    if (controlMs > targetMs * 1.06f) {
-        vkrt->runtime.autoSPPSlowFrames++;
-        vkrt->runtime.autoSPPFastFrames = 0;
-    } else if (controlMs < targetMs * 0.72f) {
-        vkrt->runtime.autoSPPFastFrames++;
-        vkrt->runtime.autoSPPSlowFrames = 0;
-    } else {
-        vkrt->runtime.autoSPPFastFrames = 0;
-        vkrt->runtime.autoSPPSlowFrames = 0;
-    }
-
-    if (vkrt->runtime.autoSPPCooldownFrames > 0) {
-        vkrt->runtime.autoSPPCooldownFrames--;
-        return;
-    }
+    float budgetMs = targetMs * 0.90f;
+    float ratio = budgetMs / controlMs;
+    if (fabsf(1.0f - ratio) < 0.04f) return;
 
     uint32_t spp = vkrt->state.samplesPerPixel;
-    uint8_t changed = 0;
+    float desired = (float)spp * ratio;
+    float nextValue = (float)spp + (desired - (float)spp) * 0.30f;
 
-    if (vkrt->runtime.autoSPPSlowFrames >= 6) {
-        uint32_t next = nextSPPStep(spp, 0, controlMs > targetMs * 1.30f);
-        if (next != spp) {
-            VKRT_setSamplesPerPixel(vkrt, next);
-            changed = 1;
-        }
-        vkrt->runtime.autoSPPSlowFrames = 0;
-    } else if (vkrt->runtime.autoSPPFastFrames >= 18) {
-        uint32_t next = nextSPPStep(spp, 1, 0);
-        if (next != spp) {
-            VKRT_setSamplesPerPixel(vkrt, next);
-            changed = 1;
-        }
-        vkrt->runtime.autoSPPFastFrames = 0;
-    }
+    if (ratio > 1.0f && nextValue < (float)spp + 1.0f) nextValue = (float)spp + 1.0f;
+    if (ratio < 1.0f && nextValue > (float)spp - 1.0f) nextValue = (float)spp - 1.0f;
 
-    if (changed) {
-        vkrt->runtime.autoSPPCooldownFrames = 12;
+    if (nextValue < 1.0f) nextValue = 1.0f;
+    if (nextValue > 2048.0f) nextValue = 2048.0f;
+
+    uint32_t next = (uint32_t)(nextValue + 0.5f);
+    if (next != spp) {
+        VKRT_setSamplesPerPixel(vkrt, next);
     }
 }
 VkTransformMatrixKHR getMeshTransform(MeshInfo* meshInfo) {

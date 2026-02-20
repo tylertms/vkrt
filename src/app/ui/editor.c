@@ -112,7 +112,6 @@ static void drawPerformanceSection(VKRT* runtime) {
         if (ImGui_SliderIntEx("Target FPS", &targetFps, 30, 360, "%d", ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_Logarithmic)) {
             VKRT_setAutoSPPTargetFPS(runtime, (uint32_t)targetFps);
         }
-        ImGui_Text("Target (ms):  %8.3f ms", runtime->state.autoSPPTargetFrameMs);
     } else {
         int spp = (int)runtime->state.samplesPerPixel;
         if (ImGui_SliderIntEx("SPP", &spp, 1, 2048, "%d", ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_Logarithmic)) {
