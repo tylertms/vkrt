@@ -26,16 +26,13 @@ void createShaderBindingTable(VKRT* vkrt) {
     VkDeviceSize stride = rayTracingPipelineProperties.shaderGroupBaseAlignment;
     VkDeviceSize sbtSize = groupCount * stride;
 
-    PFN_vkGetRayTracingShaderGroupHandlesKHR pvkGetRayTracingShaderGroupHandlesKHR = (PFN_vkGetRayTracingShaderGroupHandlesKHR)vkGetDeviceProcAddr(vkrt->core.device, "vkGetRayTracingShaderGroupHandlesKHR");
-    PFN_vkGetBufferDeviceAddressKHR pvkGetBufferDeviceAddressKHR = (PFN_vkGetBufferDeviceAddressKHR)vkGetDeviceProcAddr(vkrt->core.device, "vkGetBufferDeviceAddressKHR");
-
     VkBuffer stageBuffer;
     VkDeviceMemory stageMemory;
 
     createBuffer(vkrt, sbtSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stageBuffer, &stageMemory);
 
     uint8_t* handles = (uint8_t*)malloc(groupCount * handleSize);
-    pvkGetRayTracingShaderGroupHandlesKHR(vkrt->core.device, vkrt->core.rayTracingPipeline, 0, groupCount, groupCount * handleSize, handles);
+    vkrt->core.procs.vkGetRayTracingShaderGroupHandlesKHR(vkrt->core.device, vkrt->core.rayTracingPipeline, 0, groupCount, groupCount * handleSize, handles);
 
     void* mapped;
     vkMapMemory(vkrt->core.device, stageMemory, 0, sbtSize, 0, &mapped);
@@ -75,7 +72,7 @@ void createShaderBindingTable(VKRT* vkrt) {
     VkBufferDeviceAddressInfo bufferDeviceAddressInfo = {0};
     bufferDeviceAddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
     bufferDeviceAddressInfo.buffer = vkrt->core.shaderBindingTableBuffer;
-    VkDeviceAddress base = pvkGetBufferDeviceAddressKHR(vkrt->core.device, &bufferDeviceAddressInfo);
+    VkDeviceAddress base = vkrt->core.procs.vkGetBufferDeviceAddressKHR(vkrt->core.device, &bufferDeviceAddressInfo);
 
     for (int i = 0; i < 3; i++) {
         vkrt->core.shaderBindingTables[i].deviceAddress = base + i * stride;
@@ -124,8 +121,7 @@ void createBottomLevelAccelerationStructure(VKRT* vkrt, Mesh* mesh) {
     VkAccelerationStructureBuildSizesInfoKHR accelerationStructureBuildSizesInfo = {0};
     accelerationStructureBuildSizesInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
 
-    PFN_vkGetAccelerationStructureBuildSizesKHR pvkGetAccelerationStructureBuildSizesKHR = (PFN_vkGetAccelerationStructureBuildSizesKHR)vkGetDeviceProcAddr(vkrt->core.device, "vkGetAccelerationStructureBuildSizesKHR");
-    pvkGetAccelerationStructureBuildSizesKHR(vkrt->core.device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &accelerationStructureBuildGeometryInfo, &primitiveCount, &accelerationStructureBuildSizesInfo);
+    vkrt->core.procs.vkGetAccelerationStructureBuildSizesKHR(vkrt->core.device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &accelerationStructureBuildGeometryInfo, &primitiveCount, &accelerationStructureBuildSizesInfo);
 
     QueueFamily indices = findQueueFamilies(vkrt);
 
@@ -179,8 +175,7 @@ void createBottomLevelAccelerationStructure(VKRT* vkrt, Mesh* mesh) {
     accelerationStructureCreateInfo.size = accelerationStructureBuildSizesInfo.accelerationStructureSize;
     accelerationStructureCreateInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
 
-    PFN_vkCreateAccelerationStructureKHR pvkCreateAccelerationStructureKHR = (PFN_vkCreateAccelerationStructureKHR)vkGetDeviceProcAddr(vkrt->core.device, "vkCreateAccelerationStructureKHR");
-    if (pvkCreateAccelerationStructureKHR(vkrt->core.device, &accelerationStructureCreateInfo, NULL, &mesh->bottomLevelAccelerationStructure.structure) != VK_SUCCESS) {
+    if (vkrt->core.procs.vkCreateAccelerationStructureKHR(vkrt->core.device, &accelerationStructureCreateInfo, NULL, &mesh->bottomLevelAccelerationStructure.structure) != VK_SUCCESS) {
         perror("[ERROR]: Failed to create BLAS");
         exit(EXIT_FAILURE);
     }
@@ -227,8 +222,7 @@ void createBottomLevelAccelerationStructure(VKRT* vkrt, Mesh* mesh) {
     scratchBufferDeviceAddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
     scratchBufferDeviceAddressInfo.buffer = scratchBuffer;
 
-    PFN_vkGetBufferDeviceAddressKHR pvkGetBufferDeviceAddressKHR = (PFN_vkGetBufferDeviceAddressKHR)vkGetDeviceProcAddr(vkrt->core.device, "vkGetBufferDeviceAddressKHR");
-    VkDeviceAddress scratchBufferDeviceAddress = pvkGetBufferDeviceAddressKHR(vkrt->core.device, &scratchBufferDeviceAddressInfo);
+    VkDeviceAddress scratchBufferDeviceAddress = vkrt->core.procs.vkGetBufferDeviceAddressKHR(vkrt->core.device, &scratchBufferDeviceAddressInfo);
 
     accelerationStructureBuildGeometryInfo.dstAccelerationStructure = mesh->bottomLevelAccelerationStructure.structure;
     accelerationStructureBuildGeometryInfo.scratchData.deviceAddress = scratchBufferDeviceAddress;
@@ -241,8 +235,7 @@ void createBottomLevelAccelerationStructure(VKRT* vkrt, Mesh* mesh) {
     const VkAccelerationStructureBuildRangeInfoKHR* pBuildRangeInfo = &accelerationStructureBuildRangeInfo;
 
     VkCommandBuffer commandBuffer = beginSingleTimeCommands(vkrt);
-    PFN_vkCmdBuildAccelerationStructuresKHR pvkCmdBuildAccelerationStructuresKHR = (PFN_vkCmdBuildAccelerationStructuresKHR)vkGetDeviceProcAddr(vkrt->core.device, "vkCmdBuildAccelerationStructuresKHR");
-    pvkCmdBuildAccelerationStructuresKHR(commandBuffer, 1, &accelerationStructureBuildGeometryInfo, &pBuildRangeInfo);
+    vkrt->core.procs.vkCmdBuildAccelerationStructuresKHR(commandBuffer, 1, &accelerationStructureBuildGeometryInfo, &pBuildRangeInfo);
 
     VkMemoryBarrier memoryBarrier = {0};
     memoryBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
@@ -256,8 +249,7 @@ void createBottomLevelAccelerationStructure(VKRT* vkrt, Mesh* mesh) {
     accelerationStructureDeviceAddressInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR;
     accelerationStructureDeviceAddressInfo.accelerationStructure = mesh->bottomLevelAccelerationStructure.structure;
 
-    PFN_vkGetAccelerationStructureDeviceAddressKHR pvkGetAccelerationStructureDeviceAddressKHR = (PFN_vkGetAccelerationStructureDeviceAddressKHR)vkGetDeviceProcAddr(vkrt->core.device, "vkGetAccelerationStructureDeviceAddressKHR");
-    mesh->bottomLevelAccelerationStructure.deviceAddress = pvkGetAccelerationStructureDeviceAddressKHR(vkrt->core.device, &accelerationStructureDeviceAddressInfo);
+    mesh->bottomLevelAccelerationStructure.deviceAddress = vkrt->core.procs.vkGetAccelerationStructureDeviceAddressKHR(vkrt->core.device, &accelerationStructureDeviceAddressInfo);
 
     vkDestroyBuffer(vkrt->core.device, scratchBuffer, NULL);
     vkFreeMemory(vkrt->core.device, scratchDeviceMemory, NULL);
@@ -276,8 +268,7 @@ void createTopLevelAccelerationStructure(VKRT* vkrt) {
     uint64_t startTime = getMicroseconds();
 
     if (vkrt->core.topLevelAccelerationStructure.structure) {
-        PFN_vkDestroyAccelerationStructureKHR pvkDestroyAccelerationStructureKHR = (PFN_vkDestroyAccelerationStructureKHR)vkGetDeviceProcAddr(vkrt->core.device, "vkDestroyAccelerationStructureKHR");
-        pvkDestroyAccelerationStructureKHR(vkrt->core.device, vkrt->core.topLevelAccelerationStructure.structure, NULL);
+        vkrt->core.procs.vkDestroyAccelerationStructureKHR(vkrt->core.device, vkrt->core.topLevelAccelerationStructure.structure, NULL);
         vkDestroyBuffer(vkrt->core.device, vkrt->core.topLevelAccelerationStructure.buffer, NULL);
         vkFreeMemory(vkrt->core.device, vkrt->core.topLevelAccelerationStructure.memory, NULL);
 
@@ -389,8 +380,7 @@ void createTopLevelAccelerationStructure(VKRT* vkrt) {
     VkBufferDeviceAddressInfo instanceBufferDeviceAddressInfo = {0};
     instanceBufferDeviceAddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
     instanceBufferDeviceAddressInfo.buffer = instanceBuffer;
-    PFN_vkGetBufferDeviceAddressKHR pvkGetBufferDeviceAddressKHR = (PFN_vkGetBufferDeviceAddressKHR)vkGetDeviceProcAddr(vkrt->core.device, "vkGetBufferDeviceAddressKHR");
-    VkDeviceAddress instanceDeviceAddress = pvkGetBufferDeviceAddressKHR(vkrt->core.device, &instanceBufferDeviceAddressInfo);
+    VkDeviceAddress instanceDeviceAddress = vkrt->core.procs.vkGetBufferDeviceAddressKHR(vkrt->core.device, &instanceBufferDeviceAddressInfo);
 
     VkAccelerationStructureGeometryInstancesDataKHR accelerationStructureGeometryInstancesData = {0};
     accelerationStructureGeometryInstancesData.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
@@ -416,8 +406,7 @@ void createTopLevelAccelerationStructure(VKRT* vkrt) {
 
     VkAccelerationStructureBuildSizesInfoKHR accelerationStructureBuildSizesInfo = {0};
     accelerationStructureBuildSizesInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
-    PFN_vkGetAccelerationStructureBuildSizesKHR pvkGetAccelerationStructureBuildSizesKHR = (PFN_vkGetAccelerationStructureBuildSizesKHR)vkGetDeviceProcAddr(vkrt->core.device, "vkGetAccelerationStructureBuildSizesKHR");
-    pvkGetAccelerationStructureBuildSizesKHR(vkrt->core.device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &accelerationStructureBuildGeometryInfo, &instanceCount, &accelerationStructureBuildSizesInfo);
+    vkrt->core.procs.vkGetAccelerationStructureBuildSizesKHR(vkrt->core.device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &accelerationStructureBuildGeometryInfo, &instanceCount, &accelerationStructureBuildSizesInfo);
 
     VkBufferCreateInfo tlasBufferCreateInfo = {0};
     tlasBufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -461,8 +450,7 @@ void createTopLevelAccelerationStructure(VKRT* vkrt) {
     accelerationStructureCreateInfo.size = accelerationStructureBuildSizesInfo.accelerationStructureSize;
     accelerationStructureCreateInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
 
-    PFN_vkCreateAccelerationStructureKHR pvkCreateAccelerationStructureKHR = (PFN_vkCreateAccelerationStructureKHR)vkGetDeviceProcAddr(vkrt->core.device, "vkCreateAccelerationStructureKHR");
-    if (pvkCreateAccelerationStructureKHR(vkrt->core.device, &accelerationStructureCreateInfo, NULL, &vkrt->core.topLevelAccelerationStructure.structure) != VK_SUCCESS) {
+    if (vkrt->core.procs.vkCreateAccelerationStructureKHR(vkrt->core.device, &accelerationStructureCreateInfo, NULL, &vkrt->core.topLevelAccelerationStructure.structure) != VK_SUCCESS) {
         perror("[ERROR]: Failed to create TLAS");
         exit(EXIT_FAILURE);
     };
@@ -502,7 +490,7 @@ void createTopLevelAccelerationStructure(VKRT* vkrt) {
     scratchBufferDeviceAddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
     scratchBufferDeviceAddressInfo.buffer = scratchBuffer;
 
-    VkDeviceAddress scratchBufferDeviceAddress = pvkGetBufferDeviceAddressKHR(vkrt->core.device, &scratchBufferDeviceAddressInfo);
+    VkDeviceAddress scratchBufferDeviceAddress = vkrt->core.procs.vkGetBufferDeviceAddressKHR(vkrt->core.device, &scratchBufferDeviceAddressInfo);
     accelerationStructureBuildGeometryInfo.dstAccelerationStructure = vkrt->core.topLevelAccelerationStructure.structure;
     accelerationStructureBuildGeometryInfo.scratchData.deviceAddress = scratchBufferDeviceAddress;
 
@@ -514,8 +502,7 @@ void createTopLevelAccelerationStructure(VKRT* vkrt) {
     const VkAccelerationStructureBuildRangeInfoKHR* pBuildRangeInfo = &accelerationStructureBuildRangeInfo;
 
     VkCommandBuffer commandBuffer = beginSingleTimeCommands(vkrt);
-    PFN_vkCmdBuildAccelerationStructuresKHR pvkCmdBuildAccelerationStructuresKHR = (PFN_vkCmdBuildAccelerationStructuresKHR)vkGetDeviceProcAddr(vkrt->core.device, "vkCmdBuildAccelerationStructuresKHR");
-    pvkCmdBuildAccelerationStructuresKHR(commandBuffer, 1, &accelerationStructureBuildGeometryInfo, &pBuildRangeInfo);
+    vkrt->core.procs.vkCmdBuildAccelerationStructuresKHR(commandBuffer, 1, &accelerationStructureBuildGeometryInfo, &pBuildRangeInfo);
 
     VkMemoryBarrier memoryBarrier = {0};
     memoryBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
@@ -528,8 +515,7 @@ void createTopLevelAccelerationStructure(VKRT* vkrt) {
     VkAccelerationStructureDeviceAddressInfoKHR accelerationStructureDeviceAddressInfo = {0};
     accelerationStructureDeviceAddressInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR;
     accelerationStructureDeviceAddressInfo.accelerationStructure = vkrt->core.topLevelAccelerationStructure.structure;
-    PFN_vkGetAccelerationStructureDeviceAddressKHR fnGetASAddr = (PFN_vkGetAccelerationStructureDeviceAddressKHR)vkGetDeviceProcAddr(vkrt->core.device, "vkGetAccelerationStructureDeviceAddressKHR");
-    vkrt->core.topLevelAccelerationStructure.deviceAddress = fnGetASAddr(vkrt->core.device, &accelerationStructureDeviceAddressInfo);
+    vkrt->core.topLevelAccelerationStructure.deviceAddress = vkrt->core.procs.vkGetAccelerationStructureDeviceAddressKHR(vkrt->core.device, &accelerationStructureDeviceAddressInfo);
 
     vkDestroyBuffer(vkrt->core.device, instanceBuffer, NULL);
     vkFreeMemory(vkrt->core.device, instanceMemory, NULL);

@@ -1,8 +1,6 @@
 #ifndef CORE_COMMON_GLSL
 #define CORE_COMMON_GLSL
 
-#define MAX_BOUNCES 8
-
 struct Ray {
     vec3 origin;
     vec3 dir;
@@ -13,6 +11,10 @@ struct Material {
     float roughness;
     vec3 emissionColor;
     float emissionStrength;
+    float specular;
+    float padding0;
+    float padding1;
+    float padding2;
 };
 
 struct Payload {

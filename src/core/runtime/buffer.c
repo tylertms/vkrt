@@ -93,8 +93,7 @@ VkDeviceAddress createBufferFromHostData(VKRT* vkrt, const void* hostData, VkDev
         .buffer = *outBuffer
     };
 
-    PFN_vkGetBufferDeviceAddressKHR pvkGetBufferDeviceAddressKHR = (PFN_vkGetBufferDeviceAddressKHR)vkGetDeviceProcAddr(vkrt->core.device, "vkGetBufferDeviceAddressKHR");
-    return pvkGetBufferDeviceAddressKHR(vkrt->core.device, &addrInfo);
+    return vkrt->core.procs.vkGetBufferDeviceAddressKHR(vkrt->core.device, &addrInfo);
 }
 
 VkDeviceAddress appendBufferFromHostData(VKRT* vkrt, const void* hostData, VkDeviceSize appendSize, VkBufferUsageFlags usage, VkBuffer* ioBuffer, VkDeviceMemory* ioMemory, VkDeviceSize oldSize) {
@@ -167,7 +166,5 @@ VkDeviceAddress appendBufferFromHostData(VKRT* vkrt, const void* hostData, VkDev
     VkBufferDeviceAddressInfo addrInfo = {0};
     addrInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
     addrInfo.buffer = *ioBuffer;
-    PFN_vkGetBufferDeviceAddressKHR pvkGetBufferDeviceAddressKHR = (PFN_vkGetBufferDeviceAddressKHR)vkGetDeviceProcAddr(vkrt->core.device, "vkGetBufferDeviceAddressKHR");
-
-    return pvkGetBufferDeviceAddressKHR(vkrt->core.device, &addrInfo);
+    return vkrt->core.procs.vkGetBufferDeviceAddressKHR(vkrt->core.device, &addrInfo);
 }

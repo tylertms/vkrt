@@ -122,6 +122,10 @@ void createSceneUniform(VKRT* vkrt) {
     createBuffer(vkrt, uniformBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &vkrt->core.sceneDataBuffer, &vkrt->core.sceneDataMemory);
     vkMapMemory(vkrt->core.device, vkrt->core.sceneDataMemory, 0, uniformBufferSize, 0, (void**)&vkrt->core.sceneData);
     memset(vkrt->core.sceneData, 0, uniformBufferSize);
+
+    uint32_t initialWidth = vkrt->runtime.swapChainExtent.width ? vkrt->runtime.swapChainExtent.width : WIDTH;
+    uint32_t initialHeight = vkrt->runtime.swapChainExtent.height ? vkrt->runtime.swapChainExtent.height : HEIGHT;
+
     vkrt->state.samplesPerPixel = 8;
     vkrt->state.maxBounces = 8;
     vkrt->state.toneMappingMode = VKRT_TONE_MAPPING_ACES;
@@ -135,7 +139,7 @@ void createSceneUniform(VKRT* vkrt) {
     vkrt->state.autoSPPTargetFrameMs = 1000.0f / (float)vkrt->state.autoSPPTargetFps;
 
     vkrt->state.camera = (Camera){
-        .width = WIDTH, .height = HEIGHT,
+        .width = initialWidth, .height = initialHeight,
         .nearZ = 0.001f, .farZ = 10000.0f,
         .vfov = 40.0f,
         .pos = {-0.5f, 0.2f, -0.2f},
@@ -148,8 +152,8 @@ void createSceneUniform(VKRT* vkrt) {
 
     vkrt->core.sceneData->viewportRect[0] = 0;
     vkrt->core.sceneData->viewportRect[1] = 0;
-    vkrt->core.sceneData->viewportRect[2] = vkrt->state.camera.width;
-    vkrt->core.sceneData->viewportRect[3] = vkrt->state.camera.height;
+    vkrt->core.sceneData->viewportRect[2] = initialWidth;
+    vkrt->core.sceneData->viewportRect[3] = initialHeight;
 
     updateMatricesFromCamera(vkrt);
 }

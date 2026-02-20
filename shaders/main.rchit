@@ -1,40 +1,8 @@
 #version 460
 #extension GL_EXT_ray_tracing : require
-#include "utility/common.glsl"
+#include "utility/bindings.glsl"
 
 layout(location = 0) rayPayloadInEXT Payload payload;
-
-struct Vertex {
-    vec3 pos;
-    vec3 normal;
-};
-
-struct MeshInfo {
-    vec3 position;
-    uint vertexBase;
-    vec3 rotation;
-    uint vertexCount;
-    vec3 scale;
-    uint indexBase;
-    uint indexCount;
-    uint materialIndex;
-};
-
-layout(set = 0, binding = 4, std430) readonly buffer VertexBuffer {
-    Vertex vertices[];
-} vertexBuffer;
-
-layout(set = 0, binding = 5, std430) readonly buffer IndexBuffer {
-    uint indices[];
-} indexBuffer;
-
-layout(set = 0, binding = 7, std430) readonly buffer MeshInfoBuffer {
-    MeshInfo infos[];
-} meshInfo;
-
-layout(set = 0, binding = 8, std430) readonly buffer MaterialBuffer {
-    Material materials[];
-} materialBuffer;
 
 hitAttributeEXT vec2 barycentrics;
 

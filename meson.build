@@ -10,7 +10,6 @@ project('vkspt', ['c', 'cpp'],
 cc = meson.get_compiler('c')
 c_args = ['-D_GNU_SOURCE']
 
-
 glslc = find_program('glslc', required: true)
 
 # ----- Includes -----
@@ -31,7 +30,7 @@ includes = include_directories(
   'src/app/state',
   'src/app/scene',
   'src/app/ui',
-  is_system: true
+  is_system: true,
 )
 
 # ----- Dependencies -----
@@ -58,71 +57,18 @@ dcimgui = static_library('dcimgui',
     'external/imgui/src/imgui_tables.cpp',
     'external/imgui/src/imgui_widgets.cpp',
   ),
-  cpp_args: ['-w']
+  cpp_args: ['-w'],
 )
 
-# ----- VKRT core library -----
-vkrt_sources = files(
-  'src/core/runtime/buffer.c',
-  'src/core/runtime/command.c',
-  'src/core/render/descriptor.c',
-  'src/core/runtime/device.c',
-  'src/core/runtime/instance.c',
-  'src/core/render/pipeline.c',
-  'src/core/scene/scene.c',
-  'src/core/render/structure.c',
-  'src/core/runtime/surface.c',
-  'src/core/runtime/swapchain.c',
-  'src/core/runtime/validation.c',
-  'src/core/api/vkrt.c',
-  'src/core/utility/io.c',
-)
+subdir('src')
 
-vkrt = static_library('vkrt_core',
-  c_args: c_args,
-  sources: vkrt_sources,
-  dependencies: dependencies,
-  include_directories: includes,
-  link_with: [dcimgui],
-  link_language: 'cpp'
-)
-
-# ----- App executable -----
 executable('vkspt',
   c_args: c_args,
-  sources: files(
-    'src/app/main.c',
-    'src/app/state/state.c',
-    'src/app/scene/loader.c',
-    'src/app/scene/controller.c',
-    'src/app/ui/theme.c',
-    'src/app/ui/editor.c',
-    'external/tinyfiledialogs/tinyfiledialogs.c',
-  ),
+  sources: app_sources,
   dependencies: dependencies,
   include_directories: includes,
   link_with: [vkrt, dcimgui],
-  link_language: 'cpp'
+  link_language: 'cpp',
 )
 
-
-# ----- Shader sources -----
-shader_sources = [
-  'shaders/main.rchit',
-  'shaders/main.rgen',
-  'shaders/main.rmiss'
-]
-
-# ----- Shader targets -----
-shader_targets = []
-foreach shader_file : shader_sources
-    basename = shader_file.split('.')[-1]
-    shader_target = custom_target(
-        'compile_' + basename,
-        input: shader_file,
-        output: basename + '.spv',
-        command: [glslc, '@INPUT@', '--target-env=vulkan1.4', '-O', '-o', '@OUTPUT@'],
-        build_by_default: true,
-    )
-    shader_targets += shader_target
-endforeach
+subdir('shaders')

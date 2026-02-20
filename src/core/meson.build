@@ -1,0 +1,27 @@
+vkrt_sources = files(
+  'runtime/buffer.c',
+  'runtime/command.c',
+  'render/descriptor.c',
+  'runtime/device.c',
+  'runtime/functions.c',
+  'runtime/instance.c',
+  'render/pipeline.c',
+  'scene/scene.c',
+  'render/structure.c',
+  'runtime/surface.c',
+  'runtime/swapchain.c',
+  'runtime/validation.c',
+  'api/lifecycle.c',
+  'api/frame.c',
+  'api/scene.c',
+  'utility/io.c',
+)
+
+vkrt = static_library('vkrt_core',
+  c_args: c_args,
+  sources: vkrt_sources,
+  dependencies: dependencies,
+  include_directories: includes,
+  link_with: [dcimgui],
+  link_language: 'cpp',
+)

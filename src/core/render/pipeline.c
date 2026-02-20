@@ -95,9 +95,7 @@ void createRayTracingPipeline(VKRT* vkrt) {
     pipelineCreateInfo.maxPipelineRayRecursionDepth = 1;
     pipelineCreateInfo.layout = vkrt->core.pipelineLayout;
 
-    PFN_vkCreateRayTracingPipelinesKHR pvkCreateRayTracingPipelinesKHR = (PFN_vkCreateRayTracingPipelinesKHR)vkGetDeviceProcAddr(vkrt->core.device, "vkCreateRayTracingPipelinesKHR");
-
-    if (pvkCreateRayTracingPipelinesKHR(vkrt->core.device, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &pipelineCreateInfo, NULL, &vkrt->core.rayTracingPipeline) != VK_SUCCESS) {
+    if (vkrt->core.procs.vkCreateRayTracingPipelinesKHR(vkrt->core.device, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &pipelineCreateInfo, NULL, &vkrt->core.rayTracingPipeline) != VK_SUCCESS) {
         perror("[ERROR]: Failed to create ray tracing pipeline");
         exit(EXIT_FAILURE);
     }
@@ -105,6 +103,9 @@ void createRayTracingPipeline(VKRT* vkrt) {
     vkDestroyShaderModule(vkrt->core.device, rayGenModule, NULL);
     vkDestroyShaderModule(vkrt->core.device, closestHitModule, NULL);
     vkDestroyShaderModule(vkrt->core.device, missModule, NULL);
+    free((void*)rayGenCode);
+    free((void*)closestHitCode);
+    free((void*)missCode);
 
     printf("[INFO]: Ray tracing pipeline created. Shader Stages: %u, Shader Groups: %u, in %.3f ms\n",
         (uint32_t)COUNT_OF(shaderStages),
@@ -173,7 +174,7 @@ void createRenderPass(VKRT* vkrt) {
 
     VkAttachmentReference colorRef = {0};
     colorRef.attachment = 0;
-    colorRef.layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    colorRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
     VkSubpassDescription subpass = {0};
     subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
@@ -183,8 +184,8 @@ void createRenderPass(VKRT* vkrt) {
     VkSubpassDependency dependency = {0};
     dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
     dependency.dstSubpass = 0;
-    dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependency.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    dependency.srcStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    dependency.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
     dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 

@@ -7,6 +7,36 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+static const char* swapchainFormatName(VkFormat format) {
+    switch (format) {
+    case VK_FORMAT_R16G16B16A16_SFLOAT:
+        return "VK_FORMAT_R16G16B16A16_SFLOAT";
+    case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
+        return "VK_FORMAT_A2B10G10R10_UNORM_PACK32";
+    case VK_FORMAT_A2R10G10B10_UNORM_PACK32:
+        return "VK_FORMAT_A2R10G10B10_UNORM_PACK32";
+    case VK_FORMAT_B8G8R8A8_UNORM:
+        return "VK_FORMAT_B8G8R8A8_UNORM";
+    case VK_FORMAT_R8G8B8A8_UNORM:
+        return "VK_FORMAT_R8G8B8A8_UNORM";
+    case VK_FORMAT_A8B8G8R8_UNORM_PACK32:
+        return "VK_FORMAT_A8B8G8R8_UNORM_PACK32";
+    default:
+        return "VK_FORMAT_OTHER";
+    }
+}
+
+static const char* swapchainColorSpaceName(VkColorSpaceKHR colorSpace) {
+    switch (colorSpace) {
+    case VK_COLOR_SPACE_SRGB_NONLINEAR_KHR:
+        return "VK_COLOR_SPACE_SRGB_NONLINEAR_KHR";
+    case VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT:
+        return "VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT";
+    default:
+        return "VK_COLOR_SPACE_OTHER";
+    }
+}
+
 static float queryDisplayRefreshHz(VKRT* vkrt) {
     GLFWmonitor* monitor = glfwGetWindowMonitor(vkrt->runtime.window);
     if (!monitor) monitor = glfwGetPrimaryMonitor();
@@ -25,6 +55,9 @@ void createSwapChain(VKRT* vkrt) {
     VkExtent2D extent = chooseSwapExtent(vkrt, &supportDetails);
     vkrt->runtime.presentMode = presentMode;
     vkrt->runtime.displayRefreshHz = queryDisplayRefreshHz(vkrt);
+    printf("[INFO]: Swapchain format selected: %s (%d), color space: %s (%d)\n",
+        swapchainFormatName(surfaceFormat.format), (int)surfaceFormat.format,
+        swapchainColorSpaceName(surfaceFormat.colorSpace), (int)surfaceFormat.colorSpace);
 
     free(supportDetails.formats);
     free(supportDetails.presentModes);
@@ -238,14 +271,28 @@ VkSurfaceFormatKHR chooseSwapSurfaceFormat(SwapChainSupportDetails* supportDetai
         exit(EXIT_FAILURE);
     }
 
-    for (uint32_t i = 0; i < supportDetails->formatCount; i++) {
-        VkSurfaceFormatKHR format = supportDetails->formats[i];
-        if (format.format == VK_FORMAT_R32G32B32A32_SFLOAT && format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
-            return format;
+    static const VkFormat preferredFormats[] = {
+        VK_FORMAT_R16G16B16A16_SFLOAT,
+        VK_FORMAT_A2B10G10R10_UNORM_PACK32,
+        VK_FORMAT_A2R10G10B10_UNORM_PACK32,
+        VK_FORMAT_B8G8R8A8_UNORM,
+        VK_FORMAT_R8G8B8A8_UNORM,
+        VK_FORMAT_A8B8G8R8_UNORM_PACK32,
+    };
+
+    for (uint32_t preferredIndex = 0; preferredIndex < COUNT_OF(preferredFormats); preferredIndex++) {
+        VkFormat preferredFormat = preferredFormats[preferredIndex];
+        for (uint32_t formatIndex = 0; formatIndex < supportDetails->formatCount; formatIndex++) {
+            VkSurfaceFormatKHR candidate = supportDetails->formats[formatIndex];
+            if (candidate.format == preferredFormat &&
+                candidate.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+                return candidate;
+            }
         }
     }
 
-    return supportDetails->formats[0];
+    perror("[ERROR]: No VK_COLOR_SPACE_SRGB_NONLINEAR_KHR surface format matches the supported non-sRGB format list");
+    exit(EXIT_FAILURE);
 }
 
 VkPresentModeKHR chooseSwapPresentMode(SwapChainSupportDetails* supportDetails, uint8_t vsync) {

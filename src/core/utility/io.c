@@ -68,13 +68,21 @@ const char* readFile(const char* filename, size_t* fileSize) {
     *fileSize = (size_t)ftell(file);
     fseek(file, 0, SEEK_SET);
 
-    char* buffer = malloc(*fileSize);
+    size_t allocSize = *fileSize > 0 ? *fileSize : 1;
+    char* buffer = (char*)malloc(allocSize);
     if (!buffer) {
         perror("[ERROR]: Failed to allocate memory!");
         fclose(file);
         exit(EXIT_FAILURE);
     }
-    fread(buffer, 1, *fileSize, file);
+
+    size_t bytesRead = fread(buffer, 1, *fileSize, file);
     fclose(file);
+    if (bytesRead != *fileSize) {
+        free(buffer);
+        perror("[ERROR]: Failed to read complete file");
+        exit(EXIT_FAILURE);
+    }
+
     return buffer;
 }

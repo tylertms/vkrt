@@ -89,6 +89,8 @@ typedef struct MaterialData {
     float roughness;
     vec3 emissionColor;
     float emissionStrength;
+    float specular;
+    float padding[3];
 } MaterialData;
 
 typedef struct Mesh {
@@ -121,6 +123,18 @@ typedef struct VKRT_AppHooks {
     void (*drawOverlay)(struct VKRT* vkrt, VkCommandBuffer commandBuffer, void* userData);
     void* userData;
 } VKRT_AppHooks;
+
+typedef struct VKRT_DeviceProcedures {
+    PFN_vkCreateRayTracingPipelinesKHR vkCreateRayTracingPipelinesKHR;
+    PFN_vkGetRayTracingShaderGroupHandlesKHR vkGetRayTracingShaderGroupHandlesKHR;
+    PFN_vkCreateAccelerationStructureKHR vkCreateAccelerationStructureKHR;
+    PFN_vkDestroyAccelerationStructureKHR vkDestroyAccelerationStructureKHR;
+    PFN_vkGetAccelerationStructureBuildSizesKHR vkGetAccelerationStructureBuildSizesKHR;
+    PFN_vkGetAccelerationStructureDeviceAddressKHR vkGetAccelerationStructureDeviceAddressKHR;
+    PFN_vkCmdBuildAccelerationStructuresKHR vkCmdBuildAccelerationStructuresKHR;
+    PFN_vkGetBufferDeviceAddressKHR vkGetBufferDeviceAddressKHR;
+    PFN_vkCmdTraceRaysKHR vkCmdTraceRaysKHR;
+} VKRT_DeviceProcedures;
 
 typedef struct VKRT_Core {
     VkInstance instance;
@@ -160,6 +174,7 @@ typedef struct VKRT_Core {
     VkBool32 descriptorSetReady;
     char deviceName[256];
     VKRT_ShaderConfig shaders;
+    VKRT_DeviceProcedures procs;
 } VKRT_Core;
 
 typedef struct VKRT_Runtime {

@@ -1,10 +1,5 @@
 #include "command.h"
-#include "buffer.h"
-#include "descriptor.h"
 #include "device.h"
-#include "scene.h"
-#include "structure.h"
-#include "swapchain.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -86,8 +81,7 @@ void recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, vkrt->core.rayTracingPipeline);
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, vkrt->core.pipelineLayout, 0, 1, &vkrt->core.descriptorSet, 0, NULL);
 
-        PFN_vkCmdTraceRaysKHR pvkCmdTraceRaysKHR = (PFN_vkCmdTraceRaysKHR)vkGetDeviceProcAddr(vkrt->core.device, "vkCmdTraceRaysKHR");
-        pvkCmdTraceRaysKHR(commandBuffer, &vkrt->core.shaderBindingTables[0], &vkrt->core.shaderBindingTables[1], &vkrt->core.shaderBindingTables[2], &vkrt->core.shaderBindingTables[3], extent.width, extent.height, 1);
+        vkrt->core.procs.vkCmdTraceRaysKHR(commandBuffer, &vkrt->core.shaderBindingTables[0], &vkrt->core.shaderBindingTables[1], &vkrt->core.shaderBindingTables[2], &vkrt->core.shaderBindingTables[3], extent.width, extent.height, 1);
 
         transitionImageLayout(commandBuffer, accumulationWriteImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
         transitionImageLayout(commandBuffer, accumulationReadImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
@@ -279,10 +273,12 @@ void transitionImageLayout(VkCommandBuffer commandBuffer, VkImage image, VkImage
 }
 
 void createStorageImage(VKRT* vkrt) {
+    const VkFormat storageFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
+
     VkImageCreateInfo imageCreateInfo = {0};
     imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
-    imageCreateInfo.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+    imageCreateInfo.format = storageFormat;
     imageCreateInfo.extent.width = vkrt->runtime.swapChainExtent.width;
     imageCreateInfo.extent.height = vkrt->runtime.swapChainExtent.height;
     imageCreateInfo.extent.depth = 1;
@@ -320,7 +316,7 @@ void createStorageImage(VKRT* vkrt) {
         VkImageViewCreateInfo imageViewCreateInfo = {0};
         imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        imageViewCreateInfo.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+        imageViewCreateInfo.format = storageFormat;
         imageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
         imageViewCreateInfo.subresourceRange.levelCount = 1;
@@ -364,7 +360,7 @@ void createStorageImage(VKRT* vkrt) {
     VkImageViewCreateInfo outputImageViewCreateInfo = {0};
     outputImageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     outputImageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    outputImageViewCreateInfo.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+    outputImageViewCreateInfo.format = storageFormat;
     outputImageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     outputImageViewCreateInfo.subresourceRange.baseMipLevel = 0;
     outputImageViewCreateInfo.subresourceRange.levelCount = 1;

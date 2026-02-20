@@ -1,14 +1,7 @@
 #include "buffer.h"
-#include "command.h"
 #include "descriptor.h"
-#include "device.h"
-#include "instance.h"
-#include "pipeline.h"
 #include "scene.h"
 #include "structure.h"
-#include "surface.h"
-#include "swapchain.h"
-#include "validation.h"
 #include "debug.h"
 #include "vkrt.h"
 
@@ -18,14 +11,10 @@
 #include <string.h>
 
 
-static void logStepTime(const char* stepName, uint64_t startTime) {
-    printf("[INFO]: %s in %.3f ms\n", stepName, (double)(getMicroseconds() - startTime) / 1e3);
-}
-
 static void destroyMeshAccelerationStructure(VKRT* vkrt, Mesh* mesh) {
     if (!vkrt || !vkrt->core.device || !mesh) return;
 
-    PFN_vkDestroyAccelerationStructureKHR destroyAS = (PFN_vkDestroyAccelerationStructureKHR)vkGetDeviceProcAddr(vkrt->core.device, "vkDestroyAccelerationStructureKHR");
+    PFN_vkDestroyAccelerationStructureKHR destroyAS = vkrt->core.procs.vkDestroyAccelerationStructureKHR;
     if (!destroyAS) return;
 
     if (mesh->bottomLevelAccelerationStructure.structure != VK_NULL_HANDLE) {
@@ -98,6 +87,10 @@ static void rebuildMaterialBuffer(VKRT* vkrt) {
 
     free(materials);
     vkrt->core.materialDataDirty = VK_FALSE;
+}
+
+void vkrtRebuildMaterialBuffer(VKRT* vkrt) {
+    rebuildMaterialBuffer(vkrt);
 }
 
 static void rebuildMeshBuffersAndStructures(VKRT* vkrt) {
@@ -261,397 +254,6 @@ static void rebuildMeshBuffersAndStructures(VKRT* vkrt) {
         (double)resetSceneTime / 1e3);
 }
 
-void VKRT_defaultCreateInfo(VKRT_CreateInfo* createInfo) {
-    if (!createInfo) return;
-
-    *createInfo = (VKRT_CreateInfo){
-        .width = WIDTH,
-        .height = HEIGHT,
-        .title = "VKRT",
-        .vsync = 1,
-        .shaders = {
-            .rgenPath = "./rgen.spv",
-            .rmissPath = "./rmiss.spv",
-            .rchitPath = "./rchit.spv",
-        },
-    };
-}
-
-int VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInfo) {
-    if (!vkrt || !createInfo) return -1;
-
-    uint64_t initStartTime = getMicroseconds();
-    uint64_t stepStartTime = initStartTime;
-
-    if (!glfwInit()) {
-        perror("[ERROR]: Failed to initialize GLFW");
-        return -1;
-    }
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-    logStepTime("GLFW setup complete", stepStartTime);
-
-    vkrt->runtime.vsync = createInfo->vsync;
-    vkrt->core.shaders = createInfo->shaders;
-    vkrt->core.descriptorSetReady = VK_FALSE;
-
-    const char* title = createInfo->title ? createInfo->title : "VKRT";
-    uint32_t width = createInfo->width ? createInfo->width : WIDTH;
-    uint32_t height = createInfo->height ? createInfo->height : HEIGHT;
-
-    if (!vkrt->core.shaders.rgenPath) vkrt->core.shaders.rgenPath = "./rgen.spv";
-    if (!vkrt->core.shaders.rmissPath) vkrt->core.shaders.rmissPath = "./rmiss.spv";
-    if (!vkrt->core.shaders.rchitPath) vkrt->core.shaders.rchitPath = "./rchit.spv";
-
-    stepStartTime = getMicroseconds();
-    vkrt->runtime.window = glfwCreateWindow((int)width, (int)height, title, 0, 0);
-    if (!vkrt->runtime.window) {
-        perror("[ERROR]: Failed to create GLFW window");
-        glfwTerminate();
-        return -1;
-    }
-
-    glfwSetWindowUserPointer(vkrt->runtime.window, vkrt);
-    glfwSetFramebufferSizeCallback(vkrt->runtime.window, VKRT_framebufferResizedCallback);
-    logStepTime("Window setup complete", stepStartTime);
-
-    stepStartTime = getMicroseconds();
-    createInstance(vkrt);
-    logStepTime("Vulkan instance created", stepStartTime);
-
-    stepStartTime = getMicroseconds();
-    setupDebugMessenger(vkrt);
-    logStepTime("Debug messenger setup complete", stepStartTime);
-
-    stepStartTime = getMicroseconds();
-    createSurface(vkrt);
-    logStepTime("Surface created", stepStartTime);
-
-    stepStartTime = getMicroseconds();
-    pickPhysicalDevice(vkrt);
-    logStepTime("Physical device selection complete", stepStartTime);
-
-    stepStartTime = getMicroseconds();
-    createLogicalDevice(vkrt);
-    logStepTime("Logical device created", stepStartTime);
-
-    stepStartTime = getMicroseconds();
-    createQueryPool(vkrt);
-    logStepTime("Query pool created", stepStartTime);
-
-    stepStartTime = getMicroseconds();
-    createSwapChain(vkrt);
-    createImageViews(vkrt);
-    createRenderPass(vkrt);
-    createFramebuffers(vkrt);
-    logStepTime("Swapchain and framebuffers ready", stepStartTime);
-
-    stepStartTime = getMicroseconds();
-    createCommandPool(vkrt);
-    createDescriptorSetLayout(vkrt);
-    logStepTime("Command pool and descriptor layout ready", stepStartTime);
-
-    stepStartTime = getMicroseconds();
-    createRayTracingPipeline(vkrt);
-    logStepTime("Ray tracing pipeline ready", stepStartTime);
-
-    stepStartTime = getMicroseconds();
-    createStorageImage(vkrt);
-    logStepTime("Storage image ready", stepStartTime);
-
-    stepStartTime = getMicroseconds();
-    createSceneUniform(vkrt);
-    logStepTime("Scene uniform ready", stepStartTime);
-
-    stepStartTime = getMicroseconds();
-    createDescriptorPool(vkrt);
-    logStepTime("Descriptor pool ready", stepStartTime);
-
-    stepStartTime = getMicroseconds();
-    createDescriptorSet(vkrt);
-    logStepTime("Descriptor set ready", stepStartTime);
-
-    stepStartTime = getMicroseconds();
-    createShaderBindingTable(vkrt);
-    logStepTime("Shader binding table ready", stepStartTime);
-
-    stepStartTime = getMicroseconds();
-    createCommandBuffers(vkrt);
-    createSyncObjects(vkrt);
-    logStepTime("Command buffers and sync objects ready", stepStartTime);
-
-    stepStartTime = getMicroseconds();
-    if (vkrt->appHooks.init) {
-        vkrt->appHooks.init(vkrt, vkrt->appHooks.userData);
-    }
-    logStepTime("Application initialization complete", stepStartTime);
-
-    printf("[INFO]: VKRT initialization complete in %.3f ms\n", (double)(getMicroseconds() - initStartTime) / 1e3);
-    return 0;
-}
-
-int VKRT_init(VKRT* vkrt) {
-    VKRT_CreateInfo createInfo = {0};
-    VKRT_defaultCreateInfo(&createInfo);
-    return VKRT_initWithCreateInfo(vkrt, &createInfo);
-}
-
-void VKRT_registerAppHooks(VKRT* vkrt, VKRT_AppHooks hooks) {
-    if (!vkrt) return;
-    vkrt->appHooks = hooks;
-}
-
-void VKRT_deinit(VKRT* vkrt) {
-    if (!vkrt) return;
-
-    uint64_t deinitStartTime = getMicroseconds();
-    uint64_t stepStartTime = deinitStartTime;
-
-    vkDeviceWaitIdle(vkrt->core.device);
-    logStepTime("Device idle wait complete", stepStartTime);
-
-    stepStartTime = getMicroseconds();
-    if (vkrt->appHooks.deinit) {
-        vkrt->appHooks.deinit(vkrt, vkrt->appHooks.userData);
-    }
-    logStepTime("Application shutdown complete", stepStartTime);
-
-    stepStartTime = getMicroseconds();
-    cleanupSwapChain(vkrt);
-    logStepTime("Swapchain cleanup complete", stepStartTime);
-
-    stepStartTime = getMicroseconds();
-    vkDestroyRenderPass(vkrt->core.device, vkrt->runtime.renderPass, NULL);
-
-    vkDestroyBuffer(vkrt->core.device, vkrt->core.shaderBindingTableBuffer, NULL);
-    vkFreeMemory(vkrt->core.device, vkrt->core.shaderBindingTableMemory, NULL);
-    logStepTime("Render pass and shader binding table cleanup complete", stepStartTime);
-
-    stepStartTime = getMicroseconds();
-    PFN_vkDestroyAccelerationStructureKHR pvkDestroyAccelerationStructureKHR = (PFN_vkDestroyAccelerationStructureKHR)vkGetDeviceProcAddr(vkrt->core.device, "vkDestroyAccelerationStructureKHR");
-    if (!pvkDestroyAccelerationStructureKHR) {
-        perror("[ERROR]: Failed to load vkDestroyAccelerationStructureKHR during shutdown");
-        exit(EXIT_FAILURE);
-    }
-
-    pvkDestroyAccelerationStructureKHR(vkrt->core.device, vkrt->core.topLevelAccelerationStructure.structure, NULL);
-    vkDestroyBuffer(vkrt->core.device, vkrt->core.topLevelAccelerationStructure.buffer, NULL);
-    vkFreeMemory(vkrt->core.device, vkrt->core.topLevelAccelerationStructure.memory, NULL);
-
-    for (uint32_t i = 0; i < vkrt->core.meshData.count; i++) {
-        if (!vkrt->core.meshes[i].ownsGeometry) continue;
-
-        pvkDestroyAccelerationStructureKHR(vkrt->core.device, vkrt->core.meshes[i].bottomLevelAccelerationStructure.structure, NULL);
-        vkDestroyBuffer(vkrt->core.device, vkrt->core.meshes[i].bottomLevelAccelerationStructure.buffer, NULL);
-        vkFreeMemory(vkrt->core.device, vkrt->core.meshes[i].bottomLevelAccelerationStructure.memory, NULL);
-        free(vkrt->core.meshes[i].vertices);
-        free(vkrt->core.meshes[i].indices);
-    }
-    free(vkrt->core.meshes);
-    vkrt->core.meshes = NULL;
-    logStepTime("Acceleration structures and mesh sources cleaned", stepStartTime);
-
-    stepStartTime = getMicroseconds();
-    vkDestroyBuffer(vkrt->core.device, vkrt->core.vertexData.buffer, NULL);
-    vkFreeMemory(vkrt->core.device, vkrt->core.vertexData.memory, NULL);
-    vkDestroyBuffer(vkrt->core.device, vkrt->core.indexData.buffer, NULL);
-    vkFreeMemory(vkrt->core.device, vkrt->core.indexData.memory, NULL);
-    vkDestroyBuffer(vkrt->core.device, vkrt->core.meshData.buffer, NULL);
-    vkFreeMemory(vkrt->core.device, vkrt->core.meshData.memory, NULL);
-    vkDestroyBuffer(vkrt->core.device, vkrt->core.materialData.buffer, NULL);
-    vkFreeMemory(vkrt->core.device, vkrt->core.materialData.memory, NULL);
-
-    vkDestroyBuffer(vkrt->core.device, vkrt->core.sceneDataBuffer, NULL);
-    vkFreeMemory(vkrt->core.device, vkrt->core.sceneDataMemory, NULL);
-    logStepTime("Scene and mesh buffer cleanup complete", stepStartTime);
-
-    stepStartTime = getMicroseconds();
-    vkDestroyDescriptorPool(vkrt->core.device, vkrt->core.descriptorPool, NULL);
-    vkDestroyDescriptorSetLayout(vkrt->core.device, vkrt->core.descriptorSetLayout, NULL);
-
-    vkDestroyPipeline(vkrt->core.device, vkrt->core.rayTracingPipeline, NULL);
-    vkDestroyPipelineLayout(vkrt->core.device, vkrt->core.pipelineLayout, NULL);
-    logStepTime("Descriptor and pipeline cleanup complete", stepStartTime);
-
-    stepStartTime = getMicroseconds();
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        vkDestroySemaphore(vkrt->core.device, vkrt->runtime.imageAvailableSemaphores[i], NULL);
-        vkDestroyFence(vkrt->core.device, vkrt->runtime.inFlightFences[i], NULL);
-    }
-
-    for (size_t i = 0; i < vkrt->runtime.swapChainImageCount; i++) {
-        vkDestroySemaphore(vkrt->core.device, vkrt->runtime.renderFinishedSemaphores[i], NULL);
-    }
-    free(vkrt->runtime.renderFinishedSemaphores);
-    logStepTime("Synchronization object cleanup complete", stepStartTime);
-
-    stepStartTime = getMicroseconds();
-    vkFreeCommandBuffers(vkrt->core.device, vkrt->runtime.commandPool, COUNT_OF(vkrt->runtime.commandBuffers), vkrt->runtime.commandBuffers);
-    vkDestroyCommandPool(vkrt->core.device, vkrt->runtime.commandPool, NULL);
-
-    vkDestroyQueryPool(vkrt->core.device, vkrt->runtime.timestampPool, NULL);
-    logStepTime("Command and query resource cleanup complete", stepStartTime);
-
-    stepStartTime = getMicroseconds();
-    vkDestroyDevice(vkrt->core.device, NULL);
-
-    if (enableValidationLayers) {
-        DestroyDebugUtilsMessengerEXT(vkrt->core.instance, vkrt->core.debugMessenger, NULL);
-    }
-
-    vkDestroySurfaceKHR(vkrt->core.instance, vkrt->runtime.surface, NULL);
-    vkDestroyInstance(vkrt->core.instance, NULL);
-    logStepTime("Vulkan device and instance shutdown complete", stepStartTime);
-
-    stepStartTime = getMicroseconds();
-    glfwDestroyWindow(vkrt->runtime.window);
-    glfwTerminate();
-    logStepTime("GLFW shutdown complete", stepStartTime);
-
-    printf("[INFO]: VKRT deinitialization complete in %.3f ms\n", (double)(getMicroseconds() - deinitStartTime) / 1e3);
-}
-
-int VKRT_shouldDeinit(VKRT* vkrt) {
-    return vkrt ? glfwWindowShouldClose(vkrt->runtime.window) : 1;
-}
-
-void VKRT_poll(VKRT* vkrt) {
-    if (!vkrt) return;
-    glfwPollEvents();
-}
-
-void VKRT_beginFrame(VKRT* vkrt) {
-    if (!vkrt) return;
-
-    vkrt->runtime.frameAcquired = VK_FALSE;
-    vkrt->runtime.frameSubmitted = VK_FALSE;
-    vkrt->runtime.framePresented = VK_FALSE;
-
-    vkWaitForFences(vkrt->core.device, 1, &vkrt->runtime.inFlightFences[vkrt->runtime.currentFrame], VK_TRUE, UINT64_MAX);
-
-    if (vkrt->core.topLevelAccelerationStructure.needsRebuild) {
-        vkDeviceWaitIdle(vkrt->core.device);
-        createTopLevelAccelerationStructure(vkrt);
-        updateDescriptorSet(vkrt);
-        vkrt->core.topLevelAccelerationStructure.needsRebuild = 0;
-        resetSceneData(vkrt);
-    }
-
-    VkResult result = vkAcquireNextImageKHR(
-        vkrt->core.device,
-        vkrt->runtime.swapChain,
-        UINT64_MAX,
-        vkrt->runtime.imageAvailableSemaphores[vkrt->runtime.currentFrame],
-        VK_NULL_HANDLE,
-        &vkrt->runtime.frameImageIndex
-    );
-
-    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-        recreateSwapChain(vkrt);
-        return;
-    }
-
-    if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
-        perror("[ERROR]: Failed to acquire next swapchain image");
-        exit(EXIT_FAILURE);
-    }
-
-    vkrt->runtime.frameAcquired = VK_TRUE;
-}
-
-void VKRT_updateScene(VKRT* vkrt) {
-    if (!vkrt || !vkrt->runtime.frameAcquired) return;
-
-    if (vkrt->core.materialDataDirty) {
-        rebuildMaterialBuffer(vkrt);
-        updateDescriptorSet(vkrt);
-    }
-}
-
-void VKRT_trace(VKRT* vkrt) {
-    if (!vkrt || !vkrt->runtime.frameAcquired) return;
-    vkResetFences(vkrt->core.device, 1, &vkrt->runtime.inFlightFences[vkrt->runtime.currentFrame]);
-
-    vkResetCommandBuffer(vkrt->runtime.commandBuffers[vkrt->runtime.currentFrame], 0);
-    recordCommandBuffer(vkrt, vkrt->runtime.frameImageIndex);
-
-    VkSemaphore waitSemaphores[] = {vkrt->runtime.imageAvailableSemaphores[vkrt->runtime.currentFrame]};
-    VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_TRANSFER_BIT};
-    VkSemaphore signalSemaphores[] = {vkrt->runtime.renderFinishedSemaphores[vkrt->runtime.frameImageIndex]};
-
-    VkSubmitInfo submitInfo = {0};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.waitSemaphoreCount = 1;
-    submitInfo.pWaitSemaphores = waitSemaphores;
-    submitInfo.pWaitDstStageMask = waitStages;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &vkrt->runtime.commandBuffers[vkrt->runtime.currentFrame];
-    submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = signalSemaphores;
-
-    if (vkQueueSubmit(vkrt->core.graphicsQueue, 1, &submitInfo, vkrt->runtime.inFlightFences[vkrt->runtime.currentFrame]) != VK_SUCCESS) {
-        perror("[ERROR]: Failed to submit draw queue");
-        exit(EXIT_FAILURE);
-    }
-
-    vkrt->runtime.frameSubmitted = VK_TRUE;
-}
-
-void VKRT_present(VKRT* vkrt) {
-    if (!vkrt || !vkrt->runtime.frameSubmitted) return;
-    VkSemaphore signalSemaphores[] = {vkrt->runtime.renderFinishedSemaphores[vkrt->runtime.frameImageIndex]};
-
-    VkPresentInfoKHR presentInfo = {0};
-    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-    presentInfo.waitSemaphoreCount = 1;
-    presentInfo.pWaitSemaphores = signalSemaphores;
-    presentInfo.swapchainCount = 1;
-    presentInfo.pSwapchains = &vkrt->runtime.swapChain;
-    presentInfo.pImageIndices = &vkrt->runtime.frameImageIndex;
-
-    VkResult result = vkQueuePresentKHR(vkrt->core.presentQueue, &presentInfo);
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || vkrt->runtime.framebufferResized) {
-        vkrt->runtime.framebufferResized = VK_FALSE;
-        recreateSwapChain(vkrt);
-        return;
-    }
-
-    if (result != VK_SUCCESS) {
-        perror("[ERROR]: Failed to present draw queue");
-        exit(EXIT_FAILURE);
-    }
-
-    vkrt->runtime.framePresented = VK_TRUE;
-}
-
-void VKRT_endFrame(VKRT* vkrt) {
-    if (!vkrt) return;
-
-    if (vkrt->runtime.framePresented) {
-        uint32_t renderedSPP = vkrt->core.sceneData->samplesPerPixel;
-        recordFrameTime(vkrt);
-        updateAutoSPP(vkrt);
-        if (vkrt->core.descriptorSetReady && !vkrt->core.accumulationNeedsReset) {
-            vkrt->state.accumulationFrame++;
-            vkrt->state.totalSamples += renderedSPP;
-            vkrt->core.sceneData->frameNumber++;
-        }
-    }
-
-    if (vkrt->runtime.frameSubmitted) {
-        vkrt->runtime.currentFrame = (vkrt->runtime.currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
-    }
-}
-
-void VKRT_draw(VKRT* vkrt) {
-    if (!vkrt) return;
-    VKRT_beginFrame(vkrt);
-    VKRT_updateScene(vkrt);
-    VKRT_trace(vkrt);
-    VKRT_present(vkrt);
-    VKRT_endFrame(vkrt);
-}
-
 void VKRT_uploadMeshData(VKRT* vkrt, const Vertex* vertices, size_t vertexCount, const uint32_t* indices, size_t indexCount) {
     if (!vkrt || !vertices || !indices || vertexCount == 0 || indexCount == 0) return;
 
@@ -723,6 +325,7 @@ void VKRT_uploadMeshData(VKRT* vkrt, const Vertex* vertices, size_t vertexCount,
     mesh->material = (MaterialData){
         .baseColor = {1.0f, 1.0f, 1.0f},
         .roughness = 0.5f,
+        .specular = 0.0f,
         .emissionColor = {1.0f, 1.0f, 1.0f},
         .emissionStrength = 0.0f,
     };
@@ -870,6 +473,8 @@ void VKRT_setToneMappingMode(VKRT* vkrt, VKRT_ToneMappingMode toneMappingMode) {
     if (vkrt->core.sceneData) {
         vkrt->core.sceneData->toneMappingMode = toneMappingMode;
     }
+
+    resetSceneData(vkrt);
 }
 
 uint32_t VKRT_getMeshCount(const VKRT* vkrt) {
@@ -958,12 +563,4 @@ void VKRT_cameraGetPose(const VKRT* vkrt, vec3 position, vec3 target, vec3 up, f
     if (target) memcpy(target, vkrt->state.camera.target, sizeof(vec3));
     if (up) memcpy(up, vkrt->state.camera.up, sizeof(vec3));
     if (vfov) *vfov = vkrt->state.camera.vfov;
-}
-
-void VKRT_framebufferResizedCallback(GLFWwindow* window, int width, int height) {
-    (void)width;
-    (void)height;
-
-    VKRT* vkrt = (VKRT*)glfwGetWindowUserPointer(window);
-    vkrt->runtime.framebufferResized = VK_TRUE;
 }

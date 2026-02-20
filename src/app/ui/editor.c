@@ -10,6 +10,8 @@
 #include "tinyfiledialogs.h"
 #include "IBMPlexMono_Regular.h"
 
+#include <math.h>
+#include <stdbool.h>
 #include <stdio.h>
 
 static const char* openMeshImportDialog(void) {
@@ -187,6 +189,7 @@ static void drawMeshInspector(VKRT* runtime, EditorState* state) {
         bool materialChanged = false;
         materialChanged |= ImGui_ColorEdit3("Base Color", material.baseColor, ImGuiColorEditFlags_Float);
         materialChanged |= ImGui_DragFloatEx("Roughness", &material.roughness, 0.005f, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        materialChanged |= ImGui_DragFloatEx("Specular", &material.specular, 0.005f, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
         materialChanged |= ImGui_ColorEdit3("Emission Color", material.emissionColor, ImGuiColorEditFlags_Float);
         materialChanged |= ImGui_DragFloatEx("Emission Strength", &material.emissionStrength, 0.01f, 0.0f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
 
@@ -206,7 +209,9 @@ static void drawSceneInspectorWindow(VKRT* runtime, EditorState* state) {
     ImGui_Text("Device: %s", runtime->core.deviceName);
     ImGui_Text("Resolution: %dx%d", runtime->state.camera.width, runtime->state.camera.height);
 
-    if (ImGui_Checkbox("V-Sync", (bool*)&runtime->runtime.vsync)) {
+    bool vsync = runtime->runtime.vsync != 0;
+    if (ImGui_Checkbox("V-Sync", &vsync)) {
+        runtime->runtime.vsync = vsync ? 1 : 0;
         runtime->runtime.framebufferResized = VK_TRUE;
     }
 

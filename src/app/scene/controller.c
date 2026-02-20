@@ -48,6 +48,7 @@ void sceneControllerLoadDefaultAssets(VKRT* runtime, EditorState* state) {
     MaterialData sphereMaterial = {
         .baseColor = {1.0f, 1.0f, 1.0f},
         .roughness = 0.35f,
+        .specular = 0.0f,
         .emissionColor = {1.0f, 1.0f, 1.0f},
         .emissionStrength = 2.0f,
     };
@@ -55,6 +56,7 @@ void sceneControllerLoadDefaultAssets(VKRT* runtime, EditorState* state) {
     MaterialData dragonMaterial = {
         .baseColor = {0.72f, 0.18f, 0.16f},
         .roughness = 0.65f,
+        .specular = 0.0f,
         .emissionColor = {1.0f, 1.0f, 1.0f},
         .emissionStrength = 0.0f,
     };
