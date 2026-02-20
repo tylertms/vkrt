@@ -835,11 +835,9 @@ void VKRT_setSamplesPerPixel(VKRT* vkrt, uint32_t samplesPerPixel) {
 
     if (vkrt->state.samplesPerPixel == samplesPerPixel) return;
     vkrt->state.samplesPerPixel = samplesPerPixel;
+
     if (vkrt->core.sceneData) {
         vkrt->core.sceneData->samplesPerPixel = samplesPerPixel;
-    }
-    if (vkrt->core.sceneData) {
-        resetSceneData(vkrt);
     }
 }
 
