@@ -630,6 +630,7 @@ void VKRT_endFrame(VKRT* vkrt) {
     if (vkrt->runtime.framePresented) {
         uint32_t renderedSPP = vkrt->core.sceneData->samplesPerPixel;
         recordFrameTime(vkrt);
+        updateAutoSPP(vkrt);
         if (vkrt->core.descriptorSetReady && !vkrt->core.accumulationNeedsReset) {
             vkrt->state.accumulationFrame++;
             vkrt->state.totalSamples += renderedSPP;
@@ -832,10 +833,32 @@ void VKRT_setSamplesPerPixel(VKRT* vkrt, uint32_t samplesPerPixel) {
     if (!vkrt) return;
     if (samplesPerPixel == 0) samplesPerPixel = 1;
 
+    if (vkrt->state.samplesPerPixel == samplesPerPixel) return;
     vkrt->state.samplesPerPixel = samplesPerPixel;
     if (vkrt->core.sceneData) {
         vkrt->core.sceneData->samplesPerPixel = samplesPerPixel;
     }
+    if (vkrt->core.sceneData) {
+        resetSceneData(vkrt);
+    }
+}
+
+
+void VKRT_setAutoSPPEnabled(VKRT* vkrt, uint8_t enabled) {
+    if (!vkrt) return;
+    vkrt->state.autoSPPEnabled = enabled ? 1 : 0;
+    vkrt->runtime.autoSPPFastFrames = 0;
+    vkrt->runtime.autoSPPSlowFrames = 0;
+    vkrt->runtime.autoSPPCooldownFrames = 0;
+}
+
+
+void VKRT_setAutoSPPTargetFPS(VKRT* vkrt, uint32_t targetFPS) {
+    if (!vkrt) return;
+    if (targetFPS < 30) targetFPS = 30;
+    if (targetFPS > 360) targetFPS = 360;
+    vkrt->state.autoSPPTargetFps = targetFPS;
+    vkrt->state.autoSPPTargetFrameMs = 1000.0f / (float)targetFPS;
 }
 
 void VKRT_setToneMappingMode(VKRT* vkrt, VKRT_ToneMappingMode toneMappingMode) {

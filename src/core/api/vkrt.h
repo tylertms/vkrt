@@ -187,6 +187,11 @@ typedef struct VKRT_Runtime {
     VkBool32 frameAcquired;
     VkBool32 frameSubmitted;
     VkBool32 framePresented;
+    VkPresentModeKHR presentMode;
+    float displayRefreshHz;
+    uint32_t autoSPPFastFrames;
+    uint32_t autoSPPSlowFrames;
+    uint32_t autoSPPCooldownFrames;
 } VKRT_Runtime;
 
 typedef struct VKRT_PublicState {
@@ -205,6 +210,9 @@ typedef struct VKRT_PublicState {
     float displayFrameTimeMs;
     uint32_t maxBounces;
     VKRT_ToneMappingMode toneMappingMode;
+    uint8_t autoSPPEnabled;
+    uint32_t autoSPPTargetFps;
+    float autoSPPTargetFrameMs;
 } VKRT_PublicState;
 
 typedef struct VKRT {
@@ -236,6 +244,8 @@ void VKRT_updateTLAS(VKRT* vkrt);
 void VKRT_applyCameraInput(VKRT* vkrt, const VKRT_CameraInput* input);
 void VKRT_invalidateAccumulation(VKRT* vkrt);
 void VKRT_setSamplesPerPixel(VKRT* vkrt, uint32_t samplesPerPixel);
+void VKRT_setAutoSPPEnabled(VKRT* vkrt, uint8_t enabled);
+void VKRT_setAutoSPPTargetFPS(VKRT* vkrt, uint32_t targetFPS);
 void VKRT_setToneMappingMode(VKRT* vkrt, VKRT_ToneMappingMode toneMappingMode);
 
 uint32_t VKRT_getMeshCount(const VKRT* vkrt);

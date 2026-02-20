@@ -7,12 +7,24 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+static float queryDisplayRefreshHz(VKRT* vkrt) {
+    GLFWmonitor* monitor = glfwGetWindowMonitor(vkrt->runtime.window);
+    if (!monitor) monitor = glfwGetPrimaryMonitor();
+    if (!monitor) return 60.0f;
+
+    const GLFWvidmode* mode = glfwGetVideoMode(monitor);
+    if (!mode || mode->refreshRate <= 0) return 60.0f;
+    return (float)mode->refreshRate;
+}
+
 void createSwapChain(VKRT* vkrt) {
     SwapChainSupportDetails supportDetails = querySwapChainSupport(vkrt);
 
     VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(&supportDetails);
     VkPresentModeKHR presentMode = chooseSwapPresentMode(&supportDetails, vkrt->runtime.vsync);
     VkExtent2D extent = chooseSwapExtent(vkrt, &supportDetails);
+    vkrt->runtime.presentMode = presentMode;
+    vkrt->runtime.displayRefreshHz = queryDisplayRefreshHz(vkrt);
 
     free(supportDetails.formats);
     free(supportDetails.presentModes);
@@ -239,6 +251,12 @@ VkSurfaceFormatKHR chooseSwapSurfaceFormat(SwapChainSupportDetails* supportDetai
 VkPresentModeKHR chooseSwapPresentMode(SwapChainSupportDetails* supportDetails, uint8_t vsync) {
     if (vsync) {
         return VK_PRESENT_MODE_FIFO_KHR;
+    }
+
+    for (uint32_t i = 0; i < supportDetails->presentModeCount; i++) {
+        if (supportDetails->presentModes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
+            return supportDetails->presentModes[i];
+        }
     }
 
     for (uint32_t i = 0; i < supportDetails->presentModeCount; i++) {

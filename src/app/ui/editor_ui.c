@@ -10,7 +10,6 @@
 #include "tinyfiledialogs.h"
 #include "IBMPlexMono_Regular.h"
 
-#include <math.h>
 #include <stdio.h>
 
 static const char* openMeshImportDialog(void) {
@@ -103,9 +102,22 @@ static void drawPerformanceSection(VKRT* runtime) {
     ImGui_Text("Samples:  %12llu", (unsigned long long)runtime->state.totalSamples);
     ImGui_Text("Samples / px: %8u", runtime->state.samplesPerPixel);
 
-    int spp = (int)runtime->state.samplesPerPixel;
-    if (ImGui_SliderIntEx("SPP", &spp, 1, 2048, "%d", ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_Logarithmic)) {
-        VKRT_setSamplesPerPixel(runtime, (uint32_t)spp);
+    bool autoSPP = runtime->state.autoSPPEnabled != 0;
+    if (ImGui_Checkbox("Auto SPP", &autoSPP)) {
+        VKRT_setAutoSPPEnabled(runtime, autoSPP ? 1 : 0);
+    }
+
+    if (autoSPP) {
+        int targetFps = (int)runtime->state.autoSPPTargetFps;
+        if (ImGui_SliderIntEx("Target FPS", &targetFps, 30, 360, "%d", ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_Logarithmic)) {
+            VKRT_setAutoSPPTargetFPS(runtime, (uint32_t)targetFps);
+        }
+        ImGui_Text("Target (ms):  %8.3f ms", runtime->state.autoSPPTargetFrameMs);
+    } else {
+        int spp = (int)runtime->state.samplesPerPixel;
+        if (ImGui_SliderIntEx("SPP", &spp, 1, 2048, "%d", ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_Logarithmic)) {
+            VKRT_setSamplesPerPixel(runtime, (uint32_t)spp);
+        }
     }
 
     int maxBounces = (int)runtime->state.maxBounces;
