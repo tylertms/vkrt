@@ -1,8 +1,9 @@
 #version 460
 #extension GL_EXT_ray_tracing : require
+#include "utility/common.glsl"
 
-layout(location = 0) rayPayloadInEXT vec3 color;
+layout(location = 0) rayPayloadInEXT Payload payload;
 
 void main() {
-    color = vec3(0.1);
+    payload.didHit = false;
 }

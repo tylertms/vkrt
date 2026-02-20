@@ -1,7 +1,8 @@
 #version 460
 #extension GL_EXT_ray_tracing : require
+#include "utility/common.glsl"
 
-layout(location = 0) rayPayloadInEXT vec3 color;
+layout(location = 0) rayPayloadInEXT Payload payload;
 
 struct Vertex {
     vec3 pos;
@@ -45,11 +46,19 @@ void main() {
     vec3 normal1 = vertexBuffer.vertices[index1].normal;
     vec3 normal2 = vertexBuffer.vertices[index2].normal;
 
+    vec3 pos0 = vertexBuffer.vertices[index0].pos;
+    vec3 pos1 = vertexBuffer.vertices[index1].pos;
+    vec3 pos2 = vertexBuffer.vertices[index2].pos;
+
     float u = barycentrics.x;
     float v = barycentrics.y;
 
     vec3 localNormal = normalize(normal0 * (1.0 - u - v) + normal1 * u + normal2 * v);
+    vec3 localPos = normalize(pos0 * (1.0 - u - v) + pos1 * u + pos2 * v);
     vec3 worldNormal = normalize(localNormal * mat3(gl_ObjectToWorld3x4EXT));
+    vec3 worldPos = normalize(localPos * mat3(gl_ObjectToWorld3x4EXT));
 
-    color = worldNormal * 0.5 + 0.5;
+    payload.point = worldPos;
+    payload.didHit = true;
+    payload.normal = worldNormal;
 }
