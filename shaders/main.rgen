@@ -62,7 +62,8 @@ void main() {
 
     vec3 frameRadiance = vec3(0.0);
     for (uint sampleIndex = 0; sampleIndex < spp; sampleIndex++) {
-        uint state = initRngState(rngBase, previousSamples + sampleIndex);
+        uint sampleNumber = previousSamples + sampleIndex;
+        uint state = initRngState(rngBase, sampleNumber);
         frameRadiance += traceSample(pixel, state);
     }
     frameRadiance /= float(spp);

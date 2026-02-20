@@ -9,14 +9,29 @@
 #include "debug.h"
 #include "tinyfiledialogs.h"
 #include "IBMPlexMono_Regular.h"
+#include "fa_solid_900.h"
+#include "IconsFontAwesome6.h"
 
 #include <math.h>
+#include <float.h>
 #include <stdbool.h>
 #include <stdio.h>
 
 static const char* openMeshImportDialog(void) {
     const char* filters[] = {"*.glb", "*.gltf"};
     return tinyfd_openFileDialog("Import mesh", "assets/models", 2, filters, "glTF files", 0);
+}
+
+static ImFontConfig makeDefaultFontConfig(void) {
+    ImFontConfig config = {0};
+    config.FontDataOwnedByAtlas = true;
+    config.OversampleH = 0;
+    config.OversampleV = 0;
+    config.GlyphMaxAdvanceX = FLT_MAX;
+    config.RasterizerMultiply = 1.0f;
+    config.RasterizerDensity = 1.0f;
+    config.EllipsisChar = 0;
+    return config;
 }
 
 static void initializeDockLayout(void) {
@@ -99,10 +114,10 @@ static void drawPerformanceSection(VKRT* runtime) {
     ImGui_Separator();
     ImGui_Text("FPS:          %8u", runtime->state.framesPerSecond);
     ImGui_Text("Frames:       %8u", runtime->state.accumulationFrame);
-    ImGui_Text("Frame (ms):   %8.3f ms", runtime->state.displayFrameTimeMs);
-    ImGui_Text("Render (ms):  %8.3f ms", runtime->state.displayRenderTimeMs);
     ImGui_Text("Samples:  %12llu", (unsigned long long)runtime->state.totalSamples);
     ImGui_Text("Samples / px: %8u", runtime->state.samplesPerPixel);
+    ImGui_Text("Frame (ms):   %8.3f ms", runtime->state.displayFrameTimeMs);
+    ImGui_Text("Render (ms):  %8.3f ms", runtime->state.displayRenderTimeMs);
 
     bool autoSPP = runtime->state.autoSPPEnabled != 0;
     if (ImGui_Checkbox("Auto SPP", &autoSPP)) {
@@ -131,6 +146,10 @@ static void drawPerformanceSection(VKRT* runtime) {
     int toneMappingMode = (int)runtime->state.toneMappingMode;
     if (ImGui_ComboCharEx("Tone mapping", &toneMappingMode, toneMappingLabels, 2, 2)) {
         VKRT_setToneMappingMode(runtime, (VKRT_ToneMappingMode)toneMappingMode);
+    }
+
+    if (ImGui_Button(ICON_FA_ARROWS_ROTATE " Reset accumulation")) {
+        VKRT_invalidateAccumulation(runtime);
     }
 }
 
@@ -250,7 +269,16 @@ void editorUIInitialize(VKRT* runtime, void* userData) {
 
     ImGuiIO* io = ImGui_GetIO();
     io->ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-    ImFontAtlas_AddFontFromMemoryTTF(io->Fonts, (void*)IBMPlexMono_Regular, IBMPlexMono_Regular_len, 22.0, NULL, NULL);
+    ImFontConfig textConfig = makeDefaultFontConfig();
+    textConfig.FontDataOwnedByAtlas = false;
+    ImFontAtlas_AddFontFromMemoryTTF(io->Fonts, (void*)IBMPlexMono_Regular, IBMPlexMono_Regular_len, 22.0f, &textConfig, NULL);
+
+    ImFontConfig iconConfig = makeDefaultFontConfig();
+    iconConfig.FontDataOwnedByAtlas = false;
+    iconConfig.MergeMode = true;
+    iconConfig.PixelSnapH = true;
+    static const ImWchar iconRanges[] = {ICON_MIN_FA, ICON_MAX_FA, 0};
+    ImFontAtlas_AddFontFromMemoryTTF(io->Fonts, (void*)fa_solid_900, fa_solid_900_len, 16.0f, &iconConfig, iconRanges);
     editorThemeApplyDefault();
     cImGui_ImplGlfw_InitForVulkan(runtime->runtime.window, true);
 

@@ -20,7 +20,7 @@ includes = include_directories(
   'external/cglm/include',
   'external/cgltf/include',
   'external/tinyfiledialogs',
-  'external/fonts',
+  'assets/fonts',
   'src/core/api',
   'src/core/runtime',
   'src/core/render',
