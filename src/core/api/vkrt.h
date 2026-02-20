@@ -235,6 +235,8 @@ int VKRT_removeMesh(VKRT* vkrt, uint32_t meshIndex);
 void VKRT_updateTLAS(VKRT* vkrt);
 void VKRT_applyCameraInput(VKRT* vkrt, const VKRT_CameraInput* input);
 void VKRT_invalidateAccumulation(VKRT* vkrt);
+void VKRT_setSamplesPerPixel(VKRT* vkrt, uint32_t samplesPerPixel);
+void VKRT_setToneMappingMode(VKRT* vkrt, VKRT_ToneMappingMode toneMappingMode);
 
 uint32_t VKRT_getMeshCount(const VKRT* vkrt);
 int VKRT_setMeshTransform(VKRT* vkrt, uint32_t meshIndex, vec3 position, vec3 rotation, vec3 scale);

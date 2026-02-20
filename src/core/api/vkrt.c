@@ -631,7 +631,7 @@ void VKRT_endFrame(VKRT* vkrt) {
         uint32_t renderedSPP = vkrt->core.sceneData->samplesPerPixel;
         recordFrameTime(vkrt);
         if (vkrt->core.descriptorSetReady && !vkrt->core.accumulationNeedsReset) {
-            vkrt->state.accumulationFrame = vkrt->core.sceneData->frameNumber + 1;
+            vkrt->state.accumulationFrame++;
             vkrt->state.totalSamples += renderedSPP;
             vkrt->core.sceneData->frameNumber++;
         }
@@ -826,6 +826,25 @@ void VKRT_applyCameraInput(VKRT* vkrt, const VKRT_CameraInput* input) {
 void VKRT_invalidateAccumulation(VKRT* vkrt) {
     if (!vkrt) return;
     resetSceneData(vkrt);
+}
+
+void VKRT_setSamplesPerPixel(VKRT* vkrt, uint32_t samplesPerPixel) {
+    if (!vkrt) return;
+    if (samplesPerPixel == 0) samplesPerPixel = 1;
+
+    vkrt->state.samplesPerPixel = samplesPerPixel;
+    if (vkrt->core.sceneData) {
+        vkrt->core.sceneData->samplesPerPixel = samplesPerPixel;
+    }
+}
+
+void VKRT_setToneMappingMode(VKRT* vkrt, VKRT_ToneMappingMode toneMappingMode) {
+    if (!vkrt) return;
+
+    vkrt->state.toneMappingMode = toneMappingMode;
+    if (vkrt->core.sceneData) {
+        vkrt->core.sceneData->toneMappingMode = toneMappingMode;
+    }
 }
 
 uint32_t VKRT_getMeshCount(const VKRT* vkrt) {

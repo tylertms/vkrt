@@ -68,7 +68,6 @@ void recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
 
     if (vkrt->core.descriptorSetReady) {
         if (vkrt->core.accumulationNeedsReset) {
-            vkrt->core.sceneData->frameNumber = 0;
             vkrt->state.accumulationFrame = 0;
             vkrt->state.totalSamples = 0;
             VkClearColorValue clearZero = {.float32 = {0.0f, 0.0f, 0.0f, 0.0f}};
@@ -143,15 +142,6 @@ void recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
         perror("[ERROR]: Failed to end command buffer");
         exit(EXIT_FAILURE);
     }
-}
-
-void drawFrame(VKRT* vkrt) {
-    if (!vkrt) return;
-    VKRT_beginFrame(vkrt);
-    VKRT_updateScene(vkrt);
-    VKRT_trace(vkrt);
-    VKRT_present(vkrt);
-    VKRT_endFrame(vkrt);
 }
 
 VkCommandBuffer beginSingleTimeCommands(VKRT* vkrt) {

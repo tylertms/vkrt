@@ -18,7 +18,6 @@ static const char* openMeshImportDialog(void) {
     return tinyfd_openFileDialog("Import mesh", "assets/models", 2, filters, "glTF files", 0);
 }
 
-
 static void initializeDockLayout(void) {
     static bool isInitialized = false;
     if (isInitialized) return;
@@ -106,8 +105,7 @@ static void drawPerformanceSection(VKRT* runtime) {
 
     int spp = (int)runtime->state.samplesPerPixel;
     if (ImGui_SliderIntEx("SPP", &spp, 1, 2048, "%d", ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_Logarithmic)) {
-        runtime->state.samplesPerPixel = (uint32_t)spp;
-        VKRT_invalidateAccumulation(runtime);
+        VKRT_setSamplesPerPixel(runtime, (uint32_t)spp);
     }
 
     int maxBounces = (int)runtime->state.maxBounces;
@@ -119,8 +117,7 @@ static void drawPerformanceSection(VKRT* runtime) {
     const char* toneMappingLabels[] = {"None", "ACES"};
     int toneMappingMode = (int)runtime->state.toneMappingMode;
     if (ImGui_ComboCharEx("Tone mapping", &toneMappingMode, toneMappingLabels, 2, 2)) {
-        runtime->state.toneMappingMode = (VKRT_ToneMappingMode)toneMappingMode;
-        VKRT_invalidateAccumulation(runtime);
+        VKRT_setToneMappingMode(runtime, (VKRT_ToneMappingMode)toneMappingMode);
     }
 }
 

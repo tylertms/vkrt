@@ -160,7 +160,6 @@ void updateMatricesFromCamera(VKRT* vkrt) {
 }
 
 void resetSceneData(VKRT* vkrt) {
-    vkrt->core.sceneData->frameNumber = 0;
     vkrt->core.sceneData->samplesPerPixel = vkrt->state.samplesPerPixel;
     vkrt->core.sceneData->maxBounces = vkrt->state.maxBounces;
     vkrt->core.sceneData->toneMappingMode = vkrt->state.toneMappingMode;
