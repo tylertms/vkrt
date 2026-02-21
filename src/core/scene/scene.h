@@ -1,4 +1,5 @@
 #pragma once
+
 #include "vkrt.h"
 
 void applyCameraInput(VKRT* vkrt, const VKRT_CameraInput* input);

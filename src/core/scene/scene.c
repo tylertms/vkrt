@@ -214,6 +214,7 @@ void updateAutoSPP(VKRT* vkrt) {
         VKRT_setSamplesPerPixel(vkrt, next);
     }
 }
+
 VkTransformMatrixKHR getMeshTransform(MeshInfo* meshInfo) {
     vec3 scale;
     glm_vec3_copy(meshInfo->scale, scale);

@@ -1,5 +1,4 @@
 #include "controller.h"
-
 #include "loader.h"
 #include "debug.h"
 

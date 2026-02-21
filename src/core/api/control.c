@@ -10,7 +10,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-
 static void destroyMeshAccelerationStructure(VKRT* vkrt, Mesh* mesh) {
     if (!vkrt || !vkrt->core.device || !mesh) return;
 
@@ -45,8 +44,7 @@ static void destroyMeshBLAS(VKRT* vkrt) {
     }
 }
 
-
-static void rebuildMaterialBuffer(VKRT* vkrt) {
+void rebuildMaterialBuffer(VKRT* vkrt) {
     if (!vkrt) return;
 
     vkDeviceWaitIdle(vkrt->core.device);
@@ -87,10 +85,6 @@ static void rebuildMaterialBuffer(VKRT* vkrt) {
 
     free(materials);
     vkrt->core.materialDataDirty = VK_FALSE;
-}
-
-void refreshMaterialBuffer(VKRT* vkrt) {
-    rebuildMaterialBuffer(vkrt);
 }
 
 static void rebuildMeshBuffersAndStructures(VKRT* vkrt) {
@@ -444,12 +438,10 @@ void VKRT_setSamplesPerPixel(VKRT* vkrt, uint32_t samplesPerPixel) {
     }
 }
 
-
 void VKRT_setAutoSPPEnabled(VKRT* vkrt, uint8_t enabled) {
     if (!vkrt) return;
     vkrt->state.autoSPPEnabled = enabled ? 1 : 0;
 }
-
 
 void VKRT_setAutoSPPTargetFPS(VKRT* vkrt, uint32_t targetFPS) {
     if (!vkrt) return;
@@ -493,7 +485,6 @@ int VKRT_setMeshTransform(VKRT* vkrt, uint32_t meshIndex, vec3 position, vec3 ro
     resetSceneData(vkrt);
     return 0;
 }
-
 
 int VKRT_setMeshMaterial(VKRT* vkrt, uint32_t meshIndex, const MaterialData* material) {
     if (!vkrt || !material || meshIndex >= vkrt->core.meshData.count) return -1;

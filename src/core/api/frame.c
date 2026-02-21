@@ -4,13 +4,13 @@
 #include "scene.h"
 #include "accel.h"
 #include "swapchain.h"
-#include "private.h"
 #include "vkrt.h"
 
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
 
+void rebuildMaterialBuffer(VKRT* vkrt);
 
 void VKRT_beginFrame(VKRT* vkrt) {
     if (!vkrt) return;
@@ -55,7 +55,7 @@ void VKRT_updateScene(VKRT* vkrt) {
     if (!vkrt || !vkrt->runtime.frameAcquired) return;
 
     if (vkrt->core.materialDataDirty) {
-        refreshMaterialBuffer(vkrt);
+        rebuildMaterialBuffer(vkrt);
         updateDescriptorSet(vkrt);
     }
 }

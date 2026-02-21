@@ -116,7 +116,6 @@ void createDescriptorSet(VKRT* vkrt) {
     }
 
     vkrt->core.descriptorSetReady = VK_FALSE;
-
 }
 
 VkBool32 descriptorResourcesReady(VKRT* vkrt) {
