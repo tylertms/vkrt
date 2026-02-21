@@ -225,6 +225,8 @@ typedef struct VKRT_PublicState {
     uint8_t autoSPPEnabled;
     uint32_t autoSPPTargetFPS;
     float autoSPPTargetFrameMs;
+    float autoSPPControlMs;
+    uint32_t autoSPPFramesUntilNextAdjust;
 } VKRT_PublicState;
 
 typedef struct VKRT {

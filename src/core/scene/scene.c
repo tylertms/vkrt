@@ -137,6 +137,8 @@ void createSceneUniform(VKRT* vkrt) {
     if (targetFPS > 360) targetFPS = 360;
     vkrt->state.autoSPPTargetFPS = targetFPS;
     vkrt->state.autoSPPTargetFrameMs = 1000.0f / (float)vkrt->state.autoSPPTargetFPS;
+    vkrt->state.autoSPPControlMs = 0.0f;
+    vkrt->state.autoSPPFramesUntilNextAdjust = 0;
 
     vkrt->state.camera = (Camera){
         .width = initialWidth, .height = initialHeight,
@@ -195,21 +197,40 @@ void updateAutoSPP(VKRT* vkrt) {
     float controlMs = vkrt->state.displayRenderTimeMs > 0.0f ? vkrt->state.displayRenderTimeMs : vkrt->state.displayFrameTimeMs;
     if (controlMs <= 0.0f) return;
 
-    float budgetMs = targetMs * 0.90f;
-    float ratio = budgetMs / controlMs;
-    if (fabsf(1.0f - ratio) < 0.04f) return;
+    const float smoothing = 0.08f;
+    if (vkrt->state.autoSPPControlMs <= 0.0f) vkrt->state.autoSPPControlMs = controlMs;
+    else vkrt->state.autoSPPControlMs = vkrt->state.autoSPPControlMs * (1.0f - smoothing) + controlMs * smoothing;
+
+    if (vkrt->state.autoSPPFramesUntilNextAdjust > 0) {
+        vkrt->state.autoSPPFramesUntilNextAdjust--;
+        return;
+    }
+
+    float budgetMs = targetMs * 0.95f;
+    float ratio = budgetMs / vkrt->state.autoSPPControlMs;
+    if (fabsf(1.0f - ratio) < 0.10f) return;
 
     uint32_t spp = vkrt->state.samplesPerPixel;
     float desired = (float)spp * ratio;
-    float nextValue = (float)spp + (desired - (float)spp) * 0.30f;
 
-    if (ratio > 1.0f && nextValue < (float)spp + 1.0f) nextValue = (float)spp + 1.0f;
-    if (ratio < 1.0f && nextValue > (float)spp - 1.0f) nextValue = (float)spp - 1.0f;
+    const float maxStepUp = 0.12f;
+    const float maxStepDown = 0.08f;
+    float minAllowed = (float)spp * (1.0f - maxStepDown);
+    float maxAllowed = (float)spp * (1.0f + maxStepUp);
+    float nextValue = glm_clamp(desired, minAllowed, maxAllowed);
 
     if (nextValue < 1.0f) nextValue = 1.0f;
     if (nextValue > 2048.0f) nextValue = 2048.0f;
 
     uint32_t next = (uint32_t)(nextValue + 0.5f);
+    if (next == spp && ratio > 1.0f && spp < 2048) next = spp + 1;
+    if (next == spp && ratio < 1.0f && spp > 1) next = spp - 1;
+
+    uint32_t targetFPS = vkrt->state.autoSPPTargetFPS ? vkrt->state.autoSPPTargetFPS : 60;
+    uint32_t framesBetweenAdjust = targetFPS / 5;
+    if (framesBetweenAdjust < 6) framesBetweenAdjust = 6;
+    vkrt->state.autoSPPFramesUntilNextAdjust = framesBetweenAdjust;
+
     if (next != spp) {
         VKRT_setSamplesPerPixel(vkrt, next);
     }
