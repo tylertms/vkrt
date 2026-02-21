@@ -19,7 +19,7 @@
 
 static const char* openMeshImportDialog(void) {
     const char* filters[] = {"*.glb", "*.gltf"};
-    return tinyfd_openFileDialog("Import mesh", "assets/models", 2, filters, "glTF files", 0);
+    return tinyfd_openFileDialog("Import mesh", "assets/models", 2, filters, "glTF 2.0 (.glb/.gltf)", 0);
 }
 
 static ImFontConfig makeDefaultFontConfig(void) {
@@ -153,7 +153,7 @@ static void drawPerformanceSection(VKRT* runtime) {
     }
 }
 
-static void drawMeshInspector(VKRT* runtime, EditorState* state) {
+static void drawMeshInspector(VKRT* runtime, State* state) {
     uint32_t meshCount = VKRT_getMeshCount(runtime);
     if (meshCount == 0) {
         ImGui_TextDisabled("No meshes loaded");
@@ -165,7 +165,7 @@ static void drawMeshInspector(VKRT* runtime, EditorState* state) {
         MeshInfo* meshInfo = &mesh->info;
 
         char header[160] = {0};
-        snprintf(header, sizeof(header), "Mesh %u (%s)", meshIndex, editorStateGetMeshName(state, meshIndex));
+        snprintf(header, sizeof(header), "Mesh %u (%s)", meshIndex, stateGetMeshName(state, meshIndex));
 
         ImGui_PushIDInt((int)meshIndex);
         bool visible = true;
@@ -220,7 +220,7 @@ static void drawMeshInspector(VKRT* runtime, EditorState* state) {
     }
 }
 
-static void drawSceneInspectorWindow(VKRT* runtime, EditorState* state) {
+static void drawSceneInspectorWindow(VKRT* runtime, State* state) {
     ImGui_PushStyleColorImVec4(ImGuiCol_WindowBg, (ImVec4){0.08f, 0.08f, 0.08f, 1.00f});
     ImGui_Begin("Scene Inspector", NULL, 0);
     ImGui_PopStyleColor();
@@ -240,7 +240,7 @@ static void drawSceneInspectorWindow(VKRT* runtime, EditorState* state) {
     if (ImGui_Button("Import mesh")) {
         const char* selectedPath = openMeshImportDialog();
         if (selectedPath && selectedPath[0]) {
-            editorStateQueueMeshImport(state, selectedPath);
+            stateQueueMeshImport(state, selectedPath);
         }
     }
 
@@ -327,7 +327,7 @@ void editorUIShutdown(VKRT* runtime, void* userData) {
 }
 
 void editorUIDraw(VKRT* runtime, VkCommandBuffer commandBuffer, void* userData) {
-    EditorState* state = (EditorState*)userData;
+    State* state = (State*)userData;
 
     cImGui_ImplGlfw_NewFrame();
     cImGui_ImplVulkan_NewFrame();

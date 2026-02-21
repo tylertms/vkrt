@@ -32,7 +32,7 @@ static char* stringDuplicate(const char* value) {
     return copy;
 }
 
-static void ensureMeshSlotCount(EditorState* state, uint32_t requiredCount) {
+static void ensureMeshSlotCount(State* state, uint32_t requiredCount) {
     if (!state || requiredCount <= state->meshCount) return;
 
     char** resized = (char**)realloc(state->meshNames, (size_t)requiredCount * sizeof(char*));
@@ -49,14 +49,14 @@ static void ensureMeshSlotCount(EditorState* state, uint32_t requiredCount) {
     state->meshCount = requiredCount;
 }
 
-void editorStateInit(EditorState* state) {
+void stateInit(State* state) {
     if (!state) return;
 
     memset(state, 0, sizeof(*state));
     state->pendingMeshRemovalIndex = UINT32_MAX;
 }
 
-void editorStateDeinit(EditorState* state) {
+void stateDeinit(State* state) {
     if (!state) return;
 
     for (uint32_t index = 0; index < state->meshCount; index++) {
@@ -67,10 +67,10 @@ void editorStateDeinit(EditorState* state) {
     state->meshNames = NULL;
     state->meshCount = 0;
 
-    editorStateClearQueuedMeshImport(state);
+    stateClearQueuedMeshImport(state);
 }
 
-void editorStateSetMeshName(EditorState* state, const char* filePath, uint32_t meshIndex) {
+void stateSetMeshName(State* state, const char* filePath, uint32_t meshIndex) {
     if (!state) return;
 
     ensureMeshSlotCount(state, meshIndex + 1);
@@ -78,7 +78,7 @@ void editorStateSetMeshName(EditorState* state, const char* filePath, uint32_t m
     state->meshNames[meshIndex] = stringDuplicate(fileBasename(filePath));
 }
 
-void editorStateRemoveMeshName(EditorState* state, uint32_t meshIndex) {
+void stateRemoveMeshName(State* state, uint32_t meshIndex) {
     if (!state || meshIndex >= state->meshCount) return;
 
     free(state->meshNames[meshIndex]);
@@ -97,7 +97,7 @@ void editorStateRemoveMeshName(EditorState* state, uint32_t meshIndex) {
     if (shrunk) state->meshNames = shrunk;
 }
 
-const char* editorStateGetMeshName(const EditorState* state, uint32_t meshIndex) {
+const char* stateGetMeshName(const State* state, uint32_t meshIndex) {
     if (!state || meshIndex >= state->meshCount || !state->meshNames[meshIndex]) {
         return "(unknown)";
     }
@@ -105,16 +105,16 @@ const char* editorStateGetMeshName(const EditorState* state, uint32_t meshIndex)
     return state->meshNames[meshIndex];
 }
 
-void editorStateQueueMeshImport(EditorState* state, const char* path) {
+void stateQueueMeshImport(State* state, const char* path) {
     if (!state) return;
 
-    editorStateClearQueuedMeshImport(state);
+    stateClearQueuedMeshImport(state);
     if (!path || !path[0]) return;
 
     state->pendingMeshImportPath = stringDuplicate(path);
 }
 
-void editorStateClearQueuedMeshImport(EditorState* state) {
+void stateClearQueuedMeshImport(State* state) {
     if (!state || !state->pendingMeshImportPath) return;
 
     free(state->pendingMeshImportPath);

@@ -2,19 +2,19 @@
 
 #include <stdint.h>
 
-typedef struct EditorState {
+typedef struct State {
     char** meshNames;
     uint32_t meshCount;
     uint32_t pendingMeshRemovalIndex;
     char* pendingMeshImportPath;
-} EditorState;
+} State;
 
-void editorStateInit(EditorState* state);
-void editorStateDeinit(EditorState* state);
+void stateInit(State* state);
+void stateDeinit(State* state);
 
-void editorStateSetMeshName(EditorState* state, const char* filePath, uint32_t meshIndex);
-void editorStateRemoveMeshName(EditorState* state, uint32_t meshIndex);
-const char* editorStateGetMeshName(const EditorState* state, uint32_t meshIndex);
+void stateSetMeshName(State* state, const char* filePath, uint32_t meshIndex);
+void stateRemoveMeshName(State* state, uint32_t meshIndex);
+const char* stateGetMeshName(const State* state, uint32_t meshIndex);
 
-void editorStateQueueMeshImport(EditorState* state, const char* path);
-void editorStateClearQueuedMeshImport(EditorState* state);
+void stateQueueMeshImport(State* state, const char* path);
+void stateClearQueuedMeshImport(State* state);

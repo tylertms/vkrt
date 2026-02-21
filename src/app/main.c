@@ -6,9 +6,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static void runFrame(VKRT* runtime, EditorState* editorState) {
+static void runFrame(VKRT* runtime, State* state) {
     VKRT_poll(runtime);
-    sceneControllerApplyPendingActions(runtime, editorState);
+    sceneControllerApplyPendingActions(runtime, state);
 
     VKRT_beginFrame(runtime);
     VKRT_updateScene(runtime);
@@ -19,14 +19,14 @@ static void runFrame(VKRT* runtime, EditorState* editorState) {
 
 int main(void) {
     VKRT runtime = {0};
-    EditorState editorState = {0};
-    editorStateInit(&editorState);
+    State state = {0};
+    stateInit(&state);
 
     VKRT_AppHooks hooks = {
         .init = editorUIInitialize,
         .deinit = editorUIShutdown,
         .drawOverlay = editorUIDraw,
-        .userData = &editorState,
+        .userData = &state,
     };
     VKRT_registerAppHooks(&runtime, hooks);
 
@@ -40,17 +40,17 @@ int main(void) {
     if (VKRT_initWithCreateInfo(&runtime, &createInfo) != VK_SUCCESS) {
         fprintf(stderr, "[ERROR]: Failed to initialize VKRT runtime\n");
         VKRT_deinit(&runtime);
-        editorStateDeinit(&editorState);
+        stateDeinit(&state);
         return EXIT_FAILURE;
     }
 
-    sceneControllerLoadDefaultAssets(&runtime, &editorState);
+    sceneControllerLoadDefaultAssets(&runtime, &state);
 
     while (!VKRT_shouldDeinit(&runtime)) {
-        runFrame(&runtime, &editorState);
+        runFrame(&runtime, &state);
     }
 
     VKRT_deinit(&runtime);
-    editorStateDeinit(&editorState);
+    stateDeinit(&state);
     return EXIT_SUCCESS;
 }

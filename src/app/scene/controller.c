@@ -6,7 +6,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
-void sceneControllerImportMesh(VKRT* runtime, EditorState* state, const char* path) {
+void sceneControllerImportMesh(VKRT* runtime, State* state, const char* path) {
     if (!path || !path[0]) return;
 
     uint64_t startTime = getMicroseconds();
@@ -14,7 +14,7 @@ void sceneControllerImportMesh(VKRT* runtime, EditorState* state, const char* pa
     meshAssetLoadFromFile(runtime, path);
 
     if (VKRT_getMeshCount(runtime) > meshCountBeforeImport) {
-        editorStateSetMeshName(state, path, meshCountBeforeImport);
+        stateSetMeshName(state, path, meshCountBeforeImport);
     }
 
     printf("[INFO]: Mesh import complete. File: %s, Total Meshes: %u, in %.3f ms\n",
@@ -23,10 +23,10 @@ void sceneControllerImportMesh(VKRT* runtime, EditorState* state, const char* pa
         (double)(getMicroseconds() - startTime) / 1e3);
 }
 
-void sceneControllerApplyPendingActions(VKRT* runtime, EditorState* state) {
+void sceneControllerApplyPendingActions(VKRT* runtime, State* state) {
     if (state->pendingMeshImportPath) {
         sceneControllerImportMesh(runtime, state, state->pendingMeshImportPath);
-        editorStateClearQueuedMeshImport(state);
+        stateClearQueuedMeshImport(state);
     }
 
     if (state->pendingMeshRemovalIndex != UINT32_MAX) {
@@ -35,13 +35,13 @@ void sceneControllerApplyPendingActions(VKRT* runtime, EditorState* state) {
         state->pendingMeshRemovalIndex = UINT32_MAX;
 
         if (removeIndex < meshCount) {
-            editorStateRemoveMeshName(state, removeIndex);
+            stateRemoveMeshName(state, removeIndex);
             VKRT_removeMesh(runtime, removeIndex);
         }
     }
 }
 
-void sceneControllerLoadDefaultAssets(VKRT* runtime, EditorState* state) {
+void sceneControllerLoadDefaultAssets(VKRT* runtime, State* state) {
     sceneControllerImportMesh(runtime, state, "assets/models/sphere.glb");
     sceneControllerImportMesh(runtime, state, "assets/models/dragon.glb");
 
