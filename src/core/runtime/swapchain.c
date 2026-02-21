@@ -3,6 +3,7 @@
 #include "descriptor.h"
 #include "device.h"
 #include "scene.h"
+#include "debug.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -55,7 +56,7 @@ void createSwapChain(VKRT* vkrt) {
     VkExtent2D extent = chooseSwapExtent(vkrt, &supportDetails);
     vkrt->runtime.presentMode = presentMode;
     vkrt->runtime.displayRefreshHz = queryDisplayRefreshHz(vkrt);
-    printf("[INFO]: Swapchain format selected: %s (%d), color space: %s (%d)\n",
+    LOG_INFO("Swapchain format selected: %s (%d), color space: %s (%d)",
         swapchainFormatName(surfaceFormat.format), (int)surfaceFormat.format,
         swapchainColorSpaceName(surfaceFormat.colorSpace), (int)surfaceFormat.colorSpace);
 

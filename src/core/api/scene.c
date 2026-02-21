@@ -235,13 +235,13 @@ static void rebuildMeshBuffersAndStructures(VKRT* vkrt) {
         if (vkrt->core.meshes[i].ownsGeometry) uniqueGeometryCount++;
     }
 
-    printf("[INFO]: Scene geometry rebuilt. Meshes: %u, Unique Geometry: %u, Vertices: %u, Indices: %u, in %.3f ms\n",
+    LOG_INFO("Scene geometry rebuilt. Meshes: %u, Unique Geometry: %u, Vertices: %u, Indices: %u, in %.3f ms",
         meshCount,
         uniqueGeometryCount,
         totalVertexCount,
         totalIndexCount,
         (double)(getMicroseconds() - startTime) / 1e3);
-    printf("[INFO]: Scene geometry rebuild breakdown. Device Wait: %.3f ms, BLAS Cleanup: %.3f ms, Buffer Cleanup: %.3f ms, Data Packing: %.3f ms, Buffer Upload: %.3f ms, BLAS Build: %.3f ms, Instance Sync: %.3f ms, TLAS Build: %.3f ms, Descriptor Update: %.3f ms, Scene Reset: %.3f ms\n",
+    LOG_TRACE("Scene geometry rebuild breakdown. Device Wait: %.3f ms, BLAS Cleanup: %.3f ms, Buffer Cleanup: %.3f ms, Data Packing: %.3f ms, Buffer Upload: %.3f ms, BLAS Build: %.3f ms, Instance Sync: %.3f ms, TLAS Build: %.3f ms, Descriptor Update: %.3f ms, Scene Reset: %.3f ms",
         (double)waitIdleTime / 1e3,
         (double)destroyBlasTime / 1e3,
         (double)destroyBuffersTime / 1e3,
@@ -324,7 +324,7 @@ void VKRT_uploadMeshData(VKRT* vkrt, const Vertex* vertices, size_t vertexCount,
 
     mesh->material = (MaterialData){
         .baseColor = {1.0f, 1.0f, 1.0f},
-        .roughness = 0.5f,
+        .roughness = 1.0f,
         .specular = 0.0f,
         .emissionColor = {1.0f, 1.0f, 1.0f},
         .emissionStrength = 0.0f,
@@ -337,7 +337,7 @@ void VKRT_uploadMeshData(VKRT* vkrt, const Vertex* vertices, size_t vertexCount,
 
     vkrt->core.meshData.count = newCount;
     rebuildMeshBuffersAndStructures(vkrt);
-    printf("[INFO]: Mesh upload complete. Total Meshes: %u, Vertices: %zu, Indices: %zu, Reused Geometry: %s, in %.3f ms\n",
+    LOG_TRACE("Mesh upload complete. Total Meshes: %u, Vertices: %zu, Indices: %zu, Reused Geometry: %s, in %.3f ms",
         vkrt->core.meshData.count,
         vertexCount,
         indexCount,
@@ -408,7 +408,7 @@ int VKRT_removeMesh(VKRT* vkrt, uint32_t meshIndex) {
     }
 
     rebuildMeshBuffersAndStructures(vkrt);
-    printf("[INFO]: Mesh removal complete. Removed Index: %u, Remaining Meshes: %u, in %.3f ms\n",
+    LOG_TRACE("Mesh removal complete. Removed Index: %u, Remaining Meshes: %u, in %.3f ms",
         meshIndex,
         vkrt->core.meshData.count,
         (double)(getMicroseconds() - startTime) / 1e3);

@@ -18,9 +18,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-
-static void logStepTime(const char* stepName, uint64_t startTime) {
-    printf("[INFO]: %s in %.3f ms\n", stepName, (double)(getMicroseconds() - startTime) / 1e3);
+static inline void logStepTime(const char* stepName, uint64_t startTime) {
+    LOG_TRACE("%s in %.3f ms", stepName, (double)(getMicroseconds() - startTime) / 1e3);
 }
 
 void VKRT_defaultCreateInfo(VKRT_CreateInfo* createInfo) {
@@ -152,7 +151,7 @@ int VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInfo) {
     }
     logStepTime("Application initialization complete", stepStartTime);
 
-    printf("[INFO]: VKRT initialization complete in %.3f ms\n", (double)(getMicroseconds() - initStartTime) / 1e3);
+    LOG_INFO("VKRT initialization complete in %.3f ms", (double)(getMicroseconds() - initStartTime) / 1e3);
     return 0;
 }
 
@@ -322,7 +321,7 @@ void VKRT_deinit(VKRT* vkrt) {
     glfwTerminate();
     logStepTime("GLFW shutdown complete", stepStartTime);
 
-    printf("[INFO]: VKRT deinitialization complete in %.3f ms\n", (double)(getMicroseconds() - deinitStartTime) / 1e3);
+    LOG_INFO("VKRT deinitialization complete in %.3f ms", (double)(getMicroseconds() - deinitStartTime) / 1e3);
 }
 
 int VKRT_shouldDeinit(VKRT* vkrt) {

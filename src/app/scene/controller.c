@@ -4,7 +4,6 @@
 #include "debug.h"
 
 #include <stdint.h>
-#include <stdio.h>
 
 void sceneControllerImportMesh(VKRT* runtime, State* state, const char* path) {
     if (!path || !path[0]) return;
@@ -17,7 +16,7 @@ void sceneControllerImportMesh(VKRT* runtime, State* state, const char* path) {
         stateSetMeshName(state, path, meshCountBeforeImport);
     }
 
-    printf("[INFO]: Mesh import complete. File: %s, Total Meshes: %u, in %.3f ms\n",
+    LOG_INFO("Mesh import complete. File: %s, Total Meshes: %u, in %.3f ms",
         path,
         VKRT_getMeshCount(runtime),
         (double)(getMicroseconds() - startTime) / 1e3);

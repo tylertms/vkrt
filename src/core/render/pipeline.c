@@ -25,7 +25,7 @@ void createRayTracingPipeline(VKRT* vkrt) {
     const char* closestHitCode = readFile(vkrt->core.shaders.rchitPath, &closestHitLen);
     const char* missCode = readFile(vkrt->core.shaders.rmissPath, &missLen);
 
-    printf("[INFO]: Using shaders \"%s\", \"%s\", \"%s\"\n",
+    LOG_INFO("Using shaders \"%s\", \"%s\", \"%s\"",
         vkrt->core.shaders.rgenPath, vkrt->core.shaders.rchitPath, vkrt->core.shaders.rmissPath);
 
     VkShaderModule rayGenModule = createShaderModule(vkrt, rayGenCode, rayGenLen);
@@ -107,7 +107,7 @@ void createRayTracingPipeline(VKRT* vkrt) {
     free((void*)closestHitCode);
     free((void*)missCode);
 
-    printf("[INFO]: Ray tracing pipeline created. Shader Stages: %u, Shader Groups: %u, in %.3f ms\n",
+    LOG_INFO("Ray tracing pipeline created. Shader Stages: %u, Shader Groups: %u, in %.3f ms",
         (uint32_t)COUNT_OF(shaderStages),
         (uint32_t)COUNT_OF(shaderGroups),
         (double)(getMicroseconds() - startTime) / 1e3);

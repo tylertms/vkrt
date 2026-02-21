@@ -6,17 +6,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static void runFrame(VKRT* runtime, State* state) {
-    VKRT_poll(runtime);
-    sceneControllerApplyPendingActions(runtime, state);
-
-    VKRT_beginFrame(runtime);
-    VKRT_updateScene(runtime);
-    VKRT_trace(runtime);
-    VKRT_present(runtime);
-    VKRT_endFrame(runtime);
-}
-
 int main(void) {
     VKRT runtime = {0};
     State state = {0};
@@ -47,7 +36,9 @@ int main(void) {
     sceneControllerLoadDefaultAssets(&runtime, &state);
 
     while (!VKRT_shouldDeinit(&runtime)) {
-        runFrame(&runtime, &state);
+        VKRT_poll(&runtime);
+        sceneControllerApplyPendingActions(&runtime, &state);
+        VKRT_draw(&runtime);
     }
 
     VKRT_deinit(&runtime);

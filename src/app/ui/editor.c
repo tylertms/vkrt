@@ -137,14 +137,14 @@ static void drawPerformanceSection(VKRT* runtime) {
     }
 
     int maxBounces = (int)runtime->state.maxBounces;
-    if (ImGui_SliderIntEx("Max bounces", &maxBounces, 1, 64, "%d", ImGuiSliderFlags_AlwaysClamp)) {
+    if (ImGui_SliderIntEx("Max Bounces", &maxBounces, 1, 64, "%d", ImGuiSliderFlags_AlwaysClamp)) {
         runtime->state.maxBounces = (uint32_t)maxBounces;
         VKRT_invalidateAccumulation(runtime);
     }
 
     const char* toneMappingLabels[] = {"None", "ACES"};
     int toneMappingMode = (int)runtime->state.toneMappingMode;
-    if (ImGui_ComboCharEx("Tone mapping", &toneMappingMode, toneMappingLabels, 2, 2)) {
+    if (ImGui_ComboCharEx("Tone Mapping", &toneMappingMode, toneMappingLabels, 2, 2)) {
         VKRT_setToneMappingMode(runtime, (VKRT_ToneMappingMode)toneMappingMode);
     }
 
@@ -156,7 +156,7 @@ static void drawPerformanceSection(VKRT* runtime) {
 static void drawMeshInspector(VKRT* runtime, State* state) {
     uint32_t meshCount = VKRT_getMeshCount(runtime);
     if (meshCount == 0) {
-        ImGui_TextDisabled("No meshes loaded");
+        ImGui_TextDisabled("No meshes loaded.");
         return;
     }
 
@@ -207,8 +207,8 @@ static void drawMeshInspector(VKRT* runtime, State* state) {
         MaterialData material = mesh->material;
         bool materialChanged = false;
         materialChanged |= ImGui_ColorEdit3("Base Color", material.baseColor, ImGuiColorEditFlags_Float);
-        materialChanged |= ImGui_DragFloatEx("Roughness", &material.roughness, 0.005f, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-        materialChanged |= ImGui_DragFloatEx("Specular", &material.specular, 0.005f, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        materialChanged |= ImGui_SliderFloatEx("Roughness", &material.roughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        materialChanged |= ImGui_SliderFloatEx("Specular", &material.specular, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
         materialChanged |= ImGui_ColorEdit3("Emission Color", material.emissionColor, ImGuiColorEditFlags_Float);
         materialChanged |= ImGui_DragFloatEx("Emission Strength", &material.emissionStrength, 0.01f, 0.0f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
 
@@ -318,12 +318,12 @@ void editorUIShutdown(VKRT* runtime, void* userData) {
     cImGui_ImplGlfw_Shutdown();
     double glfwShutdownMs = (double)(getMicroseconds() - glfwShutdownStartTime) / 1e3;
 
-    printf("[INFO]: UI backends shut down. Vulkan: %.3f ms, GLFW: %.3f ms\n", vulkanShutdownMs, glfwShutdownMs);
-    printf("[INFO]: Destroying UI context\n");
+    LOG_TRACE("UI backends shut down. Vulkan: %.3f ms, GLFW: %.3f ms", vulkanShutdownMs, glfwShutdownMs);
+    LOG_TRACE("Destroying UI context");
 
     ImGui_DestroyContext(NULL);
 
-    printf("[INFO]: UI shutdown complete in %.3f ms\n", (double)(getMicroseconds() - shutdownStartTime) / 1e3);
+    LOG_TRACE("UI shutdown complete in %.3f ms", (double)(getMicroseconds() - shutdownStartTime) / 1e3);
 }
 
 void editorUIDraw(VKRT* runtime, VkCommandBuffer commandBuffer, void* userData) {

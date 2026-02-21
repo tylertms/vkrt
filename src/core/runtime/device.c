@@ -1,6 +1,7 @@
 #include "device.h"
 #include "swapchain.h"
 #include "validation.h"
+#include "debug.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -59,7 +60,7 @@ void pickPhysicalDevice(VKRT* vkrt) {
     VkPhysicalDeviceProperties deviceProperties = {0};
     vkGetPhysicalDeviceProperties(vkrt->core.physicalDevice, &deviceProperties);
 
-    printf("[INFO]: Using device [%s].\n", deviceProperties.deviceName);
+    LOG_INFO("Using device [%s].", deviceProperties.deviceName);
     snprintf(vkrt->core.deviceName, COUNT_OF(vkrt->core.deviceName), "%s", deviceProperties.deviceName);
     free(devices);
 }

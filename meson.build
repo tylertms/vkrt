@@ -10,6 +10,14 @@ project('vkspt', ['c', 'cpp'],
 cc = meson.get_compiler('c')
 c_args = ['-D_GNU_SOURCE']
 
+buildtype = get_option('buildtype')
+trace_enabled = buildtype == 'debug' or buildtype == 'debugoptimized'
+if trace_enabled
+  c_args += ['-DVKRT_TRACE_ENABLED=1']
+else
+  c_args += ['-DVKRT_TRACE_ENABLED=0']
+endif
+
 glslc = find_program('glslc', required: true)
 
 # ----- Includes -----
