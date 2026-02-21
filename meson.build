@@ -35,8 +35,8 @@ includes = include_directories(
   'src/core/scene',
   'src/core/utility',
   'src/app',
-  'src/app/state',
-  'src/app/scene',
+  'src/app/session',
+  'src/app/mesh',
   'src/app/ui',
   is_system: true,
 )

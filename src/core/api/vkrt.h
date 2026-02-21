@@ -223,7 +223,7 @@ typedef struct VKRT_PublicState {
     uint32_t maxBounces;
     VKRT_ToneMappingMode toneMappingMode;
     uint8_t autoSPPEnabled;
-    uint32_t autoSPPTargetFps;
+    uint32_t autoSPPTargetFPS;
     float autoSPPTargetFrameMs;
 } VKRT_PublicState;
 

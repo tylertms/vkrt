@@ -2,9 +2,9 @@
 #include "command.h"
 #include "descriptor.h"
 #include "scene.h"
-#include "structure.h"
+#include "accel.h"
 #include "swapchain.h"
-#include "internal.h"
+#include "private.h"
 #include "vkrt.h"
 
 #include <stdio.h>
@@ -55,7 +55,7 @@ void VKRT_updateScene(VKRT* vkrt) {
     if (!vkrt || !vkrt->runtime.frameAcquired) return;
 
     if (vkrt->core.materialDataDirty) {
-        vkrtRebuildMaterialBuffer(vkrt);
+        refreshMaterialBuffer(vkrt);
         updateDescriptorSet(vkrt);
     }
 }

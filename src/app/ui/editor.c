@@ -4,7 +4,7 @@
 #include "dcimgui_impl_glfw.h"
 #include "dcimgui_impl_vulkan.h"
 #include "dcimgui_internal.h"
-#include "state.h"
+#include "session.h"
 #include "theme.h"
 #include "debug.h"
 #include "tinyfiledialogs.h"
@@ -79,7 +79,7 @@ static bool drawWorkspaceDockspace(void) {
     return true;
 }
 
-static bool drawViewportWindow(VKRT* runtime) {
+static bool drawViewportWindow(VKRT* vkrt) {
     ImGui_PushStyleVarImVec2(ImGuiStyleVar_WindowPadding, (ImVec2){0.0f, 0.0f});
     ImGui_Begin("Viewport", NULL, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar |
                                      ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoBackground);
@@ -102,7 +102,7 @@ static bool drawViewportWindow(VKRT* runtime) {
     uint32_t viewportY = height > 0.0f ? (uint32_t)y0 : 0;
     uint32_t viewportWidth = width > 1.0f ? (uint32_t)width : 1;
     uint32_t viewportHeight = height > 1.0f ? (uint32_t)height : 1;
-    VKRT_setRenderViewport(runtime, viewportX, viewportY, viewportWidth, viewportHeight);
+    VKRT_setRenderViewport(vkrt, viewportX, viewportY, viewportWidth, viewportHeight);
 
     ImGui_End();
     ImGui_PopStyleVar();
@@ -110,68 +110,68 @@ static bool drawViewportWindow(VKRT* runtime) {
     return viewportHovered;
 }
 
-static void drawPerformanceSection(VKRT* runtime) {
+static void drawPerformanceSection(VKRT* vkrt) {
     ImGui_Separator();
-    ImGui_Text("FPS:          %8u", runtime->state.framesPerSecond);
-    ImGui_Text("Frames:       %8u", runtime->state.accumulationFrame);
-    ImGui_Text("Samples:  %12llu", (unsigned long long)runtime->state.totalSamples);
-    ImGui_Text("Samples / px: %8u", runtime->state.samplesPerPixel);
-    ImGui_Text("Frame (ms):   %8.3f ms", runtime->state.displayFrameTimeMs);
-    ImGui_Text("Render (ms):  %8.3f ms", runtime->state.displayRenderTimeMs);
+    ImGui_Text("FPS:          %8u", vkrt->state.framesPerSecond);
+    ImGui_Text("Frames:       %8u", vkrt->state.accumulationFrame);
+    ImGui_Text("Samples:  %12llu", (unsigned long long)vkrt->state.totalSamples);
+    ImGui_Text("Samples / px: %8u", vkrt->state.samplesPerPixel);
+    ImGui_Text("Frame (ms):   %8.3f ms", vkrt->state.displayFrameTimeMs);
+    ImGui_Text("Render (ms):  %8.3f ms", vkrt->state.displayRenderTimeMs);
 
-    bool autoSPP = runtime->state.autoSPPEnabled != 0;
+    bool autoSPP = vkrt->state.autoSPPEnabled != 0;
     if (ImGui_Checkbox("Auto SPP", &autoSPP)) {
-        VKRT_setAutoSPPEnabled(runtime, autoSPP ? 1 : 0);
+        VKRT_setAutoSPPEnabled(vkrt, autoSPP ? 1 : 0);
     }
 
     if (autoSPP) {
-        int targetFps = (int)runtime->state.autoSPPTargetFps;
-        if (ImGui_SliderIntEx("Target FPS", &targetFps, 30, 360, "%d", ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_Logarithmic)) {
-            VKRT_setAutoSPPTargetFPS(runtime, (uint32_t)targetFps);
+        int targetFPS = (int)vkrt->state.autoSPPTargetFPS;
+        if (ImGui_SliderIntEx("Target FPS", &targetFPS, 30, 360, "%d", ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_Logarithmic)) {
+            VKRT_setAutoSPPTargetFPS(vkrt, (uint32_t)targetFPS);
         }
     } else {
-        int spp = (int)runtime->state.samplesPerPixel;
+        int spp = (int)vkrt->state.samplesPerPixel;
         if (ImGui_SliderIntEx("SPP", &spp, 1, 2048, "%d", ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_Logarithmic)) {
-            VKRT_setSamplesPerPixel(runtime, (uint32_t)spp);
+            VKRT_setSamplesPerPixel(vkrt, (uint32_t)spp);
         }
     }
 
-    int maxBounces = (int)runtime->state.maxBounces;
+    int maxBounces = (int)vkrt->state.maxBounces;
     if (ImGui_SliderIntEx("Max Bounces", &maxBounces, 1, 64, "%d", ImGuiSliderFlags_AlwaysClamp)) {
-        runtime->state.maxBounces = (uint32_t)maxBounces;
-        VKRT_invalidateAccumulation(runtime);
+        vkrt->state.maxBounces = (uint32_t)maxBounces;
+        VKRT_invalidateAccumulation(vkrt);
     }
 
     const char* toneMappingLabels[] = {"None", "ACES"};
-    int toneMappingMode = (int)runtime->state.toneMappingMode;
+    int toneMappingMode = (int)vkrt->state.toneMappingMode;
     if (ImGui_ComboCharEx("Tone Mapping", &toneMappingMode, toneMappingLabels, 2, 2)) {
-        VKRT_setToneMappingMode(runtime, (VKRT_ToneMappingMode)toneMappingMode);
+        VKRT_setToneMappingMode(vkrt, (VKRT_ToneMappingMode)toneMappingMode);
     }
 
     if (ImGui_Button(ICON_FA_ARROWS_ROTATE " Reset accumulation")) {
-        VKRT_invalidateAccumulation(runtime);
+        VKRT_invalidateAccumulation(vkrt);
     }
 }
 
-static void drawMeshInspector(VKRT* runtime, State* state) {
-    uint32_t meshCount = VKRT_getMeshCount(runtime);
+static void drawMeshInspector(VKRT* vkrt, Session* session) {
+    uint32_t meshCount = VKRT_getMeshCount(vkrt);
     if (meshCount == 0) {
         ImGui_TextDisabled("No meshes loaded.");
         return;
     }
 
     for (uint32_t meshIndex = 0; meshIndex < meshCount; meshIndex++) {
-        Mesh* mesh = &runtime->core.meshes[meshIndex];
+        Mesh* mesh = &vkrt->core.meshes[meshIndex];
         MeshInfo* meshInfo = &mesh->info;
 
         char header[160] = {0};
-        snprintf(header, sizeof(header), "Mesh %u (%s)", meshIndex, stateGetMeshName(state, meshIndex));
+        snprintf(header, sizeof(header), "Mesh %u (%s)", meshIndex, sessionGetMeshName(session, meshIndex));
 
         ImGui_PushIDInt((int)meshIndex);
         bool visible = true;
         bool open = ImGui_CollapsingHeaderBoolPtr(header, &visible, ImGuiTreeNodeFlags_None);
         if (!visible) {
-            state->pendingMeshRemovalIndex = meshIndex;
+            session->pendingMeshRemovalIndex = meshIndex;
             ImGui_PopID();
             continue;
         }
@@ -201,7 +201,7 @@ static void drawMeshInspector(VKRT* runtime, State* state) {
                 if (rotation[axis] < -180.0f) rotation[axis] += 360.0f;
                 if (rotation[axis] >= 180.0f) rotation[axis] -= 360.0f;
             }
-            VKRT_setMeshTransform(runtime, meshIndex, position, rotation, scale);
+            VKRT_setMeshTransform(vkrt, meshIndex, position, rotation, scale);
         }
 
         MaterialData material = mesh->material;
@@ -213,42 +213,42 @@ static void drawMeshInspector(VKRT* runtime, State* state) {
         materialChanged |= ImGui_DragFloatEx("Emission Strength", &material.emissionStrength, 0.01f, 0.0f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
 
         if (materialChanged) {
-            VKRT_setMeshMaterial(runtime, meshIndex, &material);
+            VKRT_setMeshMaterial(vkrt, meshIndex, &material);
         }
 
         ImGui_PopID();
     }
 }
 
-static void drawSceneInspectorWindow(VKRT* runtime, State* state) {
+static void drawSceneInspectorWindow(VKRT* vkrt, Session* session) {
     ImGui_PushStyleColorImVec4(ImGuiCol_WindowBg, (ImVec4){0.08f, 0.08f, 0.08f, 1.00f});
     ImGui_Begin("Scene Inspector", NULL, 0);
     ImGui_PopStyleColor();
 
-    ImGui_Text("Device: %s", runtime->core.deviceName);
-    ImGui_Text("Resolution: %dx%d", runtime->state.camera.width, runtime->state.camera.height);
+    ImGui_Text("Device: %s", vkrt->core.deviceName);
+    ImGui_Text("Resolution: %dx%d", vkrt->state.camera.width, vkrt->state.camera.height);
 
-    bool vsync = runtime->runtime.vsync != 0;
+    bool vsync = vkrt->runtime.vsync != 0;
     if (ImGui_Checkbox("V-Sync", &vsync)) {
-        runtime->runtime.vsync = vsync ? 1 : 0;
-        runtime->runtime.framebufferResized = VK_TRUE;
+        vkrt->runtime.vsync = vsync ? 1 : 0;
+        vkrt->runtime.framebufferResized = VK_TRUE;
     }
 
-    drawPerformanceSection(runtime);
+    drawPerformanceSection(vkrt);
     ImGui_Separator();
 
     if (ImGui_Button("Import mesh")) {
         const char* selectedPath = openMeshImportDialog();
         if (selectedPath && selectedPath[0]) {
-            stateQueueMeshImport(state, selectedPath);
+            sessionQueueMeshImport(session, selectedPath);
         }
     }
 
-    drawMeshInspector(runtime, state);
+    drawMeshInspector(vkrt, session);
     ImGui_End();
 }
 
-static void applyCameraInput(VKRT* runtime, bool viewportHovered) {
+static void applyEditorCameraInput(VKRT* vkrt, bool viewportHovered) {
     ImGuiIO* io = ImGui_GetIO();
     VKRT_CameraInput cameraInput = {
         .orbitDx = io->MouseDelta.x,
@@ -260,10 +260,10 @@ static void applyCameraInput(VKRT* runtime, bool viewportHovered) {
         .panning = viewportHovered && ImGui_IsMouseDragging(ImGuiMouseButton_Right, -1.0f),
         .captureMouse = !viewportHovered,
     };
-    VKRT_applyCameraInput(runtime, &cameraInput);
+    VKRT_applyCameraInput(vkrt, &cameraInput);
 }
 
-void editorUIInitialize(VKRT* runtime, void* userData) {
+void editorUIInitialize(VKRT* vkrt, void* userData) {
     (void)userData;
     ImGui_CreateContext(NULL);
 
@@ -280,32 +280,32 @@ void editorUIInitialize(VKRT* runtime, void* userData) {
     static const ImWchar iconRanges[] = {ICON_MIN_FA, ICON_MAX_FA, 0};
     ImFontAtlas_AddFontFromMemoryTTF(io->Fonts, (void*)fa_solid_900, fa_solid_900_len, 16.0f, &iconConfig, iconRanges);
     editorThemeApplyDefault();
-    cImGui_ImplGlfw_InitForVulkan(runtime->runtime.window, true);
+    cImGui_ImplGlfw_InitForVulkan(vkrt->runtime.window, true);
 
-    uint32_t imageCount = (uint32_t)runtime->runtime.swapChainImageCount;
+    uint32_t imageCount = (uint32_t)vkrt->runtime.swapChainImageCount;
     uint32_t minImageCount = (imageCount > 1u) ? (imageCount - 1u) : imageCount;
 
     ImGui_ImplVulkan_InitInfo initInfo = {
-        .Instance = runtime->core.instance,
-        .PhysicalDevice = runtime->core.physicalDevice,
-        .Device = runtime->core.device,
-        .QueueFamily = (uint32_t)runtime->core.indices.graphics,
-        .Queue = runtime->core.graphicsQueue,
+        .Instance = vkrt->core.instance,
+        .PhysicalDevice = vkrt->core.physicalDevice,
+        .Device = vkrt->core.device,
+        .QueueFamily = (uint32_t)vkrt->core.indices.graphics,
+        .Queue = vkrt->core.graphicsQueue,
         .PipelineCache = VK_NULL_HANDLE,
-        .DescriptorPool = runtime->core.descriptorPool,
+        .DescriptorPool = vkrt->core.descriptorPool,
         .Allocator = VK_NULL_HANDLE,
         .MinImageCount = minImageCount,
         .ImageCount = imageCount,
         .CheckVkResultFn = VK_NULL_HANDLE,
-        .RenderPass = runtime->runtime.renderPass,
+        .RenderPass = vkrt->runtime.renderPass,
     };
 
     cImGui_ImplVulkan_Init(&initInfo);
     cImGui_ImplVulkan_CreateFontsTexture();
 }
 
-void editorUIShutdown(VKRT* runtime, void* userData) {
-    (void)runtime;
+void editorUIShutdown(VKRT* vkrt, void* userData) {
+    (void)vkrt;
     (void)userData;
 
     uint64_t shutdownStartTime = getMicroseconds();
@@ -326,17 +326,17 @@ void editorUIShutdown(VKRT* runtime, void* userData) {
     LOG_TRACE("UI shutdown complete in %.3f ms", (double)(getMicroseconds() - shutdownStartTime) / 1e3);
 }
 
-void editorUIDraw(VKRT* runtime, VkCommandBuffer commandBuffer, void* userData) {
-    State* state = (State*)userData;
+void editorUIDraw(VKRT* vkrt, VkCommandBuffer commandBuffer, void* userData) {
+    Session* session = (Session*)userData;
 
     cImGui_ImplGlfw_NewFrame();
     cImGui_ImplVulkan_NewFrame();
     ImGui_NewFrame();
 
     drawWorkspaceDockspace();
-    bool viewportHovered = drawViewportWindow(runtime);
-    drawSceneInspectorWindow(runtime, state);
-    applyCameraInput(runtime, viewportHovered);
+    bool viewportHovered = drawViewportWindow(vkrt);
+    drawSceneInspectorWindow(vkrt, session);
+    applyEditorCameraInput(vkrt, viewportHovered);
 
     ImGui_Render();
     cImGui_ImplVulkan_RenderDrawData(ImGui_GetDrawData(), commandBuffer);

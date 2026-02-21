@@ -2,11 +2,11 @@
 #include "command.h"
 #include "descriptor.h"
 #include "device.h"
-#include "functions.h"
+#include "procs.h"
 #include "instance.h"
 #include "pipeline.h"
 #include "scene.h"
-#include "structure.h"
+#include "accel.h"
 #include "surface.h"
 #include "swapchain.h"
 #include "validation.h"
@@ -97,7 +97,7 @@ int VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInfo) {
     logStepTime("Logical device created", stepStartTime);
 
     stepStartTime = getMicroseconds();
-    loadDeviceProcedures(vkrt);
+    loadDeviceProcs(vkrt);
     logStepTime("Device procedures loaded", stepStartTime);
 
     stepStartTime = getMicroseconds();
@@ -304,7 +304,7 @@ void VKRT_deinit(VKRT* vkrt) {
     stepStartTime = getMicroseconds();
     if (vkrt->core.instance != VK_NULL_HANDLE) {
         if (enableValidationLayers && vkrt->core.debugMessenger != VK_NULL_HANDLE) {
-            DestroyDebugUtilsMessengerEXT(vkrt->core.instance, vkrt->core.debugMessenger, NULL);
+            destroyDebugUtilsMessengerEXT(vkrt->core.instance, vkrt->core.debugMessenger, NULL);
         }
         if (vkrt->runtime.surface != VK_NULL_HANDLE) {
             vkDestroySurfaceKHR(vkrt->core.instance, vkrt->runtime.surface, NULL);

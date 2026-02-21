@@ -1,7 +1,7 @@
 #include "buffer.h"
 #include "descriptor.h"
 #include "scene.h"
-#include "structure.h"
+#include "accel.h"
 #include "debug.h"
 #include "vkrt.h"
 
@@ -89,7 +89,7 @@ static void rebuildMaterialBuffer(VKRT* vkrt) {
     vkrt->core.materialDataDirty = VK_FALSE;
 }
 
-void vkrtRebuildMaterialBuffer(VKRT* vkrt) {
+void refreshMaterialBuffer(VKRT* vkrt) {
     rebuildMaterialBuffer(vkrt);
 }
 
@@ -462,7 +462,7 @@ void VKRT_setAutoSPPTargetFPS(VKRT* vkrt, uint32_t targetFPS) {
 
     if (targetFPS < 30) targetFPS = 30;
     if (targetFPS > 360) targetFPS = 360;
-    vkrt->state.autoSPPTargetFps = targetFPS;
+    vkrt->state.autoSPPTargetFPS = targetFPS;
     vkrt->state.autoSPPTargetFrameMs = 1000.0f / (float)targetFPS;
 }
 

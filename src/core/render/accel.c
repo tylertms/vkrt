@@ -1,4 +1,4 @@
-#include "structure.h"
+#include "accel.h"
 #include "buffer.h"
 #include "command.h"
 #include "device.h"

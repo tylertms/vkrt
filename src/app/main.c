@@ -1,4 +1,4 @@
-#include "state.h"
+#include "session.h"
 #include "editor.h"
 #include "controller.h"
 #include "vkrt.h"
@@ -7,17 +7,17 @@
 #include <stdlib.h>
 
 int main(void) {
-    VKRT runtime = {0};
-    State state = {0};
-    stateInit(&state);
+    VKRT vkrt = {0};
+    Session session = {0};
+    sessionInit(&session);
 
     VKRT_AppHooks hooks = {
         .init = editorUIInitialize,
         .deinit = editorUIShutdown,
         .drawOverlay = editorUIDraw,
-        .userData = &state,
+        .userData = &session,
     };
-    VKRT_registerAppHooks(&runtime, hooks);
+    VKRT_registerAppHooks(&vkrt, hooks);
 
     VKRT_CreateInfo createInfo = {0};
     VKRT_defaultCreateInfo(&createInfo);
@@ -26,22 +26,22 @@ int main(void) {
     createInfo.shaders.rmissPath = "./shaders/rmiss.spv";
     createInfo.shaders.rchitPath = "./shaders/rchit.spv";
 
-    if (VKRT_initWithCreateInfo(&runtime, &createInfo) != VK_SUCCESS) {
+    if (VKRT_initWithCreateInfo(&vkrt, &createInfo) != VK_SUCCESS) {
         fprintf(stderr, "[ERROR]: Failed to initialize VKRT runtime\n");
-        VKRT_deinit(&runtime);
-        stateDeinit(&state);
+        VKRT_deinit(&vkrt);
+        sessionDeinit(&session);
         return EXIT_FAILURE;
     }
 
-    sceneControllerLoadDefaultAssets(&runtime, &state);
+    meshControllerLoadDefaultAssets(&vkrt, &session);
 
-    while (!VKRT_shouldDeinit(&runtime)) {
-        VKRT_poll(&runtime);
-        sceneControllerApplyPendingActions(&runtime, &state);
-        VKRT_draw(&runtime);
+    while (!VKRT_shouldDeinit(&vkrt)) {
+        VKRT_poll(&vkrt);
+        meshControllerApplyPendingActions(&vkrt, &session);
+        VKRT_draw(&vkrt);
     }
 
-    VKRT_deinit(&runtime);
-    stateDeinit(&state);
+    VKRT_deinit(&vkrt);
+    sessionDeinit(&session);
     return EXIT_SUCCESS;
 }

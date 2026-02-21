@@ -1,4 +1,4 @@
-#include "functions.h"
+#include "procs.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,7 +12,7 @@
         }                                                                                                         \
     } while (0)
 
-void loadDeviceProcedures(VKRT* vkrt) {
+void loadDeviceProcs(VKRT* vkrt) {
     if (!vkrt || vkrt->core.device == VK_NULL_HANDLE) {
         fprintf(stderr, "[ERROR]: Cannot load device procedures before logical device creation\n");
         exit(EXIT_FAILURE);

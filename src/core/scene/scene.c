@@ -132,11 +132,11 @@ void createSceneUniform(VKRT* vkrt) {
     vkrt->state.autoSPPEnabled = 1;
     float refreshHz = vkrt->runtime.displayRefreshHz;
     if (refreshHz <= 0.0f) refreshHz = 60.0f;
-    uint32_t targetFps = (uint32_t)(refreshHz + 0.5f);
-    if (targetFps < 30) targetFps = 30;
-    if (targetFps > 360) targetFps = 360;
-    vkrt->state.autoSPPTargetFps = targetFps;
-    vkrt->state.autoSPPTargetFrameMs = 1000.0f / (float)vkrt->state.autoSPPTargetFps;
+    uint32_t targetFPS = (uint32_t)(refreshHz + 0.5f);
+    if (targetFPS < 30) targetFPS = 30;
+    if (targetFPS > 360) targetFPS = 360;
+    vkrt->state.autoSPPTargetFPS = targetFPS;
+    vkrt->state.autoSPPTargetFrameMs = 1000.0f / (float)vkrt->state.autoSPPTargetFPS;
 
     vkrt->state.camera = (Camera){
         .width = initialWidth, .height = initialHeight,
@@ -188,8 +188,8 @@ void updateAutoSPP(VKRT* vkrt) {
 
     float targetMs = vkrt->state.autoSPPTargetFrameMs;
     if (targetMs <= 0.0f) {
-        uint32_t targetFps = vkrt->state.autoSPPTargetFps ? vkrt->state.autoSPPTargetFps : 60;
-        targetMs = 1000.0f / (float)targetFps;
+        uint32_t targetFPS = vkrt->state.autoSPPTargetFPS ? vkrt->state.autoSPPTargetFPS : 60;
+        targetMs = 1000.0f / (float)targetFPS;
     }
 
     float controlMs = vkrt->state.displayRenderTimeMs > 0.0f ? vkrt->state.displayRenderTimeMs : vkrt->state.displayFrameTimeMs;

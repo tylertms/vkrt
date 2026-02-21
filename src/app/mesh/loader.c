@@ -128,7 +128,7 @@ static ParsedMeshData parseMeshData(const cgltf_data* data) {
     return parsed;
 }
 
-void meshAssetLoadFromFile(VKRT* runtime, const char* filePath) {
+void meshLoadFromFile(VKRT* vkrt, const char* filePath) {
     cgltf_options options = {0};
     cgltf_data* data = NULL;
 
@@ -144,7 +144,7 @@ void meshAssetLoadFromFile(VKRT* runtime, const char* filePath) {
     }
 
     ParsedMeshData parsed = parseMeshData(data);
-    VKRT_uploadMeshData(runtime, parsed.vertices, parsed.vertexCount, parsed.indices, parsed.indexCount);
+    VKRT_uploadMeshData(vkrt, parsed.vertices, parsed.vertexCount, parsed.indices, parsed.indexCount);
 
     free(parsed.vertices);
     free(parsed.indices);
