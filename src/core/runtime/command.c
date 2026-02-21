@@ -1,5 +1,6 @@
 #include "command.h"
 #include "device.h"
+#include "debug.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,7 +14,7 @@ void createCommandPool(VKRT* vkrt) {
     commandPoolCreateInfo.queueFamilyIndex = indices.graphics;
 
     if (vkCreateCommandPool(vkrt->core.device, &commandPoolCreateInfo, NULL, &vkrt->runtime.commandPool) != VK_SUCCESS) {
-        perror("[ERROR]: Failed to create command pool");
+        LOG_ERROR("Failed to create command pool");
         exit(EXIT_FAILURE);
     }
 }
@@ -26,7 +27,7 @@ void createCommandBuffers(VKRT* vkrt) {
     commandBufferAllocateInfo.commandBufferCount = MAX_FRAMES_IN_FLIGHT;
 
     if (vkAllocateCommandBuffers(vkrt->core.device, &commandBufferAllocateInfo, vkrt->runtime.commandBuffers) != VK_SUCCESS) {
-        perror("[ERROR]: Failed to allocate command buffers");
+        LOG_ERROR("Failed to allocate command buffers");
         exit(EXIT_FAILURE);
     }
 }
@@ -43,7 +44,7 @@ void recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
     commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
     if (vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo) != VK_SUCCESS) {
-        perror("[ERROR]: Failed to begin command buffer");
+        LOG_ERROR("Failed to begin command buffer");
         exit(EXIT_FAILURE);
     }
 
@@ -133,7 +134,7 @@ void recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
     vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, vkrt->runtime.timestampPool, qbase + 1);
 
     if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
-        perror("[ERROR]: Failed to end command buffer");
+        LOG_ERROR("Failed to end command buffer");
         exit(EXIT_FAILURE);
     }
 }
@@ -264,8 +265,7 @@ void transitionImageLayout(VkCommandBuffer commandBuffer, VkImage image, VkImage
         srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
         dstStage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
     } else {
-        printf("No case handling transition from %d to %d\n", oldLayout, newLayout);
-        perror("[ERROR]: Unsupported layout transition");
+        LOG_ERROR("Unsupported layout transition: %d -> %d", oldLayout, newLayout);
         exit(EXIT_FAILURE);
     }
 
@@ -291,7 +291,7 @@ void createStorageImage(VKRT* vkrt) {
 
     for (uint32_t i = 0; i < 2; i++) {
         if (vkCreateImage(vkrt->core.device, &imageCreateInfo, NULL, &vkrt->core.accumulationImages[i]) != VK_SUCCESS) {
-            perror("[ERROR]: Failed to create accumulation image");
+            LOG_ERROR("Failed to create accumulation image");
             exit(EXIT_FAILURE);
         }
 
@@ -304,12 +304,12 @@ void createStorageImage(VKRT* vkrt) {
         memoryAllocateInfo.memoryTypeIndex = findMemoryType(vkrt, memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
         if (vkAllocateMemory(vkrt->core.device, &memoryAllocateInfo, NULL, &vkrt->core.accumulationImageMemories[i]) != VK_SUCCESS) {
-            perror("[ERROR]: Failed to allocate accumulation image memory");
+            LOG_ERROR("Failed to allocate accumulation image memory");
             exit(EXIT_FAILURE);
         }
 
         if (vkBindImageMemory(vkrt->core.device, vkrt->core.accumulationImages[i], vkrt->core.accumulationImageMemories[i], 0) != VK_SUCCESS) {
-            perror("[ERROR]: Failed to bind accumulation image memory");
+            LOG_ERROR("Failed to bind accumulation image memory");
             exit(EXIT_FAILURE);
         }
 
@@ -325,7 +325,7 @@ void createStorageImage(VKRT* vkrt) {
         imageViewCreateInfo.image = vkrt->core.accumulationImages[i];
 
         if (vkCreateImageView(vkrt->core.device, &imageViewCreateInfo, NULL, &vkrt->core.accumulationImageViews[i]) != VK_SUCCESS) {
-            perror("[ERROR]: Failed to create accumulation image view");
+            LOG_ERROR("Failed to create accumulation image view");
             exit(EXIT_FAILURE);
         }
     }
@@ -335,7 +335,7 @@ void createStorageImage(VKRT* vkrt) {
     vkrt->core.accumulationNeedsReset = VK_TRUE;
 
     if (vkCreateImage(vkrt->core.device, &imageCreateInfo, NULL, &vkrt->core.storageImage) != VK_SUCCESS) {
-        perror("[ERROR]: Failed to create output image");
+        LOG_ERROR("Failed to create output image");
         exit(EXIT_FAILURE);
     }
 
@@ -348,12 +348,12 @@ void createStorageImage(VKRT* vkrt) {
     outputMemoryAllocateInfo.memoryTypeIndex = findMemoryType(vkrt, outputMemoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
     if (vkAllocateMemory(vkrt->core.device, &outputMemoryAllocateInfo, NULL, &vkrt->core.storageImageMemory) != VK_SUCCESS) {
-        perror("[ERROR]: Failed to allocate output image memory");
+        LOG_ERROR("Failed to allocate output image memory");
         exit(EXIT_FAILURE);
     }
 
     if (vkBindImageMemory(vkrt->core.device, vkrt->core.storageImage, vkrt->core.storageImageMemory, 0) != VK_SUCCESS) {
-        perror("[ERROR]: Failed to bind output image memory");
+        LOG_ERROR("Failed to bind output image memory");
         exit(EXIT_FAILURE);
     }
 
@@ -369,7 +369,7 @@ void createStorageImage(VKRT* vkrt) {
     outputImageViewCreateInfo.image = vkrt->core.storageImage;
 
     if (vkCreateImageView(vkrt->core.device, &outputImageViewCreateInfo, NULL, &vkrt->core.storageImageView) != VK_SUCCESS) {
-        perror("[ERROR]: Failed to create output image view");
+        LOG_ERROR("Failed to create output image view");
         exit(EXIT_FAILURE);
     }
 

@@ -68,7 +68,7 @@ void rebuildMaterialBuffer(VKRT* vkrt) {
 
     MaterialData* materials = (MaterialData*)malloc((size_t)materialCount * sizeof(MaterialData));
     if (!materials) {
-        perror("[ERROR]: Failed to allocate material buffer");
+        LOG_ERROR("Failed to allocate material buffer");
         exit(EXIT_FAILURE);
     }
 
@@ -147,7 +147,7 @@ static void rebuildMeshBuffersAndStructures(VKRT* vkrt) {
         if (!packedVertices || !packedIndices) {
             free(packedVertices);
             free(packedIndices);
-            perror("[ERROR]: Failed to allocate packed mesh buffers");
+            LOG_ERROR("Failed to allocate packed mesh buffers");
             exit(EXIT_FAILURE);
         }
 
@@ -255,14 +255,14 @@ void VKRT_uploadMeshData(VKRT* vkrt, const Vertex* vertices, size_t vertexCount,
     vkDeviceWaitIdle(vkrt->core.device);
 
     if (vertexCount > UINT32_MAX || indexCount > UINT32_MAX) {
-        perror("[ERROR]: Mesh too large");
+        LOG_ERROR("Mesh too large");
         return;
     }
 
     uint32_t newCount = vkrt->core.meshData.count + 1;
     Mesh* resized = (Mesh*)realloc(vkrt->core.meshes, (size_t)newCount * sizeof(Mesh));
     if (!resized) {
-        perror("[ERROR]: Failed to grow mesh list");
+        LOG_ERROR("Failed to grow mesh list");
         return;
     }
 
@@ -301,7 +301,7 @@ void VKRT_uploadMeshData(VKRT* vkrt, const Vertex* vertices, size_t vertexCount,
             free(mesh->indices);
             mesh->vertices = NULL;
             mesh->indices = NULL;
-            perror("[ERROR]: Failed to allocate mesh host data");
+            LOG_ERROR("Failed to allocate mesh host data");
             return;
         }
 

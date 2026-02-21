@@ -1,5 +1,6 @@
 #include "buffer.h"
 #include "device.h"
+#include "debug.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,7 +14,7 @@ void createBuffer(VKRT* vkrt, VkDeviceSize size, VkBufferUsageFlags usage, VkMem
     bufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
     if (vkCreateBuffer(vkrt->core.device, &bufferCreateInfo, NULL, buffer) != VK_SUCCESS) {
-        perror("[ERROR]: Failed to create buffer");
+        LOG_ERROR("Failed to create buffer");
         exit(EXIT_FAILURE);
     }
 
@@ -33,7 +34,7 @@ void createBuffer(VKRT* vkrt, VkDeviceSize size, VkBufferUsageFlags usage, VkMem
     }
 
     if (vkAllocateMemory(vkrt->core.device, &memoryAllocateInfo, NULL, bufferMemory) != VK_SUCCESS) {
-        perror("[ERROR]: Failed to allocate buffer memory");
+        LOG_ERROR("Failed to allocate buffer memory");
         exit(EXIT_FAILURE);
     }
 

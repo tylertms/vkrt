@@ -98,7 +98,7 @@ void createSwapChain(VKRT* vkrt) {
     swapChainCreateInfo.oldSwapchain = VK_NULL_HANDLE;
 
     if (vkCreateSwapchainKHR(vkrt->core.device, &swapChainCreateInfo, NULL, &vkrt->runtime.swapChain) != VK_SUCCESS) {
-        perror("[ERROR]: Failed to create swapchain");
+        LOG_ERROR("Failed to create swapchain");
         exit(EXIT_FAILURE);
     }
 
@@ -140,7 +140,7 @@ void recreateSwapChain(VKRT* vkrt) {
 
     vkrt->runtime.renderFinishedSemaphores = (VkSemaphore*)malloc(vkrt->runtime.swapChainImageCount * sizeof(VkSemaphore));
     if (!vkrt->runtime.renderFinishedSemaphores) {
-        perror("[ERROR]: Failed to allocate render-finished semaphores");
+        LOG_ERROR("Failed to allocate render-finished semaphores");
         exit(EXIT_FAILURE);
     }
 
@@ -149,7 +149,7 @@ void recreateSwapChain(VKRT* vkrt) {
 
     for (size_t i = 0; i < vkrt->runtime.swapChainImageCount; i++) {
         if (vkCreateSemaphore(vkrt->core.device, &semaphoreCreateInfo, NULL, &vkrt->runtime.renderFinishedSemaphores[i]) != VK_SUCCESS) {
-            perror("[ERROR]: Failed to recreate render-finished semaphores");
+            LOG_ERROR("Failed to recreate render-finished semaphores");
             exit(EXIT_FAILURE);
         }
     }
@@ -214,7 +214,7 @@ void createImageViews(VKRT* vkrt) {
         imageViewCreateInfo.subresourceRange.layerCount = 1;
 
         if (vkCreateImageView(vkrt->core.device, &imageViewCreateInfo, NULL, &vkrt->runtime.swapChainImageViews[i]) != VK_SUCCESS) {
-            perror("[ERROR]: Failed to create swapchain image views");
+            LOG_ERROR("Failed to create swapchain image views");
             exit(EXIT_FAILURE);
         }
     }
@@ -234,7 +234,7 @@ void createFramebuffers(VKRT* vkrt) {
         framebufferCreateInfo.layers = 1;
 
         if (vkCreateFramebuffer(vkrt->core.device, &framebufferCreateInfo, NULL, &vkrt->runtime.framebuffers[i]) != VK_SUCCESS) {
-            perror("[ERROR]: Failed to create framebuffer");
+            LOG_ERROR("Failed to create framebuffer");
             exit(EXIT_FAILURE);
         }
     }
@@ -268,7 +268,7 @@ SwapChainSupportDetails querySwapChainSupport(VKRT* vkrt) {
 
 VkSurfaceFormatKHR chooseSwapSurfaceFormat(SwapChainSupportDetails* supportDetails) {
     if (supportDetails->formatCount == 0 || !supportDetails->formats) {
-        perror("[ERROR]: No swapchain surface formats are available");
+        LOG_ERROR("No swapchain surface formats are available");
         exit(EXIT_FAILURE);
     }
 
@@ -292,7 +292,7 @@ VkSurfaceFormatKHR chooseSwapSurfaceFormat(SwapChainSupportDetails* supportDetai
         }
     }
 
-    perror("[ERROR]: No VK_COLOR_SPACE_SRGB_NONLINEAR_KHR surface format matches the supported non-sRGB format list");
+    LOG_ERROR("No VK_COLOR_SPACE_SRGB_NONLINEAR_KHR surface format matches the supported non-sRGB format list");
     exit(EXIT_FAILURE);
 }
 

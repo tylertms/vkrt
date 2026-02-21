@@ -1,4 +1,5 @@
 #include "session.h"
+#include "debug.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -37,7 +38,7 @@ static void ensureMeshSlotCount(Session* session, uint32_t requiredCount) {
 
     char** resized = (char**)realloc(session->meshNames, (size_t)requiredCount * sizeof(char*));
     if (!resized) {
-        perror("[ERROR]: Failed to resize mesh label list");
+        LOG_ERROR("Failed to resize mesh label list");
         exit(EXIT_FAILURE);
     }
 

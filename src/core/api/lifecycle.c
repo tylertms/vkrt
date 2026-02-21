@@ -45,7 +45,7 @@ int VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInfo) {
     uint64_t stepStartTime = initStartTime;
 
     if (!glfwInit()) {
-        perror("[ERROR]: Failed to initialize GLFW");
+        LOG_ERROR("Failed to initialize GLFW");
         return -1;
     }
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -67,7 +67,7 @@ int VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInfo) {
     stepStartTime = getMicroseconds();
     vkrt->runtime.window = glfwCreateWindow((int)width, (int)height, title, 0, 0);
     if (!vkrt->runtime.window) {
-        perror("[ERROR]: Failed to create GLFW window");
+        LOG_ERROR("Failed to create GLFW window");
         glfwTerminate();
         return -1;
     }

@@ -5,6 +5,7 @@
 #include "accel.h"
 #include "swapchain.h"
 #include "vkrt.h"
+#include "debug.h"
 
 #include <stdio.h>
 #include <stdint.h>
@@ -44,7 +45,7 @@ void VKRT_beginFrame(VKRT* vkrt) {
     }
 
     if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
-        perror("[ERROR]: Failed to acquire next swapchain image");
+        LOG_ERROR("Failed to acquire next swapchain image");
         exit(EXIT_FAILURE);
     }
 
@@ -82,7 +83,7 @@ void VKRT_trace(VKRT* vkrt) {
     submitInfo.pSignalSemaphores = signalSemaphores;
 
     if (vkQueueSubmit(vkrt->core.graphicsQueue, 1, &submitInfo, vkrt->runtime.inFlightFences[vkrt->runtime.currentFrame]) != VK_SUCCESS) {
-        perror("[ERROR]: Failed to submit draw queue");
+        LOG_ERROR("Failed to submit draw queue");
         exit(EXIT_FAILURE);
     }
 
@@ -109,7 +110,7 @@ void VKRT_present(VKRT* vkrt) {
     }
 
     if (result != VK_SUCCESS) {
-        perror("[ERROR]: Failed to present draw queue");
+        LOG_ERROR("Failed to present draw queue");
         exit(EXIT_FAILURE);
     }
 

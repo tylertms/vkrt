@@ -15,7 +15,7 @@ void createRayTracingPipeline(VKRT* vkrt) {
     pipelineLayoutInfo.pushConstantRangeCount = 0;
 
     if (vkCreatePipelineLayout(vkrt->core.device, &pipelineLayoutInfo, NULL, &vkrt->core.pipelineLayout) != VK_SUCCESS) {
-        perror("[ERROR]: Failed to create pipeline layout");
+        LOG_ERROR("Failed to create pipeline layout");
         exit(EXIT_FAILURE);
     }
 
@@ -96,7 +96,7 @@ void createRayTracingPipeline(VKRT* vkrt) {
     pipelineCreateInfo.layout = vkrt->core.pipelineLayout;
 
     if (vkrt->core.procs.vkCreateRayTracingPipelinesKHR(vkrt->core.device, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &pipelineCreateInfo, NULL, &vkrt->core.rayTracingPipeline) != VK_SUCCESS) {
-        perror("[ERROR]: Failed to create ray tracing pipeline");
+        LOG_ERROR("Failed to create ray tracing pipeline");
         exit(EXIT_FAILURE);
     }
 
@@ -123,7 +123,7 @@ void createSyncObjects(VKRT* vkrt) {
 
     vkrt->runtime.renderFinishedSemaphores = (VkSemaphore*)malloc(vkrt->runtime.swapChainImageCount * sizeof(VkSemaphore));
     if (!vkrt->runtime.renderFinishedSemaphores) {
-        perror("[ERROR]: Failed to allocate render-finished semaphore list");
+        LOG_ERROR("Failed to allocate render-finished semaphore list");
         exit(EXIT_FAILURE);
     }
 
@@ -132,7 +132,7 @@ void createSyncObjects(VKRT* vkrt) {
         VkResult inFlightFenceResult = vkCreateFence(vkrt->core.device, &fenceInfo, NULL, &vkrt->runtime.inFlightFences[i]);
 
         if (imageAvailableSemaphoreResult != VK_SUCCESS || inFlightFenceResult != VK_SUCCESS) {
-            perror("[ERROR]: Failed to create sync objects");
+            LOG_ERROR("Failed to create sync objects");
             exit(EXIT_FAILURE);
         }
     }
@@ -140,7 +140,7 @@ void createSyncObjects(VKRT* vkrt) {
     for (size_t i = 0; i < vkrt->runtime.swapChainImageCount; i++) {
         VkResult renderFinishedSemaphoreResult = vkCreateSemaphore(vkrt->core.device, &semaphoreCreateInfo, NULL, &vkrt->runtime.renderFinishedSemaphores[i]);
         if (renderFinishedSemaphoreResult != VK_SUCCESS) {
-            perror("[ERROR]: Failed to create render-finished semaphore");
+            LOG_ERROR("Failed to create render-finished semaphore");
             exit(EXIT_FAILURE);
         }
     }
@@ -154,7 +154,7 @@ VkShaderModule createShaderModule(VKRT* vkrt, const char* spirv, size_t length) 
 
     VkShaderModule shaderModule;
     if (vkCreateShaderModule(vkrt->core.device, &shaderModuleCreateInfo, NULL, &shaderModule) != VK_SUCCESS) {
-        perror("[ERROR]: Failed to create shader module");
+        LOG_ERROR("Failed to create shader module");
         exit(EXIT_FAILURE);
     }
 
@@ -199,7 +199,7 @@ void createRenderPass(VKRT* vkrt) {
     renderPassCreateInfo.pDependencies = &dependency;
 
     if (vkCreateRenderPass(vkrt->core.device, &renderPassCreateInfo, NULL, &vkrt->runtime.renderPass) != VK_SUCCESS) {
-        perror("[ERROR]: Failed to create UI render pass");
+        LOG_ERROR("Failed to create UI render pass");
         exit(EXIT_FAILURE);
     }
 }
