@@ -1,4 +1,5 @@
 #include "validation.h"
+#include "debug.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -92,7 +93,7 @@ void setupDebugMessenger(VKRT* vkrt) {
     populateDebugMessengerCreateInfo(&createInfo);
 
     if (createDebugUtilsMessengerEXT(vkrt->core.instance, &createInfo, 0, &vkrt->core.debugMessenger) != VK_SUCCESS) {
-        perror("[ERROR]: Failed to set up debug messenger");
+        LOG_ERROR("Failed to set up debug messenger");
         exit(EXIT_FAILURE);
     }
 }

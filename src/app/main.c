@@ -2,6 +2,7 @@
 #include "editor.h"
 #include "controller.h"
 #include "vkrt.h"
+#include "debug.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,7 +28,7 @@ int main(void) {
     createInfo.shaders.rchitPath = "./shaders/rchit.spv";
 
     if (VKRT_initWithCreateInfo(&vkrt, &createInfo) != VK_SUCCESS) {
-        fprintf(stderr, "[ERROR]: Failed to initialize VKRT runtime\n");
+        LOG_ERROR("Failed to initialize VKRT runtime");
         VKRT_deinit(&vkrt);
         sessionDeinit(&session);
         return EXIT_FAILURE;

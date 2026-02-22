@@ -1,4 +1,5 @@
 #include "loader.h"
+#include "debug.h"
 #define CGLTF_IMPLEMENTATION
 #include "cgltf.h"
 
@@ -58,7 +59,7 @@ static uint32_t readIndexValue(const cgltf_accessor* accessor, const uint8_t* ba
         return value;
     }
 
-    fprintf(stderr, "[ERROR]: Unsupported index component type %u\n", accessor->component_type);
+    LOG_ERROR("Unsupported index component type %u", accessor->component_type);
     exit(EXIT_FAILURE);
 }
 
@@ -132,13 +133,13 @@ void meshLoadFromFile(VKRT* vkrt, const char* filePath) {
     cgltf_data* data = NULL;
 
     if (cgltf_parse_file(&options, filePath, &data) != cgltf_result_success) {
-        fprintf(stderr, "[ERROR]: Failed to parse GLTF '%s'\n", filePath);
+        LOG_ERROR("Failed to parse GLTF '%s'", filePath);
         exit(EXIT_FAILURE);
     }
 
     if (cgltf_load_buffers(&options, data, filePath) != cgltf_result_success) {
         cgltf_free(data);
-        fprintf(stderr, "[ERROR]: Failed to load buffers for '%s'\n", filePath);
+        LOG_ERROR("Failed to load buffers for '%s'", filePath);
         exit(EXIT_FAILURE);
     }
 

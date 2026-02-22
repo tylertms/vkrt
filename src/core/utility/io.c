@@ -1,4 +1,5 @@
 #include "io.h"
+#include "debug.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -48,7 +49,7 @@ static int get_exe_dir(char* out, size_t sz) {
 static FILE* fopen_exe_relative(const char* relpath, const char* mode) {
     char buf[4096];
     if (get_exe_dir(buf, sizeof buf) < 0) {
-        perror("[ERROR]: cannot get exe path");
+        LOG_ERROR("Failed to determine executable path");
         return NULL;
     }
 
@@ -61,7 +62,7 @@ static FILE* fopen_exe_relative(const char* relpath, const char* mode) {
 const char* readFile(const char* filename, size_t* fileSize) {
     FILE* file = fopen_exe_relative(filename, "rb");
     if (!file) {
-        perror("[ERROR]: Failed to open file");
+        LOG_ERROR("Failed to open file");
         exit(EXIT_FAILURE);
     }
     fseek(file, 0, SEEK_END);
@@ -71,7 +72,7 @@ const char* readFile(const char* filename, size_t* fileSize) {
     size_t allocSize = *fileSize > 0 ? *fileSize : 1;
     char* buffer = (char*)malloc(allocSize);
     if (!buffer) {
-        perror("[ERROR]: Failed to allocate memory!");
+        LOG_ERROR("Failed to allocate file buffer");
         fclose(file);
         exit(EXIT_FAILURE);
     }
@@ -80,7 +81,7 @@ const char* readFile(const char* filename, size_t* fileSize) {
     fclose(file);
     if (bytesRead != *fileSize) {
         free(buffer);
-        perror("[ERROR]: Failed to read complete file");
+        LOG_ERROR("Failed to read complete file");
         exit(EXIT_FAILURE);
     }
 

@@ -1,4 +1,5 @@
 #include "procs.h"
+#include "debug.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,14 +8,14 @@
     do {                                                                                                          \
         (vkrt)->core.procs.proc_name = (PFN_##proc_name)vkGetDeviceProcAddr((vkrt)->core.device, #proc_name);   \
         if (!(vkrt)->core.procs.proc_name) {                                                                      \
-            fprintf(stderr, "[ERROR]: Failed to load Vulkan procedure %s\n", #proc_name);                     \
+            LOG_ERROR("Failed to load Vulkan procedure %s", #proc_name);                     \
             exit(EXIT_FAILURE);                                                                                   \
         }                                                                                                         \
     } while (0)
 
 void loadDeviceProcs(VKRT* vkrt) {
     if (!vkrt || vkrt->core.device == VK_NULL_HANDLE) {
-        fprintf(stderr, "[ERROR]: Cannot load device procedures before logical device creation\n");
+        LOG_ERROR("Cannot load device procedures before logical device creation");
         exit(EXIT_FAILURE);
     }
 

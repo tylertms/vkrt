@@ -134,7 +134,7 @@ void createBottomLevelAccelerationStructure(VKRT* vkrt, Mesh* mesh) {
     blasBufferCreateInfo.pQueueFamilyIndices = (uint32_t*)&indices.graphics;
 
     if (vkCreateBuffer(vkrt->core.device, &blasBufferCreateInfo, NULL, &mesh->bottomLevelAccelerationStructure.buffer) != VK_SUCCESS) {
-        perror("[ERROR]: Failed to create BLAS buffer");
+        LOG_ERROR("Failed to create BLAS buffer");
         exit(EXIT_FAILURE);
     }
 
@@ -162,7 +162,7 @@ void createBottomLevelAccelerationStructure(VKRT* vkrt, Mesh* mesh) {
     memoryAllocateInfo.memoryTypeIndex = blasMemoryTypeIndex;
 
     if (vkAllocateMemory(vkrt->core.device, &memoryAllocateInfo, NULL, &mesh->bottomLevelAccelerationStructure.memory) != VK_SUCCESS) {
-        perror("[ERROR]: Failed to allocate BLAS memory");
+        LOG_ERROR("Failed to allocate BLAS memory");
         exit(EXIT_FAILURE);
     }
 
@@ -176,7 +176,7 @@ void createBottomLevelAccelerationStructure(VKRT* vkrt, Mesh* mesh) {
     accelerationStructureCreateInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
 
     if (vkrt->core.procs.vkCreateAccelerationStructureKHR(vkrt->core.device, &accelerationStructureCreateInfo, NULL, &mesh->bottomLevelAccelerationStructure.structure) != VK_SUCCESS) {
-        perror("[ERROR]: Failed to create BLAS");
+        LOG_ERROR("Failed to create BLAS");
         exit(EXIT_FAILURE);
     }
 
@@ -190,7 +190,7 @@ void createBottomLevelAccelerationStructure(VKRT* vkrt, Mesh* mesh) {
 
     VkBuffer scratchBuffer;
     if (vkCreateBuffer(vkrt->core.device, &scratchBufferCreateInfo, NULL, &scratchBuffer) != VK_SUCCESS) {
-        perror("[ERROR]: Failed to create scratch buffer");
+        LOG_ERROR("Failed to create scratch buffer");
         exit(EXIT_FAILURE);
     }
 
@@ -213,7 +213,7 @@ void createBottomLevelAccelerationStructure(VKRT* vkrt, Mesh* mesh) {
 
     VkDeviceMemory scratchDeviceMemory;
     if (vkAllocateMemory(vkrt->core.device, &scratchMemoryAllocateInfo, NULL, &scratchDeviceMemory) != VK_SUCCESS) {
-        perror("[ERROR]: Failed to allocate scratch memory");
+        LOG_ERROR("Failed to allocate scratch memory");
         exit(EXIT_FAILURE);
     }
     vkBindBufferMemory(vkrt->core.device, scratchBuffer, scratchDeviceMemory, 0);
@@ -323,7 +323,7 @@ void createTopLevelAccelerationStructure(VKRT* vkrt) {
 
     VkBuffer instanceBuffer;
     if (vkCreateBuffer(vkrt->core.device, &instanceBufferCreateInfo, NULL, &instanceBuffer) != VK_SUCCESS) {
-        perror("[ERROR]: Failed to create instance buffer");
+        LOG_ERROR("Failed to create instance buffer");
         exit(EXIT_FAILURE);
     }
 
@@ -352,7 +352,7 @@ void createTopLevelAccelerationStructure(VKRT* vkrt) {
 
     VkDeviceMemory instanceMemory;
     if (vkAllocateMemory(vkrt->core.device, &instanceMemoryAllocateInfo, NULL, &instanceMemory) != VK_SUCCESS) {
-        perror("[ERROR]: allocate instance memory");
+        LOG_ERROR("Failed to allocate instance memory");
         exit(EXIT_FAILURE);
     }
     vkBindBufferMemory(vkrt->core.device, instanceBuffer, instanceMemory, 0);
@@ -417,7 +417,7 @@ void createTopLevelAccelerationStructure(VKRT* vkrt) {
     tlasBufferCreateInfo.pQueueFamilyIndices = (uint32_t*)&indices.graphics;
 
     if (vkCreateBuffer(vkrt->core.device, &tlasBufferCreateInfo, NULL, &vkrt->core.topLevelAccelerationStructure.buffer) != VK_SUCCESS) {
-        perror("[ERROR]: Failed to create TLAS buffer");
+        LOG_ERROR("Failed to create TLAS buffer");
         exit(EXIT_FAILURE);
     }
     VkMemoryRequirements bufferMemoryRequirements = {0};
@@ -438,7 +438,7 @@ void createTopLevelAccelerationStructure(VKRT* vkrt) {
     bufferMemoryAllocateInfo.memoryTypeIndex = tlasMemoryTypeIndex;
 
     if (vkAllocateMemory(vkrt->core.device, &bufferMemoryAllocateInfo, NULL, &vkrt->core.topLevelAccelerationStructure.memory) != VK_SUCCESS) {
-        perror("[ERROR]: allocate top level acceleration structure memory");
+        LOG_ERROR("Failed to allocate top-level acceleration structure memory");
         exit(EXIT_FAILURE);
     }
     vkBindBufferMemory(vkrt->core.device, vkrt->core.topLevelAccelerationStructure.buffer, vkrt->core.topLevelAccelerationStructure.memory, 0);
@@ -451,7 +451,7 @@ void createTopLevelAccelerationStructure(VKRT* vkrt) {
     accelerationStructureCreateInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
 
     if (vkrt->core.procs.vkCreateAccelerationStructureKHR(vkrt->core.device, &accelerationStructureCreateInfo, NULL, &vkrt->core.topLevelAccelerationStructure.structure) != VK_SUCCESS) {
-        perror("[ERROR]: Failed to create TLAS");
+        LOG_ERROR("Failed to create TLAS");
         exit(EXIT_FAILURE);
     };
 

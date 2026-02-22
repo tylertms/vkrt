@@ -1,12 +1,13 @@
 #include "instance.h"
 #include "validation.h"
+#include "debug.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 
 void createInstance(VKRT* vkrt) {
     if (enableValidationLayers && !checkValidationLayerSupport()) {
-        perror("[ERROR]: Validation layers requested but not available");
+        LOG_ERROR("Validation layers requested but not available");
         exit(EXIT_FAILURE);
     }
 
@@ -42,7 +43,7 @@ void createInstance(VKRT* vkrt) {
     }
 
     if (vkCreateInstance(&instanceCreateInfo, 0, &vkrt->core.instance) != VK_SUCCESS) {
-        perror("[ERROR]: Failed to create instance");
+        LOG_ERROR("Failed to create instance");
         free(extensions);
         exit(EXIT_FAILURE);
     }
