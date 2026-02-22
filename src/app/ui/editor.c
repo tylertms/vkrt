@@ -17,6 +17,11 @@
 #include <stdbool.h>
 #include <stdio.h>
 
+static const float kEditorBaseTextSizePx = 15.5f;
+static const float kEditorBaseIconSizePx = 11.0f;
+static const float kEditorScaleEpsilon = 0.01f;
+static float gEditorUIScale = 0.0f;
+
 static const char* openMeshImportDialog(void) {
     const char* filters[] = {"*.glb", "*.gltf"};
     return tinyfd_openFileDialog("Import mesh", "assets/models", 2, filters, "glTF 2.0 (.glb/.gltf)", 0);
@@ -32,6 +37,51 @@ static ImFontConfig makeDefaultFontConfig(void) {
     config.RasterizerDensity = 1.0f;
     config.EllipsisChar = 0;
     return config;
+}
+
+static float queryEditorContentScale(GLFWwindow* window) {
+    float scaleX = 1.0f;
+    float scaleY = 1.0f;
+    glfwGetWindowContentScale(window, &scaleX, &scaleY);
+
+    float scale = fmaxf(scaleX, scaleY);
+    if (!isfinite(scale) || scale <= 0.0f) return 1.0f;
+    return scale;
+}
+
+static void rebuildEditorFonts(ImGuiIO* io, float uiScale) {
+    ImFontAtlas_Clear(io->Fonts);
+
+    ImFontConfig textConfig = makeDefaultFontConfig();
+    textConfig.FontDataOwnedByAtlas = false;
+    ImFontAtlas_AddFontFromMemoryTTF(io->Fonts, (void*)IBMPlexMono_Regular, IBMPlexMono_Regular_len, kEditorBaseTextSizePx * uiScale, &textConfig, NULL);
+
+    ImFontConfig iconConfig = makeDefaultFontConfig();
+    iconConfig.FontDataOwnedByAtlas = false;
+    iconConfig.MergeMode = true;
+    iconConfig.PixelSnapH = true;
+    static const ImWchar iconRanges[] = {ICON_MIN_FA, ICON_MAX_FA, 0};
+    ImFontAtlas_AddFontFromMemoryTTF(io->Fonts, (void*)fa_solid_900, fa_solid_900_len, kEditorBaseIconSizePx * uiScale, &iconConfig, iconRanges);
+}
+
+static void applyEditorUIScale(float uiScale, bool refreshVulkanFonts) {
+    if (gEditorUIScale > 0.0f && fabsf(uiScale - gEditorUIScale) <= kEditorScaleEpsilon) return;
+
+    ImGuiIO* io = ImGui_GetIO();
+    ImGuiStyle* style = ImGui_GetStyle();
+    if (gEditorUIScale <= 0.0f) {
+        editorThemeApplyDefault();
+        ImGuiStyle_ScaleAllSizes(style, uiScale);
+    } else {
+        ImGuiStyle_ScaleAllSizes(style, uiScale / gEditorUIScale);
+    }
+
+    rebuildEditorFonts(io, uiScale);
+    gEditorUIScale = uiScale;
+
+    if (refreshVulkanFonts) {
+        cImGui_ImplVulkan_CreateFontsTexture();
+    }
 }
 
 static void initializeDockLayout(void) {
@@ -269,17 +319,10 @@ void editorUIInitialize(VKRT* vkrt, void* userData) {
 
     ImGuiIO* io = ImGui_GetIO();
     io->ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-    ImFontConfig textConfig = makeDefaultFontConfig();
-    textConfig.FontDataOwnedByAtlas = false;
-    ImFontAtlas_AddFontFromMemoryTTF(io->Fonts, (void*)IBMPlexMono_Regular, IBMPlexMono_Regular_len, 22.0f, &textConfig, NULL);
 
-    ImFontConfig iconConfig = makeDefaultFontConfig();
-    iconConfig.FontDataOwnedByAtlas = false;
-    iconConfig.MergeMode = true;
-    iconConfig.PixelSnapH = true;
-    static const ImWchar iconRanges[] = {ICON_MIN_FA, ICON_MAX_FA, 0};
-    ImFontAtlas_AddFontFromMemoryTTF(io->Fonts, (void*)fa_solid_900, fa_solid_900_len, 16.0f, &iconConfig, iconRanges);
-    editorThemeApplyDefault();
+    float uiScale = queryEditorContentScale(vkrt->runtime.window);
+    applyEditorUIScale(uiScale, false);
+
     cImGui_ImplGlfw_InitForVulkan(vkrt->runtime.window, true);
 
     uint32_t imageCount = (uint32_t)vkrt->runtime.swapChainImageCount;
@@ -322,12 +365,14 @@ void editorUIShutdown(VKRT* vkrt, void* userData) {
     LOG_TRACE("Destroying UI context");
 
     ImGui_DestroyContext(NULL);
+    gEditorUIScale = 0.0f;
 
     LOG_TRACE("UI shutdown complete in %.3f ms", (double)(getMicroseconds() - shutdownStartTime) / 1e3);
 }
 
 void editorUIDraw(VKRT* vkrt, VkCommandBuffer commandBuffer, void* userData) {
     Session* session = (Session*)userData;
+    applyEditorUIScale(queryEditorContentScale(vkrt->runtime.window), true);
 
     cImGui_ImplGlfw_NewFrame();
     cImGui_ImplVulkan_NewFrame();
