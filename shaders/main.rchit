@@ -22,8 +22,8 @@ void main() {
     float u = barycentrics.x;
     float v = barycentrics.y;
 
-    vec3 localNormal = normalize(normal0 * (1.0 - u - v) + normal1 * u + normal2 * v);
-    vec3 worldNormal = normalize(localNormal * mat3(gl_ObjectToWorld3x4EXT));
+    vec3 localNormal = normal0 * (1.0 - u - v) + normal1 * u + normal2 * v;
+    vec3 worldNormal = normalize(localNormal * mat3(gl_WorldToObjectEXT));
     vec3 worldPos = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
 
     uint materialIndex = meshInfo.infos[instance].materialIndex;
