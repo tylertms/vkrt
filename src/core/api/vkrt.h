@@ -21,6 +21,8 @@ typedef struct SceneData {
     uint32_t maxBounces;
     uint32_t toneMappingMode;
     uint32_t viewportRect[4];
+    float timeBase;
+    float timeStep;
 } SceneData;
 
 typedef enum VKRT_ToneMappingMode {
@@ -227,6 +229,8 @@ typedef struct VKRT_PublicState {
     float autoSPPTargetFrameMs;
     float autoSPPControlMs;
     uint32_t autoSPPFramesUntilNextAdjust;
+    float timeBase;
+    float timeStep;
 } VKRT_PublicState;
 
 typedef struct VKRT {
@@ -261,6 +265,7 @@ void VKRT_setSamplesPerPixel(VKRT* vkrt, uint32_t samplesPerPixel);
 void VKRT_setAutoSPPEnabled(VKRT* vkrt, uint8_t enabled);
 void VKRT_setAutoSPPTargetFPS(VKRT* vkrt, uint32_t targetFPS);
 void VKRT_setToneMappingMode(VKRT* vkrt, VKRT_ToneMappingMode toneMappingMode);
+void VKRT_setTimeRange(VKRT* vkrt, float timeBase, float timeStep);
 
 uint32_t VKRT_getMeshCount(const VKRT* vkrt);
 int VKRT_setMeshTransform(VKRT* vkrt, uint32_t meshIndex, vec3 position, vec3 rotation, vec3 scale);

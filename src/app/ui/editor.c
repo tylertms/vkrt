@@ -192,6 +192,21 @@ static void drawPerformanceSection(VKRT* vkrt) {
         VKRT_invalidateAccumulation(vkrt);
     }
 
+    bool timeMaxEnabled = vkrt->state.timeBase >= 0.0f;
+    if (ImGui_Checkbox("Time Max", &timeMaxEnabled)) {
+        if (timeMaxEnabled) {
+            VKRT_setTimeRange(vkrt, 0.0f, 0.5f);
+        } else {
+            VKRT_setTimeRange(vkrt, -1.0f, vkrt->state.timeStep);
+        }
+    }
+    if (timeMaxEnabled) {
+        float timeMax = vkrt->state.timeStep;
+        if (ImGui_DragFloatEx("Time Max Value", &timeMax, 0.01f, 0.001f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+            VKRT_setTimeRange(vkrt, 0.0f, timeMax);
+        }
+    }
+
     const char* toneMappingLabels[] = {"None", "ACES"};
     int toneMappingMode = (int)vkrt->state.toneMappingMode;
     if (ImGui_ComboCharEx("Tone Mapping", &toneMappingMode, toneMappingLabels, 2, 2)) {

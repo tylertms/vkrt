@@ -473,6 +473,19 @@ void VKRT_setToneMappingMode(VKRT* vkrt, VKRT_ToneMappingMode toneMappingMode) {
     resetSceneData(vkrt);
 }
 
+void VKRT_setTimeRange(VKRT* vkrt, float timeBase, float timeStep) {
+    if (!vkrt) return;
+
+    vkrt->state.timeBase = timeBase;
+    vkrt->state.timeStep = timeStep;
+    if (vkrt->core.sceneData) {
+        vkrt->core.sceneData->timeBase = timeBase;
+        vkrt->core.sceneData->timeStep = timeStep;
+    }
+
+    resetSceneData(vkrt);
+}
+
 uint32_t VKRT_getMeshCount(const VKRT* vkrt) {
     return vkrt ? vkrt->core.meshData.count : 0;
 }

@@ -40,6 +40,8 @@ layout(set = 0, binding = 6) uniform SceneUniform {
     uint maxBounces;
     uint toneMappingMode;
     uvec4 viewportRect;
+    float timeBase;
+    float timeStep;
 } scene;
 
 layout(set = 0, binding = 7, std430) readonly buffer MeshInfoBuffer {

@@ -157,6 +157,11 @@ void createSceneUniform(VKRT* vkrt) {
     vkrt->core.sceneData->viewportRect[2] = initialWidth;
     vkrt->core.sceneData->viewportRect[3] = initialHeight;
 
+    vkrt->state.timeBase = -1.0f;
+    vkrt->state.timeStep = 0.5f;
+    vkrt->core.sceneData->timeBase = vkrt->state.timeBase;
+    vkrt->core.sceneData->timeStep = vkrt->state.timeStep;
+
     updateMatricesFromCamera(vkrt);
 }
 
@@ -177,6 +182,8 @@ void resetSceneData(VKRT* vkrt) {
     vkrt->core.sceneData->samplesPerPixel = vkrt->state.samplesPerPixel;
     vkrt->core.sceneData->maxBounces = vkrt->state.maxBounces;
     vkrt->core.sceneData->toneMappingMode = vkrt->state.toneMappingMode;
+    vkrt->core.sceneData->timeBase = vkrt->state.timeBase;
+    vkrt->core.sceneData->timeStep = vkrt->state.timeStep;
     vkrt->state.accumulationFrame = 0;
     vkrt->state.totalSamples = 0;
     vkrt->state.averageFrametime = 0.0f;
