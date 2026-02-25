@@ -40,6 +40,11 @@ int main(void) {
         VKRT_poll(&vkrt);
         meshControllerApplyPendingActions(&vkrt, &session);
         VKRT_draw(&vkrt);
+
+        if (session.pendingRenderSavePath) {
+            VKRT_saveCurrentRenderPNG(&vkrt, session.pendingRenderSavePath);
+            sessionClearQueuedRenderSave(&session);
+        }
     }
 
     VKRT_deinit(&vkrt);

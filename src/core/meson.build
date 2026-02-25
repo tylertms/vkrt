@@ -14,7 +14,9 @@ vkrt_sources = files(
   'api/lifecycle.c',
   'api/frame.c',
   'api/control.c',
+  'utility/export.c',
   'utility/io.c',
+  '../../external/spng/spng.c',
 )
 
 vkrt = static_library('vkrt_core',

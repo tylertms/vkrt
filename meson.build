@@ -27,6 +27,7 @@ includes = include_directories(
   'external/imgui/icons',
   'external/cglm/include',
   'external/cgltf/include',
+  'external/spng',
   'external/tinyfiledialogs',
   'assets/fonts',
   'src/core/api',
@@ -45,6 +46,7 @@ includes = include_directories(
 dependencies = [
   dependency('vulkan', required: true),
   dependency('glfw3', static: true),
+  dependency('zlib', required: true),
   dependency('rt', required: false),
 ]
 

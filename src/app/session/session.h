@@ -7,6 +7,7 @@ typedef struct Session {
     uint32_t meshCount;
     uint32_t pendingMeshRemovalIndex;
     char* pendingMeshImportPath;
+    char* pendingRenderSavePath;
 } Session;
 
 void sessionInit(Session* session);
@@ -18,3 +19,5 @@ const char* sessionGetMeshName(const Session* session, uint32_t meshIndex);
 
 void sessionQueueMeshImport(Session* session, const char* path);
 void sessionClearQueuedMeshImport(Session* session);
+void sessionQueueRenderSave(Session* session, const char* path);
+void sessionClearQueuedRenderSave(Session* session);

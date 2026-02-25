@@ -206,6 +206,10 @@ typedef struct VKRT_Runtime {
     VkBool32 framePresented;
     VkPresentModeKHR presentMode;
     float displayRefreshHz;
+    uint32_t autoSPPFastAdaptFrames;
+    VkBool32 swapchainFormatLogInitialized;
+    VkFormat lastLoggedSwapchainFormat;
+    VkColorSpaceKHR lastLoggedSwapchainColorSpace;
 } VKRT_Runtime;
 
 typedef struct VKRT_PublicState {
@@ -266,6 +270,7 @@ void VKRT_setAutoSPPEnabled(VKRT* vkrt, uint8_t enabled);
 void VKRT_setAutoSPPTargetFPS(VKRT* vkrt, uint32_t targetFPS);
 void VKRT_setToneMappingMode(VKRT* vkrt, VKRT_ToneMappingMode toneMappingMode);
 void VKRT_setTimeRange(VKRT* vkrt, float timeBase, float timeStep);
+int VKRT_saveCurrentRenderPNG(VKRT* vkrt, const char* path);
 
 uint32_t VKRT_getMeshCount(const VKRT* vkrt);
 int VKRT_setMeshTransform(VKRT* vkrt, uint32_t meshIndex, vec3 position, vec3 rotation, vec3 scale);

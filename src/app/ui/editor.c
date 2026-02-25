@@ -27,6 +27,11 @@ static const char* openMeshImportDialog(void) {
     return tinyfd_openFileDialog("Import mesh", "assets/models", 2, filters, "glTF 2.0 (.glb/.gltf)", 0);
 }
 
+static const char* openRenderSaveDialog(void) {
+    const char* filters[] = {"*.png"};
+    return tinyfd_saveFileDialog("Save Image", "captures/render.png", 1, filters, "PNG image");
+}
+
 static ImFontConfig makeDefaultFontConfig(void) {
     ImFontConfig config = {0};
     config.FontDataOwnedByAtlas = true;
@@ -297,6 +302,13 @@ static void drawSceneInspectorWindow(VKRT* vkrt, Session* session) {
     if (ImGui_Checkbox("V-Sync", &vsync)) {
         vkrt->runtime.vsync = vsync ? 1 : 0;
         vkrt->runtime.framebufferResized = VK_TRUE;
+    }
+
+    if (ImGui_Button("Save Image")) {
+        const char* selectedPath = openRenderSaveDialog();
+        if (selectedPath && selectedPath[0]) {
+            sessionQueueRenderSave(session, selectedPath);
+        }
     }
 
     drawPerformanceSection(vkrt);

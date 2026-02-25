@@ -273,12 +273,13 @@ void transitionImageLayout(VkCommandBuffer commandBuffer, VkImage image, VkImage
 }
 
 void createStorageImage(VKRT* vkrt) {
-    const VkFormat storageFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
+    const VkFormat accumulationFormat = VK_FORMAT_R32G32B32A32_SFLOAT;
+    const VkFormat outputFormat = VK_FORMAT_R16G16B16A16_UNORM;
 
     VkImageCreateInfo imageCreateInfo = {0};
     imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
-    imageCreateInfo.format = storageFormat;
+    imageCreateInfo.format = accumulationFormat;
     imageCreateInfo.extent.width = vkrt->runtime.swapChainExtent.width;
     imageCreateInfo.extent.height = vkrt->runtime.swapChainExtent.height;
     imageCreateInfo.extent.depth = 1;
@@ -316,7 +317,7 @@ void createStorageImage(VKRT* vkrt) {
         VkImageViewCreateInfo imageViewCreateInfo = {0};
         imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        imageViewCreateInfo.format = storageFormat;
+        imageViewCreateInfo.format = accumulationFormat;
         imageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
         imageViewCreateInfo.subresourceRange.levelCount = 1;
@@ -334,6 +335,7 @@ void createStorageImage(VKRT* vkrt) {
     vkrt->core.accumulationWriteIndex = 1;
     vkrt->core.accumulationNeedsReset = VK_TRUE;
 
+    imageCreateInfo.format = outputFormat;
     if (vkCreateImage(vkrt->core.device, &imageCreateInfo, NULL, &vkrt->core.storageImage) != VK_SUCCESS) {
         LOG_ERROR("Failed to create output image");
         exit(EXIT_FAILURE);
@@ -360,7 +362,7 @@ void createStorageImage(VKRT* vkrt) {
     VkImageViewCreateInfo outputImageViewCreateInfo = {0};
     outputImageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     outputImageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    outputImageViewCreateInfo.format = storageFormat;
+    outputImageViewCreateInfo.format = outputFormat;
     outputImageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     outputImageViewCreateInfo.subresourceRange.baseMipLevel = 0;
     outputImageViewCreateInfo.subresourceRange.levelCount = 1;

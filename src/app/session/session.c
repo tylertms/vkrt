@@ -69,6 +69,7 @@ void sessionDeinit(Session* session) {
     session->meshCount = 0;
 
     sessionClearQueuedMeshImport(session);
+    sessionClearQueuedRenderSave(session);
 }
 
 void sessionSetMeshName(Session* session, const char* filePath, uint32_t meshIndex) {
@@ -120,4 +121,20 @@ void sessionClearQueuedMeshImport(Session* session) {
 
     free(session->pendingMeshImportPath);
     session->pendingMeshImportPath = NULL;
+}
+
+void sessionQueueRenderSave(Session* session, const char* path) {
+    if (!session) return;
+
+    sessionClearQueuedRenderSave(session);
+    if (!path || !path[0]) return;
+
+    session->pendingRenderSavePath = stringDuplicate(path);
+}
+
+void sessionClearQueuedRenderSave(Session* session) {
+    if (!session || !session->pendingRenderSavePath) return;
+
+    free(session->pendingRenderSavePath);
+    session->pendingRenderSavePath = NULL;
 }

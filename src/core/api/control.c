@@ -3,12 +3,17 @@
 #include "scene.h"
 #include "accel.h"
 #include "debug.h"
+#include "export.h"
 #include "vkrt.h"
 
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+
+int VKRT_saveCurrentRenderPNG(VKRT* vkrt, const char* path) {
+    return saveCurrentRenderPNG(vkrt, path);
+}
 
 static void destroyMeshAccelerationStructure(VKRT* vkrt, Mesh* mesh) {
     if (!vkrt || !vkrt->core.device || !mesh) return;

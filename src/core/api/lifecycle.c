@@ -53,6 +53,10 @@ int VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInfo) {
     logStepTime("GLFW setup complete", stepStartTime);
 
     vkrt->runtime.vsync = createInfo->vsync;
+    vkrt->runtime.autoSPPFastAdaptFrames = 0;
+    vkrt->runtime.swapchainFormatLogInitialized = VK_FALSE;
+    vkrt->runtime.lastLoggedSwapchainFormat = VK_FORMAT_UNDEFINED;
+    vkrt->runtime.lastLoggedSwapchainColorSpace = VK_COLOR_SPACE_MAX_ENUM_KHR;
     vkrt->core.shaders = createInfo->shaders;
     vkrt->core.descriptorSetReady = VK_FALSE;
 

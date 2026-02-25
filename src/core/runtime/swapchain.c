@@ -56,9 +56,16 @@ void createSwapChain(VKRT* vkrt) {
     VkExtent2D extent = chooseSwapExtent(vkrt, &supportDetails);
     vkrt->runtime.presentMode = presentMode;
     vkrt->runtime.displayRefreshHz = queryDisplayRefreshHz(vkrt);
-    LOG_INFO("Swapchain format selected: %s (%d), color space: %s (%d)",
-        swapchainFormatName(surfaceFormat.format), (int)surfaceFormat.format,
-        swapchainColorSpaceName(surfaceFormat.colorSpace), (int)surfaceFormat.colorSpace);
+    if (!vkrt->runtime.swapchainFormatLogInitialized ||
+        vkrt->runtime.lastLoggedSwapchainFormat != surfaceFormat.format ||
+        vkrt->runtime.lastLoggedSwapchainColorSpace != surfaceFormat.colorSpace) {
+        LOG_INFO("Swapchain format selected: %s (%d), color space: %s (%d)",
+            swapchainFormatName(surfaceFormat.format), (int)surfaceFormat.format,
+            swapchainColorSpaceName(surfaceFormat.colorSpace), (int)surfaceFormat.colorSpace);
+        vkrt->runtime.swapchainFormatLogInitialized = VK_TRUE;
+        vkrt->runtime.lastLoggedSwapchainFormat = surfaceFormat.format;
+        vkrt->runtime.lastLoggedSwapchainColorSpace = surfaceFormat.colorSpace;
+    }
 
     free(supportDetails.formats);
     free(supportDetails.presentModes);
@@ -159,6 +166,12 @@ void recreateSwapChain(VKRT* vkrt) {
     VKRT_setRenderViewport(vkrt, 0, 0, vkrt->runtime.swapChainExtent.width, vkrt->runtime.swapChainExtent.height);
 
     resetSceneData(vkrt);
+    vkrt->state.displayRenderTimeMs = 0.0f;
+    vkrt->state.displayFrameTimeMs = 0.0f;
+    vkrt->state.lastFrameTimestamp = 0;
+    vkrt->state.autoSPPControlMs = 0.0f;
+    vkrt->state.autoSPPFramesUntilNextAdjust = 0;
+    vkrt->runtime.autoSPPFastAdaptFrames = 8;
 }
 
 void cleanupSwapChain(VKRT* vkrt) {

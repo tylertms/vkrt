@@ -204,11 +204,20 @@ void updateAutoSPP(VKRT* vkrt) {
     float controlMs = vkrt->state.displayRenderTimeMs > 0.0f ? vkrt->state.displayRenderTimeMs : vkrt->state.displayFrameTimeMs;
     if (controlMs <= 0.0f) return;
 
+    VkBool32 bypassSmoothing = vkrt->runtime.autoSPPFastAdaptFrames > 0;
+    if (bypassSmoothing) {
+        vkrt->runtime.autoSPPFastAdaptFrames--;
+    }
     const float smoothing = 0.08f;
-    if (vkrt->state.autoSPPControlMs <= 0.0f) vkrt->state.autoSPPControlMs = controlMs;
-    else vkrt->state.autoSPPControlMs = vkrt->state.autoSPPControlMs * (1.0f - smoothing) + controlMs * smoothing;
+    if (bypassSmoothing) {
+        vkrt->state.autoSPPControlMs = controlMs;
+    } else if (vkrt->state.autoSPPControlMs <= 0.0f) {
+        vkrt->state.autoSPPControlMs = controlMs;
+    } else {
+        vkrt->state.autoSPPControlMs = vkrt->state.autoSPPControlMs * (1.0f - smoothing) + controlMs * smoothing;
+    }
 
-    if (vkrt->state.autoSPPFramesUntilNextAdjust > 0) {
+    if (!bypassSmoothing && vkrt->state.autoSPPFramesUntilNextAdjust > 0) {
         vkrt->state.autoSPPFramesUntilNextAdjust--;
         return;
     }
@@ -220,11 +229,14 @@ void updateAutoSPP(VKRT* vkrt) {
     uint32_t spp = vkrt->state.samplesPerPixel;
     float desired = (float)spp * ratio;
 
-    const float maxStepUp = 0.12f;
-    const float maxStepDown = 0.08f;
-    float minAllowed = (float)spp * (1.0f - maxStepDown);
-    float maxAllowed = (float)spp * (1.0f + maxStepUp);
-    float nextValue = glm_clamp(desired, minAllowed, maxAllowed);
+    float nextValue = desired;
+    if (!bypassSmoothing) {
+        const float maxStepUp = 0.12f;
+        const float maxStepDown = 0.08f;
+        float minAllowed = (float)spp * (1.0f - maxStepDown);
+        float maxAllowed = (float)spp * (1.0f + maxStepUp);
+        nextValue = glm_clamp(desired, minAllowed, maxAllowed);
+    }
 
     if (nextValue < 1.0f) nextValue = 1.0f;
     if (nextValue > 2048.0f) nextValue = 2048.0f;
@@ -233,10 +245,14 @@ void updateAutoSPP(VKRT* vkrt) {
     if (next == spp && ratio > 1.0f && spp < 2048) next = spp + 1;
     if (next == spp && ratio < 1.0f && spp > 1) next = spp - 1;
 
-    uint32_t targetFPS = vkrt->state.autoSPPTargetFPS ? vkrt->state.autoSPPTargetFPS : 60;
-    uint32_t framesBetweenAdjust = targetFPS / 5;
-    if (framesBetweenAdjust < 6) framesBetweenAdjust = 6;
-    vkrt->state.autoSPPFramesUntilNextAdjust = framesBetweenAdjust;
+    if (!bypassSmoothing) {
+        uint32_t targetFPS = vkrt->state.autoSPPTargetFPS ? vkrt->state.autoSPPTargetFPS : 60;
+        uint32_t framesBetweenAdjust = targetFPS / 5;
+        if (framesBetweenAdjust < 6) framesBetweenAdjust = 6;
+        vkrt->state.autoSPPFramesUntilNextAdjust = framesBetweenAdjust;
+    } else {
+        vkrt->state.autoSPPFramesUntilNextAdjust = 0;
+    }
 
     if (next != spp) {
         VKRT_setSamplesPerPixel(vkrt, next);
