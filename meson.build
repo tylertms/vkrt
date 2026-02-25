@@ -49,14 +49,20 @@ dependencies = [
   dependency('rt', required: false),
 ]
 
+nfd_source = []
+sys = host_machine.system()
+
+if sys == 'windows'
+  nfd_source = files('external/nfd/src/nfd_win.cpp')
+elif sys == 'linux'
+  nfd_source = files('external/nfd/src/nfd_gtk.cpp')
+else
+  error('Unsupported platform for nfd')
+endif
+
 nfd = static_library('nfd',
   include_directories: include_directories('external/nfd/src/include'),
-  dependencies: [
-    cc.find_library('ole32'),
-    cc.find_library('uuid'),
-    cc.find_library('shell32'),
-  ],
-  sources: files('external/nfd/src/nfd_win.cpp'),
+  sources: nfd_source,
   cpp_args: ['-w'],
 )
 
