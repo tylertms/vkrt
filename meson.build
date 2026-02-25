@@ -1,4 +1,4 @@
-project('vkspt', ['c', 'cpp'],
+project('vkrt', ['c', 'cpp'],
   version: '1.0',
   default_options: [
     'c_std=c11',
@@ -81,7 +81,7 @@ dcimgui = static_library('dcimgui',
 
 subdir('src')
 
-executable('vkspt',
+executable('vkrt',
   c_args: c_args,
   sources: app_sources,
   dependencies: dependencies,
