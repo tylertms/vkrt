@@ -7,7 +7,7 @@
 #include "session.h"
 #include "theme.h"
 #include "debug.h"
-#include "tinyfiledialogs.h"
+#include "nfd.h"
 #include "IBMPlexMono_Regular.h"
 #include "fa_solid_900.h"
 #include "IconsFontAwesome6.h"
@@ -15,6 +15,7 @@
 #include <math.h>
 #include <float.h>
 #include <stdbool.h>
+#include <limits.h>
 #include <stdio.h>
 
 static const float kEditorBaseTextSizePx = 15.5f;
@@ -22,20 +23,50 @@ static const float kEditorBaseIconSizePx = 11.0f;
 static const float kEditorScaleEpsilon = 0.01f;
 static float gEditorUIScale = 0.0f;
 static const float kRenderViewWheelStep = 1.12f;
+static const float kInspectorSeparatorThickness = 2.0f;
+static const float kInspectorControlSpacing = 1.0f;
+static const float kInspectorSeparatorSpacing = 1.5f;
 static void tooltipOnHover(const char* text);
 
 static uint32_t absDiffU32(uint32_t a, uint32_t b) {
     return (a > b) ? (a - b) : (b - a);
 }
 
-static const char* openMeshImportDialog(void) {
-    const char* filters[] = {"*.glb", "*.gltf"};
-    return tinyfd_openFileDialog("Import mesh", "assets/models", 2, filters, "glTF 2.0 (.glb/.gltf)", 0);
+static void drawInspectorSeparator(void) {
+    ImGui_Dummy((ImVec2){0.0f, kInspectorSeparatorSpacing});
+    ImGui_Separator();
+
+    ImVec2 min = ImGui_GetItemRectMin();
+    ImVec2 max = ImGui_GetItemRectMax();
+    float centerY = (min.y + max.y) * 0.5f;
+    ImDrawList_AddLineEx(ImGui_GetWindowDrawList(),
+        (ImVec2){min.x, centerY},
+        (ImVec2){max.x, centerY},
+        ImGui_GetColorU32(ImGuiCol_Separator),
+        kInspectorSeparatorThickness);
+    ImGui_Dummy((ImVec2){0.0f, kInspectorSeparatorSpacing});
 }
 
-static const char* openRenderSaveDialog(void) {
-    const char* filters[] = {"*.png"};
-    return tinyfd_saveFileDialog("Save Image", "captures/render.png", 1, filters, "PNG image");
+static char* openMeshImportDialog(void) {
+    nfdchar_t* outPath = NULL;
+    nfdfilteritem_t filters[] = {{"glTF 2.0", "glb,gltf"}};
+    if (NFD_OpenDialog(&outPath, filters, 1, "assets/models") != NFD_OKAY) return NULL;
+    return outPath;
+}
+
+static char* openRenderSaveDialog(void) {
+    nfdchar_t* outPath = NULL;
+    nfdfilteritem_t filters[] = {{"PNG image", "png"}};
+    if (NFD_SaveDialog(&outPath, filters, 1, "captures", "render.png") != NFD_OKAY) return NULL;
+    return outPath;
+}
+
+static char* openRenderSequenceFolderDialog(const Session* session) {
+    const char* defaultPath = sessionGetRenderSequenceFolder(session);
+    if (!defaultPath || !defaultPath[0]) defaultPath = "captures/sequence";
+    nfdchar_t* outPath = NULL;
+    if (NFD_PickFolder(&outPath, defaultPath) != NFD_OKAY) return NULL;
+    return outPath;
 }
 
 static ImFontConfig makeDefaultFontConfig(void) {
@@ -184,13 +215,14 @@ static bool drawViewportWindow(VKRT* vkrt) {
 }
 
 static void drawPerformanceSection(VKRT* vkrt, bool controlsDisabled) {
-    ImGui_Separator();
+    drawInspectorSeparator();
     ImGui_Text("FPS:          %8u", vkrt->state.framesPerSecond);
     ImGui_Text("Frames:       %8u", vkrt->state.accumulationFrame);
     ImGui_Text("Samples:  %12llu", (unsigned long long)vkrt->state.totalSamples);
     ImGui_Text("Samples / px: %8u", vkrt->state.samplesPerPixel);
     ImGui_Text("Frame (ms):   %8.3f ms", vkrt->state.displayFrameTimeMs);
     ImGui_Text("Render (ms):  %8.3f ms", vkrt->state.displayRenderTimeMs);
+    ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing});
 
     if (controlsDisabled) ImGui_BeginDisabled(true);
 
@@ -217,23 +249,6 @@ static void drawPerformanceSection(VKRT* vkrt, bool controlsDisabled) {
         VKRT_invalidateAccumulation(vkrt);
     }
 
-    bool timeMaxEnabled = vkrt->state.timeBase >= 0.0f;
-    if (ImGui_Checkbox("Time Max", &timeMaxEnabled)) {
-        if (timeMaxEnabled) {
-            VKRT_setTimeRange(vkrt, 0.0f, 0.5f);
-        } else {
-            VKRT_setTimeRange(vkrt, -1.0f, vkrt->state.timeStep);
-        }
-    }
-    tooltipOnHover("Enable a fixed upper time bound for temporal evaluation.");
-    if (timeMaxEnabled) {
-        float timeMax = vkrt->state.timeStep;
-        if (ImGui_DragFloatEx("Time Max Value", &timeMax, 0.01f, 0.001f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
-            VKRT_setTimeRange(vkrt, 0.0f, timeMax);
-        }
-        tooltipOnHover("Upper bound value used when Time Max is enabled.");
-    }
-
     const char* toneMappingLabels[] = {"None", "ACES"};
     int toneMappingMode = (int)vkrt->state.toneMappingMode;
     if (ImGui_ComboCharEx("Tone Mapping", &toneMappingMode, toneMappingLabels, 2, 2)) {
@@ -254,6 +269,7 @@ static uint32_t clampRenderDimension(int value) {
     if (value > 16384) return 16384;
     return (uint32_t)value;
 }
+
 
 static float clampRenderViewValue(float value, float minValue, float maxValue) {
     if (value < minValue) return minValue;
@@ -364,47 +380,109 @@ static void initializeRenderConfig(Session* session) {
         session->renderConfig.width = 1920;
         session->renderConfig.height = 1080;
     }
+    sessionSanitizeAnimationSettings(&session->renderConfig.animation);
 }
 
 static void drawRenderSection(VKRT* vkrt, Session* session) {
     initializeRenderConfig(session);
-    ImGui_Separator();
-    ImGui_Text("Render");
+    drawInspectorSeparator();
+
+    SessionRenderAnimationSettings* anim = &session->renderConfig.animation;
 
     if (!vkrt->state.renderModeActive) {
-        int outputWidth = (int)session->renderConfig.width;
-        int outputHeight = (int)session->renderConfig.height;
+        int outputSize[2] = {(int)session->renderConfig.width, (int)session->renderConfig.height};
         int targetSamples = (int)session->renderConfig.targetSamples;
+        bool animationEnabled = anim->enabled != 0;
+        uint32_t frameCount = sessionComputeAnimationFrameCount(anim);
+        const char* sequenceFolder = sessionGetRenderSequenceFolder(session);
+        if (!sequenceFolder || !sequenceFolder[0]) sequenceFolder = "(not set)";
 
-        const float inputWidth = 140.0f;
+        const float inputWidth = 240.0f;
 
         ImGui_SetNextItemWidth(inputWidth);
-        if (ImGui_DragIntEx("Width", &outputWidth, 1.0f, 1, 16384, "%d", ImGuiSliderFlags_AlwaysClamp)) {
-            session->renderConfig.width = clampRenderDimension(outputWidth);
+        if (ImGui_DragInt2Ex(ICON_FA_CAMERA_RETRO " Output Size", outputSize, 1.0f, 1, 16384, "%d", ImGuiSliderFlags_AlwaysClamp)) {
+            session->renderConfig.width = clampRenderDimension(outputSize[0]);
+            session->renderConfig.height = clampRenderDimension(outputSize[1]);
         }
 
         ImGui_SetNextItemWidth(inputWidth);
-        if (ImGui_DragIntEx("Height", &outputHeight, 1.0f, 1, 16384, "%d", ImGuiSliderFlags_AlwaysClamp)) {
-            session->renderConfig.height = clampRenderDimension(outputHeight);
-        }
-
-        ImGui_SetNextItemWidth(inputWidth);
-        if (ImGui_DragIntEx("Samples", &targetSamples, 1.0f, 0, INT_MAX, "%d", ImGuiSliderFlags_AlwaysClamp)) {
+        if (ImGui_DragIntEx(ICON_FA_IMAGES " Samples", &targetSamples, 1.0f, 0, INT_MAX, "%d", ImGuiSliderFlags_AlwaysClamp)) {
             if (targetSamples < 0) targetSamples = 0;
             session->renderConfig.targetSamples = (uint32_t)targetSamples;
         }
         tooltipOnHover("Total samples to render. Set to 0 for manual stop.");
+        ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing});
 
-        if (ImGui_Button("Start Render")) {
+        if (ImGui_Checkbox("Light Animation", &animationEnabled)) {
+            anim->enabled = animationEnabled ? 1 : 0;
+        }
+        tooltipOnHover("Render a sequence by stepping light travel time from Min to Max.");
+
+        if (animationEnabled) {
+            float timeMin = anim->minTime;
+            float timeMax = anim->maxTime;
+            float timeStep = anim->timeStep;
+
+            ImGui_SetNextItemWidth(inputWidth);
+            if (ImGui_DragFloatEx(ICON_FA_TIMELINE " Time Min", &timeMin, 0.01f, 0.0f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+                anim->minTime = timeMin;
+                sessionSanitizeAnimationSettings(anim);
+                frameCount = sessionComputeAnimationFrameCount(anim);
+            }
+            tooltipOnHover("Sequence start time.");
+
+            ImGui_SetNextItemWidth(inputWidth);
+            if (ImGui_DragFloatEx(ICON_FA_TIMELINE " Time Max", &timeMax, 0.01f, 0.0f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+                anim->maxTime = timeMax;
+                sessionSanitizeAnimationSettings(anim);
+                frameCount = sessionComputeAnimationFrameCount(anim);
+            }
+            tooltipOnHover("Sequence end time.");
+
+            ImGui_SetNextItemWidth(inputWidth);
+            if (ImGui_DragFloatEx(ICON_FA_CLOCK " Step", &timeStep, 0.005f, 0.001f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+                anim->timeStep = timeStep;
+                sessionSanitizeAnimationSettings(anim);
+                frameCount = sessionComputeAnimationFrameCount(anim);
+            }
+            tooltipOnHover("Time increment per sequence frame.");
+
+            ImGui_Text(ICON_FA_IMAGES " Frames: %u", frameCount);
+
+            if (ImGui_Button(ICON_FA_FOLDER_OPEN " Select Folder")) {
+                sessionRequestRenderSequenceFolderDialog(session);
+            }
+
+            char folderPathBuffer[256] = {0};
+            snprintf(folderPathBuffer, sizeof(folderPathBuffer), "%s", sequenceFolder);
+            ImGui_SetNextItemWidth(inputWidth * 1.10f);
+            ImGui_InputTextEx("Folder", folderPathBuffer, sizeof(folderPathBuffer), ImGuiInputTextFlags_ReadOnly, NULL, NULL);
+            tooltipOnHover(sequenceFolder);
+
+            if (session->renderConfig.targetSamples == 0) {
+                ImGui_TextDisabled("Sequence mode needs finite samples. `0` will be promoted to `1`.");
+            }
+        }
+
+        ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing * 1.5f});
+        const char* startLabel = animationEnabled
+            ? ICON_FA_CLAPPERBOARD " Start Sequence"
+            : ICON_FA_CAMERA " Start Render";
+        if (ImGui_Button(startLabel)) {
+            uint32_t startSamples = session->renderConfig.targetSamples;
+            if (animationEnabled && startSamples == 0) startSamples = 1;
             sessionQueueRenderStart(session,
                 session->renderConfig.width,
                 session->renderConfig.height,
-                session->renderConfig.targetSamples);
+                startSamples,
+                anim);
         }
         return;
     }
 
-    ImGui_Text("Output: %ux%u", vkrt->runtime.renderExtent.width, vkrt->runtime.renderExtent.height);
+    const SessionSequenceProgress* seq = &session->sequenceProgress;
+
+    ImGui_Text(ICON_FA_CAMERA_RETRO " Output: %ux%u", vkrt->runtime.renderExtent.width, vkrt->runtime.renderExtent.height);
     if (vkrt->state.renderTargetSamples > 0) {
         uint64_t shownSamples = vkrt->state.totalSamples;
         if (shownSamples > vkrt->state.renderTargetSamples) {
@@ -421,20 +499,44 @@ static void drawRenderSection(VKRT* vkrt, Session* session) {
         ImGui_Text("Progress: %llu Samples", (unsigned long long)vkrt->state.totalSamples);
     }
     ImGui_Text("%s", vkrt->state.renderModeFinished ? "Status: Complete" : "Status: Rendering");
+    if (seq->active) {
+        ImGui_Text(ICON_FA_TIMELINE " Sequence: %u / %u  (t = %.3f)",
+            seq->frameIndex, seq->frameCount, seq->currentTime);
+    }
 
     if (!vkrt->state.renderModeFinished) {
-        if (ImGui_Button("Stop Render")) {
+        if (seq->active) {
+            if (ImGui_Button(ICON_FA_STOP " Stop Sequence")) {
+                sessionQueueRenderStop(session);
+            }
+        } else if (ImGui_Button(ICON_FA_STOP " Stop Render")) {
             VKRT_stopRenderSampling(vkrt);
         }
     } else {
-        if (ImGui_Button("Save Image")) {
-            sessionRequestRenderSaveDialog(session);
+        if (!seq->active) {
+            if (ImGui_Button(ICON_FA_FLOPPY_DISK " Save Image")) {
+                sessionRequestRenderSaveDialog(session);
+            }
+            ImGui_SameLine();
         }
-        ImGui_SameLine();
-        if (ImGui_Button("Exit Render")) {
+        if (ImGui_Button(ICON_FA_ARROW_RIGHT_FROM_BRACKET " Exit Render")) {
             sessionQueueRenderStop(session);
         }
     }
+}
+
+static void drawConfigSection(VKRT* vkrt, bool renderModeActive) {
+    ImGui_Text("Device: %s", vkrt->core.deviceName);
+    ImGui_Text("Viewport: %ux%u", vkrt->runtime.displayViewportRect[2], vkrt->runtime.displayViewportRect[3]);
+    ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing});
+
+    ImGui_BeginDisabled(renderModeActive);
+    bool vsync = vkrt->runtime.vsync != 0;
+    if (ImGui_Checkbox("V-Sync", &vsync)) {
+        vkrt->runtime.vsync = vsync ? 1 : 0;
+        vkrt->runtime.framebufferResized = VK_TRUE;
+    }
+    ImGui_EndDisabled();
 }
 
 static void drawMeshInspector(VKRT* vkrt, Session* session) {
@@ -505,6 +607,18 @@ static void drawMeshInspector(VKRT* vkrt, Session* session) {
     }
 }
 
+static void drawEditorSection(VKRT* vkrt, Session* session, bool renderModeActive) {
+    drawInspectorSeparator();
+
+    ImGui_BeginDisabled(renderModeActive);
+    if (ImGui_Button(ICON_FA_FOLDER_PLUS " Import mesh")) {
+        sessionRequestMeshImportDialog(session);
+    }
+    ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing});
+    drawMeshInspector(vkrt, session);
+    ImGui_EndDisabled();
+}
+
 static void drawSceneInspectorWindow(VKRT* vkrt, Session* session) {
     bool renderModeActive = vkrt->state.renderModeActive != 0;
 
@@ -512,34 +626,11 @@ static void drawSceneInspectorWindow(VKRT* vkrt, Session* session) {
     ImGui_Begin("Scene Inspector", NULL, 0);
     ImGui_PopStyleColor();
 
-    ImGui_Text("Device: %s", vkrt->core.deviceName);
-    ImGui_Text("Viewport: %ux%u", vkrt->runtime.displayViewportRect[2], vkrt->runtime.displayViewportRect[3]);
-
-    ImGui_BeginDisabled(renderModeActive);
-    bool vsync = vkrt->runtime.vsync != 0;
-    if (ImGui_Checkbox("V-Sync", &vsync)) {
-        vkrt->runtime.vsync = vsync ? 1 : 0;
-        vkrt->runtime.framebufferResized = VK_TRUE;
-    }
-    ImGui_EndDisabled();
-
-    if (!renderModeActive) {
-        if (ImGui_Button(ICON_FA_CAMERA " Save Screenshot")) {
-            sessionRequestRenderSaveDialog(session);
-        }
-    }
-
+    drawConfigSection(vkrt, renderModeActive);
     drawRenderSection(vkrt, session);
     drawPerformanceSection(vkrt, renderModeActive);
-    ImGui_Separator();
+    drawEditorSection(vkrt, session, renderModeActive);
 
-    ImGui_BeginDisabled(renderModeActive);
-    if (ImGui_Button("Import mesh")) {
-        sessionRequestMeshImportDialog(session);
-    }
-
-    drawMeshInspector(vkrt, session);
-    ImGui_EndDisabled();
     ImGui_End();
 }
 
@@ -590,22 +681,33 @@ void editorUIProcessDialogs(Session* session) {
     if (!session) return;
 
     if (sessionTakeMeshImportDialogRequest(session)) {
-        const char* selectedPath = openMeshImportDialog();
+        char* selectedPath = openMeshImportDialog();
         if (selectedPath && selectedPath[0]) {
             sessionQueueMeshImport(session, selectedPath);
         }
+        if (selectedPath) NFD_FreePath(selectedPath);
     }
 
     if (sessionTakeRenderSaveDialogRequest(session)) {
-        const char* selectedPath = openRenderSaveDialog();
+        char* selectedPath = openRenderSaveDialog();
         if (selectedPath && selectedPath[0]) {
             sessionQueueRenderSave(session, selectedPath);
         }
+        if (selectedPath) NFD_FreePath(selectedPath);
+    }
+
+    if (sessionTakeRenderSequenceFolderDialogRequest(session)) {
+        char* selectedPath = openRenderSequenceFolderDialog(session);
+        if (selectedPath && selectedPath[0]) {
+            sessionSetRenderSequenceFolder(session, selectedPath);
+        }
+        if (selectedPath) NFD_FreePath(selectedPath);
     }
 }
 
 void editorUIInitialize(VKRT* vkrt, void* userData) {
     (void)userData;
+    NFD_Init();
     ImGui_CreateContext(NULL);
 
     ImGuiIO* io = ImGui_GetIO();
@@ -656,6 +758,7 @@ void editorUIShutdown(VKRT* vkrt, void* userData) {
     LOG_TRACE("Destroying UI context");
 
     ImGui_DestroyContext(NULL);
+    NFD_Quit();
     gEditorUIScale = 0.0f;
 
     LOG_TRACE("UI shutdown complete in %.3f ms", (double)(getMicroseconds() - shutdownStartTime) / 1e3);

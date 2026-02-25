@@ -20,7 +20,6 @@ endif
 
 glslc = find_program('glslc', required: true)
 
-# ----- Includes -----
 includes = include_directories(
   'external/glfw3/include',
   'external/imgui/include',
@@ -28,7 +27,7 @@ includes = include_directories(
   'external/cglm/include',
   'external/cgltf/include',
   'external/spng',
-  'external/tinyfiledialogs',
+  'external/nfd/src/include',
   'assets/fonts',
   'src/core/api',
   'src/core/runtime',
@@ -42,7 +41,6 @@ includes = include_directories(
   is_system: true,
 )
 
-# ----- Dependencies -----
 dependencies = [
   dependency('vulkan', required: true),
   dependency('glfw3', static: true),
@@ -50,7 +48,17 @@ dependencies = [
   dependency('rt', required: false),
 ]
 
-# ----- Dear ImGui bridge (static) -----
+nfd = static_library('nfd',
+  include_directories: include_directories('external/nfd/src/include'),
+  dependencies: [
+    cc.find_library('ole32'),
+    cc.find_library('uuid'),
+    cc.find_library('shell32'),
+  ],
+  sources: files('external/nfd/src/nfd_win.cpp'),
+  cpp_args: ['-w'],
+)
+
 dcimgui = static_library('dcimgui',
   include_directories: includes,
   dependencies: dependencies,
@@ -77,7 +85,7 @@ executable('vkspt',
   sources: app_sources,
   dependencies: dependencies,
   include_directories: includes,
-  link_with: [vkrt, dcimgui],
+  link_with: [vkrt, dcimgui, nfd],
   link_language: 'cpp',
 )
 

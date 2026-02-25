@@ -1,15 +1,17 @@
 #include "session.h"
+#include "render/sequencer.h"
 #include "editor.h"
 #include "controller.h"
 #include "vkrt.h"
 #include "debug.h"
 
-#include <stdio.h>
 #include <stdlib.h>
 
 int main(void) {
     VKRT vkrt = {0};
     Session session = {0};
+    RenderSequencer renderSequencer = {0};
+
     sessionInit(&session);
 
     VKRT_AppHooks hooks = {
@@ -40,18 +42,10 @@ int main(void) {
         VKRT_poll(&vkrt);
         editorUIProcessDialogs(&session);
         meshControllerApplySessionActions(&vkrt, &session);
-
-        SessionRenderCommand renderCommand = SESSION_RENDER_COMMAND_NONE;
-        SessionRenderSettings renderSettings = {0};
-        if (sessionTakeRenderCommand(&session, &renderCommand, &renderSettings)) {
-            if (renderCommand == SESSION_RENDER_COMMAND_START) {
-                VKRT_startRender(&vkrt, renderSettings.width, renderSettings.height, renderSettings.targetSamples);
-            } else if (renderCommand == SESSION_RENDER_COMMAND_STOP) {
-                VKRT_stopRender(&vkrt);
-            }
-        }
+        renderSequencerHandleCommands(&renderSequencer, &vkrt, &session);
 
         VKRT_draw(&vkrt);
+        renderSequencerUpdate(&renderSequencer, &vkrt, &session);
 
         char* savePath = NULL;
         if (sessionTakeRenderSave(&session, &savePath)) {

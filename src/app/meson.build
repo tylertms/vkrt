@@ -3,7 +3,7 @@ app_sources = files(
   'session/session.c',
   'mesh/loader.c',
   'mesh/controller.c',
+  'render/sequencer.c',
   'ui/theme.c',
   'ui/editor.c',
-  '../../external/tinyfiledialogs/tinyfiledialogs.c',
 )

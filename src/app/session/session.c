@@ -1,10 +1,13 @@
 #include "session.h"
 #include "debug.h"
 
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+static const char* kDefaultRenderSequenceFolder = "captures/sequence";
 
 static const char* fileBasename(const char* path) {
     if (!path || !path[0]) return "(unknown)";
@@ -63,6 +66,10 @@ void sessionInit(Session* session) {
     session->meshToRemove = UINT32_MAX;
     session->renderCommand = SESSION_RENDER_COMMAND_NONE;
     session->renderConfig.targetSamples = 1024;
+    session->renderConfig.animation.minTime = 0.0f;
+    session->renderConfig.animation.maxTime = 0.5f;
+    session->renderConfig.animation.timeStep = 0.05f;
+    sessionSetRenderSequenceFolder(session, kDefaultRenderSequenceFolder);
 }
 
 void sessionDeinit(Session* session) {
@@ -77,6 +84,7 @@ void sessionDeinit(Session* session) {
 
     clearOwnedString(&session->meshImportPath);
     clearOwnedString(&session->saveImagePath);
+    clearOwnedString(&session->renderSequenceFolderPath);
 }
 
 void sessionSetMeshName(Session* session, const char* filePath, uint32_t meshIndex) {
@@ -123,6 +131,11 @@ void sessionRequestRenderSaveDialog(Session* session) {
     session->requestRenderSaveDialog = 1;
 }
 
+void sessionRequestRenderSequenceFolderDialog(Session* session) {
+    if (!session) return;
+    session->requestRenderSequenceFolderDialog = 1;
+}
+
 int sessionTakeMeshImportDialogRequest(Session* session) {
     if (!session || !session->requestMeshImportDialog) return 0;
     session->requestMeshImportDialog = 0;
@@ -132,6 +145,12 @@ int sessionTakeMeshImportDialogRequest(Session* session) {
 int sessionTakeRenderSaveDialogRequest(Session* session) {
     if (!session || !session->requestRenderSaveDialog) return 0;
     session->requestRenderSaveDialog = 0;
+    return 1;
+}
+
+int sessionTakeRenderSequenceFolderDialogRequest(Session* session) {
+    if (!session || !session->requestRenderSequenceFolderDialog) return 0;
+    session->requestRenderSequenceFolderDialog = 0;
     return 1;
 }
 
@@ -178,6 +197,21 @@ void sessionQueueRenderSave(Session* session, const char* path) {
     session->saveImagePath = stringDuplicate(path);
 }
 
+void sessionSetRenderSequenceFolder(Session* session, const char* path) {
+    if (!session) return;
+
+    clearOwnedString(&session->renderSequenceFolderPath);
+    if (!path || !path[0]) return;
+    session->renderSequenceFolderPath = stringDuplicate(path);
+}
+
+const char* sessionGetRenderSequenceFolder(const Session* session) {
+    if (!session || !session->renderSequenceFolderPath || !session->renderSequenceFolderPath[0]) {
+        return "";
+    }
+    return session->renderSequenceFolderPath;
+}
+
 int sessionTakeRenderSave(Session* session, char** outPath) {
     if (!session || !session->saveImagePath) return 0;
 
@@ -191,16 +225,22 @@ int sessionTakeRenderSave(Session* session, char** outPath) {
     return 1;
 }
 
-void sessionQueueRenderStart(Session* session, uint32_t width, uint32_t height, uint32_t targetSamples) {
+void sessionQueueRenderStart(Session* session, uint32_t width, uint32_t height, uint32_t targetSamples, const SessionRenderAnimationSettings* animation) {
     if (!session) return;
 
     if (width == 0) width = 1;
     if (height == 0) height = 1;
 
+    SessionRenderAnimationSettings animationSettings = {0};
+    if (animation) {
+        animationSettings = *animation;
+    }
+
     session->renderCommand = SESSION_RENDER_COMMAND_START;
     session->pendingRenderJob.width = width;
     session->pendingRenderJob.height = height;
     session->pendingRenderJob.targetSamples = targetSamples;
+    session->pendingRenderJob.animation = animationSettings;
 }
 
 void sessionQueueRenderStop(Session* session) {
@@ -218,4 +258,24 @@ int sessionTakeRenderCommand(Session* session, SessionRenderCommand* outCommand,
     if (outCommand) *outCommand = command;
     if (outSettings) *outSettings = settings;
     return 1;
+}
+
+void sessionSanitizeAnimationSettings(SessionRenderAnimationSettings* animation) {
+    if (!animation) return;
+    if (!isfinite(animation->minTime) || animation->minTime < 0.0f) animation->minTime = 0.0f;
+    if (!isfinite(animation->maxTime) || animation->maxTime < animation->minTime) animation->maxTime = animation->minTime;
+    if (!isfinite(animation->timeStep) || animation->timeStep <= 0.0f) animation->timeStep = 0.05f;
+}
+
+uint32_t sessionComputeAnimationFrameCount(const SessionRenderAnimationSettings* animation) {
+    if (!animation) return 0;
+    if (!isfinite(animation->minTime) || !isfinite(animation->maxTime) || !isfinite(animation->timeStep)) return 0;
+    if (animation->timeStep <= 0.0f || animation->maxTime < animation->minTime) return 0;
+
+    double span = (double)animation->maxTime - (double)animation->minTime;
+    double steps = floor(span / (double)animation->timeStep + 1e-6);
+    if (!isfinite(steps) || steps < 0.0) return 0;
+    double count = steps + 1.0;
+    if (count > (double)UINT32_MAX) return UINT32_MAX;
+    return (uint32_t)count;
 }
