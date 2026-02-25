@@ -50,12 +50,47 @@ dependencies = [
 ]
 
 nfd_source = []
+nfd_deps = []
+nfd_cpp_args = ['-w']
 sys = host_machine.system()
 
 if sys == 'windows'
   nfd_source = files('external/nfd/src/nfd_win.cpp')
 elif sys == 'linux'
-  nfd_source = files('external/nfd/src/nfd_gtk.cpp')
+  nfd_backend = get_option('nfd_backend')
+
+  dbus_dep = dependency('dbus-1', required: false, method: 'pkg-config')
+  gtk3_dep = dependency('gtk+-3.0', required: false, method: 'pkg-config')
+
+  if nfd_backend == 'portal'
+    if not dbus_dep.found()
+      error('nfd_backend=portal requires dbus-1 development files')
+    endif
+    nfd_source = files('external/nfd/src/nfd_portal.cpp')
+    nfd_deps += dbus_dep
+    nfd_cpp_args += ['-DNFD_PORTAL']
+  elif nfd_backend == 'gtk'
+    if not gtk3_dep.found()
+      error('nfd_backend=gtk requires gtk+-3.0 development files')
+    endif
+    nfd_source = files('external/nfd/src/nfd_gtk.cpp')
+    nfd_deps += gtk3_dep
+  elif nfd_backend == 'auto'
+    if dbus_dep.found()
+      nfd_source = files('external/nfd/src/nfd_portal.cpp')
+      nfd_deps += dbus_dep
+      nfd_cpp_args += ['-DNFD_PORTAL']
+      message('NFD backend: portal (dbus-1)')
+    elif gtk3_dep.found()
+      nfd_source = files('external/nfd/src/nfd_gtk.cpp')
+      nfd_deps += gtk3_dep
+      message('NFD backend: gtk (gtk+-3.0)')
+    else
+      error('No Linux NFD backend found. Install dbus-1 development files (preferred) or gtk+-3.0 development files.')
+    endif
+  else
+    error('Invalid nfd_backend option: ' + nfd_backend)
+  endif
 else
   error('Unsupported platform for nfd')
 endif
@@ -63,7 +98,8 @@ endif
 nfd = static_library('nfd',
   include_directories: include_directories('external/nfd/src/include'),
   sources: nfd_source,
-  cpp_args: ['-w'],
+  dependencies: nfd_deps,
+  cpp_args: nfd_cpp_args,
 )
 
 dcimgui = static_library('dcimgui',

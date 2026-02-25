@@ -1,0 +1,7 @@
+option(
+  'nfd_backend',
+  type: 'combo',
+  choices: ['auto', 'portal', 'gtk'],
+  value: 'auto',
+  description: 'Linux NFD backend. Prefers portal and falls back to gtk.',
+)
