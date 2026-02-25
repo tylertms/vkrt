@@ -17,6 +17,8 @@ struct MeshInfo {
     uint indexBase;
     uint indexCount;
     uint materialIndex;
+    uint renderBackfaces;
+    uint padding0;
 };
 
 layout(set = 0, binding = 0) uniform accelerationStructureEXT topLevelAS;
@@ -42,6 +44,8 @@ layout(set = 0, binding = 6) uniform SceneUniform {
     uvec4 viewportRect;
     float timeBase;
     float timeStep;
+    float fogDensity;
+    float padding0;
 } scene;
 
 layout(set = 0, binding = 7, std430) readonly buffer MeshInfoBuffer {

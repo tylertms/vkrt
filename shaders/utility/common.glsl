@@ -23,6 +23,7 @@ struct Payload {
     vec3 normal;
     uint materialIndex;
     float time;
+    float hitDistance;
 };
 
 vec3 toneMapACES(vec3 x) {

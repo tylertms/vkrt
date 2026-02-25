@@ -20,7 +20,7 @@ static const float kRenderSequenceMinStep = 0.0001f;
 
 static void disableTimeRange(VKRT* vkrt) {
     if (vkrt->state.timeBase >= 0.0f) {
-        VKRT_setTimeRange(vkrt, -1.0f, vkrt->state.timeStep);
+        VKRT_setTimeRange(vkrt, -1.0f, -1.0f);
     }
 }
 
@@ -150,7 +150,7 @@ static int beginSequence(VKRT* vkrt, Session* session, const SessionRenderSettin
     float currentTime = queryFrameTime(sequencer, 0);
     updateSessionProgress(session, sequencer, currentTime);
 
-    VKRT_setTimeRange(vkrt, 0.0f, currentTime);
+    VKRT_setTimeRange(vkrt, minTime, currentTime);
     if (startSequenceRender(vkrt, sequencer) != 0) {
         LOG_ERROR("Failed to start render sequence");
         memset(sequencer, 0, sizeof(*sequencer));
@@ -213,7 +213,7 @@ void renderSequencerUpdate(RenderSequencer* sequencer, VKRT* vkrt, Session* sess
     sequencer->frameIndex = nextFrame;
     float nextTime = queryFrameTime(sequencer, nextFrame);
     updateSessionProgress(session, sequencer, nextTime);
-    VKRT_setTimeRange(vkrt, 0.0f, nextTime);
+    VKRT_setTimeRange(vkrt, sequencer->minTime, nextTime);
 
     if (startSequenceRender(vkrt, sequencer) != 0) {
         LOG_ERROR("Failed to continue render sequence at frame %u", nextFrame);

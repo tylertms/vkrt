@@ -7,8 +7,20 @@
 #define SPNG_STATIC
 #include "spng.h"
 
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <pthread.h>
+
+typedef struct PNGEncodeJob {
+    struct PNGEncodeJob* next;
+    char* path;
+    uint16_t* rgba16;
+    uint32_t width;
+    uint32_t height;
+} PNGEncodeJob;
 
 static int writePNGFile(const char* path, const uint16_t* rgba16, uint32_t width, uint32_t height) {
     FILE* file = fopen(path, "wb");
@@ -52,6 +64,174 @@ static int writePNGFile(const char* path, const uint16_t* rgba16, uint32_t width
     return 0;
 }
 
+static char* duplicateString(const char* value) {
+    if (!value) return NULL;
+    size_t length = strlen(value);
+    char* out = (char*)malloc(length + 1);
+    if (!out) return NULL;
+    memcpy(out, value, length + 1);
+    return out;
+}
+
+static pthread_once_t gPNGWorkerInitOnce = PTHREAD_ONCE_INIT;
+static pthread_mutex_t gPNGWorkerLock;
+static pthread_cond_t gPNGWorkerCondition;
+static pthread_t gPNGWorkerThread;
+static PNGEncodeJob* gPNGWorkerHead = NULL;
+static PNGEncodeJob* gPNGWorkerTail = NULL;
+static int gPNGWorkerStop = 0;
+static int gPNGWorkerInitialized = 0;
+static int gPNGWorkerInitFailed = 0;
+
+static void freePNGEncodeJob(PNGEncodeJob* job) {
+    if (!job) return;
+    free(job->path);
+    free(job->rgba16);
+    free(job);
+}
+
+static void* pngWorkerMain(void* userData) {
+    (void)userData;
+
+    for (;;) {
+        pthread_mutex_lock(&gPNGWorkerLock);
+        while (!gPNGWorkerStop && gPNGWorkerHead == NULL) {
+            pthread_cond_wait(&gPNGWorkerCondition, &gPNGWorkerLock);
+        }
+
+        if (gPNGWorkerStop && gPNGWorkerHead == NULL) {
+            pthread_mutex_unlock(&gPNGWorkerLock);
+            break;
+        }
+
+        PNGEncodeJob* job = gPNGWorkerHead;
+        gPNGWorkerHead = job->next;
+        if (gPNGWorkerHead == NULL) {
+            gPNGWorkerTail = NULL;
+        }
+        pthread_mutex_unlock(&gPNGWorkerLock);
+
+        int result = writePNGFile(job->path, job->rgba16, job->width, job->height);
+        if (result == 0) {
+            LOG_INFO("Saved render PNG: %s", job->path);
+        }
+        freePNGEncodeJob(job);
+    }
+
+    return NULL;
+}
+
+static void initializePNGWorkerOnce(void) {
+    if (pthread_mutex_init(&gPNGWorkerLock, NULL) != 0) {
+        gPNGWorkerInitFailed = 1;
+        return;
+    }
+    if (pthread_cond_init(&gPNGWorkerCondition, NULL) != 0) {
+        pthread_mutex_destroy(&gPNGWorkerLock);
+        gPNGWorkerInitFailed = 1;
+        return;
+    }
+    gPNGWorkerStop = 0;
+    gPNGWorkerHead = NULL;
+    gPNGWorkerTail = NULL;
+
+    if (pthread_create(&gPNGWorkerThread, NULL, pngWorkerMain, NULL) != 0) {
+        pthread_cond_destroy(&gPNGWorkerCondition);
+        pthread_mutex_destroy(&gPNGWorkerLock);
+        gPNGWorkerInitFailed = 1;
+        return;
+    }
+
+    gPNGWorkerInitialized = 1;
+}
+
+static int ensurePNGWorkerStarted(void) {
+    pthread_once(&gPNGWorkerInitOnce, initializePNGWorkerOnce);
+    if (!gPNGWorkerInitialized || gPNGWorkerInitFailed) {
+        LOG_ERROR("Failed to initialize PNG exporter worker");
+        return -1;
+    }
+    return 0;
+}
+
+static int queuePNGWrite(const char* path, uint16_t* rgba16, uint32_t width, uint32_t height) {
+    if (!path || !rgba16 || width == 0 || height == 0) {
+        free(rgba16);
+        return -1;
+    }
+
+    if (ensurePNGWorkerStarted() != 0) {
+        free(rgba16);
+        return -1;
+    }
+
+    PNGEncodeJob* job = (PNGEncodeJob*)calloc(1, sizeof(PNGEncodeJob));
+    if (!job) {
+        free(rgba16);
+        LOG_ERROR("Failed to allocate PNG export job");
+        return -1;
+    }
+
+    job->path = duplicateString(path);
+    if (!job->path) {
+        free(rgba16);
+        free(job);
+        LOG_ERROR("Failed to allocate PNG export path");
+        return -1;
+    }
+
+    job->rgba16 = rgba16;
+    job->width = width;
+    job->height = height;
+    job->next = NULL;
+
+    pthread_mutex_lock(&gPNGWorkerLock);
+    if (gPNGWorkerStop) {
+        pthread_mutex_unlock(&gPNGWorkerLock);
+        freePNGEncodeJob(job);
+        LOG_ERROR("PNG exporter is shutting down");
+        return -1;
+    }
+
+    if (gPNGWorkerTail) {
+        gPNGWorkerTail->next = job;
+    } else {
+        gPNGWorkerHead = job;
+    }
+    gPNGWorkerTail = job;
+    pthread_cond_signal(&gPNGWorkerCondition);
+    pthread_mutex_unlock(&gPNGWorkerLock);
+
+    return 0;
+}
+
+void shutdownRenderPNGExporter(void) {
+    if (!gPNGWorkerInitialized) return;
+
+    pthread_mutex_lock(&gPNGWorkerLock);
+    gPNGWorkerStop = 1;
+    pthread_cond_broadcast(&gPNGWorkerCondition);
+    pthread_mutex_unlock(&gPNGWorkerLock);
+
+    pthread_join(gPNGWorkerThread, NULL);
+
+    pthread_mutex_lock(&gPNGWorkerLock);
+    PNGEncodeJob* job = gPNGWorkerHead;
+    gPNGWorkerHead = NULL;
+    gPNGWorkerTail = NULL;
+    pthread_mutex_unlock(&gPNGWorkerLock);
+
+    while (job) {
+        PNGEncodeJob* next = job->next;
+        freePNGEncodeJob(job);
+        job = next;
+    }
+
+    pthread_cond_destroy(&gPNGWorkerCondition);
+    pthread_mutex_destroy(&gPNGWorkerLock);
+    gPNGWorkerInitialized = 0;
+}
+
 int saveCurrentRenderPNG(VKRT* vkrt, const char* path) {
     if (!vkrt || !path || !path[0]) return -1;
     if (vkrt->core.storageImage == VK_NULL_HANDLE) {
@@ -81,8 +261,6 @@ int saveCurrentRenderPNG(VKRT* vkrt, const char* path) {
     VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
     void* mapped = NULL;
     int result = -1;
-
-    vkDeviceWaitIdle(vkrt->core.device);
 
     createBuffer(vkrt,
         readbackBytes,
@@ -116,9 +294,17 @@ int saveCurrentRenderPNG(VKRT* vkrt, const char* path) {
     endSingleTimeCommands(vkrt, commandBuffer);
 
     if (vkMapMemory(vkrt->core.device, stagingMemory, 0, readbackBytes, 0, &mapped) == VK_SUCCESS) {
-        result = writePNGFile(path, (const uint16_t*)mapped, width, height);
-        if (result == 0) {
-            LOG_INFO("Saved render PNG: %s", path);
+        uint16_t* readbackCopy = (uint16_t*)malloc((size_t)readbackBytes);
+        if (!readbackCopy) {
+            LOG_ERROR("Failed to allocate PNG snapshot buffer");
+        } else {
+            memcpy(readbackCopy, mapped, (size_t)readbackBytes);
+            result = queuePNGWrite(path, readbackCopy, width, height);
+            if (result == 0) {
+                LOG_TRACE("Queued render PNG save: %s", path);
+            } else {
+                LOG_ERROR("Failed to queue PNG export: %s", path);
+            }
         }
         vkUnmapMemory(vkrt->core.device, stagingMemory);
     } else {

@@ -26,6 +26,8 @@ typedef struct SceneData {
     uint32_t viewportRect[4];
     float timeBase;
     float timeStep;
+    float fogDensity;
+    float padding0;
 } SceneData;
 
 typedef enum VKRT_ToneMappingMode {
@@ -86,7 +88,8 @@ typedef struct MeshInfo {
     uint32_t indexBase;
     uint32_t indexCount;
     uint32_t materialIndex;
-    uint32_t padding[2];
+    uint32_t renderBackfaces;
+    uint32_t padding;
 } MeshInfo;
 
 typedef struct MaterialData {
@@ -213,7 +216,6 @@ typedef struct VKRT_Runtime {
     VkPresentModeKHR presentMode;
     float displayRefreshHz;
     uint32_t autoSPPFastAdaptFrames;
-    uint8_t preRenderAutoSPPEnabled;
     VkBool32 swapchainFormatLogInitialized;
     VkFormat lastLoggedSwapchainFormat;
     VkColorSpaceKHR lastLoggedSwapchainColorSpace;
@@ -246,6 +248,7 @@ typedef struct VKRT_PublicState {
     float autoSPPTargetFrameMs;
     float autoSPPControlMs;
     uint32_t autoSPPFramesUntilNextAdjust;
+    float fogDensity;
     float timeBase;
     float timeStep;
 } VKRT_PublicState;
@@ -282,6 +285,7 @@ void VKRT_setSamplesPerPixel(VKRT* vkrt, uint32_t samplesPerPixel);
 void VKRT_setAutoSPPEnabled(VKRT* vkrt, uint8_t enabled);
 void VKRT_setAutoSPPTargetFPS(VKRT* vkrt, uint32_t targetFPS);
 void VKRT_setToneMappingMode(VKRT* vkrt, VKRT_ToneMappingMode toneMappingMode);
+void VKRT_setFogDensity(VKRT* vkrt, float fogDensity);
 void VKRT_setTimeRange(VKRT* vkrt, float timeBase, float timeStep);
 int VKRT_saveRenderPNG(VKRT* vkrt, const char* path);
 int VKRT_startRender(VKRT* vkrt, uint32_t width, uint32_t height, uint32_t targetSamples);
@@ -291,6 +295,7 @@ void VKRT_stopRender(VKRT* vkrt);
 uint32_t VKRT_getMeshCount(const VKRT* vkrt);
 int VKRT_setMeshTransform(VKRT* vkrt, uint32_t meshIndex, vec3 position, vec3 rotation, vec3 scale);
 int VKRT_setMeshMaterial(VKRT* vkrt, uint32_t meshIndex, const MaterialData* material);
+int VKRT_setMeshRenderBackfaces(VKRT* vkrt, uint32_t meshIndex, uint8_t renderBackfaces);
 void VKRT_setRenderViewport(VKRT* vkrt, uint32_t x, uint32_t y, uint32_t width, uint32_t height);
 void VKRT_cameraSetPose(VKRT* vkrt, vec3 position, vec3 target, vec3 up, float vfov);
 void VKRT_cameraGetPose(const VKRT* vkrt, vec3 position, vec3 target, vec3 up, float* vfov);

@@ -1,6 +1,7 @@
 #version 460
 #extension GL_EXT_ray_tracing : enable
 #include "utility/bindings.glsl"
+#include "utility/fog.glsl"
 #include "bsdf/eval.glsl"
 
 layout(location = 0) rayPayloadEXT Payload payload;
@@ -8,6 +9,9 @@ layout(location = 0) rayPayloadEXT Payload payload;
 vec3 traceSample(ivec2 pixel, inout uint state) {
     ivec2 viewportOrigin = ivec2(scene.viewportRect.xy);
     ivec2 viewportSize = ivec2(scene.viewportRect.zw);
+    const float rayMinDistance = 0.001;
+    const float rayMaxDistance = 10000.0;
+    const uint rayFlags = gl_RayFlagsOpaqueEXT | gl_RayFlagsCullBackFacingTrianglesEXT;
 
     vec2 jitter = vec2(rand(state), rand(state));
     vec2 viewportPixel = vec2(pixel - viewportOrigin) + jitter;
@@ -25,17 +29,40 @@ vec3 traceSample(ivec2 pixel, inout uint state) {
 
     payload.time = 0;
     bool timeLimitEnabled = scene.timeBase >= 0.0;
-    float timeMax = scene.timeStep;
-
+    float timeMin = max(scene.timeBase, 0.0);
+    float timeMax = max(scene.timeStep, timeMin);
+    float fogDensity = max(scene.fogDensity, 0.0);
     for (uint i = 0; i < max(scene.maxBounces, 1u); i++) {
-        payload.didHit = false;
-        traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, 0xFF, 0, 0, 0, ray.origin, 0.001, ray.dir, 10000.0, 0);
+        float traceDistanceMax = rayMaxDistance;
+        if (timeLimitEnabled) {
+            float remainingTime = timeMax - payload.time;
+            if (remainingTime <= rayMinDistance) break;
+            traceDistanceMax = min(traceDistanceMax, remainingTime);
+        }
 
-        if (!payload.didHit) break;
+        payload.didHit = false;
+        payload.hitDistance = traceDistanceMax;
+        traceRayEXT(topLevelAS, rayFlags, 0xFF, 0, 0, 0, ray.origin, rayMinDistance, ray.dir, traceDistanceMax, 0);
+
+        float segmentDistance = payload.didHit ? max(payload.hitDistance, rayMinDistance) : traceDistanceMax;
+        float traveledDistance = segmentDistance;
+
+        if (applyFogSegment(fogDensity, segmentDistance, state, ray, throughput, traveledDistance)) {
+            payload.time += traveledDistance;
+            if (timeLimitEnabled && payload.time > timeMax) break;
+            continue;
+        }
+
+        payload.time += traveledDistance;
         if (timeLimitEnabled && payload.time > timeMax) break;
 
+        if (!payload.didHit) break;
+
         Material material = materialBuffer.materials[payload.materialIndex];
-        radiance += throughput * (material.emissionColor * material.emissionStrength);
+        bool timeInWindow = !timeLimitEnabled || payload.time >= timeMin;
+        if (timeInWindow) {
+            radiance += throughput * (material.emissionColor * material.emissionStrength);
+        }
 
         evalBSDF(payload, material, ray, throughput, state);
     }

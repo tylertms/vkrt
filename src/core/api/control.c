@@ -321,6 +321,8 @@ void VKRT_uploadMeshData(VKRT* vkrt, const Vertex* vertices, size_t vertexCount,
     mesh->info.vertexCount = (uint32_t)vertexCount;
     mesh->info.indexCount = (uint32_t)indexCount;
     mesh->info.materialIndex = newIndex;
+    mesh->info.renderBackfaces = 0;
+    mesh->info.padding = 0;
 
     mesh->material = (MaterialData){
         .baseColor = {1.0f, 1.0f, 1.0f},
@@ -479,8 +481,28 @@ void VKRT_setToneMappingMode(VKRT* vkrt, VKRT_ToneMappingMode toneMappingMode) {
     resetSceneData(vkrt);
 }
 
+void VKRT_setFogDensity(VKRT* vkrt, float fogDensity) {
+    if (!vkrt) return;
+    if (!(fogDensity >= 0.0f)) fogDensity = 0.0f;
+
+    if (vkrt->state.fogDensity == fogDensity) return;
+    vkrt->state.fogDensity = fogDensity;
+    if (vkrt->core.sceneData) {
+        vkrt->core.sceneData->fogDensity = fogDensity;
+    }
+
+    resetSceneData(vkrt);
+}
+
 void VKRT_setTimeRange(VKRT* vkrt, float timeBase, float timeStep) {
     if (!vkrt) return;
+
+    if (timeBase < 0.0f) {
+        timeBase = -1.0f;
+        timeStep = -1.0f;
+    } else if (timeStep < timeBase) {
+        timeStep = timeBase;
+    }
 
     vkrt->state.timeBase = timeBase;
     vkrt->state.timeStep = timeStep;
@@ -514,6 +536,19 @@ int VKRT_setMeshMaterial(VKRT* vkrt, uint32_t meshIndex, const MaterialData* mat
 
     vkrt->core.meshes[meshIndex].material = *material;
     vkrt->core.materialDataDirty = VK_TRUE;
+    resetSceneData(vkrt);
+    return 0;
+}
+
+int VKRT_setMeshRenderBackfaces(VKRT* vkrt, uint32_t meshIndex, uint8_t renderBackfaces) {
+    if (!vkrt || meshIndex >= vkrt->core.meshData.count) return -1;
+
+    uint32_t next = renderBackfaces ? 1u : 0u;
+    MeshInfo* info = &vkrt->core.meshes[meshIndex].info;
+    if (info->renderBackfaces == next) return 0;
+
+    info->renderBackfaces = next;
+    vkrt->core.topLevelAccelerationStructure.needsRebuild = 1;
     resetSceneData(vkrt);
     return 0;
 }
@@ -584,26 +619,35 @@ int VKRT_startRender(VKRT* vkrt, uint32_t width, uint32_t height, uint32_t targe
     if (width > 16384) width = 16384;
     if (height > 16384) height = 16384;
 
-    if (!vkrt->state.renderModeActive) {
-        vkrt->runtime.preRenderAutoSPPEnabled = vkrt->state.autoSPPEnabled;
+    VkBool32 wasRenderModeActive = vkrt->state.renderModeActive != 0;
+    VkBool32 extentChanged = vkrt->runtime.renderExtent.width != width || vkrt->runtime.renderExtent.height != height;
+    if (vkrt->state.samplesPerPixel == 0) {
+        vkrt->state.samplesPerPixel = 1;
+        vkrt->core.sceneData->samplesPerPixel = 1;
     }
 
     vkrt->runtime.renderExtent = (VkExtent2D){width, height};
     recreateRenderTargets(vkrt);
 
-    vkrt->state.autoSPPEnabled = 0;
     vkrt->state.renderModeActive = 1;
     vkrt->state.renderModeFinished = 0;
     vkrt->state.renderTargetSamples = targetSamples;
     vkrt->state.renderViewZoom = 1.0f;
     vkrt->state.renderViewPanX = 0.0f;
     vkrt->state.renderViewPanY = 0.0f;
-    vkrt->state.displayRenderTimeMs = 0.0f;
-    vkrt->state.displayFrameTimeMs = 0.0f;
-    vkrt->state.lastFrameTimestamp = 0;
-    vkrt->state.autoSPPControlMs = 0.0f;
-    vkrt->state.autoSPPFramesUntilNextAdjust = 0;
-    vkrt->runtime.autoSPPFastAdaptFrames = 8;
+
+    if (!wasRenderModeActive || extentChanged) {
+        vkrt->state.displayRenderTimeMs = 0.0f;
+        vkrt->state.displayFrameTimeMs = 0.0f;
+        vkrt->state.lastFrameTimestamp = 0;
+        vkrt->state.autoSPPControlMs = 0.0f;
+        vkrt->state.autoSPPFramesUntilNextAdjust = 0;
+        vkrt->runtime.autoSPPFastAdaptFrames = vkrt->state.autoSPPEnabled ? 8 : 0;
+    } else if (!vkrt->state.autoSPPEnabled) {
+        vkrt->state.autoSPPControlMs = 0.0f;
+        vkrt->state.autoSPPFramesUntilNextAdjust = 0;
+        vkrt->runtime.autoSPPFastAdaptFrames = 0;
+    }
 
     applySceneViewport(vkrt, 0, 0, width, height);
     return 0;
@@ -616,7 +660,6 @@ void VKRT_stopRenderSampling(VKRT* vkrt) {
 
 void VKRT_stopRender(VKRT* vkrt) {
     if (!vkrt || !vkrt->state.renderModeActive) return;
-    const uint32_t autoSPPResumeDelay = 24;
 
     vkrt->state.renderModeActive = 0;
     vkrt->state.renderModeFinished = 0;
@@ -625,10 +668,9 @@ void VKRT_stopRender(VKRT* vkrt) {
     vkrt->state.renderViewPanX = 0.0f;
     vkrt->state.renderViewPanY = 0.0f;
 
-    vkrt->state.autoSPPEnabled = vkrt->runtime.preRenderAutoSPPEnabled ? 1 : 0;
     vkrt->state.autoSPPControlMs = 0.0f;
-    vkrt->state.autoSPPFramesUntilNextAdjust = vkrt->state.autoSPPEnabled ? autoSPPResumeDelay : 0;
-    vkrt->runtime.autoSPPFastAdaptFrames = 0;
+    vkrt->state.autoSPPFramesUntilNextAdjust = 0;
+    vkrt->runtime.autoSPPFastAdaptFrames = vkrt->state.autoSPPEnabled ? 8 : 0;
 
     vkrt->runtime.renderExtent = vkrt->runtime.swapChainExtent;
     recreateRenderTargets(vkrt);

@@ -306,7 +306,10 @@ void createTopLevelAccelerationStructure(VKRT* vkrt) {
         inst.instanceCustomIndex = i;
         inst.mask = 0xFF;
         inst.instanceShaderBindingTableRecordOffset = 0;
-        inst.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
+        inst.flags = 0;
+        if (meshInfo.renderBackfaces) {
+            inst.flags |= VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
+        }
         inst.accelerationStructureReference = vkrt->core.meshes[i].bottomLevelAccelerationStructure.deviceAddress;
 
         instances[i] = inst;

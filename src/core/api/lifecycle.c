@@ -10,6 +10,7 @@
 #include "surface.h"
 #include "swapchain.h"
 #include "validation.h"
+#include "export.h"
 #include "debug.h"
 #include "vkrt.h"
 
@@ -54,7 +55,6 @@ int VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInfo) {
 
     vkrt->runtime.vsync = createInfo->vsync;
     vkrt->runtime.autoSPPFastAdaptFrames = 0;
-    vkrt->runtime.preRenderAutoSPPEnabled = 0;
     vkrt->runtime.swapchainFormatLogInitialized = VK_FALSE;
     vkrt->runtime.lastLoggedSwapchainFormat = VK_FORMAT_UNDEFINED;
     vkrt->runtime.lastLoggedSwapchainColorSpace = VK_COLOR_SPACE_MAX_ENUM_KHR;
@@ -180,6 +180,10 @@ void VKRT_deinit(VKRT* vkrt) {
     if (vkrt->core.device != VK_NULL_HANDLE) {
         vkDeviceWaitIdle(vkrt->core.device);
         logStepTime("Device idle wait complete", stepStartTime);
+
+        stepStartTime = getMicroseconds();
+        shutdownRenderPNGExporter();
+        logStepTime("PNG export worker shutdown complete", stepStartTime);
 
         stepStartTime = getMicroseconds();
         if (vkrt->appHooks.deinit) {

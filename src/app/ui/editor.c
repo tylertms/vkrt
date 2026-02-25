@@ -249,6 +249,12 @@ static void drawPerformanceSection(VKRT* vkrt, bool controlsDisabled) {
         VKRT_invalidateAccumulation(vkrt);
     }
 
+    float fogDensity = vkrt->state.fogDensity;
+    if (ImGui_DragFloatEx("Fog Density", &fogDensity, 0.0005f, 0.0f, 4.0f, "%.4f", ImGuiSliderFlags_AlwaysClamp)) {
+        VKRT_setFogDensity(vkrt, fogDensity);
+    }
+    tooltipOnHover("Global homogeneous fog density.");
+
     const char* toneMappingLabels[] = {"None", "ACES"};
     int toneMappingMode = (int)vkrt->state.toneMappingMode;
     if (ImGui_ComboCharEx("Tone Mapping", &toneMappingMode, toneMappingLabels, 2, 2)) {
@@ -268,6 +274,35 @@ static uint32_t clampRenderDimension(int value) {
     if (value < 1) return 1;
     if (value > 16384) return 16384;
     return (uint32_t)value;
+}
+
+static void drawCameraSection(VKRT* vkrt, bool renderModeActive) {
+    (void)renderModeActive;
+    drawInspectorSeparator();
+
+    if (!ImGui_CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) return;
+
+    vec3 position = {0.0f, 0.0f, 0.0f};
+    vec3 target = {0.0f, 0.0f, 0.0f};
+    vec3 up = {0.0f, 0.0f, 1.0f};
+    float fov = 40.0f;
+    VKRT_cameraGetPose(vkrt, position, target, up, &fov);
+
+    bool changed = false;
+    changed |= ImGui_DragFloat3Ex("Position", position, 0.01f, 0.0f, 0.0f, "%.3f", ImGuiSliderFlags_None);
+    changed |= ImGui_DragFloat3Ex("Target", target, 0.01f, 0.0f, 0.0f, "%.3f", ImGuiSliderFlags_None);
+    bool fovChanged = ImGui_SliderFloatEx("FOV", &fov, 10.0f, 140.0f, "%.1f deg", ImGuiSliderFlags_AlwaysClamp);
+
+    if (!changed && !fovChanged) return;
+
+    vec3 viewDir;
+    glm_vec3_sub(target, position, viewDir);
+    if (glm_vec3_norm2(viewDir) < 1e-8f) {
+        target[0] = position[0] + 0.001f;
+        target[1] = position[1];
+        target[2] = position[2];
+    }
+    VKRT_cameraSetPose(vkrt, position, target, up, fov);
 }
 
 
@@ -591,6 +626,12 @@ static void drawMeshInspector(VKRT* vkrt, Session* session) {
             VKRT_setMeshTransform(vkrt, meshIndex, position, rotation, scale);
         }
 
+        bool renderBackfaces = meshInfo->renderBackfaces != 0;
+        if (ImGui_Checkbox("Render Backfaces", &renderBackfaces)) {
+            VKRT_setMeshRenderBackfaces(vkrt, meshIndex, renderBackfaces ? 1 : 0);
+        }
+        tooltipOnHover("Disable backface culling for this mesh instance.");
+
         MaterialData material = mesh->material;
         bool materialChanged = false;
         materialChanged |= ImGui_ColorEdit3("Base Color", material.baseColor, ImGuiColorEditFlags_Float);
@@ -627,6 +668,7 @@ static void drawSceneInspectorWindow(VKRT* vkrt, Session* session) {
     ImGui_PopStyleColor();
 
     drawConfigSection(vkrt, renderModeActive);
+    drawCameraSection(vkrt, renderModeActive);
     drawRenderSection(vkrt, session);
     drawPerformanceSection(vkrt, renderModeActive);
     drawEditorSection(vkrt, session, renderModeActive);

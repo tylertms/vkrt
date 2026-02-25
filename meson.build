@@ -45,6 +45,7 @@ dependencies = [
   dependency('vulkan', required: true),
   dependency('glfw3', static: true),
   dependency('zlib', required: true),
+  dependency('threads'),
   dependency('rt', required: false),
 ]
 
