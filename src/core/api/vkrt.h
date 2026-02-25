@@ -13,6 +13,9 @@ extern "C" {
 
 #define MAX_FRAMES_IN_FLIGHT 2
 
+#define VKRT_RENDER_VIEW_ZOOM_MIN 1.0f
+#define VKRT_RENDER_VIEW_ZOOM_MAX 64.0f
+
 typedef struct SceneData {
     mat4 viewInverse;
     mat4 projInverse;
@@ -188,6 +191,8 @@ typedef struct VKRT_Runtime {
     size_t swapChainImageCount;
     VkFormat swapChainImageFormat;
     VkExtent2D swapChainExtent;
+    VkExtent2D renderExtent;
+    uint32_t displayViewportRect[4];
     VkRenderPass renderPass;
     VkFramebuffer* framebuffers;
     VkCommandPool commandPool;
@@ -204,9 +209,11 @@ typedef struct VKRT_Runtime {
     VkBool32 frameAcquired;
     VkBool32 frameSubmitted;
     VkBool32 framePresented;
+    VkBool32 frameTraced;
     VkPresentModeKHR presentMode;
     float displayRefreshHz;
     uint32_t autoSPPFastAdaptFrames;
+    uint8_t preRenderAutoSPPEnabled;
     VkBool32 swapchainFormatLogInitialized;
     VkFormat lastLoggedSwapchainFormat;
     VkColorSpaceKHR lastLoggedSwapchainColorSpace;
@@ -224,6 +231,12 @@ typedef struct VKRT_PublicState {
     uint32_t accumulationFrame;
     uint32_t samplesPerPixel;
     uint64_t totalSamples;
+    uint8_t renderModeActive;
+    uint8_t renderModeFinished;
+    uint32_t renderTargetSamples;
+    float renderViewZoom;
+    float renderViewPanX;
+    float renderViewPanY;
     float displayRenderTimeMs;
     float displayFrameTimeMs;
     uint32_t maxBounces;
@@ -270,7 +283,10 @@ void VKRT_setAutoSPPEnabled(VKRT* vkrt, uint8_t enabled);
 void VKRT_setAutoSPPTargetFPS(VKRT* vkrt, uint32_t targetFPS);
 void VKRT_setToneMappingMode(VKRT* vkrt, VKRT_ToneMappingMode toneMappingMode);
 void VKRT_setTimeRange(VKRT* vkrt, float timeBase, float timeStep);
-int VKRT_saveCurrentRenderPNG(VKRT* vkrt, const char* path);
+int VKRT_saveRenderPNG(VKRT* vkrt, const char* path);
+int VKRT_startRender(VKRT* vkrt, uint32_t width, uint32_t height, uint32_t targetSamples);
+void VKRT_stopRenderSampling(VKRT* vkrt);
+void VKRT_stopRender(VKRT* vkrt);
 
 uint32_t VKRT_getMeshCount(const VKRT* vkrt);
 int VKRT_setMeshTransform(VKRT* vkrt, uint32_t meshIndex, vec3 position, vec3 rotation, vec3 scale);

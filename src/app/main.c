@@ -38,12 +38,25 @@ int main(void) {
 
     while (!VKRT_shouldDeinit(&vkrt)) {
         VKRT_poll(&vkrt);
-        meshControllerApplyPendingActions(&vkrt, &session);
+        editorUIProcessDialogs(&session);
+        meshControllerApplySessionActions(&vkrt, &session);
+
+        SessionRenderCommand renderCommand = SESSION_RENDER_COMMAND_NONE;
+        SessionRenderSettings renderSettings = {0};
+        if (sessionTakeRenderCommand(&session, &renderCommand, &renderSettings)) {
+            if (renderCommand == SESSION_RENDER_COMMAND_START) {
+                VKRT_startRender(&vkrt, renderSettings.width, renderSettings.height, renderSettings.targetSamples);
+            } else if (renderCommand == SESSION_RENDER_COMMAND_STOP) {
+                VKRT_stopRender(&vkrt);
+            }
+        }
+
         VKRT_draw(&vkrt);
 
-        if (session.pendingRenderSavePath) {
-            VKRT_saveCurrentRenderPNG(&vkrt, session.pendingRenderSavePath);
-            sessionClearQueuedRenderSave(&session);
+        char* savePath = NULL;
+        if (sessionTakeRenderSave(&session, &savePath)) {
+            VKRT_saveRenderPNG(&vkrt, savePath);
+            free(savePath);
         }
     }
 

@@ -4,5 +4,5 @@
 #include "vkrt.h"
 
 void meshControllerImportMesh(VKRT* vkrt, Session* session, const char* path);
-void meshControllerApplyPendingActions(VKRT* vkrt, Session* session);
+void meshControllerApplySessionActions(VKRT* vkrt, Session* session);
 void meshControllerLoadDefaultAssets(VKRT* vkrt, Session* session);

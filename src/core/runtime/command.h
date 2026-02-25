@@ -9,3 +9,4 @@ VkCommandBuffer beginSingleTimeCommands(VKRT* vkrt);
 void endSingleTimeCommands(VKRT* vkrt, VkCommandBuffer commandBuffer);
 void transitionImageLayout(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout);
 void createStorageImage(VKRT* vkrt);
+void destroyStorageImage(VKRT* vkrt);

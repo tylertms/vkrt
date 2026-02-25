@@ -8,9 +8,9 @@
 
 void applyCameraInput(VKRT* vkrt, const VKRT_CameraInput* input) {
     if (!vkrt || !input) return;
-    const float panSpeed = 0.0015f;
+    const float panSpeed = 0.001f;
     const float orbitSpeed = 0.004f;
-    const float zoomSpeed = -0.1f;
+    const float zoomSpeed = -0.075f;
 
     if (input->captureMouse) return;
 
@@ -125,10 +125,21 @@ void createSceneUniform(VKRT* vkrt) {
 
     uint32_t initialWidth = vkrt->runtime.swapChainExtent.width ? vkrt->runtime.swapChainExtent.width : WIDTH;
     uint32_t initialHeight = vkrt->runtime.swapChainExtent.height ? vkrt->runtime.swapChainExtent.height : HEIGHT;
+    vkrt->runtime.renderExtent = (VkExtent2D){initialWidth, initialHeight};
+    vkrt->runtime.displayViewportRect[0] = 0;
+    vkrt->runtime.displayViewportRect[1] = 0;
+    vkrt->runtime.displayViewportRect[2] = initialWidth;
+    vkrt->runtime.displayViewportRect[3] = initialHeight;
 
     vkrt->state.samplesPerPixel = 8;
     vkrt->state.maxBounces = 8;
     vkrt->state.toneMappingMode = VKRT_TONE_MAPPING_ACES;
+    vkrt->state.renderModeActive = 0;
+    vkrt->state.renderModeFinished = 0;
+    vkrt->state.renderTargetSamples = 0;
+    vkrt->state.renderViewZoom = 1.0f;
+    vkrt->state.renderViewPanX = 0.0f;
+    vkrt->state.renderViewPanY = 0.0f;
     vkrt->state.autoSPPEnabled = 1;
     float refreshHz = vkrt->runtime.displayRefreshHz;
     if (refreshHz <= 0.0f) refreshHz = 60.0f;
@@ -184,6 +195,7 @@ void resetSceneData(VKRT* vkrt) {
     vkrt->core.sceneData->toneMappingMode = vkrt->state.toneMappingMode;
     vkrt->core.sceneData->timeBase = vkrt->state.timeBase;
     vkrt->core.sceneData->timeStep = vkrt->state.timeStep;
+    vkrt->state.renderModeFinished = 0;
     vkrt->state.accumulationFrame = 0;
     vkrt->state.totalSamples = 0;
     vkrt->state.averageFrametime = 0.0f;

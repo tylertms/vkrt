@@ -33,6 +33,12 @@ static char* stringDuplicate(const char* value) {
     return copy;
 }
 
+static void clearOwnedString(char** value) {
+    if (!value || !*value) return;
+    free(*value);
+    *value = NULL;
+}
+
 static void ensureMeshSlotCount(Session* session, uint32_t requiredCount) {
     if (!session || requiredCount <= session->meshCount) return;
 
@@ -54,7 +60,9 @@ void sessionInit(Session* session) {
     if (!session) return;
 
     memset(session, 0, sizeof(*session));
-    session->pendingMeshRemovalIndex = UINT32_MAX;
+    session->meshToRemove = UINT32_MAX;
+    session->renderCommand = SESSION_RENDER_COMMAND_NONE;
+    session->renderConfig.targetSamples = 1024;
 }
 
 void sessionDeinit(Session* session) {
@@ -64,12 +72,11 @@ void sessionDeinit(Session* session) {
         free(session->meshNames[index]);
     }
     free(session->meshNames);
-
     session->meshNames = NULL;
     session->meshCount = 0;
 
-    sessionClearQueuedMeshImport(session);
-    sessionClearQueuedRenderSave(session);
+    clearOwnedString(&session->meshImportPath);
+    clearOwnedString(&session->saveImagePath);
 }
 
 void sessionSetMeshName(Session* session, const char* filePath, uint32_t meshIndex) {
@@ -103,38 +110,112 @@ const char* sessionGetMeshName(const Session* session, uint32_t meshIndex) {
     if (!session || meshIndex >= session->meshCount || !session->meshNames[meshIndex]) {
         return "(unknown)";
     }
-
     return session->meshNames[meshIndex];
+}
+
+void sessionRequestMeshImportDialog(Session* session) {
+    if (!session) return;
+    session->requestMeshImportDialog = 1;
+}
+
+void sessionRequestRenderSaveDialog(Session* session) {
+    if (!session) return;
+    session->requestRenderSaveDialog = 1;
+}
+
+int sessionTakeMeshImportDialogRequest(Session* session) {
+    if (!session || !session->requestMeshImportDialog) return 0;
+    session->requestMeshImportDialog = 0;
+    return 1;
+}
+
+int sessionTakeRenderSaveDialogRequest(Session* session) {
+    if (!session || !session->requestRenderSaveDialog) return 0;
+    session->requestRenderSaveDialog = 0;
+    return 1;
 }
 
 void sessionQueueMeshImport(Session* session, const char* path) {
     if (!session) return;
 
-    sessionClearQueuedMeshImport(session);
+    clearOwnedString(&session->meshImportPath);
     if (!path || !path[0]) return;
-
-    session->pendingMeshImportPath = stringDuplicate(path);
+    session->meshImportPath = stringDuplicate(path);
 }
 
-void sessionClearQueuedMeshImport(Session* session) {
-    if (!session || !session->pendingMeshImportPath) return;
+void sessionQueueMeshRemoval(Session* session, uint32_t meshIndex) {
+    if (!session) return;
+    session->meshToRemove = meshIndex;
+}
 
-    free(session->pendingMeshImportPath);
-    session->pendingMeshImportPath = NULL;
+int sessionTakeMeshImport(Session* session, char** outPath) {
+    if (!session || !session->meshImportPath) return 0;
+
+    char* path = session->meshImportPath;
+    session->meshImportPath = NULL;
+    if (outPath) {
+        *outPath = path;
+    } else {
+        free(path);
+    }
+    return 1;
+}
+
+int sessionTakeMeshRemoval(Session* session, uint32_t* outMeshIndex) {
+    if (!session || session->meshToRemove == UINT32_MAX) return 0;
+
+    if (outMeshIndex) *outMeshIndex = session->meshToRemove;
+    session->meshToRemove = UINT32_MAX;
+    return 1;
 }
 
 void sessionQueueRenderSave(Session* session, const char* path) {
     if (!session) return;
 
-    sessionClearQueuedRenderSave(session);
+    clearOwnedString(&session->saveImagePath);
     if (!path || !path[0]) return;
 
-    session->pendingRenderSavePath = stringDuplicate(path);
+    session->saveImagePath = stringDuplicate(path);
 }
 
-void sessionClearQueuedRenderSave(Session* session) {
-    if (!session || !session->pendingRenderSavePath) return;
+int sessionTakeRenderSave(Session* session, char** outPath) {
+    if (!session || !session->saveImagePath) return 0;
 
-    free(session->pendingRenderSavePath);
-    session->pendingRenderSavePath = NULL;
+    char* path = session->saveImagePath;
+    session->saveImagePath = NULL;
+    if (outPath) {
+        *outPath = path;
+    } else {
+        free(path);
+    }
+    return 1;
+}
+
+void sessionQueueRenderStart(Session* session, uint32_t width, uint32_t height, uint32_t targetSamples) {
+    if (!session) return;
+
+    if (width == 0) width = 1;
+    if (height == 0) height = 1;
+
+    session->renderCommand = SESSION_RENDER_COMMAND_START;
+    session->pendingRenderJob.width = width;
+    session->pendingRenderJob.height = height;
+    session->pendingRenderJob.targetSamples = targetSamples;
+}
+
+void sessionQueueRenderStop(Session* session) {
+    if (!session) return;
+    session->renderCommand = SESSION_RENDER_COMMAND_STOP;
+}
+
+int sessionTakeRenderCommand(Session* session, SessionRenderCommand* outCommand, SessionRenderSettings* outSettings) {
+    if (!session || session->renderCommand == SESSION_RENDER_COMMAND_NONE) return 0;
+
+    SessionRenderCommand command = session->renderCommand;
+    SessionRenderSettings settings = session->pendingRenderJob;
+    session->renderCommand = SESSION_RENDER_COMMAND_NONE;
+
+    if (outCommand) *outCommand = command;
+    if (outSettings) *outSettings = settings;
+    return 1;
 }

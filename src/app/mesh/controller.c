@@ -3,6 +3,7 @@
 #include "debug.h"
 
 #include <stdint.h>
+#include <stdlib.h>
 
 void meshControllerImportMesh(VKRT* vkrt, Session* session, const char* path) {
     if (!path || !path[0]) return;
@@ -21,17 +22,16 @@ void meshControllerImportMesh(VKRT* vkrt, Session* session, const char* path) {
         (double)(getMicroseconds() - startTime) / 1e3);
 }
 
-void meshControllerApplyPendingActions(VKRT* vkrt, Session* session) {
-    if (session->pendingMeshImportPath) {
-        meshControllerImportMesh(vkrt, session, session->pendingMeshImportPath);
-        sessionClearQueuedMeshImport(session);
+void meshControllerApplySessionActions(VKRT* vkrt, Session* session) {
+    char* importPath = NULL;
+    if (sessionTakeMeshImport(session, &importPath)) {
+        meshControllerImportMesh(vkrt, session, importPath);
+        free(importPath);
     }
 
-    if (session->pendingMeshRemovalIndex != UINT32_MAX) {
+    uint32_t removeIndex = UINT32_MAX;
+    if (sessionTakeMeshRemoval(session, &removeIndex)) {
         uint32_t meshCount = VKRT_getMeshCount(vkrt);
-        uint32_t removeIndex = session->pendingMeshRemovalIndex;
-        session->pendingMeshRemovalIndex = UINT32_MAX;
-
         if (removeIndex < meshCount) {
             sessionRemoveMeshName(session, removeIndex);
             VKRT_removeMesh(vkrt, removeIndex);

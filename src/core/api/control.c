@@ -1,4 +1,5 @@
 #include "buffer.h"
+#include "command.h"
 #include "descriptor.h"
 #include "scene.h"
 #include "accel.h"
@@ -11,7 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-int VKRT_saveCurrentRenderPNG(VKRT* vkrt, const char* path) {
+int VKRT_saveRenderPNG(VKRT* vkrt, const char* path) {
     return saveCurrentRenderPNG(vkrt, path);
 }
 
@@ -517,31 +518,40 @@ int VKRT_setMeshMaterial(VKRT* vkrt, uint32_t meshIndex, const MaterialData* mat
     return 0;
 }
 
-void VKRT_setRenderViewport(VKRT* vkrt, uint32_t x, uint32_t y, uint32_t width, uint32_t height) {
-    if (!vkrt || !vkrt->core.sceneData) return;
-
+static void clampViewportToSwapchain(const VKRT* vkrt, uint32_t* x, uint32_t* y, uint32_t* width, uint32_t* height) {
+    if (!vkrt || !x || !y || !width || !height) return;
     uint32_t fullWidth = vkrt->runtime.swapChainExtent.width;
     uint32_t fullHeight = vkrt->runtime.swapChainExtent.height;
-
-    if (width == 0 || height == 0 || fullWidth == 0 || fullHeight == 0) {
-        x = 0;
-        y = 0;
-        width = fullWidth;
-        height = fullHeight;
+    if (fullWidth == 0 || fullHeight == 0) {
+        *x = 0;
+        *y = 0;
+        *width = 0;
+        *height = 0;
+        return;
     }
 
-    if (width <= 1 || height <= 1) {
-        x = 0;
-        y = 0;
-        width = fullWidth;
-        height = fullHeight;
+    if (*width == 0 || *height == 0) {
+        *x = 0;
+        *y = 0;
+        *width = fullWidth;
+        *height = fullHeight;
     }
 
-    if (x >= fullWidth) x = fullWidth - 1;
-    if (y >= fullHeight) y = fullHeight - 1;
-    if (x + width > fullWidth) width = fullWidth - x;
-    if (y + height > fullHeight) height = fullHeight - y;
+    if (*width <= 1 || *height <= 1) {
+        *x = 0;
+        *y = 0;
+        *width = fullWidth;
+        *height = fullHeight;
+    }
 
+    if (*x >= fullWidth) *x = fullWidth - 1;
+    if (*y >= fullHeight) *y = fullHeight - 1;
+    if (*x + *width > fullWidth) *width = fullWidth - *x;
+    if (*y + *height > fullHeight) *height = fullHeight - *y;
+}
+
+static void applySceneViewport(VKRT* vkrt, uint32_t x, uint32_t y, uint32_t width, uint32_t height) {
+    if (!vkrt || !vkrt->core.sceneData) return;
     uint32_t* rect = vkrt->core.sceneData->viewportRect;
     if (rect[0] == x && rect[1] == y && rect[2] == width && rect[3] == height &&
         vkrt->state.camera.width == width && vkrt->state.camera.height == height) {
@@ -556,6 +566,92 @@ void VKRT_setRenderViewport(VKRT* vkrt, uint32_t x, uint32_t y, uint32_t width, 
     vkrt->state.camera.width = width;
     vkrt->state.camera.height = height;
     updateMatricesFromCamera(vkrt);
+}
+
+static void recreateRenderTargets(VKRT* vkrt) {
+    if (!vkrt || vkrt->core.device == VK_NULL_HANDLE) return;
+
+    vkDeviceWaitIdle(vkrt->core.device);
+    destroyStorageImage(vkrt);
+    createStorageImage(vkrt);
+    updateDescriptorSet(vkrt);
+}
+
+int VKRT_startRender(VKRT* vkrt, uint32_t width, uint32_t height, uint32_t targetSamples) {
+    if (!vkrt || width == 0 || height == 0) return -1;
+    if (!vkrt->core.sceneData) return -1;
+
+    if (width > 16384) width = 16384;
+    if (height > 16384) height = 16384;
+
+    if (!vkrt->state.renderModeActive) {
+        vkrt->runtime.preRenderAutoSPPEnabled = vkrt->state.autoSPPEnabled;
+    }
+
+    vkrt->runtime.renderExtent = (VkExtent2D){width, height};
+    recreateRenderTargets(vkrt);
+
+    vkrt->state.autoSPPEnabled = 0;
+    vkrt->state.renderModeActive = 1;
+    vkrt->state.renderModeFinished = 0;
+    vkrt->state.renderTargetSamples = targetSamples;
+    vkrt->state.renderViewZoom = 1.0f;
+    vkrt->state.renderViewPanX = 0.0f;
+    vkrt->state.renderViewPanY = 0.0f;
+    vkrt->state.displayRenderTimeMs = 0.0f;
+    vkrt->state.displayFrameTimeMs = 0.0f;
+    vkrt->state.lastFrameTimestamp = 0;
+    vkrt->state.autoSPPControlMs = 0.0f;
+    vkrt->state.autoSPPFramesUntilNextAdjust = 0;
+    vkrt->runtime.autoSPPFastAdaptFrames = 8;
+
+    applySceneViewport(vkrt, 0, 0, width, height);
+    return 0;
+}
+
+void VKRT_stopRenderSampling(VKRT* vkrt) {
+    if (!vkrt || !vkrt->state.renderModeActive) return;
+    vkrt->state.renderModeFinished = 1;
+}
+
+void VKRT_stopRender(VKRT* vkrt) {
+    if (!vkrt || !vkrt->state.renderModeActive) return;
+    const uint32_t autoSPPResumeDelay = 24;
+
+    vkrt->state.renderModeActive = 0;
+    vkrt->state.renderModeFinished = 0;
+    vkrt->state.renderTargetSamples = 0;
+    vkrt->state.renderViewZoom = 1.0f;
+    vkrt->state.renderViewPanX = 0.0f;
+    vkrt->state.renderViewPanY = 0.0f;
+
+    vkrt->state.autoSPPEnabled = vkrt->runtime.preRenderAutoSPPEnabled ? 1 : 0;
+    vkrt->state.autoSPPControlMs = 0.0f;
+    vkrt->state.autoSPPFramesUntilNextAdjust = vkrt->state.autoSPPEnabled ? autoSPPResumeDelay : 0;
+    vkrt->runtime.autoSPPFastAdaptFrames = 0;
+
+    vkrt->runtime.renderExtent = vkrt->runtime.swapChainExtent;
+    recreateRenderTargets(vkrt);
+
+    uint32_t x = vkrt->runtime.displayViewportRect[0];
+    uint32_t y = vkrt->runtime.displayViewportRect[1];
+    uint32_t width = vkrt->runtime.displayViewportRect[2];
+    uint32_t height = vkrt->runtime.displayViewportRect[3];
+    clampViewportToSwapchain(vkrt, &x, &y, &width, &height);
+    applySceneViewport(vkrt, x, y, width, height);
+}
+
+void VKRT_setRenderViewport(VKRT* vkrt, uint32_t x, uint32_t y, uint32_t width, uint32_t height) {
+    if (!vkrt) return;
+
+    clampViewportToSwapchain(vkrt, &x, &y, &width, &height);
+    vkrt->runtime.displayViewportRect[0] = x;
+    vkrt->runtime.displayViewportRect[1] = y;
+    vkrt->runtime.displayViewportRect[2] = width;
+    vkrt->runtime.displayViewportRect[3] = height;
+
+    if (vkrt->state.renderModeActive) return;
+    applySceneViewport(vkrt, x, y, width, height);
 }
 
 void VKRT_cameraSetPose(VKRT* vkrt, vec3 position, vec3 target, vec3 up, float vfov) {

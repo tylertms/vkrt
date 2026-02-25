@@ -59,8 +59,12 @@ int saveCurrentRenderPNG(VKRT* vkrt, const char* path) {
         return -1;
     }
 
-    uint32_t fullWidth = vkrt->runtime.swapChainExtent.width;
-    uint32_t fullHeight = vkrt->runtime.swapChainExtent.height;
+    uint32_t fullWidth = vkrt->runtime.renderExtent.width;
+    uint32_t fullHeight = vkrt->runtime.renderExtent.height;
+    if (fullWidth == 0 || fullHeight == 0) {
+        fullWidth = vkrt->runtime.swapChainExtent.width;
+        fullHeight = vkrt->runtime.swapChainExtent.height;
+    }
     if (fullWidth == 0 || fullHeight == 0) {
         LOG_ERROR("Cannot save PNG with invalid render size %ux%u", fullWidth, fullHeight);
         return -1;
@@ -70,28 +74,6 @@ int saveCurrentRenderPNG(VKRT* vkrt, const char* path) {
     uint32_t offsetY = 0;
     uint32_t width = fullWidth;
     uint32_t height = fullHeight;
-
-    if (vkrt->core.sceneData) {
-        uint32_t* rect = vkrt->core.sceneData->viewportRect;
-        if (rect[2] > 0 && rect[3] > 0) {
-            offsetX = rect[0];
-            offsetY = rect[1];
-            width = rect[2];
-            height = rect[3];
-
-            if (offsetX >= fullWidth) offsetX = fullWidth - 1;
-            if (offsetY >= fullHeight) offsetY = fullHeight - 1;
-            if (offsetX + width > fullWidth) width = fullWidth - offsetX;
-            if (offsetY + height > fullHeight) height = fullHeight - offsetY;
-
-            if (width == 0 || height == 0) {
-                offsetX = 0;
-                offsetY = 0;
-                width = fullWidth;
-                height = fullHeight;
-            }
-        }
-    }
 
     VkDeviceSize pixelCount = (VkDeviceSize)width * (VkDeviceSize)height;
     VkDeviceSize readbackBytes = pixelCount * 4 * sizeof(uint16_t);

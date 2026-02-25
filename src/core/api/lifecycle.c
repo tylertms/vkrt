@@ -54,6 +54,7 @@ int VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInfo) {
 
     vkrt->runtime.vsync = createInfo->vsync;
     vkrt->runtime.autoSPPFastAdaptFrames = 0;
+    vkrt->runtime.preRenderAutoSPPEnabled = 0;
     vkrt->runtime.swapchainFormatLogInitialized = VK_FALSE;
     vkrt->runtime.lastLoggedSwapchainFormat = VK_FORMAT_UNDEFINED;
     vkrt->runtime.lastLoggedSwapchainColorSpace = VK_COLOR_SPACE_MAX_ENUM_KHR;
@@ -190,6 +191,7 @@ void VKRT_deinit(VKRT* vkrt) {
         if (vkrt->runtime.swapChain != VK_NULL_HANDLE) {
             cleanupSwapChain(vkrt);
         }
+        destroyStorageImage(vkrt);
         logStepTime("Swapchain cleanup complete", stepStartTime);
 
         stepStartTime = getMicroseconds();

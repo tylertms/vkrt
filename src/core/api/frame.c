@@ -19,6 +19,7 @@ void VKRT_beginFrame(VKRT* vkrt) {
     vkrt->runtime.frameAcquired = VK_FALSE;
     vkrt->runtime.frameSubmitted = VK_FALSE;
     vkrt->runtime.framePresented = VK_FALSE;
+    vkrt->runtime.frameTraced = VK_FALSE;
 
     vkWaitForFences(vkrt->core.device, 1, &vkrt->runtime.inFlightFences[vkrt->runtime.currentFrame], VK_TRUE, UINT64_MAX);
 
@@ -122,12 +123,24 @@ void VKRT_endFrame(VKRT* vkrt) {
 
     if (vkrt->runtime.framePresented) {
         uint32_t renderedSPP = vkrt->core.sceneData->samplesPerPixel;
+        VkBool32 traceContributed = vkrt->core.descriptorSetReady &&
+                                    !vkrt->core.accumulationNeedsReset &&
+                                    vkrt->runtime.frameTraced &&
+                                    !(vkrt->state.renderModeActive && vkrt->state.renderModeFinished);
+
         recordFrameTime(vkrt);
-        updateAutoSPP(vkrt);
-        if (vkrt->core.descriptorSetReady && !vkrt->core.accumulationNeedsReset) {
+        if (traceContributed) {
+            updateAutoSPP(vkrt);
             vkrt->state.accumulationFrame++;
             vkrt->state.totalSamples += renderedSPP;
             vkrt->core.sceneData->frameNumber++;
+        }
+
+        if (vkrt->state.renderModeActive &&
+            !vkrt->state.renderModeFinished &&
+            vkrt->state.renderTargetSamples > 0 &&
+            vkrt->state.totalSamples >= vkrt->state.renderTargetSamples) {
+            vkrt->state.renderModeFinished = 1;
         }
     }
 
