@@ -15,6 +15,9 @@ typedef struct RenderSequencer {
     float minTime;
     float maxTime;
     float step;
+    uint64_t frameStartTimeUs;
+    uint32_t timedFrameCount;
+    float averageFrameSeconds;
     char outputFolder[RENDER_SEQUENCE_PATH_CAPACITY];
 } RenderSequencer;
 

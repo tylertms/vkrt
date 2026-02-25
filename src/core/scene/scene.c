@@ -6,6 +6,59 @@
 #include <stdint.h>
 #include <string.h>
 
+static VKRT_SceneTimelineKeyframe makeDefaultSceneTimelineKeyframe(float time) {
+    return (VKRT_SceneTimelineKeyframe){
+        .time = time,
+        .emissionScale = 1.0f,
+        .emissionTint = {1.0f, 1.0f, 1.0f},
+    };
+}
+
+static void resetTimelineDefaults(VKRT_PublicState* state) {
+    if (!state) return;
+
+    state->sceneTimeline.enabled = 0;
+    state->sceneTimeline.keyframeCount = 2;
+    state->sceneTimeline.keyframes[0] = makeDefaultSceneTimelineKeyframe(0.0f);
+    state->sceneTimeline.keyframes[1] = makeDefaultSceneTimelineKeyframe(1.0f);
+}
+
+static void writeTimelineUniform(SceneData* sceneData, const VKRT_PublicState* state) {
+    if (!sceneData || !state) return;
+
+    sceneData->timelineEnabled = state->sceneTimeline.enabled ? 1u : 0u;
+    uint32_t keyCount = state->sceneTimeline.keyframeCount;
+    if (keyCount > VKRT_SCENE_TIMELINE_MAX_KEYFRAMES) keyCount = VKRT_SCENE_TIMELINE_MAX_KEYFRAMES;
+    sceneData->timelineKeyframeCount = keyCount;
+    sceneData->timelinePadding[0] = 0.0f;
+    sceneData->timelinePadding[1] = 0.0f;
+
+    for (uint32_t i = 0; i < VKRT_SCENE_TIMELINE_MAX_KEYFRAMES; i++) {
+        float time = 0.0f;
+        float scale = 1.0f;
+        vec3 tint = {1.0f, 1.0f, 1.0f};
+
+        if (i < keyCount) {
+            VKRT_SceneTimelineKeyframe key = state->sceneTimeline.keyframes[i];
+            if (isfinite(key.time)) time = key.time;
+            if (isfinite(key.emissionScale)) scale = key.emissionScale;
+            for (int c = 0; c < 3; c++) {
+                if (isfinite(key.emissionTint[c])) tint[c] = key.emissionTint[c];
+            }
+        }
+
+        sceneData->timelineTimeScale[i][0] = time;
+        sceneData->timelineTimeScale[i][1] = scale;
+        sceneData->timelineTimeScale[i][2] = 0.0f;
+        sceneData->timelineTimeScale[i][3] = 0.0f;
+
+        sceneData->timelineTint[i][0] = tint[0];
+        sceneData->timelineTint[i][1] = tint[1];
+        sceneData->timelineTint[i][2] = tint[2];
+        sceneData->timelineTint[i][3] = 0.0f;
+    }
+}
+
 void applyCameraInput(VKRT* vkrt, const VKRT_CameraInput* input) {
     if (!vkrt || !input) return;
     const float panSpeed = 0.001f;
@@ -171,6 +224,7 @@ void createSceneUniform(VKRT* vkrt) {
     vkrt->state.timeBase = -1.0f;
     vkrt->state.timeStep = 0.5f;
     vkrt->state.fogDensity = 0.0f;
+    resetTimelineDefaults(&vkrt->state);
     vkrt->core.sceneData->timeBase = vkrt->state.timeBase;
     vkrt->core.sceneData->timeStep = vkrt->state.timeStep;
     vkrt->core.sceneData->fogDensity = vkrt->state.fogDensity;
@@ -193,6 +247,7 @@ void updateMatricesFromCamera(VKRT* vkrt) {
 }
 
 void resetSceneData(VKRT* vkrt) {
+    vkrt->core.sceneData->frameNumber = 0;
     vkrt->core.sceneData->samplesPerPixel = vkrt->state.samplesPerPixel;
     vkrt->core.sceneData->maxBounces = vkrt->state.maxBounces;
     vkrt->core.sceneData->toneMappingMode = vkrt->state.toneMappingMode;
@@ -200,6 +255,8 @@ void resetSceneData(VKRT* vkrt) {
     vkrt->core.sceneData->timeStep = vkrt->state.timeStep;
     vkrt->core.sceneData->fogDensity = vkrt->state.fogDensity;
     vkrt->core.sceneData->padding0 = 0.0f;
+    writeTimelineUniform(vkrt->core.sceneData, &vkrt->state);
+
     vkrt->state.renderModeFinished = 0;
     vkrt->state.accumulationFrame = 0;
     vkrt->state.totalSamples = 0;

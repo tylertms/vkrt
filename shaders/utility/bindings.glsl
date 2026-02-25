@@ -1,6 +1,7 @@
 #ifndef BINDINGS_GLSL
 #define BINDINGS_GLSL
 
+#include "constants.h"
 #include "common.glsl"
 
 struct Vertex {
@@ -46,6 +47,11 @@ layout(set = 0, binding = 6) uniform SceneUniform {
     float timeStep;
     float fogDensity;
     float padding0;
+    uint timelineEnabled;
+    uint timelineKeyframeCount;
+    vec2 timelinePadding;
+    vec4 timelineTimeScale[VKRT_SCENE_TIMELINE_MAX_KEYFRAMES];
+    vec4 timelineTint[VKRT_SCENE_TIMELINE_MAX_KEYFRAMES];
 } scene;
 
 layout(set = 0, binding = 7, std430) readonly buffer MeshInfoBuffer {

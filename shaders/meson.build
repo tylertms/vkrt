@@ -21,6 +21,7 @@ foreach shader_file : shader_sources
       '-MF', '@DEPFILE@',
       '-MT', '@OUTPUT@',
       '-I', meson.current_source_dir(),
+      '-I', join_paths(meson.project_source_root(), 'shared'),
       '-o', '@OUTPUT@',
     ],
     build_by_default: true,

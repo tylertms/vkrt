@@ -8,6 +8,40 @@
 #include <string.h>
 
 static const char* kDefaultRenderSequenceFolder = "captures/sequence";
+static const float kDefaultTimelineStartTime = 0.0f;
+static const float kDefaultTimelineEndTime = 0.5f;
+static const float kDefaultTimelineEmissionScale = 1.0f;
+
+static int compareTimelineKeyframesByTime(const void* lhs, const void* rhs) {
+    const SessionSceneTimelineKeyframe* a = (const SessionSceneTimelineKeyframe*)lhs;
+    const SessionSceneTimelineKeyframe* b = (const SessionSceneTimelineKeyframe*)rhs;
+    if (a->time < b->time) return -1;
+    if (a->time > b->time) return 1;
+    return 0;
+}
+
+static float clampFloat(float value, float minValue, float maxValue) {
+    if (value < minValue) return minValue;
+    if (value > maxValue) return maxValue;
+    return value;
+}
+
+static void sessionResetTimelineDefaults(SessionSceneTimelineSettings* timeline) {
+    if (!timeline) return;
+
+    timeline->enabled = 0;
+    timeline->keyframeCount = 2;
+    timeline->keyframes[0] = (SessionSceneTimelineKeyframe){
+        .time = kDefaultTimelineStartTime,
+        .emissionScale = kDefaultTimelineEmissionScale,
+        .emissionTint = {1.0f, 1.0f, 1.0f},
+    };
+    timeline->keyframes[1] = (SessionSceneTimelineKeyframe){
+        .time = kDefaultTimelineEndTime,
+        .emissionScale = kDefaultTimelineEmissionScale,
+        .emissionTint = {1.0f, 1.0f, 1.0f},
+    };
+}
 
 static const char* fileBasename(const char* path) {
     if (!path || !path[0]) return "(unknown)";
@@ -66,9 +100,10 @@ void sessionInit(Session* session) {
     session->meshToRemove = UINT32_MAX;
     session->renderCommand = SESSION_RENDER_COMMAND_NONE;
     session->renderConfig.targetSamples = 1024;
-    session->renderConfig.animation.minTime = 0.0f;
-    session->renderConfig.animation.maxTime = 0.5f;
+    session->renderConfig.animation.minTime = kDefaultTimelineStartTime;
+    session->renderConfig.animation.maxTime = kDefaultTimelineEndTime;
     session->renderConfig.animation.timeStep = 0.05f;
+    sessionResetTimelineDefaults(&session->renderConfig.animation.sceneTimeline);
     sessionSetRenderSequenceFolder(session, kDefaultRenderSequenceFolder);
 }
 
@@ -235,6 +270,7 @@ void sessionQueueRenderStart(Session* session, uint32_t width, uint32_t height, 
     if (animation) {
         animationSettings = *animation;
     }
+    sessionSanitizeAnimationSettings(&animationSettings);
 
     session->renderCommand = SESSION_RENDER_COMMAND_START;
     session->pendingRenderJob.width = width;
@@ -260,11 +296,43 @@ int sessionTakeRenderCommand(Session* session, SessionRenderCommand* outCommand,
     return 1;
 }
 
+static void sessionSanitizeTimelineSettings(SessionSceneTimelineSettings* timeline) {
+    if (!timeline) return;
+
+    if (timeline->keyframeCount == 0 || timeline->keyframeCount > SESSION_SCENE_TIMELINE_KEYFRAME_CAPACITY) {
+        sessionResetTimelineDefaults(timeline);
+    }
+
+    for (uint32_t keyIndex = 0; keyIndex < timeline->keyframeCount; keyIndex++) {
+        SessionSceneTimelineKeyframe* key = &timeline->keyframes[keyIndex];
+        if (!isfinite(key->time)) key->time = kDefaultTimelineStartTime;
+        key->time = clampFloat(key->time, SESSION_SCENE_TIMELINE_TIME_MIN, SESSION_SCENE_TIMELINE_TIME_MAX);
+
+        if (!isfinite(key->emissionScale)) key->emissionScale = 0.0f;
+        key->emissionScale = clampFloat(key->emissionScale,
+            SESSION_SCENE_TIMELINE_EMISSION_SCALE_MIN,
+            SESSION_SCENE_TIMELINE_EMISSION_SCALE_MAX);
+
+        for (int channel = 0; channel < 3; channel++) {
+            if (!isfinite(key->emissionTint[channel])) key->emissionTint[channel] = 1.0f;
+            key->emissionTint[channel] = clampFloat(key->emissionTint[channel],
+                SESSION_SCENE_TIMELINE_EMISSION_TINT_MIN,
+                SESSION_SCENE_TIMELINE_EMISSION_TINT_MAX);
+        }
+    }
+
+    qsort(timeline->keyframes,
+        timeline->keyframeCount,
+        sizeof(timeline->keyframes[0]),
+        compareTimelineKeyframesByTime);
+}
+
 void sessionSanitizeAnimationSettings(SessionRenderAnimationSettings* animation) {
     if (!animation) return;
     if (!isfinite(animation->minTime) || animation->minTime < 0.0f) animation->minTime = 0.0f;
     if (!isfinite(animation->maxTime) || animation->maxTime < animation->minTime) animation->maxTime = animation->minTime;
     if (!isfinite(animation->timeStep) || animation->timeStep <= 0.0f) animation->timeStep = 0.05f;
+    sessionSanitizeTimelineSettings(&animation->sceneTimeline);
 }
 
 uint32_t sessionComputeAnimationFrameCount(const SessionRenderAnimationSettings* animation) {

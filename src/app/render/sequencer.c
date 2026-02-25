@@ -18,19 +18,39 @@
 
 static const float kRenderSequenceMinStep = 0.0001f;
 
+static void clearSequencerState(RenderSequencer* sequencer) {
+    if (!sequencer) return;
+    memset(sequencer, 0, sizeof(*sequencer));
+}
+
 static void disableTimeRange(VKRT* vkrt) {
+    if (!vkrt) return;
     if (vkrt->state.timeBase >= 0.0f) {
         VKRT_setTimeRange(vkrt, -1.0f, -1.0f);
     }
 }
 
+static void disableTimeline(VKRT* vkrt) {
+    if (!vkrt) return;
+    VKRT_setSceneTimeline(vkrt, NULL);
+}
+
 static void stopSequence(RenderSequencer* sequencer, VKRT* vkrt, Session* session) {
-    memset(sequencer, 0, sizeof(*sequencer));
+    if (!sequencer || !vkrt || !session) return;
+
     memset(&session->sequenceProgress, 0, sizeof(session->sequenceProgress));
     if (vkrt->state.renderModeActive) {
         VKRT_stopRender(vkrt);
     }
     disableTimeRange(vkrt);
+    disableTimeline(vkrt);
+    clearSequencerState(sequencer);
+}
+
+static void completeSequenceWithPause(RenderSequencer* sequencer, Session* session) {
+    if (!sequencer || !session) return;
+    memset(&session->sequenceProgress, 0, sizeof(session->sequenceProgress));
+    clearSequencerState(sequencer);
 }
 
 static int createDirectoryIfMissing(const char* path) {
@@ -78,6 +98,11 @@ static float queryFrameTime(const RenderSequencer* sequencer, uint32_t frameInde
     return t;
 }
 
+static void applyFrameTimeWindow(VKRT* vkrt, const RenderSequencer* sequencer, float frameTime) {
+    if (!vkrt || !sequencer) return;
+    VKRT_setTimeRange(vkrt, sequencer->minTime, frameTime);
+}
+
 static int buildFramePath(char* outPath, size_t outPathSize, const RenderSequencer* sequencer) {
     if (!outPath || outPathSize == 0 || !sequencer->outputFolder[0]) return -1;
 
@@ -94,11 +119,30 @@ static int buildFramePath(char* outPath, size_t outPathSize, const RenderSequenc
     return 0;
 }
 
-static void updateSessionProgress(Session* session, const RenderSequencer* sequencer, float currentTime) {
+static void updateSessionProgress(
+    Session* session,
+    const RenderSequencer* sequencer,
+    float currentTime,
+    float estimatedRemainingSeconds,
+    uint8_t hasEstimatedRemaining
+) {
     session->sequenceProgress.active = sequencer->active;
     session->sequenceProgress.frameIndex = sequencer->frameIndex + 1;
     session->sequenceProgress.frameCount = sequencer->frameCount;
     session->sequenceProgress.currentTime = currentTime;
+    session->sequenceProgress.hasEstimatedRemaining = hasEstimatedRemaining ? 1u : 0u;
+    session->sequenceProgress.estimatedRemainingSeconds = estimatedRemainingSeconds;
+}
+
+static void noteCompletedFrameTime(RenderSequencer* sequencer, uint64_t frameEndTimeUs) {
+    if (!sequencer || sequencer->frameStartTimeUs == 0 || frameEndTimeUs <= sequencer->frameStartTimeUs) return;
+
+    float seconds = (float)(frameEndTimeUs - sequencer->frameStartTimeUs) / 1000000.0f;
+    if (!(seconds > 0.0f)) return;
+
+    float weighted = sequencer->averageFrameSeconds * (float)sequencer->timedFrameCount + seconds;
+    sequencer->timedFrameCount++;
+    sequencer->averageFrameSeconds = weighted / (float)sequencer->timedFrameCount;
 }
 
 static int startSequenceRender(VKRT* vkrt, const RenderSequencer* sequencer) {
@@ -108,7 +152,35 @@ static int startSequenceRender(VKRT* vkrt, const RenderSequencer* sequencer) {
         sequencer->renderSettings.targetSamples);
 }
 
+static void applyTimelineTrack(VKRT* vkrt, const SessionSceneTimelineSettings* timeline) {
+    if (!vkrt) return;
+
+    if (!timeline || !timeline->enabled || timeline->keyframeCount == 0) {
+        VKRT_setSceneTimeline(vkrt, NULL);
+        return;
+    }
+
+    uint32_t count = timeline->keyframeCount;
+    if (count > VKRT_SCENE_TIMELINE_MAX_KEYFRAMES) {
+        count = VKRT_SCENE_TIMELINE_MAX_KEYFRAMES;
+    }
+
+    VKRT_SceneTimelineSettings converted = {0};
+    converted.enabled = 1;
+    converted.keyframeCount = count;
+    memcpy(converted.keyframes, timeline->keyframes, count * sizeof(converted.keyframes[0]));
+
+    VKRT_setSceneTimeline(vkrt, &converted);
+}
+
 static int beginSequence(VKRT* vkrt, Session* session, const SessionRenderSettings* settings, RenderSequencer* sequencer) {
+    if (!vkrt || !session || !settings || !sequencer) return -1;
+
+    clearSequencerState(sequencer);
+    memset(&session->sequenceProgress, 0, sizeof(session->sequenceProgress));
+    disableTimeRange(vkrt);
+    disableTimeline(vkrt);
+
     const char* folder = sessionGetRenderSequenceFolder(session);
     if (!folder || !folder[0]) {
         LOG_ERROR("Render sequence requires an output folder");
@@ -125,41 +197,55 @@ static int beginSequence(VKRT* vkrt, Session* session, const SessionRenderSettin
         return -1;
     }
 
-    float minTime = settings->animation.minTime;
-    float maxTime = settings->animation.maxTime;
-    float step = settings->animation.timeStep;
+    SessionRenderSettings sanitizedSettings = *settings;
+    sessionSanitizeAnimationSettings(&sanitizedSettings.animation);
 
+    float minTime = sanitizedSettings.animation.minTime;
+    float maxTime = sanitizedSettings.animation.maxTime;
+    float step = sanitizedSettings.animation.timeStep;
     if (!isfinite(minTime) || minTime < 0.0f) minTime = 0.0f;
     if (!isfinite(maxTime) || maxTime < minTime) maxTime = minTime;
     if (!isfinite(step) || step < kRenderSequenceMinStep) step = 0.05f;
 
-    uint32_t frameCount = sessionComputeAnimationFrameCount(&settings->animation);
+    uint32_t frameCount = sessionComputeAnimationFrameCount(&sanitizedSettings.animation);
     if (frameCount == 0) {
         LOG_ERROR("Render sequence produced an invalid frame count");
         return -1;
     }
 
     sequencer->active = 1;
-    sequencer->renderSettings = *settings;
+    sequencer->renderSettings = sanitizedSettings;
     sequencer->frameIndex = 0;
     sequencer->frameCount = frameCount;
     sequencer->minTime = minTime;
     sequencer->maxTime = maxTime;
     sequencer->step = step;
+    sequencer->frameStartTimeUs = getMicroseconds();
+    sequencer->timedFrameCount = 0;
+    sequencer->averageFrameSeconds = 0.0f;
 
-    float currentTime = queryFrameTime(sequencer, 0);
-    updateSessionProgress(session, sequencer, currentTime);
+    applyTimelineTrack(vkrt, &sanitizedSettings.animation.sceneTimeline);
 
-    VKRT_setTimeRange(vkrt, minTime, currentTime);
+    float currentBaseTime = queryFrameTime(sequencer, 0);
+    updateSessionProgress(session, sequencer, currentBaseTime, 0.0f, 0);
+    applyFrameTimeWindow(vkrt, sequencer, currentBaseTime);
+
     if (startSequenceRender(vkrt, sequencer) != 0) {
         LOG_ERROR("Failed to start render sequence");
-        memset(sequencer, 0, sizeof(*sequencer));
+        clearSequencerState(sequencer);
         memset(&session->sequenceProgress, 0, sizeof(session->sequenceProgress));
+        disableTimeRange(vkrt);
+        disableTimeline(vkrt);
         return -1;
     }
 
-    LOG_INFO("Render sequence started. Frames: %u, Time: %.3f -> %.3f (step %.3f), Folder: %s",
-        frameCount, minTime, maxTime, step, sequencer->outputFolder);
+    LOG_INFO("Render sequence started. Frames: %u, Time: %.3f -> %.3f (step %.3f), Keyframes: %s, Folder: %s",
+        frameCount,
+        minTime,
+        maxTime,
+        step,
+        sanitizedSettings.animation.sceneTimeline.enabled ? "On" : "Off",
+        sequencer->outputFolder);
     return 0;
 }
 
@@ -174,9 +260,10 @@ void renderSequencerHandleCommands(RenderSequencer* sequencer, VKRT* vkrt, Sessi
         if (settings.animation.enabled) {
             beginSequence(vkrt, session, &settings, sequencer);
         } else {
-            memset(sequencer, 0, sizeof(*sequencer));
+            clearSequencerState(sequencer);
             memset(&session->sequenceProgress, 0, sizeof(session->sequenceProgress));
             disableTimeRange(vkrt);
+            disableTimeline(vkrt);
             VKRT_startRender(vkrt, settings.width, settings.height, settings.targetSamples);
         }
     } else if (command == SESSION_RENDER_COMMAND_STOP) {
@@ -188,8 +275,7 @@ void renderSequencerUpdate(RenderSequencer* sequencer, VKRT* vkrt, Session* sess
     if (!sequencer || !vkrt || !session || !sequencer->active) return;
 
     if (!vkrt->state.renderModeActive) {
-        memset(sequencer, 0, sizeof(*sequencer));
-        memset(&session->sequenceProgress, 0, sizeof(session->sequenceProgress));
+        stopSequence(sequencer, vkrt, session);
         return;
     }
 
@@ -203,17 +289,34 @@ void renderSequencerUpdate(RenderSequencer* sequencer, VKRT* vkrt, Session* sess
         return;
     }
 
+    uint64_t frameEndTimeUs = getMicroseconds();
+    noteCompletedFrameTime(sequencer, frameEndTimeUs);
+
     uint32_t nextFrame = sequencer->frameIndex + 1;
     if (nextFrame >= sequencer->frameCount) {
         LOG_INFO("Render sequence complete. Frames saved: %u", sequencer->frameCount);
-        stopSequence(sequencer, vkrt, session);
+        completeSequenceWithPause(sequencer, session);
         return;
     }
 
     sequencer->frameIndex = nextFrame;
-    float nextTime = queryFrameTime(sequencer, nextFrame);
-    updateSessionProgress(session, sequencer, nextTime);
-    VKRT_setTimeRange(vkrt, sequencer->minTime, nextTime);
+    float nextBaseTime = queryFrameTime(sequencer, nextFrame);
+    uint32_t remainingFrames = sequencer->frameCount - nextFrame;
+    float estimatedRemainingSeconds = 0.0f;
+    uint8_t hasEstimatedRemaining = 0;
+    if (sequencer->timedFrameCount > 0 && remainingFrames > 0) {
+        estimatedRemainingSeconds = sequencer->averageFrameSeconds * (float)remainingFrames;
+        hasEstimatedRemaining = 1;
+    }
+
+    updateSessionProgress(
+        session,
+        sequencer,
+        nextBaseTime,
+        estimatedRemainingSeconds,
+        hasEstimatedRemaining);
+    applyFrameTimeWindow(vkrt, sequencer, nextBaseTime);
+    sequencer->frameStartTimeUs = getMicroseconds();
 
     if (startSequenceRender(vkrt, sequencer) != 0) {
         LOG_ERROR("Failed to continue render sequence at frame %u", nextFrame);

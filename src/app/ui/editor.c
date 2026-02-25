@@ -418,6 +418,59 @@ static void initializeRenderConfig(Session* session) {
     sessionSanitizeAnimationSettings(&session->renderConfig.animation);
 }
 
+static void formatEstimatedDuration(float seconds, char* out, size_t outSize) {
+    if (!out || outSize == 0) return;
+    if (!(seconds > 0.0f)) {
+        snprintf(out, outSize, "0s");
+        return;
+    }
+
+    uint64_t total = (uint64_t)(seconds + 0.5f);
+    if (total == 0) {
+        snprintf(out, outSize, "0s");
+        return;
+    }
+
+    static const uint64_t unitSeconds[] = {86400ull, 3600ull, 60ull, 1ull};
+    static const char* unitLabels[] = {"d", "h", "m", "s"};
+
+    int firstUnit = -1;
+    uint64_t firstValue = 0;
+    uint64_t remainder = total;
+    for (int i = 0; i < 4; i++) {
+        uint64_t value = remainder / unitSeconds[i];
+        if (value == 0) continue;
+        firstUnit = i;
+        firstValue = value;
+        remainder %= unitSeconds[i];
+        break;
+    }
+
+    if (firstUnit < 0) {
+        snprintf(out, outSize, "0s");
+        return;
+    }
+
+    int secondUnit = -1;
+    uint64_t secondValue = 0;
+    for (int i = firstUnit + 1; i < 4; i++) {
+        uint64_t value = remainder / unitSeconds[i];
+        if (value == 0) continue;
+        secondUnit = i;
+        secondValue = value;
+        break;
+    }
+
+    if (secondUnit >= 0) {
+        snprintf(out, outSize, "%llu%s %llu%s",
+            (unsigned long long)firstValue, unitLabels[firstUnit],
+            (unsigned long long)secondValue, unitLabels[secondUnit]);
+    } else {
+        snprintf(out, outSize, "%llu%s",
+            (unsigned long long)firstValue, unitLabels[firstUnit]);
+    }
+}
+
 static void drawRenderSection(VKRT* vkrt, Session* session) {
     initializeRenderConfig(session);
     drawInspectorSeparator();
@@ -457,6 +510,7 @@ static void drawRenderSection(VKRT* vkrt, Session* session) {
             float timeMin = anim->minTime;
             float timeMax = anim->maxTime;
             float timeStep = anim->timeStep;
+            SessionSceneTimelineSettings* sceneTimeline = &anim->sceneTimeline;
 
             ImGui_SetNextItemWidth(inputWidth);
             if (ImGui_DragFloatEx(ICON_FA_TIMELINE " Time Min", &timeMin, 0.01f, 0.0f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
@@ -483,6 +537,69 @@ static void drawRenderSection(VKRT* vkrt, Session* session) {
             tooltipOnHover("Time increment per sequence frame.");
 
             ImGui_Text(ICON_FA_IMAGES " Frames: %u", frameCount);
+            ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing});
+
+            bool timelineEnabled = sceneTimeline->enabled != 0;
+            if (ImGui_Checkbox("Timeline", &timelineEnabled)) {
+                sceneTimeline->enabled = timelineEnabled ? 1 : 0;
+                sessionSanitizeAnimationSettings(anim);
+            }
+            tooltipOnHover("Step emission values at discrete points in source time.");
+
+            if (timelineEnabled) {
+                bool timelineEdited = false;
+
+                if (ImGui_Button(ICON_FA_PLUS " Add")) {
+                    if (sceneTimeline->keyframeCount < SESSION_SCENE_TIMELINE_KEYFRAME_CAPACITY) {
+                        SessionSceneTimelineKeyframe newKey = {
+                            .time = 0.0f,
+                            .emissionScale = 1.0f,
+                            .emissionTint = {1.0f, 1.0f, 1.0f},
+                        };
+                        if (sceneTimeline->keyframeCount > 0) {
+                            newKey = sceneTimeline->keyframes[sceneTimeline->keyframeCount - 1];
+                            newKey.time += SESSION_SCENE_TIMELINE_DEFAULT_INCREMENT;
+                        }
+                        sceneTimeline->keyframes[sceneTimeline->keyframeCount] = newKey;
+                        sceneTimeline->keyframeCount++;
+                        timelineEdited = true;
+                    }
+                }
+
+                if (sceneTimeline->keyframeCount > 1) {
+                    ImGui_SameLine();
+                    if (ImGui_Button(ICON_FA_MINUS " Remove")) {
+                        sceneTimeline->keyframeCount--;
+                        timelineEdited = true;
+                    }
+                }
+
+                for (uint32_t keyIndex = 0; keyIndex < sceneTimeline->keyframeCount; keyIndex++) {
+                    SessionSceneTimelineKeyframe* key = &sceneTimeline->keyframes[keyIndex];
+                    ImGui_PushIDInt((int)keyIndex);
+                    ImGui_SeparatorText("Marker");
+
+                    ImGui_SetNextItemWidth(inputWidth);
+                    timelineEdited |= ImGui_DragFloatEx("Time", &key->time, 0.01f,
+                        SESSION_SCENE_TIMELINE_TIME_MIN,
+                        SESSION_SCENE_TIMELINE_TIME_MAX,
+                        "%.3f",
+                        ImGuiSliderFlags_AlwaysClamp);
+                    ImGui_SetNextItemWidth(inputWidth);
+                    timelineEdited |= ImGui_DragFloatEx("Emission Scale", &key->emissionScale, 0.01f,
+                        SESSION_SCENE_TIMELINE_EMISSION_SCALE_MIN,
+                        SESSION_SCENE_TIMELINE_EMISSION_SCALE_MAX,
+                        "%.3f", ImGuiSliderFlags_AlwaysClamp);
+
+                    timelineEdited |= ImGui_ColorEdit3("Emission Tint", key->emissionTint, ImGuiColorEditFlags_Float);
+
+                    ImGui_PopID();
+                }
+
+                if (timelineEdited) {
+                    sessionSanitizeAnimationSettings(anim);
+                }
+            }
 
             if (ImGui_Button(ICON_FA_FOLDER_OPEN " Select Folder")) {
                 sessionRequestRenderSequenceFolderDialog(session);
@@ -537,6 +654,11 @@ static void drawRenderSection(VKRT* vkrt, Session* session) {
     if (seq->active) {
         ImGui_Text(ICON_FA_TIMELINE " Sequence: %u / %u  (t = %.3f)",
             seq->frameIndex, seq->frameCount, seq->currentTime);
+        if (seq->hasEstimatedRemaining) {
+            char etaText[32] = {0};
+            formatEstimatedDuration(seq->estimatedRemainingSeconds, etaText, sizeof(etaText));
+            ImGui_Text(ICON_FA_CLOCK " Remaining: %s", etaText);
+        }
     }
 
     if (!vkrt->state.renderModeFinished) {

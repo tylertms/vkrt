@@ -10,10 +10,19 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <math.h>
 #include <string.h>
 
 int VKRT_saveRenderPNG(VKRT* vkrt, const char* path) {
     return saveCurrentRenderPNG(vkrt, path);
+}
+
+static int compareTimelineKeyframesByTime(const void* lhs, const void* rhs) {
+    const VKRT_SceneTimelineKeyframe* a = (const VKRT_SceneTimelineKeyframe*)lhs;
+    const VKRT_SceneTimelineKeyframe* b = (const VKRT_SceneTimelineKeyframe*)rhs;
+    if (a->time < b->time) return -1;
+    if (a->time > b->time) return 1;
+    return 0;
 }
 
 static void destroyMeshAccelerationStructure(VKRT* vkrt, Mesh* mesh) {
@@ -504,6 +513,8 @@ void VKRT_setTimeRange(VKRT* vkrt, float timeBase, float timeStep) {
         timeStep = timeBase;
     }
 
+    if (vkrt->state.timeBase == timeBase && vkrt->state.timeStep == timeStep) return;
+
     vkrt->state.timeBase = timeBase;
     vkrt->state.timeStep = timeStep;
     if (vkrt->core.sceneData) {
@@ -511,6 +522,46 @@ void VKRT_setTimeRange(VKRT* vkrt, float timeBase, float timeStep) {
         vkrt->core.sceneData->timeStep = timeStep;
     }
 
+    resetSceneData(vkrt);
+}
+
+void VKRT_setSceneTimeline(VKRT* vkrt, const VKRT_SceneTimelineSettings* timeline) {
+    if (!vkrt) return;
+
+    VKRT_SceneTimelineSettings sanitized = {0};
+
+    if (timeline) {
+        sanitized.enabled = timeline->enabled ? 1u : 0u;
+        uint32_t keyCount = timeline->keyframeCount;
+        if (keyCount > VKRT_SCENE_TIMELINE_MAX_KEYFRAMES) {
+            keyCount = VKRT_SCENE_TIMELINE_MAX_KEYFRAMES;
+        }
+
+        sanitized.keyframeCount = keyCount;
+        for (uint32_t keyIndex = 0; keyIndex < keyCount; keyIndex++) {
+            VKRT_SceneTimelineKeyframe key = timeline->keyframes[keyIndex];
+            if (!isfinite(key.time)) key.time = 0.0f;
+            if (!isfinite(key.emissionScale)) key.emissionScale = 1.0f;
+            if (key.emissionScale < 0.0f) key.emissionScale = 0.0f;
+
+            for (int channel = 0; channel < 3; channel++) {
+                if (!isfinite(key.emissionTint[channel])) key.emissionTint[channel] = 1.0f;
+                if (key.emissionTint[channel] < 0.0f) key.emissionTint[channel] = 0.0f;
+            }
+
+            sanitized.keyframes[keyIndex] = key;
+        }
+
+        if (sanitized.keyframeCount > 1) {
+            qsort(sanitized.keyframes,
+                sanitized.keyframeCount,
+                sizeof(sanitized.keyframes[0]),
+                compareTimelineKeyframesByTime);
+        }
+    }
+
+    if (memcmp(&vkrt->state.sceneTimeline, &sanitized, sizeof(sanitized)) == 0) return;
+    vkrt->state.sceneTimeline = sanitized;
     resetSceneData(vkrt);
 }
 

@@ -21,6 +21,7 @@ endif
 glslc = find_program('glslc', required: true)
 
 includes = include_directories(
+  'shared',
   'external/glfw3/include',
   'external/imgui/include',
   'external/imgui/icons',

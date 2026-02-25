@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdint.h>
+#include "constants.h"
 
 typedef enum SessionRenderCommand {
     SESSION_RENDER_COMMAND_NONE = 0,
@@ -8,11 +9,34 @@ typedef enum SessionRenderCommand {
     SESSION_RENDER_COMMAND_STOP,
 } SessionRenderCommand;
 
+enum { SESSION_SCENE_TIMELINE_KEYFRAME_CAPACITY = VKRT_SCENE_TIMELINE_MAX_KEYFRAMES };
+
+#define SESSION_SCENE_TIMELINE_TIME_MIN 0.0f
+#define SESSION_SCENE_TIMELINE_TIME_MAX 100000.0f
+#define SESSION_SCENE_TIMELINE_EMISSION_SCALE_MIN 0.0f
+#define SESSION_SCENE_TIMELINE_EMISSION_SCALE_MAX 1024.0f
+#define SESSION_SCENE_TIMELINE_EMISSION_TINT_MIN 0.0f
+#define SESSION_SCENE_TIMELINE_EMISSION_TINT_MAX 16.0f
+#define SESSION_SCENE_TIMELINE_DEFAULT_INCREMENT 0.5f
+
+typedef struct SessionSceneTimelineKeyframe {
+    float time;
+    float emissionScale;
+    float emissionTint[3];
+} SessionSceneTimelineKeyframe;
+
+typedef struct SessionSceneTimelineSettings {
+    uint8_t enabled;
+    uint32_t keyframeCount;
+    SessionSceneTimelineKeyframe keyframes[SESSION_SCENE_TIMELINE_KEYFRAME_CAPACITY];
+} SessionSceneTimelineSettings;
+
 typedef struct SessionRenderAnimationSettings {
     uint8_t enabled;
     float minTime;
     float maxTime;
     float timeStep;
+    SessionSceneTimelineSettings sceneTimeline;
 } SessionRenderAnimationSettings;
 
 typedef struct SessionRenderSettings {
@@ -27,6 +51,8 @@ typedef struct SessionSequenceProgress {
     uint32_t frameIndex;
     uint32_t frameCount;
     float currentTime;
+    uint8_t hasEstimatedRemaining;
+    float estimatedRemainingSeconds;
 } SessionSequenceProgress;
 
 typedef struct Session {

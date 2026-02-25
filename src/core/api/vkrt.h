@@ -7,6 +7,7 @@ extern "C" {
 #include <GLFW/glfw3.h>
 
 #include "cglm.h"
+#include "constants.h"
 
 #define WIDTH 1600
 #define HEIGHT 900
@@ -15,6 +16,17 @@ extern "C" {
 
 #define VKRT_RENDER_VIEW_ZOOM_MIN 1.0f
 #define VKRT_RENDER_VIEW_ZOOM_MAX 64.0f
+typedef struct VKRT_SceneTimelineKeyframe {
+    float time;
+    float emissionScale;
+    vec3 emissionTint;
+} VKRT_SceneTimelineKeyframe;
+
+typedef struct VKRT_SceneTimelineSettings {
+    uint8_t enabled;
+    uint32_t keyframeCount;
+    VKRT_SceneTimelineKeyframe keyframes[VKRT_SCENE_TIMELINE_MAX_KEYFRAMES];
+} VKRT_SceneTimelineSettings;
 
 typedef struct SceneData {
     mat4 viewInverse;
@@ -28,6 +40,11 @@ typedef struct SceneData {
     float timeStep;
     float fogDensity;
     float padding0;
+    uint32_t timelineEnabled;
+    uint32_t timelineKeyframeCount;
+    float timelinePadding[2];
+    vec4 timelineTimeScale[VKRT_SCENE_TIMELINE_MAX_KEYFRAMES];
+    vec4 timelineTint[VKRT_SCENE_TIMELINE_MAX_KEYFRAMES];
 } SceneData;
 
 typedef enum VKRT_ToneMappingMode {
@@ -251,6 +268,7 @@ typedef struct VKRT_PublicState {
     float fogDensity;
     float timeBase;
     float timeStep;
+    VKRT_SceneTimelineSettings sceneTimeline;
 } VKRT_PublicState;
 
 typedef struct VKRT {
@@ -287,6 +305,7 @@ void VKRT_setAutoSPPTargetFPS(VKRT* vkrt, uint32_t targetFPS);
 void VKRT_setToneMappingMode(VKRT* vkrt, VKRT_ToneMappingMode toneMappingMode);
 void VKRT_setFogDensity(VKRT* vkrt, float fogDensity);
 void VKRT_setTimeRange(VKRT* vkrt, float timeBase, float timeStep);
+void VKRT_setSceneTimeline(VKRT* vkrt, const VKRT_SceneTimelineSettings* timeline);
 int VKRT_saveRenderPNG(VKRT* vkrt, const char* path);
 int VKRT_startRender(VKRT* vkrt, uint32_t width, uint32_t height, uint32_t targetSamples);
 void VKRT_stopRenderSampling(VKRT* vkrt);
