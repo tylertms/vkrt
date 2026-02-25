@@ -632,11 +632,11 @@ int VKRT_startRender(VKRT* vkrt, uint32_t width, uint32_t height, uint32_t targe
     vkrt->state.renderModeActive = 1;
     vkrt->state.renderModeFinished = 0;
     vkrt->state.renderTargetSamples = targetSamples;
-    vkrt->state.renderViewZoom = 1.0f;
-    vkrt->state.renderViewPanX = 0.0f;
-    vkrt->state.renderViewPanY = 0.0f;
 
     if (!wasRenderModeActive || extentChanged) {
+        vkrt->state.renderViewZoom = 1.0f;
+        vkrt->state.renderViewPanX = 0.0f;
+        vkrt->state.renderViewPanY = 0.0f;
         vkrt->state.displayRenderTimeMs = 0.0f;
         vkrt->state.displayFrameTimeMs = 0.0f;
         vkrt->state.lastFrameTimestamp = 0;
