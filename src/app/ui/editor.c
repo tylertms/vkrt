@@ -25,6 +25,8 @@ static float gEditorUIScale = 0.0f;
 static const float kRenderViewWheelStep = 1.12f;
 static const float kInspectorControlSpacing = 1.0f;
 static const float kInspectorSectionIndent = 10.0f;
+static const float kInspectorCollapsedWidth = 46.0f;
+static const float kInspectorMinExpandedWidth = 140.0f;
 static const ImVec2 kTooltipPadding = {8.0f, 4.0f};
 
 typedef struct VerticalIconTab {
@@ -43,6 +45,7 @@ typedef enum InspectorTab {
 static void tooltipOnHover(const char* text);
 static void drawPaddedTooltip(const char* text);
 static void drawInspectorVerticalDivider(void);
+static void syncInspectorDockWidthForTabState(int currentTab);
 static void formatDriverVersionText(uint32_t vendorID, uint32_t driverVersion, char* out, size_t outSize);
 
 static uint32_t absDiffU32(uint32_t a, uint32_t b) {
@@ -348,7 +351,7 @@ static void drawPerformanceSection(VKRT* vkrt, bool controlsDisabled) {
         ImGui_Unindent();
     }
 
-    if (!ImGui_CollapsingHeader("Sampling & Effects", ImGuiTreeNodeFlags_DefaultOpen)) return;
+    if (!ImGui_CollapsingHeader("Sampling", ImGuiTreeNodeFlags_DefaultOpen)) return;
 
     ImGui_Indent();
     if (controlsDisabled) ImGui_BeginDisabled(true);
@@ -369,6 +372,19 @@ static void drawPerformanceSection(VKRT* vkrt, bool controlsDisabled) {
             VKRT_setSamplesPerPixel(vkrt, (uint32_t)spp);
         }
     }
+
+    if (controlsDisabled) {
+        ImGui_EndDisabled();
+    }
+    ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing});
+    ImGui_Unindent();
+}
+
+static void drawCameraEffectsSection(VKRT* vkrt, bool controlsDisabled) {
+    if (!ImGui_CollapsingHeader("Shading & Effects", ImGuiTreeNodeFlags_DefaultOpen)) return;
+
+    ImGui_Indent();
+    if (controlsDisabled) ImGui_BeginDisabled(true);
 
     int maxBounces = (int)vkrt->state.maxBounces;
     if (ImGui_SliderIntEx("Max Bounces", &maxBounces, 1, 64, "%d", ImGuiSliderFlags_AlwaysClamp)) {
@@ -395,6 +411,7 @@ static void drawPerformanceSection(VKRT* vkrt, bool controlsDisabled) {
     if (controlsDisabled) {
         ImGui_EndDisabled();
     }
+    ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing});
     ImGui_Unindent();
 }
 
@@ -422,6 +439,7 @@ static void drawCameraSection(VKRT* vkrt, bool renderModeActive) {
 
     if (!changed && !fovChanged) {
         ImGui_EndDisabled();
+        ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing});
         ImGui_Unindent();
         return;
     }
@@ -435,6 +453,7 @@ static void drawCameraSection(VKRT* vkrt, bool renderModeActive) {
     }
     VKRT_cameraSetPose(vkrt, position, target, up, fov);
     ImGui_EndDisabled();
+    ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing});
     ImGui_Unindent();
 }
 
@@ -470,6 +489,57 @@ static void drawInspectorVerticalDivider(void) {
         ImGui_GetColorU32(ImGuiCol_Separator),
         1.0f);
     ImGui_Dummy((ImVec2){1.0f, height});
+}
+
+static void syncInspectorDockWidthForTabState(int currentTab) {
+    static bool wasCollapsed = false;
+    static float expandedWidth = 0.0f;
+
+    ImGuiDockNode* inspectorNode = ImGui_GetWindowDockNode();
+    if (!inspectorNode) return;
+
+    ImGuiDockNode* parentNode = inspectorNode->ParentNode;
+    if (!parentNode || parentNode->SplitAxis != ImGuiAxis_X) return;
+
+    ImGuiDockNode* siblingNode = NULL;
+    if (parentNode->ChildNodes[0] == inspectorNode) siblingNode = parentNode->ChildNodes[1];
+    else if (parentNode->ChildNodes[1] == inspectorNode) siblingNode = parentNode->ChildNodes[0];
+    if (!siblingNode) return;
+
+    float totalWidth = parentNode->Size.x;
+    if (totalWidth <= 2.0f) return;
+
+    bool collapsed = currentTab < 0;
+    if (!collapsed && expandedWidth <= 0.0f) {
+        expandedWidth = inspectorNode->Size.x;
+    }
+
+    if (collapsed) {
+        if (!wasCollapsed) {
+            expandedWidth = inspectorNode->Size.x;
+        }
+
+        float collapsedWidth = kInspectorCollapsedWidth;
+        if (collapsedWidth < 1.0f) collapsedWidth = 1.0f;
+        if (collapsedWidth > totalWidth - 1.0f) collapsedWidth = totalWidth - 1.0f;
+
+        inspectorNode->SizeRef.x = collapsedWidth;
+        siblingNode->SizeRef.x = totalWidth - collapsedWidth;
+        parentNode->WantLockSizeOnce = true;
+        wasCollapsed = true;
+        return;
+    }
+
+    if (wasCollapsed) {
+        float restoredWidth = expandedWidth;
+        if (restoredWidth < kInspectorMinExpandedWidth) restoredWidth = totalWidth * 0.26f;
+        if (restoredWidth > totalWidth - 1.0f) restoredWidth = totalWidth - 1.0f;
+
+        inspectorNode->SizeRef.x = restoredWidth;
+        siblingNode->SizeRef.x = totalWidth - restoredWidth;
+        parentNode->WantLockSizeOnce = true;
+        wasCollapsed = false;
+    }
 }
 
 static void queryRenderSourceExtent(const VKRT* vkrt, float* outWidth, float* outHeight) {
@@ -838,6 +908,7 @@ static void drawRenderSection(VKRT* vkrt, Session* session) {
                 ImGui_Text(ICON_FA_CLOCK " Remaining: %s", etaText);
             }
         }
+        ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing});
         ImGui_Unindent();
     }
 
@@ -862,6 +933,7 @@ static void drawRenderSection(VKRT* vkrt, Session* session) {
                 sessionQueueRenderStop(session);
             }
         }
+        ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing});
         ImGui_Unindent();
     }
 }
@@ -888,6 +960,7 @@ static void drawConfigSection(VKRT* vkrt, bool renderModeActive) {
         vkrt->runtime.framebufferResized = VK_TRUE;
     }
     ImGui_EndDisabled();
+    ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing});
     ImGui_Unindent();
 }
 
@@ -985,6 +1058,7 @@ static void drawEditorSection(VKRT* vkrt, Session* session, bool renderModeActiv
     ImGui_BeginDisabled(renderModeActive);
     drawMeshInspector(vkrt, session);
     ImGui_EndDisabled();
+    ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing});
     ImGui_Unindent();
 }
 
@@ -1014,6 +1088,7 @@ static void drawSceneInspectorWindow(VKRT* vkrt, Session* session) {
     ImVec2 defaultSpacing = ImGui_GetStyle()->ItemSpacing;
     ImGui_PushStyleVarImVec2(ImGuiStyleVar_ItemSpacing, (ImVec2){0.0f, defaultSpacing.y});
     drawVerticalIconTabs(kTabs, IM_ARRAYSIZE(kTabs), &currentTab);
+    syncInspectorDockWidthForTabState(currentTab);
     if (currentTab >= 0) {
         ImGui_SameLine();
         drawInspectorVerticalDivider();
@@ -1063,6 +1138,7 @@ static void drawSceneInspectorWindow(VKRT* vkrt, Session* session) {
             break;
         case INSPECTOR_TAB_CAMERA:
             drawCameraSection(vkrt, renderModeActive);
+            drawCameraEffectsSection(vkrt, renderModeActive);
             break;
         case INSPECTOR_TAB_RENDER:
             drawRenderSection(vkrt, session);
