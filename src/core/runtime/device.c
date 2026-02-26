@@ -62,6 +62,8 @@ void pickPhysicalDevice(VKRT* vkrt) {
 
     LOG_INFO("Using device [%s].", deviceProperties.deviceName);
     snprintf(vkrt->core.deviceName, COUNT_OF(vkrt->core.deviceName), "%s", deviceProperties.deviceName);
+    vkrt->core.vendorID = deviceProperties.vendorID;
+    vkrt->core.driverVersion = deviceProperties.driverVersion;
     free(devices);
 }
 

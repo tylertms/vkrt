@@ -198,6 +198,8 @@ typedef struct VKRT_Core {
     VkBool32 materialDataDirty;
     VkBool32 descriptorSetReady;
     char deviceName[256];
+    uint32_t vendorID;
+    uint32_t driverVersion;
     VKRT_ShaderConfig shaders;
     VKRT_DeviceProcedures procs;
 } VKRT_Core;
