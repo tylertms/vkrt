@@ -726,6 +726,7 @@ static void drawRenderSection(VKRT* vkrt, Session* session) {
 
                 ImGui_BeginDisabled(!timelineEnabled);
                 bool timelineEdited = false;
+                bool timeActivelyEditing = false;
 
                 if (ImGui_Button(ICON_FA_PLUS " Add")) {
                     if (sceneTimeline->keyframeCount < SESSION_SCENE_TIMELINE_KEYFRAME_CAPACITY) {
@@ -758,11 +759,14 @@ static void drawRenderSection(VKRT* vkrt, Session* session) {
                     ImGui_SeparatorText("Marker");
 
                     ImGui_SetNextItemWidth(inputWidth);
-                    timelineEdited |= ImGui_DragFloatEx("Time", &key->time, 0.01f,
+                    ImGui_DragFloatEx("Time", &key->time, 0.01f,
                         SESSION_SCENE_TIMELINE_TIME_MIN,
                         SESSION_SCENE_TIMELINE_TIME_MAX,
                         "%.3f",
                         ImGuiSliderFlags_AlwaysClamp);
+                    timelineEdited |= ImGui_IsItemDeactivatedAfterEdit();
+                    timeActivelyEditing |= ImGui_IsItemActive();
+
                     ImGui_SetNextItemWidth(inputWidth);
                     timelineEdited |= ImGui_DragFloatEx("Emission Scale", &key->emissionScale, 0.01f,
                         SESSION_SCENE_TIMELINE_EMISSION_SCALE_MIN,
@@ -774,7 +778,7 @@ static void drawRenderSection(VKRT* vkrt, Session* session) {
                     ImGui_PopID();
                 }
 
-                if (timelineEdited) {
+                if (timelineEdited && !timeActivelyEditing) {
                     sessionSanitizeAnimationSettings(anim);
                 }
                 ImGui_EndDisabled();
