@@ -140,9 +140,13 @@ static void noteCompletedFrameTime(RenderSequencer* sequencer, uint64_t frameEnd
     float seconds = (float)(frameEndTimeUs - sequencer->frameStartTimeUs) / 1000000.0f;
     if (!(seconds > 0.0f)) return;
 
-    float weighted = sequencer->averageFrameSeconds * (float)sequencer->timedFrameCount + seconds;
     sequencer->timedFrameCount++;
-    sequencer->averageFrameSeconds = weighted / (float)sequencer->timedFrameCount;
+    if (sequencer->timedFrameCount == 1) {
+        sequencer->averageFrameSeconds = seconds;
+    } else {
+        static const float kEmaAlpha = 0.3f;
+        sequencer->averageFrameSeconds = kEmaAlpha * seconds + (1.0f - kEmaAlpha) * sequencer->averageFrameSeconds;
+    }
 }
 
 static int startSequenceRender(VKRT* vkrt, const RenderSequencer* sequencer) {

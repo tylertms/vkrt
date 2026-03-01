@@ -907,6 +907,25 @@ static void drawRenderSection(VKRT* vkrt, Session* session) {
                 formatEstimatedDuration(seq->estimatedRemainingSeconds, etaText, sizeof(etaText));
                 ImGui_Text(ICON_FA_CLOCK " Remaining: %s", etaText);
             }
+        } else if (!vkrt->state.renderModeFinished &&
+                   vkrt->state.renderTargetSamples > 0 &&
+                   vkrt->state.totalSamples > 0) {
+            static uint64_t sRenderStartTimeUs = 0;
+            static uint64_t sLastTotalSamples = 0;
+            if (vkrt->state.totalSamples < sLastTotalSamples) {
+                sRenderStartTimeUs = getMicroseconds();
+            }
+            sLastTotalSamples = vkrt->state.totalSamples;
+            uint64_t nowUs = getMicroseconds();
+            float elapsedSeconds = (float)(nowUs - sRenderStartTimeUs) / 1000000.0f;
+            if (elapsedSeconds > 0.5f) {
+                float rate = (float)vkrt->state.totalSamples / elapsedSeconds;
+                uint64_t remaining = vkrt->state.renderTargetSamples - vkrt->state.totalSamples;
+                float etaSeconds = (float)remaining / rate;
+                char etaText[32] = {0};
+                formatEstimatedDuration(etaSeconds, etaText, sizeof(etaText));
+                ImGui_Text(ICON_FA_CLOCK " Remaining: %s", etaText);
+            }
         }
         ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing});
         ImGui_Unindent();
