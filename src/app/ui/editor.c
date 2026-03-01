@@ -912,19 +912,31 @@ static void drawRenderSection(VKRT* vkrt, Session* session) {
                    vkrt->state.totalSamples > 0) {
             static uint64_t sRenderStartTimeUs = 0;
             static uint64_t sLastTotalSamples = 0;
-            if (vkrt->state.totalSamples < sLastTotalSamples) {
+            static uint64_t sMeasureBaseTimeUs = 0;
+            static uint64_t sMeasureBaseSamples = 0;
+            if (vkrt->state.totalSamples < sLastTotalSamples || sRenderStartTimeUs == 0) {
                 sRenderStartTimeUs = getMicroseconds();
+                sMeasureBaseTimeUs = 0;
+                sMeasureBaseSamples = 0;
             }
             sLastTotalSamples = vkrt->state.totalSamples;
             uint64_t nowUs = getMicroseconds();
-            float elapsedSeconds = (float)(nowUs - sRenderStartTimeUs) / 1000000.0f;
-            if (elapsedSeconds > 0.5f) {
-                float rate = (float)vkrt->state.totalSamples / elapsedSeconds;
-                uint64_t remaining = vkrt->state.renderTargetSamples - vkrt->state.totalSamples;
-                float etaSeconds = (float)remaining / rate;
-                char etaText[32] = {0};
-                formatEstimatedDuration(etaSeconds, etaText, sizeof(etaText));
-                ImGui_Text(ICON_FA_CLOCK " Remaining: %s", etaText);
+            float sinceStart = (float)(nowUs - sRenderStartTimeUs) / 1000000.0f;
+            if (sMeasureBaseTimeUs == 0 && sinceStart >= 2.0f) {
+                sMeasureBaseTimeUs = nowUs;
+                sMeasureBaseSamples = vkrt->state.totalSamples;
+            }
+            if (sMeasureBaseTimeUs != 0) {
+                float elapsed = (float)(nowUs - sMeasureBaseTimeUs) / 1000000.0f;
+                uint64_t samplesDelta = vkrt->state.totalSamples - sMeasureBaseSamples;
+                if (elapsed > 0.5f && samplesDelta > 0) {
+                    float rate = (float)samplesDelta / elapsed;
+                    uint64_t remaining = vkrt->state.renderTargetSamples - vkrt->state.totalSamples;
+                    float etaSeconds = (float)remaining / rate;
+                    char etaText[32] = {0};
+                    formatEstimatedDuration(etaSeconds, etaText, sizeof(etaText));
+                    ImGui_Text(ICON_FA_CLOCK " Remaining: %s", etaText);
+                }
             }
         }
         ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing});
