@@ -113,7 +113,7 @@ bool sampleDirectLight(
     float dist = sqrt(dist2);
     vec3 wi = toLight / dist;
 
-    float cosLight = max(dot(lightNormal, -wi), 0.0);
+    float cosLight = abs(dot(lightNormal, -wi));
     if (cosLight <= 1e-7) return false;
 
     float pSelectMesh = light.stats.z;
@@ -154,7 +154,7 @@ float lightPdfForEmitterHit(uint meshIndex, uint primitiveIndex, vec3 previousPo
     if (!(dist2 > 1e-8)) return 0.0;
 
     vec3 wi = normalize(toLight);
-    float cosLight = max(dot(lightNormal, -wi), 0.0);
+    float cosLight = abs(dot(lightNormal, -wi));
     if (cosLight <= 1e-7) return 0.0;
 
     float pArea = light.stats.z / light.stats.y;

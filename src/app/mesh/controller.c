@@ -180,5 +180,5 @@ void meshControllerLoadDefaultAssets(VKRT* vkrt, Session* session) {
     vec3 cameraUp = {0.0f, 0.0f, 1.0f};
     VKRT_cameraSetPose(vkrt, cameraPosition, cameraTarget, cameraUp, 26.9f);
 
-    VKRT_setFogDensity(vkrt, 0.15);
+    VKRT_setFogDensity(vkrt, 0.0);
 }

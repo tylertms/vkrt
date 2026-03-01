@@ -125,6 +125,8 @@ void rebuildLightBuffers(VKRT* vkrt) {
             vec3 p0 = {0.0f, 0.0f, 0.0f};
             vec3 p1 = {0.0f, 0.0f, 0.0f};
             vec3 p2 = {0.0f, 0.0f, 0.0f};
+            vec3 e1World = {0.0f, 0.0f, 0.0f};
+            vec3 e2World = {0.0f, 0.0f, 0.0f};
             float area = 0.0f;
 
             if (i0 < mesh->info.vertexCount && i1 < mesh->info.vertexCount && i2 < mesh->info.vertexCount) {
@@ -139,6 +141,54 @@ void rebuildLightBuffers(VKRT* vkrt) {
                 area = 0.5f * glm_vec3_norm(crossE);
                 if (!isfinite(area) || area < 0.0f) area = 0.0f;
                 totalArea += area;
+
+                glm_vec3_copy(e1Valid, e1World);
+                glm_vec3_copy(e2Valid, e2World);
+
+                vec3 objP0 = {
+                    mesh->vertices[i0].position[0],
+                    mesh->vertices[i0].position[1],
+                    mesh->vertices[i0].position[2]
+                };
+                vec3 objP1 = {
+                    mesh->vertices[i1].position[0],
+                    mesh->vertices[i1].position[1],
+                    mesh->vertices[i1].position[2]
+                };
+                vec3 objP2 = {
+                    mesh->vertices[i2].position[0],
+                    mesh->vertices[i2].position[1],
+                    mesh->vertices[i2].position[2]
+                };
+                vec3 objN0 = {
+                    mesh->vertices[i0].normal[0],
+                    mesh->vertices[i0].normal[1],
+                    mesh->vertices[i0].normal[2]
+                };
+                vec3 objN1 = {
+                    mesh->vertices[i1].normal[0],
+                    mesh->vertices[i1].normal[1],
+                    mesh->vertices[i1].normal[2]
+                };
+                vec3 objN2 = {
+                    mesh->vertices[i2].normal[0],
+                    mesh->vertices[i2].normal[1],
+                    mesh->vertices[i2].normal[2]
+                };
+
+                vec3 objE1, objE2, objFace, avgObjNormal;
+                glm_vec3_sub(objP1, objP0, objE1);
+                glm_vec3_sub(objP2, objP0, objE2);
+                glm_vec3_cross(objE1, objE2, objFace);
+
+                glm_vec3_add(objN0, objN1, avgObjNormal);
+                glm_vec3_add(avgObjNormal, objN2, avgObjNormal);
+                if (glm_vec3_norm2(objFace) > 1e-12f && glm_vec3_norm2(avgObjNormal) > 1e-12f) {
+                    if (glm_vec3_dot(objFace, avgObjNormal) < 0.0f) {
+                        glm_vec3_sub(p2, p0, e1World);
+                        glm_vec3_sub(p1, p0, e2World);
+                    }
+                }
             }
 
             EmissiveTriangleGPU triGPU = {0};
@@ -147,14 +197,14 @@ void rebuildLightBuffers(VKRT* vkrt) {
             triGPU.v0Area[2] = p0[2];
             triGPU.v0Area[3] = area;
 
-            triGPU.e1Pad[0] = p1[0] - p0[0];
-            triGPU.e1Pad[1] = p1[1] - p0[1];
-            triGPU.e1Pad[2] = p1[2] - p0[2];
+            triGPU.e1Pad[0] = e1World[0];
+            triGPU.e1Pad[1] = e1World[1];
+            triGPU.e1Pad[2] = e1World[2];
             triGPU.e1Pad[3] = 0.0f;
 
-            triGPU.e2Pad[0] = p2[0] - p0[0];
-            triGPU.e2Pad[1] = p2[1] - p0[1];
-            triGPU.e2Pad[2] = p2[2] - p0[2];
+            triGPU.e2Pad[0] = e2World[0];
+            triGPU.e2Pad[1] = e2World[1];
+            triGPU.e2Pad[2] = e2World[2];
             triGPU.e2Pad[3] = 0.0f;
 
             emissiveTriangles[triangleWriteIndex++] = triGPU;

@@ -34,6 +34,11 @@ vec3 debugBounceHeatmap(uint bounces, uint maxBounces) {
     return mix(vec3(0.0, 1.0, 0.0), vec3(1.0, 0.0, 0.0), (t - 0.5) * 2.0);
 }
 
+float debugDepthValue(float distance) {
+    float scaledDistance = max(distance, 0.0) * 0.25;
+    return 1.0 / (1.0 + scaledDistance);
+}
+
 vec3 trace(ivec2 pixel, inout uint state) {
     ivec2 viewportOrigin = ivec2(scene.viewportRect.xy);
     ivec2 viewportSize = ivec2(scene.viewportRect.zw);
@@ -60,7 +65,7 @@ vec3 trace(ivec2 pixel, inout uint state) {
         traceRayEXT(topLevelAS, rayFlags, 0xFF, 0, 0, 0, ray.origin, rayMinDistance, ray.dir, rayMaxDistance, 0);
         if (!payload.didHit) return vec3(0.0);
         if (debugMode == 1u) return payload.normal * 0.5 + 0.5;
-        return vec3(1.0 - clamp(payload.hitDistance / rayMaxDistance, 0.0, 1.0));
+        return vec3(debugDepthValue(payload.hitDistance));
     }
 
     bool neeOn = scene.neeEnabled != 0u;
@@ -102,6 +107,7 @@ vec3 trace(ivec2 pixel, inout uint state) {
 
             if (scatterDistance < segmentDistance) {
                 traveledDistance = max(scatterDistance, rayMinDistance);
+                throughput *= exp(-fogDensity * traveledDistance);
                 payload.time += traveledDistance;
                 ray.origin += ray.dir * traveledDistance;
                 bounceCount++;
@@ -113,7 +119,7 @@ vec3 trace(ivec2 pixel, inout uint state) {
                     {
                         float shadowDistance = directSample.distance - rayMinDistance;
                         if (shadowDistance > rayMinDistance
-                            && traceShadowVisibility(ray.origin + directSample.wi * rayMinDistance,
+                            && traceShadowVisibility(ray.origin,
                                                      directSample.wi, shadowDistance, rayMinDistance))
                         {
                             float phase = mediumIsotropicPhase();
@@ -131,6 +137,8 @@ vec3 trace(ivec2 pixel, inout uint state) {
                 if (!applyRussianRoulette(throughput, state, i)) break;
                 continue;
             }
+
+            throughput *= exp(-fogDensity * segmentDistance);
         }
 
         payload.time += traveledDistance;
@@ -142,6 +150,7 @@ vec3 trace(ivec2 pixel, inout uint state) {
             TimelineSample emissionSample = sampleTimeline(observationTime - payload.time);
             applyTimelineEmission(material, emissionSample);
         }
+        bool emissiveSurface = material.emissionStrength > 0.0;
 
         if (!neeOnly && material.emissionStrength > 0.0) {
             vec3 emitted = material.emissionColor * material.emissionStrength;
@@ -153,7 +162,7 @@ vec3 trace(ivec2 pixel, inout uint state) {
             radiance += throughput * emitted * emissionWeight;
         }
 
-        if (neeOn && !bsdfOnly) {
+        if (neeOn && !bsdfOnly && !emissiveSurface) {
             DirectLightSample directSample;
             if (sampleDirectLight(payload.point, payload.time, observationTime, tlActive, state, directSample)
                 && directSample.pdf > 1e-8)
@@ -161,12 +170,13 @@ vec3 trace(ivec2 pixel, inout uint state) {
                 float cosSurface = max(dot(payload.normal, directSample.wi), 0.0);
                 float shadowDistance = directSample.distance - rayMinDistance;
                 if (cosSurface > 0.0 && shadowDistance > rayMinDistance
-                    && traceShadowVisibility(payload.point + payload.normal * rayMinDistance,
+                    && traceShadowVisibility(payload.point,
                                              directSample.wi, shadowDistance, rayMinDistance))
                 {
                     vec3 f = evalBSDF(payload.normal, directSample.wi, -ray.dir, material);
                     float bsdfPdf = pdfBSDF(payload.normal, directSample.wi, -ray.dir, material);
                     float misWeight = misOn ? misPowerWeight(directSample.pdf, bsdfPdf) : 1.0;
+                    if (isnan(bsdfPdf) || isinf(bsdfPdf) || isnan(misWeight) || isinf(misWeight)) continue;
                     radiance += throughput * f * directSample.radiance *
                         (cosSurface * exp(-fogDensity * directSample.distance) * misWeight / directSample.pdf);
                 }
@@ -177,7 +187,10 @@ vec3 trace(ivec2 pixel, inout uint state) {
         BSDFSample bsdfSample = sampleBSDF(payload.normal, outgoing, material, state);
         if (bsdfSample.pdf < 1e-7 || dot(payload.normal, bsdfSample.incoming) <= 0.0) break;
 
-        throughput *= bsdfSample.f * dot(payload.normal, bsdfSample.incoming) / bsdfSample.pdf;
+        vec3 bsdfFactor = bsdfSample.f * dot(payload.normal, bsdfSample.incoming) / bsdfSample.pdf;
+        if (any(isnan(bsdfFactor)) || any(isinf(bsdfFactor))) break;
+        throughput *= bsdfFactor;
+        if (any(isnan(throughput)) || any(isinf(throughput))) break;
         hasPrevSample = true;
         prevSamplePdf = bsdfSample.pdf;
 

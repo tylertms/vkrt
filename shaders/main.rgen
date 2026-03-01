@@ -7,6 +7,14 @@ layout(location = 0) rayPayloadEXT Payload payload;
 
 #include "integrator/trace.glsl"
 
+bool isFiniteVec3(vec3 v) {
+    return !any(isnan(v)) && !any(isinf(v));
+}
+
+bool isFiniteVec4(vec4 v) {
+    return !any(isnan(v)) && !any(isinf(v));
+}
+
 void main() {
     ivec2 pixel = ivec2(gl_LaunchIDEXT.xy);
     ivec2 viewportOrigin = ivec2(scene.viewportRect.xy);
@@ -27,6 +35,9 @@ void main() {
 
     uint spp = max(scene.samplesPerPixel, 1u);
     vec4 previous = imageLoad(accumulationReadImage, pixel);
+    if (!isFiniteVec4(previous) || previous.a < 0.0) {
+        previous = vec4(0.0);
+    }
     uint previousSamples = uint(previous.a + 0.5);
     uint rngBase = initRngBase(uvec2(pixel), scene.frameNumber);
 
@@ -34,18 +45,23 @@ void main() {
     for (uint sampleIndex = 0; sampleIndex < spp; sampleIndex++) {
         uint sampleNumber = previousSamples + sampleIndex;
         uint state = initRngState(rngBase, sampleNumber);
-        frameRadiance += trace(pixel, state);
+        vec3 sampleRadiance = trace(pixel, state);
+        if (!isFiniteVec3(sampleRadiance)) sampleRadiance = vec3(0.0);
+        frameRadiance += sampleRadiance;
     }
     frameRadiance /= float(spp);
+    if (!isFiniteVec3(frameRadiance)) frameRadiance = vec3(0.0);
 
     float previousWeight = float(previousSamples);
     float newWeight = float(spp);
     vec3 accumulated = (previous.rgb * previousWeight + frameRadiance * newWeight) / (previousWeight + newWeight);
+    if (!isFiniteVec3(accumulated)) accumulated = vec3(0.0);
 
     vec3 mapped = accumulated;
     if (scene.debugMode == 0u && scene.toneMappingMode == 1u) {
         mapped = toneMapACES(mapped);
     }
+    if (!isFiniteVec3(mapped)) mapped = vec3(0.0);
 
     imageStore(accumulationWriteImage, pixel, vec4(accumulated, previousWeight + newWeight));
     imageStore(outputImage, pixel, vec4(mapped, 1.0));
