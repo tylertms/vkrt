@@ -6,7 +6,13 @@
 #include "bsdf/diffuse.glsl"
 #include "bsdf/ggx.glsl"
 
-vec3 sampleBSDF(vec3 normal, vec3 outgoing, Material material, inout uint state) {
+struct BSDFSample {
+    vec3 incoming;
+    vec3 f;
+    float pdf;
+};
+
+vec3 sampleBSDFDirection(vec3 normal, vec3 outgoing, Material material, inout uint state) {
     float alpha = max(material.roughness * material.roughness, 0.001);
     vec3 f0 = mix(vec3(0.04), material.baseColor, material.metallic);
     float specularWeight = clamp(luminance(f0), 0.1, 0.9);
@@ -37,6 +43,14 @@ float pdfBSDF(vec3 normal, vec3 incoming, vec3 outgoing, Material material) {
     float specular = specularWeight * pdfGGX(normal, incoming, outgoing, alpha);
 
     return diffuse + specular;
+}
+
+BSDFSample sampleBSDF(vec3 normal, vec3 outgoing, Material material, inout uint state) {
+    BSDFSample result;
+    result.incoming = sampleBSDFDirection(normal, outgoing, material, state);
+    result.pdf = pdfBSDF(normal, result.incoming, outgoing, material);
+    result.f = evalBSDF(normal, result.incoming, outgoing, material);
+    return result;
 }
 
 #endif

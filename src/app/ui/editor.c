@@ -969,6 +969,30 @@ static void drawRenderSection(VKRT* vkrt, Session* session) {
     }
 }
 
+static void drawDebugSection(VKRT* vkrt, bool controlsDisabled) {
+    if (!ImGui_CollapsingHeader("Debug", ImGuiTreeNodeFlags_None)) return;
+
+    ImGui_Indent();
+    if (controlsDisabled) ImGui_BeginDisabled(true);
+
+    const char* debugModeLabels[] = {"None", "Normals", "Depth", "Bounce Count", "NEE Only", "BSDF Only"};
+    int debugMode = (int)vkrt->state.debugMode;
+    if (ImGui_ComboCharEx("Debug Mode", &debugMode, debugModeLabels, 6, 6)) {
+        VKRT_setDebugMode(vkrt, (uint32_t)debugMode);
+    }
+
+    bool nee = vkrt->state.neeEnabled != 0;
+    if (ImGui_Checkbox("NEE + MIS", &nee)) {
+        VKRT_setNEEEnabled(vkrt, nee ? 1 : 0);
+        VKRT_setMISEnabled(vkrt, nee ? 1 : 0);
+    }
+    tooltipOnHover("Next Event Estimation with Multiple Importance Sampling. Traces shadow rays to lights at each bounce for faster convergence.");
+
+    if (controlsDisabled) ImGui_EndDisabled();
+    ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing});
+    ImGui_Unindent();
+}
+
 static void drawConfigSection(VKRT* vkrt, bool renderModeActive) {
     if (ImGui_CollapsingHeader("System", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui_Indent();
@@ -1165,6 +1189,7 @@ static void drawSceneInspectorWindow(VKRT* vkrt, Session* session) {
         switch ((InspectorTab)currentTab) {
         case INSPECTOR_TAB_MAIN:
             drawConfigSection(vkrt, renderModeActive);
+            drawDebugSection(vkrt, renderModeActive);
             drawPerformanceSection(vkrt, renderModeActive);
             break;
         case INSPECTOR_TAB_CAMERA:
@@ -1179,6 +1204,7 @@ static void drawSceneInspectorWindow(VKRT* vkrt, Session* session) {
             break;
         default:
             drawConfigSection(vkrt, renderModeActive);
+            drawDebugSection(vkrt, renderModeActive);
             drawPerformanceSection(vkrt, renderModeActive);
             break;
         }

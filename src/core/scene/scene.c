@@ -30,8 +30,6 @@ static void writeTimelineUniform(SceneData* sceneData, const VKRT_PublicState* s
     uint32_t keyCount = state->sceneTimeline.keyframeCount;
     if (keyCount > VKRT_SCENE_TIMELINE_MAX_KEYFRAMES) keyCount = VKRT_SCENE_TIMELINE_MAX_KEYFRAMES;
     sceneData->timelineKeyframeCount = keyCount;
-    sceneData->timelinePadding[0] = 0.0f;
-    sceneData->timelinePadding[1] = 0.0f;
 
     for (uint32_t i = 0; i < VKRT_SCENE_TIMELINE_MAX_KEYFRAMES; i++) {
         float time = 0.0f;
@@ -224,11 +222,20 @@ void createSceneUniform(VKRT* vkrt) {
     vkrt->state.timeBase = -1.0f;
     vkrt->state.timeStep = 0.5f;
     vkrt->state.fogDensity = 0.0f;
+    vkrt->state.debugMode = 0;
+    vkrt->state.neeEnabled = 1;
+    vkrt->state.misEnabled = 1;
     resetTimelineDefaults(&vkrt->state);
     vkrt->core.sceneData->timeBase = vkrt->state.timeBase;
     vkrt->core.sceneData->timeStep = vkrt->state.timeStep;
     vkrt->core.sceneData->fogDensity = vkrt->state.fogDensity;
-    vkrt->core.sceneData->padding0 = 0.0f;
+    vkrt->core.sceneData->debugMode = 0;
+    vkrt->core.sceneData->emissiveMeshCount = 0;
+    vkrt->core.sceneData->emissiveTriangleCount = 0;
+    vkrt->core.sceneData->neeEnabled = 1;
+    vkrt->core.sceneData->misEnabled = 1;
+    vkrt->core.sceneData->padding0 = 0;
+    vkrt->core.sceneData->padding1 = 0;
 
     updateMatricesFromCamera(vkrt);
 }
@@ -254,7 +261,11 @@ void resetSceneData(VKRT* vkrt) {
     vkrt->core.sceneData->timeBase = vkrt->state.timeBase;
     vkrt->core.sceneData->timeStep = vkrt->state.timeStep;
     vkrt->core.sceneData->fogDensity = vkrt->state.fogDensity;
-    vkrt->core.sceneData->padding0 = 0.0f;
+    vkrt->core.sceneData->debugMode = vkrt->state.debugMode;
+    vkrt->core.sceneData->emissiveMeshCount = vkrt->core.emissiveMeshCount;
+    vkrt->core.sceneData->emissiveTriangleCount = vkrt->core.emissiveTriangleCount;
+    vkrt->core.sceneData->neeEnabled = vkrt->state.neeEnabled ? 1u : 0u;
+    vkrt->core.sceneData->misEnabled = vkrt->state.misEnabled ? 1u : 0u;
     writeTimelineUniform(vkrt->core.sceneData, &vkrt->state);
 
     vkrt->state.renderModeFinished = 0;

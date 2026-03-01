@@ -52,6 +52,7 @@ void meshControllerApplySessionActions(VKRT* vkrt, Session* session) {
 void meshControllerLoadDefaultAssets(VKRT* vkrt, Session* session) {
     const char* planePath = "assets/models/plane.glb";
     const char* spherePath = "assets/models/sphere.glb";
+    const char* dragonPath = "assets/models/dragon.glb";
 
     uint32_t floorMesh = UINT32_MAX;
     uint32_t ceilingMesh = UINT32_MAX;
@@ -131,7 +132,7 @@ void meshControllerLoadDefaultAssets(VKRT* vkrt, Session* session) {
     lightMaterial.emissionColor[0] = 1.0f;
     lightMaterial.emissionColor[1] = 0.97f;
     lightMaterial.emissionColor[2] = 0.90f;
-    lightMaterial.emissionStrength = 200.0f;
+    lightMaterial.emissionStrength = 70.0f;
 
     if (floorMesh != UINT32_MAX) VKRT_setMeshMaterial(vkrt, floorMesh, &neutralWhite);
     if (ceilingMesh != UINT32_MAX) VKRT_setMeshMaterial(vkrt, ceilingMesh, &neutralWhite);
@@ -141,7 +142,7 @@ void meshControllerLoadDefaultAssets(VKRT* vkrt, Session* session) {
     if (ceilingLightMesh != UINT32_MAX) VKRT_setMeshMaterial(vkrt, ceilingLightMesh, &lightMaterial);
 
     uint32_t dragonMeshIndex = UINT32_MAX;
-    if (meshControllerImportMesh(vkrt, session, "assets/models/dragon.glb", "dragon", &dragonMeshIndex)) {
+    if (meshControllerImportMesh(vkrt, session, dragonPath, "dragon", &dragonMeshIndex)) {
         MaterialData dragonMaterial = {
             .baseColor = {0.74f, 0.73f, 0.72f},
             .roughness = 0.78f,
@@ -150,11 +151,28 @@ void meshControllerLoadDefaultAssets(VKRT* vkrt, Session* session) {
             .emissionStrength = 0.0f,
         };
 
-        vec3 dragonPosition = {0.0f, 0.0f, 0.59f};
+        vec3 dragonPosition = {-0.1f, 0.32f, 0.59f};
         vec3 dragonRotation = {0.0f, 0.0f, 125.0f};
         vec3 dragonScale = {8.0f, 8.0f, 8.0f};
         VKRT_setMeshTransform(vkrt, dragonMeshIndex, dragonPosition, dragonRotation, dragonScale);
         VKRT_setMeshMaterial(vkrt, dragonMeshIndex, &dragonMaterial);
+    }
+
+    uint32_t sphereMeshIndex = UINT32_MAX;
+    if (meshControllerImportMesh(vkrt, session, spherePath, "sphere", &sphereMeshIndex)) {
+        MaterialData sphereMaterial = {
+            .baseColor = {1.0f, 1.0f, 1.0f},
+            .roughness = 0.0f,
+            .metallic = 1.0f,
+            .emissionColor = {1.0f, 1.0f, 1.0f},
+            .emissionStrength = 0.0f,
+        };
+
+        vec3 spherePosition = {0.42f, -0.15f, 0.70f};
+        vec3 sphereRotation = {0.0f, 0.0f, 0.0f};
+        vec3 sphereScale = {0.3f, 0.3f, 0.3f};
+        VKRT_setMeshTransform(vkrt, sphereMeshIndex, spherePosition, sphereRotation, sphereScale);
+        VKRT_setMeshMaterial(vkrt, sphereMeshIndex, &sphereMaterial);
     }
 
     vec3 cameraPosition = {0.0f, -5.17, 0.0f};

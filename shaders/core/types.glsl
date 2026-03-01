@@ -22,6 +22,8 @@ struct Payload {
     bool didHit;
     vec3 normal;
     uint materialIndex;
+    uint instanceIndex;
+    uint primitiveIndex;
     float time;
     float hitDistance;
 };

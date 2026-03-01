@@ -3,7 +3,36 @@
 
 #include "utility/fog.glsl"
 #include "utility/timeline.glsl"
+#include "core/mis.glsl"
 #include "bsdf/bsdf.glsl"
+#include "lighting/direct.glsl"
+
+bool applyRussianRoulette(inout vec3 throughput, inout uint state, uint bounce) {
+    if (bounce < 3u) return true;
+
+    float continueProbability = clamp(max(throughput.r, max(throughput.g, throughput.b)), 0.05, 0.95);
+    if (rand(state) > continueProbability) return false;
+    throughput /= continueProbability;
+    return true;
+}
+
+bool traceShadowVisibility(vec3 origin, vec3 direction, float maxDistance, float rayMinDistance) {
+    if (!(maxDistance > rayMinDistance)) return false;
+
+    const uint shadowRayFlags = gl_RayFlagsOpaqueEXT
+        | gl_RayFlagsTerminateOnFirstHitEXT
+        | gl_RayFlagsSkipClosestHitShaderEXT;
+
+    payload.didHit = true;
+    traceRayEXT(topLevelAS, shadowRayFlags, 0xFF, 0, 0, 0, origin, rayMinDistance, direction, maxDistance, 0);
+    return !payload.didHit;
+}
+
+vec3 debugBounceHeatmap(uint bounces, uint maxBounces) {
+    float t = clamp(float(bounces) / float(maxBounces), 0.0, 1.0);
+    if (t < 0.5) return mix(vec3(0.0, 0.0, 1.0), vec3(0.0, 1.0, 0.0), t * 2.0);
+    return mix(vec3(0.0, 1.0, 0.0), vec3(1.0, 0.0, 0.0), (t - 0.5) * 2.0);
+}
 
 vec3 trace(ivec2 pixel, inout uint state) {
     ivec2 viewportOrigin = ivec2(scene.viewportRect.xy);
@@ -23,8 +52,25 @@ vec3 trace(ivec2 pixel, inout uint state) {
     vec4 viewDir = scene.projInverse * vec4(d.x, d.y, 1.0, 1.0);
     ray.dir = normalize((scene.viewInverse * vec4(viewDir.xyz, 0.0)).xyz);
 
+    uint debugMode = scene.debugMode;
+
+    if (debugMode == 1u || debugMode == 2u) {
+        payload.didHit = false;
+        payload.hitDistance = rayMaxDistance;
+        traceRayEXT(topLevelAS, rayFlags, 0xFF, 0, 0, 0, ray.origin, rayMinDistance, ray.dir, rayMaxDistance, 0);
+        if (!payload.didHit) return vec3(0.0);
+        if (debugMode == 1u) return payload.normal * 0.5 + 0.5;
+        return vec3(1.0 - clamp(payload.hitDistance / rayMaxDistance, 0.0, 1.0));
+    }
+
+    bool neeOn = scene.neeEnabled != 0u;
+    bool misOn = scene.misEnabled != 0u && neeOn;
+    bool neeOnly = debugMode == 4u;
+    bool bsdfOnly = debugMode == 5u;
+
     vec3 throughput = vec3(1.0);
     vec3 radiance = vec3(0.0);
+    uint bounceCount = 0u;
 
     payload.time = 0;
     bool timeWindowEnabled = scene.timeBase >= 0.0 && scene.timeStep >= scene.timeBase;
@@ -33,6 +79,8 @@ vec3 trace(ivec2 pixel, inout uint state) {
     bool tlActive = timelineIsActive();
     float observationTime = tlActive ? scene.timeStep : 0.0;
     float fogDensity = max(scene.fogDensity, 0.0);
+    bool hasPrevSample = false;
+    float prevSamplePdf = 0.0;
 
     for (uint i = 0; i < max(scene.maxBounces, 1u); i++) {
         float traceDistanceMax = rayMaxDistance;
@@ -49,13 +97,45 @@ vec3 trace(ivec2 pixel, inout uint state) {
         float segmentDistance = payload.didHit ? max(payload.hitDistance, rayMinDistance) : traceDistanceMax;
         float traveledDistance = segmentDistance;
 
-        if (applyFogSegment(fogDensity, segmentDistance, state, ray, throughput, traveledDistance)) {
-            payload.time += traveledDistance;
-            continue;
+        if (fogDensity > 0.0 && segmentDistance > rayMinDistance) {
+            float scatterDistance = sampleExponentialDistance(fogDensity, state);
+
+            if (scatterDistance < segmentDistance) {
+                traveledDistance = max(scatterDistance, rayMinDistance);
+                payload.time += traveledDistance;
+                ray.origin += ray.dir * traveledDistance;
+                bounceCount++;
+
+                if (neeOn && !bsdfOnly) {
+                    DirectLightSample directSample;
+                    if (sampleDirectLight(ray.origin, payload.time, observationTime, tlActive, state, directSample)
+                        && directSample.pdf > 1e-8)
+                    {
+                        float shadowDistance = directSample.distance - rayMinDistance;
+                        if (shadowDistance > rayMinDistance
+                            && traceShadowVisibility(ray.origin + directSample.wi * rayMinDistance,
+                                                     directSample.wi, shadowDistance, rayMinDistance))
+                        {
+                            float phase = mediumIsotropicPhase();
+                            float misWeight = misOn ? misPowerWeight(directSample.pdf, phase) : 1.0;
+                            radiance += throughput * directSample.radiance *
+                                (phase * exp(-fogDensity * directSample.distance) * misWeight / directSample.pdf);
+                        }
+                    }
+                }
+
+                ray.dir = randDir(state);
+                hasPrevSample = true;
+                prevSamplePdf = mediumIsotropicPhase();
+
+                if (!applyRussianRoulette(throughput, state, i)) break;
+                continue;
+            }
         }
 
         payload.time += traveledDistance;
         if (!payload.didHit) break;
+        bounceCount++;
 
         Material material = materialBuffer.materials[payload.materialIndex];
         if (tlActive && material.emissionStrength > 0.0) {
@@ -63,20 +143,51 @@ vec3 trace(ivec2 pixel, inout uint state) {
             applyTimelineEmission(material, emissionSample);
         }
 
-        radiance += throughput * (material.emissionColor * material.emissionStrength);
+        if (!neeOnly && material.emissionStrength > 0.0) {
+            vec3 emitted = material.emissionColor * material.emissionStrength;
+            float emissionWeight = 1.0;
+            if (misOn && hasPrevSample) {
+                float lightPdf = lightPdfForEmitterHit(payload.instanceIndex, payload.primitiveIndex, ray.origin, payload.point);
+                emissionWeight = misPowerWeight(prevSamplePdf, lightPdf);
+            }
+            radiance += throughput * emitted * emissionWeight;
+        }
+
+        if (neeOn && !bsdfOnly) {
+            DirectLightSample directSample;
+            if (sampleDirectLight(payload.point, payload.time, observationTime, tlActive, state, directSample)
+                && directSample.pdf > 1e-8)
+            {
+                float cosSurface = max(dot(payload.normal, directSample.wi), 0.0);
+                float shadowDistance = directSample.distance - rayMinDistance;
+                if (cosSurface > 0.0 && shadowDistance > rayMinDistance
+                    && traceShadowVisibility(payload.point + payload.normal * rayMinDistance,
+                                             directSample.wi, shadowDistance, rayMinDistance))
+                {
+                    vec3 f = evalBSDF(payload.normal, directSample.wi, -ray.dir, material);
+                    float bsdfPdf = pdfBSDF(payload.normal, directSample.wi, -ray.dir, material);
+                    float misWeight = misOn ? misPowerWeight(directSample.pdf, bsdfPdf) : 1.0;
+                    radiance += throughput * f * directSample.radiance *
+                        (cosSurface * exp(-fogDensity * directSample.distance) * misWeight / directSample.pdf);
+                }
+            }
+        }
 
         vec3 outgoing = -ray.dir;
-        vec3 incoming = sampleBSDF(payload.normal, outgoing, material, state);
+        BSDFSample bsdfSample = sampleBSDF(payload.normal, outgoing, material, state);
+        if (bsdfSample.pdf < 1e-7 || dot(payload.normal, bsdfSample.incoming) <= 0.0) break;
 
-        float pdf = pdfBSDF(payload.normal, incoming, outgoing, material);
-        if (pdf < 1e-7 || dot(payload.normal, incoming) <= 0.0) break;
+        throughput *= bsdfSample.f * dot(payload.normal, bsdfSample.incoming) / bsdfSample.pdf;
+        hasPrevSample = true;
+        prevSamplePdf = bsdfSample.pdf;
 
-        vec3 f = evalBSDF(payload.normal, incoming, outgoing, material);
-        throughput *= f * dot(payload.normal, incoming) / pdf;
+        if (!applyRussianRoulette(throughput, state, i)) break;
 
-        ray.dir = incoming;
+        ray.dir = bsdfSample.incoming;
         ray.origin = payload.point;
     }
+
+    if (debugMode == 3u) return debugBounceHeatmap(bounceCount, max(scene.maxBounces, 1u));
 
     return radiance;
 }

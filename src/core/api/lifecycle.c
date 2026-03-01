@@ -60,6 +60,8 @@ int VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInfo) {
     vkrt->runtime.lastLoggedSwapchainColorSpace = VK_COLOR_SPACE_MAX_ENUM_KHR;
     vkrt->core.shaders = createInfo->shaders;
     vkrt->core.descriptorSetReady = VK_FALSE;
+    vkrt->core.emissiveMeshCount = 0;
+    vkrt->core.emissiveTriangleCount = 0;
 
     const char* title = createInfo->title ? createInfo->title : "VKRT";
     uint32_t width = createInfo->width ? createInfo->width : WIDTH;
@@ -253,6 +255,10 @@ void VKRT_deinit(VKRT* vkrt) {
         if (vkrt->core.meshData.memory != VK_NULL_HANDLE) vkFreeMemory(vkrt->core.device, vkrt->core.meshData.memory, NULL);
         if (vkrt->core.materialData.buffer != VK_NULL_HANDLE) vkDestroyBuffer(vkrt->core.device, vkrt->core.materialData.buffer, NULL);
         if (vkrt->core.materialData.memory != VK_NULL_HANDLE) vkFreeMemory(vkrt->core.device, vkrt->core.materialData.memory, NULL);
+        if (vkrt->core.emissiveMeshData.buffer != VK_NULL_HANDLE) vkDestroyBuffer(vkrt->core.device, vkrt->core.emissiveMeshData.buffer, NULL);
+        if (vkrt->core.emissiveMeshData.memory != VK_NULL_HANDLE) vkFreeMemory(vkrt->core.device, vkrt->core.emissiveMeshData.memory, NULL);
+        if (vkrt->core.emissiveTriangleData.buffer != VK_NULL_HANDLE) vkDestroyBuffer(vkrt->core.device, vkrt->core.emissiveTriangleData.buffer, NULL);
+        if (vkrt->core.emissiveTriangleData.memory != VK_NULL_HANDLE) vkFreeMemory(vkrt->core.device, vkrt->core.emissiveTriangleData.memory, NULL);
         if (vkrt->core.sceneDataBuffer != VK_NULL_HANDLE) vkDestroyBuffer(vkrt->core.device, vkrt->core.sceneDataBuffer, NULL);
         if (vkrt->core.sceneDataMemory != VK_NULL_HANDLE) vkFreeMemory(vkrt->core.device, vkrt->core.sceneDataMemory, NULL);
         logStepTime("Scene and mesh buffer cleanup complete", stepStartTime);

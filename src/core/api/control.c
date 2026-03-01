@@ -13,6 +13,245 @@
 #include <math.h>
 #include <string.h>
 
+typedef struct EmissiveMeshGPU {
+    uint32_t indices[4];
+    vec4 emission;
+    vec4 stats;
+} EmissiveMeshGPU;
+
+typedef struct EmissiveTriangleGPU {
+    vec4 v0Area;
+    vec4 e1Pad;
+    vec4 e2Pad;
+} EmissiveTriangleGPU;
+
+static float luminance3(const vec3 value) {
+    return value[0] * 0.2126f + value[1] * 0.7152f + value[2] * 0.0722f;
+}
+
+static float materialEmissionWeight(const MaterialData* material) {
+    if (!material) return 0.0f;
+    if (!(material->emissionStrength > 0.0f)) return 0.0f;
+    float lum = luminance3(material->emissionColor);
+    if (!(lum > 0.0f)) return 0.0f;
+    return lum * material->emissionStrength;
+}
+
+static void transformPosition(const VkTransformMatrixKHR* transform, const vec4 position, vec3 outWorld) {
+    outWorld[0] = transform->matrix[0][0] * position[0] + transform->matrix[0][1] * position[1] + transform->matrix[0][2] * position[2] + transform->matrix[0][3];
+    outWorld[1] = transform->matrix[1][0] * position[0] + transform->matrix[1][1] * position[1] + transform->matrix[1][2] * position[2] + transform->matrix[1][3];
+    outWorld[2] = transform->matrix[2][0] * position[0] + transform->matrix[2][1] * position[1] + transform->matrix[2][2] * position[2] + transform->matrix[2][3];
+}
+
+static void destroyLightBuffers(VKRT* vkrt) {
+    if (!vkrt) return;
+
+    if (vkrt->core.emissiveMeshData.buffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(vkrt->core.device, vkrt->core.emissiveMeshData.buffer, NULL);
+        vkrt->core.emissiveMeshData.buffer = VK_NULL_HANDLE;
+    }
+    if (vkrt->core.emissiveMeshData.memory != VK_NULL_HANDLE) {
+        vkFreeMemory(vkrt->core.device, vkrt->core.emissiveMeshData.memory, NULL);
+        vkrt->core.emissiveMeshData.memory = VK_NULL_HANDLE;
+    }
+    vkrt->core.emissiveMeshData.deviceAddress = 0;
+    vkrt->core.emissiveMeshData.count = 0;
+
+    if (vkrt->core.emissiveTriangleData.buffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(vkrt->core.device, vkrt->core.emissiveTriangleData.buffer, NULL);
+        vkrt->core.emissiveTriangleData.buffer = VK_NULL_HANDLE;
+    }
+    if (vkrt->core.emissiveTriangleData.memory != VK_NULL_HANDLE) {
+        vkFreeMemory(vkrt->core.device, vkrt->core.emissiveTriangleData.memory, NULL);
+        vkrt->core.emissiveTriangleData.memory = VK_NULL_HANDLE;
+    }
+    vkrt->core.emissiveTriangleData.deviceAddress = 0;
+    vkrt->core.emissiveTriangleData.count = 0;
+
+    vkrt->core.emissiveMeshCount = 0;
+    vkrt->core.emissiveTriangleCount = 0;
+}
+
+void rebuildLightBuffers(VKRT* vkrt) {
+    if (!vkrt) return;
+
+    destroyLightBuffers(vkrt);
+
+    const uint32_t meshCount = vkrt->core.meshData.count;
+    uint32_t emissiveMeshCount = 0;
+    uint32_t emissiveTriangleCount = 0;
+
+    for (uint32_t meshIndex = 0; meshIndex < meshCount; meshIndex++) {
+        Mesh* mesh = &vkrt->core.meshes[meshIndex];
+        if (!(materialEmissionWeight(&mesh->material) > 0.0f)) continue;
+        uint32_t triangleCount = mesh->info.indexCount / 3u;
+        if (triangleCount == 0) continue;
+        emissiveMeshCount++;
+        emissiveTriangleCount += triangleCount;
+    }
+
+    uint32_t allocMeshCount = emissiveMeshCount > 0 ? emissiveMeshCount : 1u;
+    uint32_t allocTriangleCount = emissiveTriangleCount > 0 ? emissiveTriangleCount : 1u;
+
+    EmissiveMeshGPU* emissiveMeshes = (EmissiveMeshGPU*)calloc(allocMeshCount, sizeof(EmissiveMeshGPU));
+    EmissiveTriangleGPU* emissiveTriangles = (EmissiveTriangleGPU*)calloc(allocTriangleCount, sizeof(EmissiveTriangleGPU));
+    if (!emissiveMeshes || !emissiveTriangles) {
+        free(emissiveMeshes);
+        free(emissiveTriangles);
+        LOG_ERROR("Failed to allocate emissive light staging buffers");
+        exit(EXIT_FAILURE);
+    }
+
+    float totalSelectionWeight = 0.0f;
+    uint32_t meshWriteIndex = 0;
+    uint32_t triangleWriteIndex = 0;
+
+    for (uint32_t meshIndex = 0; meshIndex < meshCount; meshIndex++) {
+        Mesh* mesh = &vkrt->core.meshes[meshIndex];
+        float emissionWeight = materialEmissionWeight(&mesh->material);
+        if (!(emissionWeight > 0.0f)) continue;
+
+        uint32_t triangleCount = mesh->info.indexCount / 3u;
+        if (triangleCount == 0) continue;
+
+        VkTransformMatrixKHR transform = getMeshTransform(&mesh->info);
+        float totalArea = 0.0f;
+        uint32_t triangleOffset = triangleWriteIndex;
+
+        for (uint32_t tri = 0; tri < triangleCount; tri++) {
+            uint32_t i0 = mesh->indices[tri * 3u + 0u];
+            uint32_t i1 = mesh->indices[tri * 3u + 1u];
+            uint32_t i2 = mesh->indices[tri * 3u + 2u];
+            vec3 p0 = {0.0f, 0.0f, 0.0f};
+            vec3 p1 = {0.0f, 0.0f, 0.0f};
+            vec3 p2 = {0.0f, 0.0f, 0.0f};
+            float area = 0.0f;
+
+            if (i0 < mesh->info.vertexCount && i1 < mesh->info.vertexCount && i2 < mesh->info.vertexCount) {
+                transformPosition(&transform, mesh->vertices[i0].position, p0);
+                transformPosition(&transform, mesh->vertices[i1].position, p1);
+                transformPosition(&transform, mesh->vertices[i2].position, p2);
+
+                vec3 e1Valid, e2Valid, crossE;
+                glm_vec3_sub(p1, p0, e1Valid);
+                glm_vec3_sub(p2, p0, e2Valid);
+                glm_vec3_cross(e1Valid, e2Valid, crossE);
+                area = 0.5f * glm_vec3_norm(crossE);
+                if (!isfinite(area) || area < 0.0f) area = 0.0f;
+                totalArea += area;
+            }
+
+            EmissiveTriangleGPU triGPU = {0};
+            triGPU.v0Area[0] = p0[0];
+            triGPU.v0Area[1] = p0[1];
+            triGPU.v0Area[2] = p0[2];
+            triGPU.v0Area[3] = area;
+
+            triGPU.e1Pad[0] = p1[0] - p0[0];
+            triGPU.e1Pad[1] = p1[1] - p0[1];
+            triGPU.e1Pad[2] = p1[2] - p0[2];
+            triGPU.e1Pad[3] = 0.0f;
+
+            triGPU.e2Pad[0] = p2[0] - p0[0];
+            triGPU.e2Pad[1] = p2[1] - p0[1];
+            triGPU.e2Pad[2] = p2[2] - p0[2];
+            triGPU.e2Pad[3] = 0.0f;
+
+            emissiveTriangles[triangleWriteIndex++] = triGPU;
+        }
+
+        float selectionWeight = totalArea * emissionWeight;
+        if (!(selectionWeight > 0.0f)) {
+            triangleWriteIndex = triangleOffset;
+            continue;
+        }
+
+        float areaCdf = 0.0f;
+        for (uint32_t tri = triangleOffset; tri < triangleWriteIndex; tri++) {
+            areaCdf += emissiveTriangles[tri].v0Area[3];
+            emissiveTriangles[tri].e1Pad[3] = areaCdf;
+        }
+        if (triangleWriteIndex > triangleOffset) {
+            emissiveTriangles[triangleWriteIndex - 1u].e1Pad[3] = totalArea;
+        }
+
+        EmissiveMeshGPU meshGPU = {0};
+        meshGPU.indices[0] = meshIndex;
+        meshGPU.indices[1] = triangleOffset;
+        meshGPU.indices[2] = triangleCount;
+        meshGPU.indices[3] = 0;
+
+        meshGPU.emission[0] = mesh->material.emissionColor[0];
+        meshGPU.emission[1] = mesh->material.emissionColor[1];
+        meshGPU.emission[2] = mesh->material.emissionColor[2];
+        meshGPU.emission[3] = mesh->material.emissionStrength;
+
+        meshGPU.stats[0] = 0.0f;
+        meshGPU.stats[1] = totalArea;
+        meshGPU.stats[2] = 0.0f;
+        meshGPU.stats[3] = selectionWeight;
+
+        emissiveMeshes[meshWriteIndex++] = meshGPU;
+        totalSelectionWeight += selectionWeight;
+    }
+
+    emissiveMeshCount = meshWriteIndex;
+    emissiveTriangleCount = triangleWriteIndex;
+
+    if (emissiveMeshCount > 0) {
+        float cumulative = 0.0f;
+        if (totalSelectionWeight <= 0.0f || !isfinite(totalSelectionWeight)) {
+            float uniform = 1.0f / (float)emissiveMeshCount;
+            for (uint32_t i = 0; i < emissiveMeshCount; i++) {
+                emissiveMeshes[i].stats[2] = uniform;
+                cumulative += uniform;
+                emissiveMeshes[i].stats[0] = cumulative;
+            }
+        } else {
+            for (uint32_t i = 0; i < emissiveMeshCount; i++) {
+                float p = emissiveMeshes[i].stats[3] / totalSelectionWeight;
+                emissiveMeshes[i].stats[2] = p;
+                cumulative += p;
+                emissiveMeshes[i].stats[0] = cumulative;
+            }
+        }
+        emissiveMeshes[emissiveMeshCount - 1u].stats[0] = 1.0f;
+    }
+
+    uint32_t uploadMeshCount = emissiveMeshCount > 0 ? emissiveMeshCount : 1u;
+    uint32_t uploadTriangleCount = emissiveTriangleCount > 0 ? emissiveTriangleCount : 1u;
+
+    vkrt->core.emissiveMeshData.deviceAddress = createBufferFromHostData(
+        vkrt,
+        emissiveMeshes,
+        (VkDeviceSize)uploadMeshCount * sizeof(EmissiveMeshGPU),
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+        &vkrt->core.emissiveMeshData.buffer,
+        &vkrt->core.emissiveMeshData.memory
+    );
+    vkrt->core.emissiveMeshData.count = emissiveMeshCount;
+
+    vkrt->core.emissiveTriangleData.deviceAddress = createBufferFromHostData(
+        vkrt,
+        emissiveTriangles,
+        (VkDeviceSize)uploadTriangleCount * sizeof(EmissiveTriangleGPU),
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+        &vkrt->core.emissiveTriangleData.buffer,
+        &vkrt->core.emissiveTriangleData.memory
+    );
+    vkrt->core.emissiveTriangleData.count = emissiveTriangleCount;
+
+    vkrt->core.emissiveMeshCount = emissiveMeshCount;
+    vkrt->core.emissiveTriangleCount = emissiveTriangleCount;
+    if (vkrt->core.sceneData) {
+        vkrt->core.sceneData->emissiveMeshCount = emissiveMeshCount;
+        vkrt->core.sceneData->emissiveTriangleCount = emissiveTriangleCount;
+    }
+
+    free(emissiveMeshes);
+    free(emissiveTriangles);
+}
+
 int VKRT_saveRenderPNG(VKRT* vkrt, const char* path) {
     return saveCurrentRenderPNG(vkrt, path);
 }
@@ -77,6 +316,7 @@ void rebuildMaterialBuffer(VKRT* vkrt) {
     vkrt->core.materialData.count = materialCount;
     vkrt->core.materialData.deviceAddress = 0;
     if (materialCount == 0) {
+        rebuildLightBuffers(vkrt);
         vkrt->core.materialDataDirty = VK_FALSE;
         return;
     }
@@ -99,6 +339,7 @@ void rebuildMaterialBuffer(VKRT* vkrt) {
         &vkrt->core.materialData.memory);
 
     free(materials);
+    rebuildLightBuffers(vkrt);
     vkrt->core.materialDataDirty = VK_FALSE;
 }
 
@@ -429,6 +670,9 @@ int VKRT_removeMesh(VKRT* vkrt, uint32_t meshIndex) {
 void VKRT_updateTLAS(VKRT* vkrt) {
     if (!vkrt) return;
     vkDeviceWaitIdle(vkrt->core.device);
+    if (!vkrt->core.materialDataDirty) {
+        rebuildLightBuffers(vkrt);
+    }
     createTopLevelAccelerationStructure(vkrt);
     updateDescriptorSet(vkrt);
     resetSceneData(vkrt);
@@ -500,6 +744,29 @@ void VKRT_setFogDensity(VKRT* vkrt, float fogDensity) {
         vkrt->core.sceneData->fogDensity = fogDensity;
     }
 
+    resetSceneData(vkrt);
+}
+
+void VKRT_setDebugMode(VKRT* vkrt, uint32_t mode) {
+    if (!vkrt) return;
+    if (vkrt->state.debugMode == mode) return;
+    vkrt->state.debugMode = mode;
+    resetSceneData(vkrt);
+}
+
+void VKRT_setNEEEnabled(VKRT* vkrt, uint8_t enabled) {
+    if (!vkrt) return;
+    uint8_t val = enabled ? 1 : 0;
+    if (vkrt->state.neeEnabled == val) return;
+    vkrt->state.neeEnabled = val;
+    resetSceneData(vkrt);
+}
+
+void VKRT_setMISEnabled(VKRT* vkrt, uint8_t enabled) {
+    if (!vkrt) return;
+    uint8_t val = enabled ? 1 : 0;
+    if (vkrt->state.misEnabled == val) return;
+    vkrt->state.misEnabled = val;
     resetSceneData(vkrt);
 }
 

@@ -32,5 +32,7 @@ void main() {
     payload.didHit = true;
     payload.normal = worldNormal;
     payload.materialIndex = materialIndex;
+    payload.instanceIndex = instance;
+    payload.primitiveIndex = gl_PrimitiveID;
     payload.hitDistance = gl_HitTEXT;
 }

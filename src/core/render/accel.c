@@ -32,6 +32,12 @@ void createShaderBindingTable(VKRT* vkrt) {
     createBuffer(vkrt, sbtSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stageBuffer, &stageMemory);
 
     uint8_t* handles = (uint8_t*)malloc(groupCount * handleSize);
+    if (!handles) {
+        vkDestroyBuffer(vkrt->core.device, stageBuffer, NULL);
+        vkFreeMemory(vkrt->core.device, stageMemory, NULL);
+        LOG_ERROR("Failed to allocate shader group handle buffer");
+        exit(EXIT_FAILURE);
+    }
     vkrt->core.procs.vkGetRayTracingShaderGroupHandlesKHR(vkrt->core.device, vkrt->core.rayTracingPipeline, 0, groupCount, groupCount * handleSize, handles);
 
     void* mapped;
@@ -297,6 +303,12 @@ void createTopLevelAccelerationStructure(VKRT* vkrt) {
     QueueFamily indices = findQueueFamilies(vkrt);
     VkAccelerationStructureInstanceKHR* instances = (VkAccelerationStructureInstanceKHR*)malloc(sizeof(VkAccelerationStructureInstanceKHR) * instanceCount);
     MeshInfo* meshInfos = (MeshInfo*)malloc(sizeof(MeshInfo) * instanceCount);
+    if (!instances || !meshInfos) {
+        free(instances);
+        free(meshInfos);
+        LOG_ERROR("Failed to allocate TLAS instance staging data");
+        exit(EXIT_FAILURE);
+    }
 
     for (uint32_t i = 0; i < instanceCount; i++) {
         VkAccelerationStructureInstanceKHR inst = {0};

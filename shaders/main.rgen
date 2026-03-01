@@ -43,7 +43,7 @@ void main() {
     vec3 accumulated = (previous.rgb * previousWeight + frameRadiance * newWeight) / (previousWeight + newWeight);
 
     vec3 mapped = accumulated;
-    if (scene.toneMappingMode == 1u) {
+    if (scene.debugMode == 0u && scene.toneMappingMode == 1u) {
         mapped = toneMapACES(mapped);
     }
 

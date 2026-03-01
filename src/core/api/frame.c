@@ -12,6 +12,7 @@
 #include <stdlib.h>
 
 void rebuildMaterialBuffer(VKRT* vkrt);
+void rebuildLightBuffers(VKRT* vkrt);
 
 void VKRT_beginFrame(VKRT* vkrt) {
     if (!vkrt) return;
@@ -25,6 +26,9 @@ void VKRT_beginFrame(VKRT* vkrt) {
 
     if (vkrt->core.topLevelAccelerationStructure.needsRebuild) {
         vkDeviceWaitIdle(vkrt->core.device);
+        if (!vkrt->core.materialDataDirty) {
+            rebuildLightBuffers(vkrt);
+        }
         createTopLevelAccelerationStructure(vkrt);
         updateDescriptorSet(vkrt);
         vkrt->core.topLevelAccelerationStructure.needsRebuild = 0;
