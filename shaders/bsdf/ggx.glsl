@@ -30,27 +30,19 @@ vec3 F_Schlick(float cosTheta, vec3 f0) {
 }
 
 vec3 sampleGGX(vec3 normal, vec3 outgoing, float alpha, inout uint state) {
+    float r1 = rand(state);
+    float r2 = rand(state);
+
+    float theta = atan(alpha * sqrt(r1), sqrt(max(1.0 - r1, 1e-7)));
+    float phi = 2.0 * PI * r2;
+
+    float sinTheta = sin(theta);
+    vec3 halfLocal = vec3(sinTheta * cos(phi), sinTheta * sin(phi), cos(theta));
+
     mat3 tbn = buildTBN(normal);
-    vec3 outgoingLocal = normalize(transpose(tbn) * outgoing);
-    vec3 outgoingStretched = normalize(vec3(alpha * outgoingLocal.x, alpha * outgoingLocal.y, outgoingLocal.z));
+    vec3 halfVector = normalize(tbn * halfLocal);
 
-    float phi = 2.0 * PI * rand(state);
-
-    float a2 = alpha * alpha;
-    float s = 1.0 + length(outgoingLocal.xy);
-    float s2 = s * s;
-    float k = (1.0 - a2) * s2 / max(s2 + a2 * outgoingLocal.z * outgoingLocal.z, 1e-7);
-    float b = outgoingLocal.z > 0.0 ? k * outgoingStretched.z : outgoingStretched.z;
-
-    float u = rand(state);
-    float z = (1.0 - u) * (1.0 + b) - b;
-    float sinTheta = sqrt(max(0.0, 1.0 - z * z));
-    vec3 incomingStretched = vec3(sinTheta * cos(phi), sinTheta * sin(phi), z);
-
-    vec3 halfStretched = outgoingStretched + incomingStretched;
-    vec3 halfLocal = normalize(vec3(alpha * halfStretched.x, alpha * halfStretched.y, halfStretched.z));
-    vec3 incomingLocal = reflect(-outgoingLocal, halfLocal);
-    return normalize(tbn * incomingLocal);
+    return reflect(-outgoing, halfVector);
 }
 
 vec3 evalGGX(vec3 normal, vec3 incoming, vec3 outgoing, float alpha, vec3 f0) {
@@ -85,20 +77,9 @@ float pdfGGX(vec3 normal, vec3 incoming, vec3 outgoing, float alpha) {
 
     float cosNH = max(dot(normal, h), 0.0);
     float cosVH = max(dot(outgoing, h), 0.0);
-    if (cosNH <= 0.0 || cosVH <= 1e-7) return 0.0;
+    if (cosVH <= 1e-7) return 0.0;
 
-    float ndf = D_GGX(cosNH, alpha);
-
-    float sinNV = sqrt(max(1.0 - cosNV * cosNV, 0.0));
-    float a2 = alpha * alpha;
-    float t = sqrt(a2 * sinNV * sinNV + cosNV * cosNV);
-
-    float s = 1.0 + sinNV;
-    float s2 = s * s;
-    float k = (1.0 - a2) * s2 / max(s2 + a2 * cosNV * cosNV, 1e-7);
-
-    float vndfPdf = ndf / max(2.0 * (k * cosNV + t), 1e-7);
-    return vndfPdf / (4.0 * cosVH);
+    return D_GGX(cosNH, alpha) * cosNH / (4.0 * cosVH);
 }
 
 #endif
