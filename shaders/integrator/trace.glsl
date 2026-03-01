@@ -176,7 +176,6 @@ vec3 trace(ivec2 pixel, inout uint state) {
                     vec3 f = evalBSDF(payload.normal, directSample.wi, -ray.dir, material);
                     float bsdfPdf = pdfBSDF(payload.normal, directSample.wi, -ray.dir, material);
                     float misWeight = misOn ? misPowerWeight(directSample.pdf, bsdfPdf) : 1.0;
-                    if (isnan(bsdfPdf) || isinf(bsdfPdf) || isnan(misWeight) || isinf(misWeight)) continue;
                     radiance += throughput * f * directSample.radiance *
                         (cosSurface * exp(-fogDensity * directSample.distance) * misWeight / directSample.pdf);
                 }
@@ -188,9 +187,7 @@ vec3 trace(ivec2 pixel, inout uint state) {
         if (bsdfSample.pdf < 1e-7 || dot(payload.normal, bsdfSample.incoming) <= 0.0) break;
 
         vec3 bsdfFactor = bsdfSample.f * dot(payload.normal, bsdfSample.incoming) / bsdfSample.pdf;
-        if (any(isnan(bsdfFactor)) || any(isinf(bsdfFactor))) break;
         throughput *= bsdfFactor;
-        if (any(isnan(throughput)) || any(isinf(throughput))) break;
         hasPrevSample = true;
         prevSamplePdf = bsdfSample.pdf;
 

@@ -641,43 +641,43 @@ static void initializeRenderConfig(Session* session) {
     sessionSanitizeAnimationSettings(&session->renderConfig.animation);
 }
 
-static void formatEstimatedDuration(float seconds, char* out, size_t outSize) {
+static void formatTime(float seconds, char* out, size_t outSize) {
     if (!out || outSize == 0) return;
     if (!(seconds > 0.0f)) {
-        snprintf(out, outSize, "0s");
+        snprintf(out, outSize, "0ms");
         return;
     }
 
-    uint64_t total = (uint64_t)(seconds + 0.5f);
-    if (total == 0) {
-        snprintf(out, outSize, "0s");
+    uint64_t totalMs = (uint64_t)(seconds * 1000.0f + 0.5f);
+    if (totalMs == 0) {
+        snprintf(out, outSize, "0ms");
         return;
     }
 
-    static const uint64_t unitSeconds[] = {86400ull, 3600ull, 60ull, 1ull};
-    static const char* unitLabels[] = {"d", "h", "m", "s"};
+    static const uint64_t unitMs[] = {86400000ull, 3600000ull, 60000ull, 1000ull, 1ull};
+    static const char* unitLabels[] = {"d", "h", "m", "s", "ms"};
 
     int firstUnit = -1;
     uint64_t firstValue = 0;
-    uint64_t remainder = total;
-    for (int i = 0; i < 4; i++) {
-        uint64_t value = remainder / unitSeconds[i];
+    uint64_t remainder = totalMs;
+    for (int i = 0; i < 5; i++) {
+        uint64_t value = remainder / unitMs[i];
         if (value == 0) continue;
         firstUnit = i;
         firstValue = value;
-        remainder %= unitSeconds[i];
+        remainder %= unitMs[i];
         break;
     }
 
     if (firstUnit < 0) {
-        snprintf(out, outSize, "0s");
+        snprintf(out, outSize, "0ms");
         return;
     }
 
     int secondUnit = -1;
     uint64_t secondValue = 0;
-    for (int i = firstUnit + 1; i < 4; i++) {
-        uint64_t value = remainder / unitSeconds[i];
+    for (int i = firstUnit + 1; i < 5; i++) {
+        uint64_t value = remainder / unitMs[i];
         if (value == 0) continue;
         secondUnit = i;
         secondValue = value;
@@ -692,29 +692,6 @@ static void formatEstimatedDuration(float seconds, char* out, size_t outSize) {
         snprintf(out, outSize, "%llu%s",
             (unsigned long long)firstValue, unitLabels[firstUnit]);
     }
-}
-
-static void formatRenderDurationWithMs(float seconds, char* out, size_t outSize) {
-    if (!out || outSize == 0) return;
-    if (!(seconds > 0.0f)) {
-        snprintf(out, outSize, "0ms");
-        return;
-    }
-
-    uint64_t totalMs = (uint64_t)(seconds * 1000.0f + 0.5f);
-    if (totalMs < 1000ull) {
-        snprintf(out, outSize, "%llums", (unsigned long long)totalMs);
-        return;
-    }
-
-    if (seconds < 60.0f) {
-        snprintf(out, outSize, "%.3fs (%llums)", seconds, (unsigned long long)totalMs);
-        return;
-    }
-
-    char durationText[32] = {0};
-    formatEstimatedDuration(seconds, durationText, sizeof(durationText));
-    snprintf(out, outSize, "%s (%llums)", durationText, (unsigned long long)totalMs);
 }
 
 static void drawRenderSection(VKRT* vkrt, Session* session) {
@@ -949,7 +926,7 @@ static void drawRenderSection(VKRT* vkrt, Session* session) {
         }
         if (sRenderTotalSeconds > 0.0f) {
             char totalText[32] = {0};
-            formatRenderDurationWithMs(sRenderTotalSeconds, totalText, sizeof(totalText));
+            formatTime(sRenderTotalSeconds, totalText, sizeof(totalText));
             ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing});
             ImGui_Text(ICON_FA_CLOCK " Last Render Time: %s", totalText);
         }
@@ -979,11 +956,11 @@ static void drawRenderSection(VKRT* vkrt, Session* session) {
         ImGui_Text("%s", vkrt->state.renderModeFinished ? "Status: Complete" : "Status: Rendering");
 
         char elapsedText[32] = {0};
-        formatRenderDurationWithMs(sRenderElapsedSeconds, elapsedText, sizeof(elapsedText));
+        formatTime(sRenderElapsedSeconds, elapsedText, sizeof(elapsedText));
         ImGui_Text(ICON_FA_CLOCK " Elapsed: %s", elapsedText);
         if (vkrt->state.renderModeFinished) {
             char totalText[32] = {0};
-            formatRenderDurationWithMs(sRenderTotalSeconds, totalText, sizeof(totalText));
+            formatTime(sRenderTotalSeconds, totalText, sizeof(totalText));
             ImGui_Text(ICON_FA_CLOCK " Total: %s", totalText);
         }
 
@@ -992,7 +969,7 @@ static void drawRenderSection(VKRT* vkrt, Session* session) {
                 seq->frameIndex, seq->frameCount, seq->currentTime);
             if (seq->hasEstimatedRemaining) {
                 char etaText[32] = {0};
-                formatEstimatedDuration(seq->estimatedRemainingSeconds, etaText, sizeof(etaText));
+                formatTime(seq->estimatedRemainingSeconds, etaText, sizeof(etaText));
                 ImGui_Text(ICON_FA_CLOCK " Remaining: %s", etaText);
             }
         } else if (!vkrt->state.renderModeFinished &&
@@ -1015,7 +992,7 @@ static void drawRenderSection(VKRT* vkrt, Session* session) {
                     uint64_t remaining = vkrt->state.renderTargetSamples - vkrt->state.totalSamples;
                     float etaSeconds = (float)remaining / rate;
                     char etaText[32] = {0};
-                    formatEstimatedDuration(etaSeconds, etaText, sizeof(etaText));
+                    formatTime(etaSeconds, etaText, sizeof(etaText));
                     ImGui_Text(ICON_FA_CLOCK " Remaining: %s", etaText);
                 }
             }

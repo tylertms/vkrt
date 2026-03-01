@@ -122,6 +122,11 @@ void createSwapChain(VKRT* vkrt) {
 }
 
 void recreateSwapChain(VKRT* vkrt) {
+    uint32_t preservedViewportX = vkrt->runtime.displayViewportRect[0];
+    uint32_t preservedViewportY = vkrt->runtime.displayViewportRect[1];
+    uint32_t preservedViewportWidth = vkrt->runtime.displayViewportRect[2];
+    uint32_t preservedViewportHeight = vkrt->runtime.displayViewportRect[3];
+
     int framebufferWidth = 0;
     int framebufferHeight = 0;
     glfwGetFramebufferSize(vkrt->runtime.window, &framebufferWidth, &framebufferHeight);
@@ -167,7 +172,16 @@ void recreateSwapChain(VKRT* vkrt) {
 
     updateDescriptorSet(vkrt);
     createFramebuffers(vkrt);
-    VKRT_setRenderViewport(vkrt, 0, 0, vkrt->runtime.swapChainExtent.width, vkrt->runtime.swapChainExtent.height);
+
+    if (vkrt->state.renderModeActive) {
+        VKRT_setRenderViewport(vkrt,
+            preservedViewportX,
+            preservedViewportY,
+            preservedViewportWidth,
+            preservedViewportHeight);
+    } else {
+        VKRT_setRenderViewport(vkrt, 0, 0, vkrt->runtime.swapChainExtent.width, vkrt->runtime.swapChainExtent.height);
+    }
 
     vkrt->state.displayRenderTimeMs = 0.0f;
     vkrt->state.displayFrameTimeMs = 0.0f;
