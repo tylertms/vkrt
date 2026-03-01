@@ -694,8 +694,80 @@ static void formatEstimatedDuration(float seconds, char* out, size_t outSize) {
     }
 }
 
+static void formatRenderDurationWithMs(float seconds, char* out, size_t outSize) {
+    if (!out || outSize == 0) return;
+    if (!(seconds > 0.0f)) {
+        snprintf(out, outSize, "0ms");
+        return;
+    }
+
+    uint64_t totalMs = (uint64_t)(seconds * 1000.0f + 0.5f);
+    if (totalMs < 1000ull) {
+        snprintf(out, outSize, "%llums", (unsigned long long)totalMs);
+        return;
+    }
+
+    if (seconds < 60.0f) {
+        snprintf(out, outSize, "%.3fs (%llums)", seconds, (unsigned long long)totalMs);
+        return;
+    }
+
+    char durationText[32] = {0};
+    formatEstimatedDuration(seconds, durationText, sizeof(durationText));
+    snprintf(out, outSize, "%s (%llums)", durationText, (unsigned long long)totalMs);
+}
+
 static void drawRenderSection(VKRT* vkrt, Session* session) {
     initializeRenderConfig(session);
+
+    static uint8_t sRenderTimerWasActive = 0;
+    static uint8_t sRenderTimerWasFinished = 0;
+    static uint64_t sRenderTimerStartUs = 0;
+    static float sRenderElapsedSeconds = 0.0f;
+    static float sRenderTotalSeconds = 0.0f;
+    static uint64_t sEtaLastTotalSamples = 0;
+    static uint64_t sEtaMeasureBaseTimeUs = 0;
+    static uint64_t sEtaMeasureBaseSamples = 0;
+
+    uint8_t renderModeActive = vkrt->state.renderModeActive != 0;
+    uint8_t renderModeFinished = (renderModeActive && vkrt->state.renderModeFinished != 0) ? 1u : 0u;
+    uint64_t nowUs = getMicroseconds();
+
+    if (renderModeActive && !sRenderTimerWasActive) {
+        sRenderTimerStartUs = nowUs;
+        sRenderElapsedSeconds = 0.0f;
+        sRenderTotalSeconds = 0.0f;
+        sEtaLastTotalSamples = 0;
+        sEtaMeasureBaseTimeUs = 0;
+        sEtaMeasureBaseSamples = 0;
+    }
+
+    if (renderModeActive && !renderModeFinished && sRenderTimerStartUs > 0 && nowUs >= sRenderTimerStartUs) {
+        sRenderElapsedSeconds = (float)(nowUs - sRenderTimerStartUs) / 1000000.0f;
+    }
+
+    if (renderModeActive && renderModeFinished && !sRenderTimerWasFinished) {
+        if (sRenderTimerStartUs > 0 && nowUs >= sRenderTimerStartUs) {
+            sRenderTotalSeconds = (float)(nowUs - sRenderTimerStartUs) / 1000000.0f;
+        } else {
+            sRenderTotalSeconds = sRenderElapsedSeconds;
+        }
+        sRenderElapsedSeconds = sRenderTotalSeconds;
+    }
+
+    if (!renderModeActive && sRenderTimerWasActive) {
+        if (!sRenderTimerWasFinished && sRenderTimerStartUs > 0 && nowUs >= sRenderTimerStartUs) {
+            sRenderTotalSeconds = (float)(nowUs - sRenderTimerStartUs) / 1000000.0f;
+        }
+        sRenderElapsedSeconds = 0.0f;
+        sRenderTimerStartUs = 0;
+        sEtaLastTotalSamples = 0;
+        sEtaMeasureBaseTimeUs = 0;
+        sEtaMeasureBaseSamples = 0;
+    }
+
+    sRenderTimerWasActive = renderModeActive;
+    sRenderTimerWasFinished = renderModeFinished;
 
     SessionRenderAnimationSettings* anim = &session->renderConfig.animation;
 
@@ -875,6 +947,12 @@ static void drawRenderSection(VKRT* vkrt, Session* session) {
                 startSamples,
                 anim);
         }
+        if (sRenderTotalSeconds > 0.0f) {
+            char totalText[32] = {0};
+            formatRenderDurationWithMs(sRenderTotalSeconds, totalText, sizeof(totalText));
+            ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing});
+            ImGui_Text(ICON_FA_CLOCK " Last Render Time: %s", totalText);
+        }
         return;
     }
 
@@ -899,6 +977,16 @@ static void drawRenderSection(VKRT* vkrt, Session* session) {
             ImGui_Text("Progress: %llu Samples", (unsigned long long)vkrt->state.totalSamples);
         }
         ImGui_Text("%s", vkrt->state.renderModeFinished ? "Status: Complete" : "Status: Rendering");
+
+        char elapsedText[32] = {0};
+        formatRenderDurationWithMs(sRenderElapsedSeconds, elapsedText, sizeof(elapsedText));
+        ImGui_Text(ICON_FA_CLOCK " Elapsed: %s", elapsedText);
+        if (vkrt->state.renderModeFinished) {
+            char totalText[32] = {0};
+            formatRenderDurationWithMs(sRenderTotalSeconds, totalText, sizeof(totalText));
+            ImGui_Text(ICON_FA_CLOCK " Total: %s", totalText);
+        }
+
         if (seq->active) {
             ImGui_Text(ICON_FA_TIMELINE " Sequence: %u / %u  (t = %.3f)",
                 seq->frameIndex, seq->frameCount, seq->currentTime);
@@ -910,25 +998,18 @@ static void drawRenderSection(VKRT* vkrt, Session* session) {
         } else if (!vkrt->state.renderModeFinished &&
                    vkrt->state.renderTargetSamples > 0 &&
                    vkrt->state.totalSamples > 0) {
-            static uint64_t sRenderStartTimeUs = 0;
-            static uint64_t sLastTotalSamples = 0;
-            static uint64_t sMeasureBaseTimeUs = 0;
-            static uint64_t sMeasureBaseSamples = 0;
-            if (vkrt->state.totalSamples < sLastTotalSamples || sRenderStartTimeUs == 0) {
-                sRenderStartTimeUs = getMicroseconds();
-                sMeasureBaseTimeUs = 0;
-                sMeasureBaseSamples = 0;
+            if (vkrt->state.totalSamples < sEtaLastTotalSamples) {
+                sEtaMeasureBaseTimeUs = 0;
+                sEtaMeasureBaseSamples = 0;
             }
-            sLastTotalSamples = vkrt->state.totalSamples;
-            uint64_t nowUs = getMicroseconds();
-            float sinceStart = (float)(nowUs - sRenderStartTimeUs) / 1000000.0f;
-            if (sMeasureBaseTimeUs == 0 && sinceStart >= 2.0f) {
-                sMeasureBaseTimeUs = nowUs;
-                sMeasureBaseSamples = vkrt->state.totalSamples;
+            sEtaLastTotalSamples = vkrt->state.totalSamples;
+            if (sEtaMeasureBaseTimeUs == 0 && sRenderElapsedSeconds >= 2.0f) {
+                sEtaMeasureBaseTimeUs = nowUs;
+                sEtaMeasureBaseSamples = vkrt->state.totalSamples;
             }
-            if (sMeasureBaseTimeUs != 0) {
-                float elapsed = (float)(nowUs - sMeasureBaseTimeUs) / 1000000.0f;
-                uint64_t samplesDelta = vkrt->state.totalSamples - sMeasureBaseSamples;
+            if (sEtaMeasureBaseTimeUs != 0) {
+                float elapsed = (float)(nowUs - sEtaMeasureBaseTimeUs) / 1000000.0f;
+                uint64_t samplesDelta = vkrt->state.totalSamples - sEtaMeasureBaseSamples;
                 if (elapsed > 0.5f && samplesDelta > 0) {
                     float rate = (float)samplesDelta / elapsed;
                     uint64_t remaining = vkrt->state.renderTargetSamples - vkrt->state.totalSamples;
