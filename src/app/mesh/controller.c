@@ -112,7 +112,7 @@ void meshControllerLoadDefaultAssets(VKRT* vkrt, Session* session) {
     MaterialData neutralWhite = {
         .baseColor = {1.0f, 1.0f, 1.0f},
         .roughness = 1.0f,
-        .specular = 0.0f,
+        .metallic = 0.0f,
         .emissionColor = {1.0f, 1.0f, 1.0f},
         .emissionStrength = 0.0f,
     };
@@ -145,7 +145,7 @@ void meshControllerLoadDefaultAssets(VKRT* vkrt, Session* session) {
         MaterialData dragonMaterial = {
             .baseColor = {0.74f, 0.73f, 0.72f},
             .roughness = 0.78f,
-            .specular = 0.08f,
+            .metallic = 0.08f,
             .emissionColor = {1.0f, 1.0f, 1.0f},
             .emissionStrength = 0.0f,
         };

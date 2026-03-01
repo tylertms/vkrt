@@ -1,17 +1,19 @@
-shader_sources = [
-  'main.rchit',
-  'main.rgen',
-  'main.rmiss',
+shader_programs = [
+  ['rgen', 'main.rgen', 'rgen.spv'],
+  ['rchit', 'main.rchit', 'rchit.spv'],
+  ['rmiss', 'main.rmiss', 'rmiss.spv'],
 ]
 
 shader_targets = []
-foreach shader_file : shader_sources
-  basename = shader_file.split('.')[-1]
+foreach shader_program : shader_programs
+  stage_name = shader_program[0]
+  shader_file = shader_program[1]
+  output_file = shader_program[2]
   shader_target = custom_target(
-    'compile_' + basename,
+    'compile_shader_' + stage_name,
     input: shader_file,
-    output: basename + '.spv',
-    depfile: basename + '.d',
+    output: output_file,
+    depfile: output_file + '.d',
     command: [
       glslc,
       '@INPUT@',

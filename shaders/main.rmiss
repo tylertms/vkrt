@@ -1,6 +1,6 @@
 #version 460
 #extension GL_EXT_ray_tracing : require
-#include "utility/common.glsl"
+#include "core/types.glsl"
 
 layout(location = 0) rayPayloadInEXT Payload payload;
 

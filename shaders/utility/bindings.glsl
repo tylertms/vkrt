@@ -1,8 +1,8 @@
-#ifndef BINDINGS_GLSL
-#define BINDINGS_GLSL
+#ifndef SHADER_BINDINGS_GLSL
+#define SHADER_BINDINGS_GLSL
 
 #include "constants.h"
-#include "common.glsl"
+#include "core/types.glsl"
 
 struct Vertex {
     vec3 pos;

@@ -1,10 +1,11 @@
 #version 460
-#extension GL_EXT_ray_tracing : enable
+#extension GL_EXT_ray_tracing : require
 #include "utility/bindings.glsl"
+#include "core/tonemap.glsl"
 
 layout(location = 0) rayPayloadEXT Payload payload;
 
-#include "utility/trace.glsl"
+#include "integrator/trace.glsl"
 
 void main() {
     ivec2 pixel = ivec2(gl_LaunchIDEXT.xy);
@@ -33,7 +34,7 @@ void main() {
     for (uint sampleIndex = 0; sampleIndex < spp; sampleIndex++) {
         uint sampleNumber = previousSamples + sampleIndex;
         uint state = initRngState(rngBase, sampleNumber);
-        frameRadiance += traceSample(pixel, state);
+        frameRadiance += trace(pixel, state);
     }
     frameRadiance /= float(spp);
 

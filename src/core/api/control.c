@@ -336,7 +336,7 @@ void VKRT_uploadMeshData(VKRT* vkrt, const Vertex* vertices, size_t vertexCount,
     mesh->material = (MaterialData){
         .baseColor = {1.0f, 1.0f, 1.0f},
         .roughness = 1.0f,
-        .specular = 0.0f,
+        .metallic = 0.0f,
         .emissionColor = {1.0f, 1.0f, 1.0f},
         .emissionStrength = 0.0f,
     };
@@ -672,6 +672,14 @@ int VKRT_startRender(VKRT* vkrt, uint32_t width, uint32_t height, uint32_t targe
 
     VkBool32 wasRenderModeActive = vkrt->state.renderModeActive != 0;
     VkBool32 extentChanged = vkrt->runtime.renderExtent.width != width || vkrt->runtime.renderExtent.height != height;
+
+    if (!wasRenderModeActive) {
+        vkrt->runtime.savedVsync = vkrt->runtime.vsync;
+        if (vkrt->runtime.vsync) {
+            vkrt->runtime.vsync = 0;
+            vkrt->runtime.framebufferResized = VK_TRUE;
+        }
+    }
     if (vkrt->state.samplesPerPixel == 0) {
         vkrt->state.samplesPerPixel = 1;
         vkrt->core.sceneData->samplesPerPixel = 1;
@@ -709,9 +717,17 @@ void VKRT_stopRenderSampling(VKRT* vkrt) {
     vkrt->state.renderModeFinished = 1;
 }
 
+static void restoreSavedVsync(VKRT* vkrt) {
+    if (vkrt->runtime.vsync != vkrt->runtime.savedVsync) {
+        vkrt->runtime.vsync = vkrt->runtime.savedVsync;
+        vkrt->runtime.framebufferResized = VK_TRUE;
+    }
+}
+
 void VKRT_stopRender(VKRT* vkrt) {
     if (!vkrt || !vkrt->state.renderModeActive) return;
 
+    restoreSavedVsync(vkrt);
     vkrt->state.renderModeActive = 0;
     vkrt->state.renderModeFinished = 0;
     vkrt->state.renderTargetSamples = 0;

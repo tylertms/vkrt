@@ -1,11 +1,11 @@
-#ifndef TRACE_GLSL
-#define TRACE_GLSL
+#ifndef SHADER_TRACE_GLSL
+#define SHADER_TRACE_GLSL
 
-#include "fog.glsl"
-#include "timeline.glsl"
-#include "bsdf/eval.glsl"
+#include "utility/fog.glsl"
+#include "utility/timeline.glsl"
+#include "bsdf/bsdf.glsl"
 
-vec3 traceSample(ivec2 pixel, inout uint state) {
+vec3 trace(ivec2 pixel, inout uint state) {
     ivec2 viewportOrigin = ivec2(scene.viewportRect.xy);
     ivec2 viewportSize = ivec2(scene.viewportRect.zw);
     const float rayMinDistance = 0.001;
@@ -65,7 +65,17 @@ vec3 traceSample(ivec2 pixel, inout uint state) {
 
         radiance += throughput * (material.emissionColor * material.emissionStrength);
 
-        evalBSDF(payload, material, ray, throughput, state);
+        vec3 outgoing = -ray.dir;
+        vec3 incoming = sampleBSDF(payload.normal, outgoing, material, state);
+
+        float pdf = pdfBSDF(payload.normal, incoming, outgoing, material);
+        if (pdf < 1e-7 || dot(payload.normal, incoming) <= 0.0) break;
+
+        vec3 f = evalBSDF(payload.normal, incoming, outgoing, material);
+        throughput *= f * dot(payload.normal, incoming) / pdf;
+
+        ray.dir = incoming;
+        ray.origin = payload.point;
     }
 
     return radiance;

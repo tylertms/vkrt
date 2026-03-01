@@ -114,7 +114,7 @@ typedef struct MaterialData {
     float roughness;
     vec3 emissionColor;
     float emissionStrength;
-    float specular;
+    float metallic;
     float padding[3];
 } MaterialData;
 
@@ -227,6 +227,7 @@ typedef struct VKRT_Runtime {
     VkQueryPool timestampPool;
     float timestampPeriod;
     uint8_t vsync;
+    uint8_t savedVsync;
     uint32_t frameImageIndex;
     VkBool32 frameAcquired;
     VkBool32 frameSubmitted;

@@ -1,5 +1,5 @@
-#ifndef RAND_GLSL
-#define RAND_GLSL
+#ifndef SHADER_RAND_GLSL
+#define SHADER_RAND_GLSL
 
 const float TWO_PI = 6.28318530718;
 

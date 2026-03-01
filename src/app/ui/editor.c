@@ -985,7 +985,7 @@ static void drawConfigSection(VKRT* vkrt, bool renderModeActive) {
 
     ImGui_Indent();
     ImGui_BeginDisabled(renderModeActive);
-    bool vsync = vkrt->runtime.vsync != 0;
+    bool vsync = (renderModeActive ? vkrt->runtime.savedVsync : vkrt->runtime.vsync) != 0;
     if (ImGui_Checkbox("V-Sync", &vsync)) {
         vkrt->runtime.vsync = vsync ? 1 : 0;
         vkrt->runtime.framebufferResized = VK_TRUE;
@@ -1058,7 +1058,7 @@ static void drawMeshInspector(VKRT* vkrt, Session* session) {
         bool materialChanged = false;
         materialChanged |= ImGui_ColorEdit3("Base Color", material.baseColor, ImGuiColorEditFlags_Float);
         materialChanged |= ImGui_SliderFloatEx("Roughness", &material.roughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-        materialChanged |= ImGui_SliderFloatEx("Specular", &material.specular, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        materialChanged |= ImGui_SliderFloatEx("Metallic", &material.metallic, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
         materialChanged |= ImGui_ColorEdit3("Emission Color", material.emissionColor, ImGuiColorEditFlags_Float);
         materialChanged |= ImGui_DragFloatEx("Emission Strength", &material.emissionStrength, 0.01f, 0.0f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
 

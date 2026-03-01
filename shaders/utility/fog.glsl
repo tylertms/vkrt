@@ -1,8 +1,8 @@
-#ifndef FOG_GLSL
-#define FOG_GLSL
+#ifndef SHADER_FOG_GLSL
+#define SHADER_FOG_GLSL
 
-#include "common.glsl"
-#include "rand.glsl"
+#include "core/types.glsl"
+#include "utility/rand.glsl"
 
 bool applyFogSegment(
     float fogDensity,

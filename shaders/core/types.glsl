@@ -1,5 +1,5 @@
-#ifndef CORE_COMMON_GLSL
-#define CORE_COMMON_GLSL
+#ifndef SHADER_TYPES_GLSL
+#define SHADER_TYPES_GLSL
 
 struct Ray {
     vec3 origin;
@@ -11,7 +11,7 @@ struct Material {
     float roughness;
     vec3 emissionColor;
     float emissionStrength;
-    float specular;
+    float metallic;
     float padding0;
     float padding1;
     float padding2;
@@ -25,14 +25,5 @@ struct Payload {
     float time;
     float hitDistance;
 };
-
-vec3 toneMapACES(vec3 x) {
-    const float a = 2.51;
-    const float b = 0.03;
-    const float c = 2.43;
-    const float d = 0.59;
-    const float e = 0.14;
-    return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
-}
 
 #endif

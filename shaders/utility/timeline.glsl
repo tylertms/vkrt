@@ -1,7 +1,7 @@
-#ifndef TIMELINE_GLSL
-#define TIMELINE_GLSL
+#ifndef SHADER_TIMELINE_GLSL
+#define SHADER_TIMELINE_GLSL
 
-#include "bindings.glsl"
+#include "utility/bindings.glsl"
 
 struct TimelineSample {
     float emissionScale;

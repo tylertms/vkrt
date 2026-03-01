@@ -141,6 +141,10 @@ void VKRT_endFrame(VKRT* vkrt) {
             vkrt->state.renderTargetSamples > 0 &&
             vkrt->state.totalSamples >= vkrt->state.renderTargetSamples) {
             vkrt->state.renderModeFinished = 1;
+            if (vkrt->runtime.vsync != vkrt->runtime.savedVsync) {
+                vkrt->runtime.vsync = vkrt->runtime.savedVsync;
+                vkrt->runtime.framebufferResized = VK_TRUE;
+            }
         }
     }
 
