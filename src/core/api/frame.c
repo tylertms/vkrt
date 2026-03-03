@@ -14,6 +14,11 @@
 void rebuildMaterialBuffer(VKRT* vkrt);
 void rebuildLightBuffers(VKRT* vkrt);
 
+static void waitForAllInFlightFrames(VKRT* vkrt) {
+    if (!vkrt) return;
+    vkWaitForFences(vkrt->core.device, MAX_FRAMES_IN_FLIGHT, vkrt->runtime.inFlightFences, VK_TRUE, UINT64_MAX);
+}
+
 void VKRT_beginFrame(VKRT* vkrt) {
     if (!vkrt) return;
 
@@ -61,6 +66,7 @@ void VKRT_updateScene(VKRT* vkrt) {
     if (!vkrt || !vkrt->runtime.frameAcquired) return;
 
     if (vkrt->core.materialDataDirty) {
+        waitForAllInFlightFrames(vkrt);
         rebuildMaterialBuffer(vkrt);
         updateDescriptorSet(vkrt);
     }

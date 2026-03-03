@@ -143,14 +143,14 @@ vec3 trace(ivec2 pixel, inout uint state) {
         bounceCount++;
 
         Material material = materialBuffer.materials[payload.materialIndex];
-        if (tlActive && material.emissionStrength > 0.0) {
+        if (tlActive && material.emissionLuminance > 0.0) {
             TimelineSample emissionSample = sampleTimeline(observationTime - payload.time);
             applyTimelineEmission(material, emissionSample);
         }
-        bool emissiveSurface = material.emissionStrength > 0.0;
+        bool emissiveSurface = material.emissionLuminance > 0.0;
 
-        if (!neeOnly && material.emissionStrength > 0.0) {
-            vec3 emitted = material.emissionColor * material.emissionStrength;
+        if (!neeOnly && material.emissionLuminance > 0.0) {
+            vec3 emitted = material.emissionColor * material.emissionLuminance;
             float emissionWeight = 1.0;
             if (neeOn && hasPrevSample) {
                 if (misOn) {

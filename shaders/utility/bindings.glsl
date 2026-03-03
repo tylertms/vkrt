@@ -24,7 +24,7 @@ struct MeshInfo {
 
 struct EmissiveMesh {
     uvec4 indices;   // x: meshIndex, y: triangleOffset, z: triangleCount
-    vec4 emission;   // rgb: emissionColor, a: emissionStrength
+    vec4 emission;   // rgb: emissionColor, a: emissionLuminance
     vec4 stats;      // x: cumulativeMeshCdf, y: totalArea, z: selectionProbability
 };
 

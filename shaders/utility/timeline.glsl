@@ -50,7 +50,7 @@ TimelineSample sampleTimeline(float queryTime) {
 }
 
 void applyTimelineEmission(inout Material material, TimelineSample timelineValue) {
-    material.emissionStrength *= max(timelineValue.emissionScale, 0.0);
+    material.emissionLuminance *= max(timelineValue.emissionScale, 0.0);
     material.emissionColor *= max(timelineValue.emissionTint, vec3(0.0));
 }
 

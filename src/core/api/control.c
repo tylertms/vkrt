@@ -31,10 +31,10 @@ static float luminance3(const vec3 value) {
 
 static float materialEmissionWeight(const MaterialData* material) {
     if (!material) return 0.0f;
-    if (!(material->emissionStrength > 0.0f)) return 0.0f;
+    if (!(material->emissionLuminance > 0.0f)) return 0.0f;
     float lum = luminance3(material->emissionColor);
     if (!(lum > 0.0f)) return 0.0f;
-    return lum * material->emissionStrength;
+    return lum * material->emissionLuminance;
 }
 
 static void transformPosition(const VkTransformMatrixKHR* transform, const vec4 position, vec3 outWorld) {
@@ -207,7 +207,7 @@ void rebuildLightBuffers(VKRT* vkrt) {
         meshGPU.emission[0] = mesh->material.emissionColor[0];
         meshGPU.emission[1] = mesh->material.emissionColor[1];
         meshGPU.emission[2] = mesh->material.emissionColor[2];
-        meshGPU.emission[3] = mesh->material.emissionStrength;
+        meshGPU.emission[3] = mesh->material.emissionLuminance;
 
         meshGPU.stats[0] = 0.0f;
         meshGPU.stats[1] = totalArea;
@@ -591,13 +591,7 @@ void VKRT_uploadMeshData(VKRT* vkrt, const Vertex* vertices, size_t vertexCount,
     mesh->info.renderBackfaces = 0;
     mesh->info.padding = 0;
 
-    mesh->material = (MaterialData){
-        .baseColor = {1.0f, 1.0f, 1.0f},
-        .roughness = 1.0f,
-        .metallic = 0.0f,
-        .emissionColor = {1.0f, 1.0f, 1.0f},
-        .emissionStrength = 0.0f,
-    };
+    mesh->material = VKRT_materialDataOpenPBRDefault();
 
     vec3 scale = {1.f, 1.f, 1.f};
     memcpy(&mesh->info.scale, &scale, sizeof(vec3));

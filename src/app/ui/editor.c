@@ -1112,37 +1112,128 @@ static void drawMeshInspector(VKRT* vkrt, Session* session) {
         }
 
         ImGui_Indent();
-        float position[3] = {meshInfo->position[0], meshInfo->position[1], meshInfo->position[2]};
-        float rotation[3] = {meshInfo->rotation[0], meshInfo->rotation[1], meshInfo->rotation[2]};
-        float scale[3] = {meshInfo->scale[0], meshInfo->scale[1], meshInfo->scale[2]};
+        if (ImGui_CollapsingHeader("Transform", ImGuiTreeNodeFlags_None)) {
+            ImGui_Indent();
+            float position[3] = {meshInfo->position[0], meshInfo->position[1], meshInfo->position[2]};
+            float rotation[3] = {meshInfo->rotation[0], meshInfo->rotation[1], meshInfo->rotation[2]};
+            float scale[3] = {meshInfo->scale[0], meshInfo->scale[1], meshInfo->scale[2]};
 
-        bool transformChanged = false;
-        transformChanged |= ImGui_DragFloat3Ex("Translate", position, 0.001f, 0.0f, 0.0f, "%.3f", ImGuiSliderFlags_None);
-        transformChanged |= ImGui_DragFloat3Ex("Rotate", rotation, 0.05f, 0.0f, 0.0f, "%.2f", ImGuiSliderFlags_None);
-        transformChanged |= ImGui_DragFloat3Ex("Scale", scale, 0.001f, 0.001f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            bool transformChanged = false;
+            transformChanged |= ImGui_DragFloat3Ex("Translate", position, 0.001f, 0.0f, 0.0f, "%.3f", ImGuiSliderFlags_None);
+            transformChanged |= ImGui_DragFloat3Ex("Rotate", rotation, 0.05f, 0.0f, 0.0f, "%.2f", ImGuiSliderFlags_None);
+            transformChanged |= ImGui_DragFloat3Ex("Scale", scale, 0.001f, 0.001f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
 
-        if (transformChanged) {
-            for (int axis = 0; axis < 3; axis++) {
-                rotation[axis] = fmodf(rotation[axis], 360.0f);
-                if (rotation[axis] < -180.0f) rotation[axis] += 360.0f;
-                if (rotation[axis] >= 180.0f) rotation[axis] -= 360.0f;
+            if (transformChanged) {
+                for (int axis = 0; axis < 3; axis++) {
+                    rotation[axis] = fmodf(rotation[axis], 360.0f);
+                    if (rotation[axis] < -180.0f) rotation[axis] += 360.0f;
+                    if (rotation[axis] >= 180.0f) rotation[axis] -= 360.0f;
+                }
+                VKRT_setMeshTransform(vkrt, meshIndex, position, rotation, scale);
             }
-            VKRT_setMeshTransform(vkrt, meshIndex, position, rotation, scale);
-        }
 
-        bool renderBackfaces = meshInfo->renderBackfaces != 0;
-        if (ImGui_Checkbox("Render Backfaces", &renderBackfaces)) {
-            VKRT_setMeshRenderBackfaces(vkrt, meshIndex, renderBackfaces ? 1 : 0);
+            bool renderBackfaces = meshInfo->renderBackfaces != 0;
+            if (ImGui_Checkbox("Render Backfaces", &renderBackfaces)) {
+                VKRT_setMeshRenderBackfaces(vkrt, meshIndex, renderBackfaces ? 1 : 0);
+            }
+            tooltipOnHover("Disable backface culling for this mesh instance.");
+            ImGui_Unindent();
         }
-        tooltipOnHover("Disable backface culling for this mesh instance.");
 
         MaterialData material = mesh->material;
         bool materialChanged = false;
-        materialChanged |= ImGui_ColorEdit3("Base Color", material.baseColor, ImGuiColorEditFlags_Float);
-        materialChanged |= ImGui_SliderFloatEx("Roughness", &material.roughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-        materialChanged |= ImGui_SliderFloatEx("Metallic", &material.metallic, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-        materialChanged |= ImGui_ColorEdit3("Emission Color", material.emissionColor, ImGuiColorEditFlags_Float);
-        materialChanged |= ImGui_DragFloatEx("Emission Strength", &material.emissionStrength, 0.01f, 0.0f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+
+        if (ImGui_CollapsingHeader("Base", ImGuiTreeNodeFlags_None)) {
+            ImGui_Indent();
+            materialChanged |= ImGui_SliderFloatEx("Weight##baseWeight", &material.baseWeight, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            materialChanged |= ImGui_ColorEdit3("Color##baseColor", material.baseColor, ImGuiColorEditFlags_Float);
+            materialChanged |= ImGui_SliderFloatEx("Metalness##baseMetalness", &material.baseMetalness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            materialChanged |= ImGui_SliderFloatEx("Diffuse Roughness##baseDiffuseRoughness", &material.baseDiffuseRoughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            ImGui_Unindent();
+        }
+
+        if (ImGui_CollapsingHeader("Specular", ImGuiTreeNodeFlags_None)) {
+            ImGui_Indent();
+            materialChanged |= ImGui_DragFloatEx("Weight##specularWeight", &material.specularWeight, 0.01f, 0.0f, 32.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            materialChanged |= ImGui_ColorEdit3("Color##specularColor", material.specularColor, ImGuiColorEditFlags_Float);
+            materialChanged |= ImGui_SliderFloatEx("Roughness##specularRoughness", &material.specularRoughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            materialChanged |= ImGui_SliderFloatEx("Anisotropy##specularRoughnessAnisotropy", &material.specularRoughnessAnisotropy, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            materialChanged |= ImGui_DragFloatEx("IOR##specularIor", &material.specularIor, 0.01f, 1.0f, 3.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            ImGui_Unindent();
+        }
+
+        if (ImGui_CollapsingHeader("Transmission", ImGuiTreeNodeFlags_None)) {
+            ImGui_Indent();
+            materialChanged |= ImGui_SliderFloatEx("Weight##transmissionWeight", &material.transmissionWeight, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            materialChanged |= ImGui_ColorEdit3("Color##transmissionColor", material.transmissionColor, ImGuiColorEditFlags_Float);
+            materialChanged |= ImGui_DragFloatEx("Depth##transmissionDepth", &material.transmissionDepth, 0.01f, 0.0f, 10.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            materialChanged |= ImGui_ColorEdit3("Scatter##transmissionScatter", material.transmissionScatter, ImGuiColorEditFlags_Float);
+            materialChanged |= ImGui_SliderFloatEx("Scatter Anisotropy##transmissionScatterAnisotropy", &material.transmissionScatterAnisotropy, -1.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            materialChanged |= ImGui_SliderFloatEx("Dispersion Scale##transmissionDispersionScale", &material.transmissionDispersionScale, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            materialChanged |= ImGui_DragFloatEx("Abbe Number##transmissionDispersionAbbeNumber", &material.transmissionDispersionAbbeNumber, 0.1f, 1.0f, 256.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            ImGui_Unindent();
+        }
+
+        if (ImGui_CollapsingHeader("Subsurface", ImGuiTreeNodeFlags_None)) {
+            ImGui_Indent();
+            materialChanged |= ImGui_SliderFloatEx("Weight##subsurfaceWeight", &material.subsurfaceWeight, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            materialChanged |= ImGui_ColorEdit3("Color##subsurfaceColor", material.subsurfaceColor, ImGuiColorEditFlags_Float);
+            materialChanged |= ImGui_DragFloatEx("Radius##subsurfaceRadius", &material.subsurfaceRadius, 0.01f, 0.0f, 10.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            materialChanged |= ImGui_ColorEdit3("Radius Scale##subsurfaceRadiusScale", material.subsurfaceRadiusScale, ImGuiColorEditFlags_Float);
+            materialChanged |= ImGui_SliderFloatEx("Anisotropy##subsurfaceScatterAnisotropy", &material.subsurfaceScatterAnisotropy, -1.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            ImGui_Unindent();
+        }
+
+        if (ImGui_CollapsingHeader("Coat", ImGuiTreeNodeFlags_None)) {
+            ImGui_Indent();
+            materialChanged |= ImGui_SliderFloatEx("Weight##coatWeight", &material.coatWeight, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            materialChanged |= ImGui_ColorEdit3("Color##coatColor", material.coatColor, ImGuiColorEditFlags_Float);
+            materialChanged |= ImGui_SliderFloatEx("Roughness##coatRoughness", &material.coatRoughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            materialChanged |= ImGui_SliderFloatEx("Anisotropy##coatRoughnessAnisotropy", &material.coatRoughnessAnisotropy, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            materialChanged |= ImGui_DragFloatEx("IOR##coatIor", &material.coatIor, 0.01f, 1.0f, 3.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            materialChanged |= ImGui_SliderFloatEx("Darkening##coatDarkening", &material.coatDarkening, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            ImGui_Unindent();
+        }
+
+        if (ImGui_CollapsingHeader("Fuzz", ImGuiTreeNodeFlags_None)) {
+            ImGui_Indent();
+            materialChanged |= ImGui_SliderFloatEx("Weight##fuzzWeight", &material.fuzzWeight, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            materialChanged |= ImGui_ColorEdit3("Color##fuzzColor", material.fuzzColor, ImGuiColorEditFlags_Float);
+            materialChanged |= ImGui_SliderFloatEx("Roughness##fuzzRoughness", &material.fuzzRoughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            ImGui_Unindent();
+        }
+
+        if (ImGui_CollapsingHeader("Emission", ImGuiTreeNodeFlags_None)) {
+            ImGui_Indent();
+            materialChanged |= ImGui_DragFloatEx("Luminance (nits)##emissionLuminance", &material.emissionLuminance, 0.1f, 0.0f, 10000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            materialChanged |= ImGui_ColorEdit3("Color##emissionColor", material.emissionColor, ImGuiColorEditFlags_Float);
+            ImGui_Unindent();
+        }
+
+        if (ImGui_CollapsingHeader("Thin-film", ImGuiTreeNodeFlags_None)) {
+            ImGui_Indent();
+            materialChanged |= ImGui_SliderFloatEx("Weight##thinFilmWeight", &material.thinFilmWeight, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            materialChanged |= ImGui_SliderFloatEx("Thickness (\xC2\xB5m)##thinFilmThickness", &material.thinFilmThickness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            materialChanged |= ImGui_DragFloatEx("IOR##thinFilmIor", &material.thinFilmIor, 0.01f, 1.0f, 3.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            ImGui_Unindent();
+        }
+
+        if (ImGui_CollapsingHeader("Geometry", ImGuiTreeNodeFlags_None)) {
+            ImGui_Indent();
+            materialChanged |= ImGui_SliderFloatEx("Opacity##geometryOpacity", &material.geometryOpacity, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+
+            bool thinWalled = material.geometryThinWalled != 0u;
+            if (ImGui_Checkbox("Thin Walled##geometryThinWalled", &thinWalled)) {
+                material.geometryThinWalled = thinWalled ? 1u : 0u;
+                materialChanged = true;
+            }
+
+            materialChanged |= ImGui_DragFloat3Ex("Normal##geometryNormal", material.geometryNormal, 0.01f, -1.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            materialChanged |= ImGui_DragFloat3Ex("Tangent##geometryTangent", material.geometryTangent, 0.01f, -1.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            materialChanged |= ImGui_DragFloat3Ex("Coat Normal##geometryCoatNormal", material.geometryCoatNormal, 0.01f, -1.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            materialChanged |= ImGui_DragFloat3Ex("Coat Tangent##geometryCoatTangent", material.geometryCoatTangent, 0.01f, -1.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            ImGui_Unindent();
+        }
 
         if (materialChanged) {
             VKRT_setMeshMaterial(vkrt, meshIndex, &material);

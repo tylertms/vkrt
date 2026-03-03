@@ -115,13 +115,104 @@ typedef struct MeshInfo {
 } MeshInfo;
 
 typedef struct MaterialData {
+    float baseWeight;
+    float paddingBaseWeight[3];
     vec3 baseColor;
-    float roughness;
+    float baseMetalness;
+    float baseDiffuseRoughness;
+    float specularWeight;
+    float paddingSpecularWeight[2];
+    vec3 specularColor;
+    float specularRoughness;
+    float specularRoughnessAnisotropy;
+    float specularIor;
+    float transmissionWeight;
+    float paddingTransmissionWeight;
+    vec3 transmissionColor;
+    float transmissionDepth;
+    vec3 transmissionScatter;
+    float transmissionScatterAnisotropy;
+    float transmissionDispersionScale;
+    float transmissionDispersionAbbeNumber;
+    float subsurfaceWeight;
+    float paddingSubsurfaceWeight;
+    vec3 subsurfaceColor;
+    float subsurfaceRadius;
+    vec3 subsurfaceRadiusScale;
+    float subsurfaceScatterAnisotropy;
+    float coatWeight;
+    float paddingCoatWeight[3];
+    vec3 coatColor;
+    float coatRoughness;
+    float coatRoughnessAnisotropy;
+    float coatIor;
+    float coatDarkening;
+    float fuzzWeight;
+    vec3 fuzzColor;
+    float fuzzRoughness;
+    float emissionLuminance;
+    float paddingEmissionLuminance[3];
     vec3 emissionColor;
-    float emissionStrength;
-    float metallic;
-    float padding[3];
+    float thinFilmWeight;
+    float thinFilmThickness;
+    float thinFilmIor;
+    float geometryOpacity;
+    uint32_t geometryThinWalled;
+    vec3 geometryNormal;
+    float paddingGeometryNormal;
+    vec3 geometryTangent;
+    float paddingGeometryTangent;
+    vec3 geometryCoatNormal;
+    float paddingGeometryCoatNormal;
+    vec3 geometryCoatTangent;
+    float paddingGeometryCoatTangent;
 } MaterialData;
+
+static inline MaterialData VKRT_materialDataOpenPBRDefault(void) {
+    return (MaterialData){
+        .baseWeight = 1.0f,
+        .baseColor = {0.8f, 0.8f, 0.8f},
+        .baseMetalness = 0.0f,
+        .baseDiffuseRoughness = 0.0f,
+        .specularWeight = 1.0f,
+        .specularColor = {1.0f, 1.0f, 1.0f},
+        .specularRoughness = 0.3f,
+        .specularRoughnessAnisotropy = 0.0f,
+        .specularIor = 1.5f,
+        .transmissionWeight = 0.0f,
+        .transmissionColor = {1.0f, 1.0f, 1.0f},
+        .transmissionDepth = 0.0f,
+        .transmissionScatter = {0.0f, 0.0f, 0.0f},
+        .transmissionScatterAnisotropy = 0.0f,
+        .transmissionDispersionScale = 0.0f,
+        .transmissionDispersionAbbeNumber = 20.0f,
+        .subsurfaceWeight = 0.0f,
+        .subsurfaceColor = {0.8f, 0.8f, 0.8f},
+        .subsurfaceRadius = 1.0f,
+        .subsurfaceRadiusScale = {1.0f, 0.5f, 0.25f},
+        .subsurfaceScatterAnisotropy = 0.0f,
+        .coatWeight = 0.0f,
+        .coatColor = {1.0f, 1.0f, 1.0f},
+        .coatRoughness = 0.0f,
+        .coatRoughnessAnisotropy = 0.0f,
+        .coatIor = 1.6f,
+        .coatDarkening = 1.0f,
+        .fuzzWeight = 0.0f,
+        .fuzzColor = {1.0f, 1.0f, 1.0f},
+        .fuzzRoughness = 0.5f,
+        .emissionLuminance = 0.0f,
+        .emissionColor = {1.0f, 1.0f, 1.0f},
+        .thinFilmWeight = 0.0f,
+        .thinFilmThickness = 0.5f,
+        .thinFilmIor = 1.4f,
+        .geometryOpacity = 1.0f,
+        .geometryThinWalled = 0u,
+        .geometryNormal = {0.0f, 0.0f, 1.0f},
+        .geometryTangent = {1.0f, 0.0f, 0.0f},
+        .geometryCoatNormal = {0.0f, 0.0f, 1.0f},
+        .geometryCoatTangent = {1.0f, 0.0f, 0.0f},
+    };
+}
 
 typedef struct Mesh {
     MeshInfo info;

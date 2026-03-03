@@ -110,13 +110,9 @@ void meshControllerLoadDefaultAssets(VKRT* vkrt, Session* session) {
         VKRT_setMeshTransform(vkrt, ceilingLightMesh, position, rotation, scale);
     }
 
-    MaterialData neutralWhite = {
-        .baseColor = {1.0f, 1.0f, 1.0f},
-        .roughness = 1.0f,
-        .metallic = 0.0f,
-        .emissionColor = {1.0f, 1.0f, 1.0f},
-        .emissionStrength = 0.0f,
-    };
+    MaterialData neutralWhite = VKRT_materialDataOpenPBRDefault();
+    neutralWhite.specularWeight = 0.0f;
+    neutralWhite.specularRoughness = 1.0f;
 
     MaterialData leftWallMaterial = neutralWhite;
     leftWallMaterial.baseColor[0] = 0.80f;
@@ -132,7 +128,7 @@ void meshControllerLoadDefaultAssets(VKRT* vkrt, Session* session) {
     lightMaterial.emissionColor[0] = 1.0f;
     lightMaterial.emissionColor[1] = 0.97f;
     lightMaterial.emissionColor[2] = 0.90f;
-    lightMaterial.emissionStrength = 70.0f;
+    lightMaterial.emissionLuminance = 70.0f;
 
     if (floorMesh != UINT32_MAX) VKRT_setMeshMaterial(vkrt, floorMesh, &neutralWhite);
     if (ceilingMesh != UINT32_MAX) VKRT_setMeshMaterial(vkrt, ceilingMesh, &neutralWhite);
@@ -143,13 +139,12 @@ void meshControllerLoadDefaultAssets(VKRT* vkrt, Session* session) {
 
     uint32_t dragonMeshIndex = UINT32_MAX;
     if (meshControllerImportMesh(vkrt, session, dragonPath, "dragon", &dragonMeshIndex)) {
-        MaterialData dragonMaterial = {
-            .baseColor = {0.74f, 0.73f, 0.72f},
-            .roughness = 0.78f,
-            .metallic = 0.08f,
-            .emissionColor = {1.0f, 1.0f, 1.0f},
-            .emissionStrength = 0.0f,
-        };
+        MaterialData dragonMaterial = VKRT_materialDataOpenPBRDefault();
+        dragonMaterial.baseColor[0] = 0.74f;
+        dragonMaterial.baseColor[1] = 0.73f;
+        dragonMaterial.baseColor[2] = 0.72f;
+        dragonMaterial.specularRoughness = 0.0f;
+        dragonMaterial.baseMetalness = 0.0f;
 
         vec3 dragonPosition = {-0.1f, 0.32f, 0.59f};
         vec3 dragonRotation = {0.0f, 0.0f, 125.0f};
@@ -160,13 +155,12 @@ void meshControllerLoadDefaultAssets(VKRT* vkrt, Session* session) {
 
     uint32_t sphereMeshIndex = UINT32_MAX;
     if (meshControllerImportMesh(vkrt, session, spherePath, "sphere", &sphereMeshIndex)) {
-        MaterialData sphereMaterial = {
-            .baseColor = {1.0f, 1.0f, 1.0f},
-            .roughness = 0.0f,
-            .metallic = 1.0f,
-            .emissionColor = {1.0f, 1.0f, 1.0f},
-            .emissionStrength = 0.0f,
-        };
+        MaterialData sphereMaterial = VKRT_materialDataOpenPBRDefault();
+        sphereMaterial.baseColor[0] = 1.0f;
+        sphereMaterial.baseColor[1] = 1.0f;
+        sphereMaterial.baseColor[2] = 1.0f;
+        sphereMaterial.specularRoughness = 0.0f;
+        sphereMaterial.baseMetalness = 1.0f;
 
         vec3 spherePosition = {0.42f, -0.15f, 0.70f};
         vec3 sphereRotation = {0.0f, 0.0f, 0.0f};
