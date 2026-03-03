@@ -155,9 +155,13 @@ vec3 trace(ivec2 pixel, inout uint state) {
         if (!neeOnly && material.emissionStrength > 0.0) {
             vec3 emitted = material.emissionColor * material.emissionStrength;
             float emissionWeight = 1.0;
-            if (misOn && hasPrevSample) {
-                float lightPdf = lightPdfForEmitterHit(payload.instanceIndex, payload.primitiveIndex, ray.origin, payload.point);
-                emissionWeight = misPowerWeight(prevSamplePdf, lightPdf);
+            if (neeOn && hasPrevSample) {
+                if (misOn) {
+                    float lightPdf = lightPdfForEmitterHit(payload.instanceIndex, payload.primitiveIndex, ray.origin, payload.point);
+                    emissionWeight = misPowerWeight(prevSamplePdf, lightPdf);
+                } else {
+                    emissionWeight = 0.0;
+                }
             }
             radiance += throughput * emitted * emissionWeight;
         }
