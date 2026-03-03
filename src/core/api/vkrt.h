@@ -46,8 +46,8 @@ typedef struct SceneData {
     uint32_t emissiveTriangleCount;
     uint32_t neeEnabled;
     uint32_t misEnabled;
-    uint32_t padding0;
-    uint32_t padding1;
+    uint32_t selectionEnabled;
+    uint32_t selectedMeshIndex;
     vec4 timelineTimeScale[VKRT_SCENE_TIMELINE_MAX_KEYFRAMES];
     vec4 timelineTint[VKRT_SCENE_TIMELINE_MAX_KEYFRAMES];
 } SceneData;
@@ -224,6 +224,13 @@ typedef struct Mesh {
     uint8_t ownsGeometry;
 } Mesh;
 
+typedef struct PickBuffer {
+    uint32_t pixel; // (x | (y << 16))
+    uint32_t requestID;
+    uint32_t hitMeshIndex;
+    uint32_t resultID;
+} PickBuffer;
+
 typedef struct Buffer {
     VkBuffer buffer;
     VkDeviceMemory memory;
@@ -276,6 +283,7 @@ typedef struct VKRT_Core {
     VkBuffer sceneDataBuffer;
     VkDeviceMemory sceneDataMemory;
     SceneData* sceneData;
+    PickBuffer* pickData;
     VkImage storageImage;
     VkImageView storageImageView;
     VkDeviceMemory storageImageMemory;
@@ -287,6 +295,7 @@ typedef struct VKRT_Core {
     VkBool32 accumulationNeedsReset;
     Mesh* meshes;
     AccelerationStructure topLevelAccelerationStructure;
+    Buffer pickBuffer;
     Buffer vertexData;
     Buffer indexData;
     Buffer meshData;
@@ -374,6 +383,8 @@ typedef struct VKRT_PublicState {
     uint32_t debugMode;
     uint8_t neeEnabled;
     uint8_t misEnabled;
+    uint32_t selectionEnabled;
+    uint32_t selectedMeshIndex;
     VKRT_SceneTimelineSettings sceneTimeline;
 } VKRT_PublicState;
 
@@ -424,6 +435,9 @@ uint32_t VKRT_getMeshCount(const VKRT* vkrt);
 int VKRT_setMeshTransform(VKRT* vkrt, uint32_t meshIndex, vec3 position, vec3 rotation, vec3 scale);
 int VKRT_setMeshMaterial(VKRT* vkrt, uint32_t meshIndex, const MaterialData* material);
 int VKRT_setMeshRenderBackfaces(VKRT* vkrt, uint32_t meshIndex, uint8_t renderBackfaces);
+void VKRT_pickMeshAtPixel(const VKRT* vkrt, uint32_t x, uint32_t y, uint32_t* outMeshIndex);
+void VKRT_setSelectedMesh(VKRT* vkrt, uint32_t meshIndex);
+void VKRT_getSelectedMesh(const VKRT* vkrt, uint32_t* outMeshIndex);
 void VKRT_setRenderViewport(VKRT* vkrt, uint32_t x, uint32_t y, uint32_t width, uint32_t height);
 void VKRT_cameraSetPose(VKRT* vkrt, vec3 position, vec3 target, vec3 up, float vfov);
 void VKRT_cameraGetPose(const VKRT* vkrt, vec3 position, vec3 target, vec3 up, float* vfov);

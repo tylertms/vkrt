@@ -65,25 +65,32 @@ layout(set = 0, binding = 6) uniform SceneUniform {
     uint emissiveTriangleCount;
     uint neeEnabled;
     uint misEnabled;
-    uint padding0;
-    uint padding1;
+    uint selectionEnabled;
+    uint selectedMeshIndex;
     vec4 timelineTimeScale[VKRT_SCENE_TIMELINE_MAX_KEYFRAMES];
     vec4 timelineTint[VKRT_SCENE_TIMELINE_MAX_KEYFRAMES];
 } scene;
 
-layout(set = 0, binding = 7, std430) readonly buffer MeshInfoBuffer {
+layout(set = 0, binding = 7, std430) buffer PickBuffer {
+    uint pixel; // (x | (y << 16))
+    uint requestID;
+    uint hitMeshIndex;
+    uint resultID;
+} pickBuffer;
+
+layout(set = 0, binding = 8, std430) readonly buffer MeshInfoBuffer {
     MeshInfo infos[];
 } meshInfo;
 
-layout(set = 0, binding = 8, std430) readonly buffer MaterialBuffer {
+layout(set = 0, binding = 9, std430) readonly buffer MaterialBuffer {
     Material materials[];
 } materialBuffer;
 
-layout(set = 0, binding = 9, std430) readonly buffer EmissiveMeshBuffer {
+layout(set = 0, binding = 10, std430) readonly buffer EmissiveMeshBuffer {
     EmissiveMesh meshes[];
 } emissiveMeshBuffer;
 
-layout(set = 0, binding = 10, std430) readonly buffer EmissiveTriangleBuffer {
+layout(set = 0, binding = 11, std430) readonly buffer EmissiveTriangleBuffer {
     EmissiveTriangle triangles[];
 } emissiveTriangleBuffer;
 

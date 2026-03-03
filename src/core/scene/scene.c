@@ -154,9 +154,29 @@ void recordFrameTime(VKRT* vkrt) {
 
 void createSceneUniform(VKRT* vkrt) {
     VkDeviceSize uniformBufferSize = sizeof(SceneData);
-    createBuffer(vkrt, uniformBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &vkrt->core.sceneDataBuffer, &vkrt->core.sceneDataMemory);
+    createBuffer(vkrt,
+        uniformBufferSize,
+        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        &vkrt->core.sceneDataBuffer,
+        &vkrt->core.sceneDataMemory);
+
     vkMapMemory(vkrt->core.device, vkrt->core.sceneDataMemory, 0, uniformBufferSize, 0, (void**)&vkrt->core.sceneData);
     memset(vkrt->core.sceneData, 0, uniformBufferSize);
+
+    VkDeviceSize pickBufferSize = sizeof(PickBuffer);
+    createBuffer(vkrt,
+        pickBufferSize,
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        &vkrt->core.pickBuffer.buffer,
+        &vkrt->core.pickBuffer.memory);
+
+    vkMapMemory(vkrt->core.device, vkrt->core.pickBuffer.memory, 0, pickBufferSize, 0, (void**)&vkrt->core.pickData);
+    memset(vkrt->core.pickData, 0, sizeof(*vkrt->core.pickData));
+    vkrt->core.pickData->hitMeshIndex = UINT32_MAX;
+    vkrt->core.pickBuffer.deviceAddress = 0;
+    vkrt->core.pickBuffer.count = 1;
 
     uint32_t initialWidth = vkrt->runtime.swapChainExtent.width ? vkrt->runtime.swapChainExtent.width : WIDTH;
     uint32_t initialHeight = vkrt->runtime.swapChainExtent.height ? vkrt->runtime.swapChainExtent.height : HEIGHT;
@@ -209,6 +229,8 @@ void createSceneUniform(VKRT* vkrt) {
     vkrt->state.debugMode = 0;
     vkrt->state.neeEnabled = 1;
     vkrt->state.misEnabled = 1;
+    vkrt->state.selectionEnabled = 1;
+    vkrt->state.selectedMeshIndex = UINT32_MAX;
     resetTimelineDefaults(&vkrt->state);
     vkrt->core.sceneData->timeBase = vkrt->state.timeBase;
     vkrt->core.sceneData->timeStep = vkrt->state.timeStep;
@@ -218,8 +240,6 @@ void createSceneUniform(VKRT* vkrt) {
     vkrt->core.sceneData->emissiveTriangleCount = 0;
     vkrt->core.sceneData->neeEnabled = 1;
     vkrt->core.sceneData->misEnabled = 1;
-    vkrt->core.sceneData->padding0 = 0;
-    vkrt->core.sceneData->padding1 = 0;
 
     updateMatricesFromCamera(vkrt);
 }
@@ -250,6 +270,8 @@ void resetSceneData(VKRT* vkrt) {
     vkrt->core.sceneData->emissiveTriangleCount = vkrt->core.emissiveTriangleCount;
     vkrt->core.sceneData->neeEnabled = vkrt->state.neeEnabled ? 1u : 0u;
     vkrt->core.sceneData->misEnabled = vkrt->state.misEnabled ? 1u : 0u;
+    vkrt->core.sceneData->selectionEnabled = vkrt->state.selectionEnabled ? 1u : 0u;
+    vkrt->core.sceneData->selectedMeshIndex = vkrt->state.selectedMeshIndex;
     writeTimelineUniform(vkrt->core.sceneData, &vkrt->state);
 
     vkrt->state.renderModeFinished = 0;

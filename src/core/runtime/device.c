@@ -6,11 +6,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <vulkan/vulkan_core.h>
 
 const char* deviceExtensions[NUM_EXTENSIONS] = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
     VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
     VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
+    VK_KHR_RAY_QUERY_EXTENSION_NAME,
     VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
     VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME
 };
@@ -112,9 +114,14 @@ void createLogicalDevice(VKRT* vkrt) {
     deviceAccelerationStructureFeatures.accelerationStructureHostCommands = VK_FALSE;
     deviceAccelerationStructureFeatures.descriptorBindingAccelerationStructureUpdateAfterBind = VK_FALSE;
 
+    VkPhysicalDeviceRayQueryFeaturesKHR deviceRayQueryFeatures = {0};
+    deviceRayQueryFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR;
+    deviceRayQueryFeatures.pNext = &deviceAccelerationStructureFeatures;
+    deviceRayQueryFeatures.rayQuery = VK_TRUE;
+
     VkPhysicalDeviceRayTracingPipelineFeaturesKHR deviceRayTracingPipelineFeatures = {0};
     deviceRayTracingPipelineFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
-    deviceRayTracingPipelineFeatures.pNext = &deviceAccelerationStructureFeatures;
+    deviceRayTracingPipelineFeatures.pNext = &deviceRayQueryFeatures;
     deviceRayTracingPipelineFeatures.rayTracingPipeline = VK_TRUE;
     deviceRayTracingPipelineFeatures.rayTracingPipelineShaderGroupHandleCaptureReplay = VK_FALSE;
     deviceRayTracingPipelineFeatures.rayTracingPipelineShaderGroupHandleCaptureReplayMixed = VK_FALSE;
@@ -209,9 +216,13 @@ int32_t isDeviceSuitable(VKRT* vkrt) {
     accelerationStructureFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
     accelerationStructureFeatures.pNext = &bufferDeviceAddressFeatures;
 
+    VkPhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures = {0};
+    rayQueryFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR;
+    rayQueryFeatures.pNext = &accelerationStructureFeatures;
+
     VkPhysicalDeviceRayTracingPipelineFeaturesKHR rayTracingPipelineFeatures = {0};
     rayTracingPipelineFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
-    rayTracingPipelineFeatures.pNext = &accelerationStructureFeatures;
+    rayTracingPipelineFeatures.pNext = &rayQueryFeatures;
 
     VkPhysicalDeviceFeatures2 physicalDeviceFeatures = {0};
     physicalDeviceFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
@@ -236,6 +247,7 @@ int32_t isDeviceSuitable(VKRT* vkrt) {
 
     VkBool32 requiredFeatures = bufferDeviceAddressFeatures.bufferDeviceAddress &&
                                 accelerationStructureFeatures.accelerationStructure &&
+                                rayQueryFeatures.rayQuery &&
                                 rayTracingPipelineFeatures.rayTracingPipeline;
 
     if (queueFamilyComplete && extensionSupport && swapChainAdequate && requiredFeatures) {

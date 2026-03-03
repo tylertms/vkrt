@@ -2,7 +2,7 @@
 
 #include "vkrt.h"
 
-#define NUM_EXTENSIONS 5
+#define NUM_EXTENSIONS 6
 extern const char* deviceExtensions[NUM_EXTENSIONS];
 
 void pickPhysicalDevice(VKRT* vkrt);

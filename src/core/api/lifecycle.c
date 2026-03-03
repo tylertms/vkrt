@@ -253,12 +253,22 @@ void VKRT_deinit(VKRT* vkrt) {
         if (vkrt->core.indexData.memory != VK_NULL_HANDLE) vkFreeMemory(vkrt->core.device, vkrt->core.indexData.memory, NULL);
         if (vkrt->core.meshData.buffer != VK_NULL_HANDLE) vkDestroyBuffer(vkrt->core.device, vkrt->core.meshData.buffer, NULL);
         if (vkrt->core.meshData.memory != VK_NULL_HANDLE) vkFreeMemory(vkrt->core.device, vkrt->core.meshData.memory, NULL);
+        if (vkrt->core.pickData && vkrt->core.pickBuffer.memory != VK_NULL_HANDLE) {
+            vkUnmapMemory(vkrt->core.device, vkrt->core.pickBuffer.memory);
+            vkrt->core.pickData = NULL;
+        }
+        if (vkrt->core.pickBuffer.buffer != VK_NULL_HANDLE) vkDestroyBuffer(vkrt->core.device, vkrt->core.pickBuffer.buffer, NULL);
+        if (vkrt->core.pickBuffer.memory != VK_NULL_HANDLE) vkFreeMemory(vkrt->core.device, vkrt->core.pickBuffer.memory, NULL);
         if (vkrt->core.materialData.buffer != VK_NULL_HANDLE) vkDestroyBuffer(vkrt->core.device, vkrt->core.materialData.buffer, NULL);
         if (vkrt->core.materialData.memory != VK_NULL_HANDLE) vkFreeMemory(vkrt->core.device, vkrt->core.materialData.memory, NULL);
         if (vkrt->core.emissiveMeshData.buffer != VK_NULL_HANDLE) vkDestroyBuffer(vkrt->core.device, vkrt->core.emissiveMeshData.buffer, NULL);
         if (vkrt->core.emissiveMeshData.memory != VK_NULL_HANDLE) vkFreeMemory(vkrt->core.device, vkrt->core.emissiveMeshData.memory, NULL);
         if (vkrt->core.emissiveTriangleData.buffer != VK_NULL_HANDLE) vkDestroyBuffer(vkrt->core.device, vkrt->core.emissiveTriangleData.buffer, NULL);
         if (vkrt->core.emissiveTriangleData.memory != VK_NULL_HANDLE) vkFreeMemory(vkrt->core.device, vkrt->core.emissiveTriangleData.memory, NULL);
+        if (vkrt->core.sceneData && vkrt->core.sceneDataMemory != VK_NULL_HANDLE) {
+            vkUnmapMemory(vkrt->core.device, vkrt->core.sceneDataMemory);
+            vkrt->core.sceneData = NULL;
+        }
         if (vkrt->core.sceneDataBuffer != VK_NULL_HANDLE) vkDestroyBuffer(vkrt->core.device, vkrt->core.sceneDataBuffer, NULL);
         if (vkrt->core.sceneDataMemory != VK_NULL_HANDLE) vkFreeMemory(vkrt->core.device, vkrt->core.sceneDataMemory, NULL);
         logStepTime("Scene and mesh buffer cleanup complete", stepStartTime);

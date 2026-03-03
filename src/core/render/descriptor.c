@@ -3,6 +3,8 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <vkrt.h>
+#include <vulkan/vulkan_core.h>
 
 void createDescriptorSetLayout(VKRT* vkrt) {
     VkDescriptorSetLayoutBinding accelerationStructureLayoutBinding = {0};
@@ -47,26 +49,32 @@ void createDescriptorSetLayout(VKRT* vkrt) {
     sceneDataLayoutBinding.descriptorCount = 1;
     sceneDataLayoutBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
 
+    VkDescriptorSetLayoutBinding pickBufferLayoutBinding = {0};
+    pickBufferLayoutBinding.binding = 7;
+    pickBufferLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    pickBufferLayoutBinding.descriptorCount = 1;
+    pickBufferLayoutBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+
     VkDescriptorSetLayoutBinding meshInfoLayoutBinding = {0};
-    meshInfoLayoutBinding.binding = 7;
+    meshInfoLayoutBinding.binding = 8;
     meshInfoLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     meshInfoLayoutBinding.descriptorCount = 1;
     meshInfoLayoutBinding.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
 
     VkDescriptorSetLayoutBinding materialLayoutBinding = {0};
-    materialLayoutBinding.binding = 8;
+    materialLayoutBinding.binding = 9;
     materialLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     materialLayoutBinding.descriptorCount = 1;
     materialLayoutBinding.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR;
 
     VkDescriptorSetLayoutBinding emissiveMeshLayoutBinding = {0};
-    emissiveMeshLayoutBinding.binding = 9;
+    emissiveMeshLayoutBinding.binding = 10;
     emissiveMeshLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     emissiveMeshLayoutBinding.descriptorCount = 1;
     emissiveMeshLayoutBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
 
     VkDescriptorSetLayoutBinding emissiveTriangleLayoutBinding = {0};
-    emissiveTriangleLayoutBinding.binding = 10;
+    emissiveTriangleLayoutBinding.binding = 11;
     emissiveTriangleLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     emissiveTriangleLayoutBinding.descriptorCount = 1;
     emissiveTriangleLayoutBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
@@ -79,6 +87,7 @@ void createDescriptorSetLayout(VKRT* vkrt) {
         vertexBufferLayoutBinding,
         indexBufferLayoutBinding,
         sceneDataLayoutBinding,
+        pickBufferLayoutBinding,
         meshInfoLayoutBinding,
         materialLayoutBinding,
         emissiveMeshLayoutBinding,
@@ -100,7 +109,7 @@ void createDescriptorPool(VKRT* vkrt) {
     VkDescriptorPoolSize poolSizes[] = {
         {VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1},
         {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 3},
-        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 8},
+        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 9},
         {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1},
         {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1}
     };
@@ -139,6 +148,7 @@ VkBool32 descriptorResourcesReady(VKRT* vkrt) {
     return vkrt->core.topLevelAccelerationStructure.structure != VK_NULL_HANDLE &&
            vkrt->core.vertexData.buffer != VK_NULL_HANDLE &&
            vkrt->core.indexData.buffer != VK_NULL_HANDLE &&
+           vkrt->core.pickBuffer.buffer != VK_NULL_HANDLE &&
            vkrt->core.meshData.buffer != VK_NULL_HANDLE &&
            vkrt->core.materialData.buffer != VK_NULL_HANDLE &&
            vkrt->core.emissiveMeshData.buffer != VK_NULL_HANDLE &&
@@ -220,6 +230,20 @@ void updateDescriptorSet(VKRT* vkrt) {
     sceneDataWrite.descriptorCount = 1;
     sceneDataWrite.pBufferInfo = &sceneDataInfo;
 
+    VkDescriptorBufferInfo pickBufferInfo = {0};
+    pickBufferInfo.buffer = vkrt->core.pickBuffer.buffer;
+    pickBufferInfo.offset = 0;
+    pickBufferInfo.range = sizeof(PickBuffer);
+
+    VkWriteDescriptorSet pickBufferWrite = {0};
+    pickBufferWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    pickBufferWrite.dstSet = vkrt->core.descriptorSet;
+    pickBufferWrite.dstBinding = 7;
+    pickBufferWrite.dstArrayElement = 0;
+    pickBufferWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    pickBufferWrite.descriptorCount = 1;
+    pickBufferWrite.pBufferInfo = &pickBufferInfo;
+
     VkDescriptorBufferInfo meshInfo = {0};
     meshInfo.buffer = vkrt->core.meshData.buffer;
     meshInfo.offset = 0;
@@ -228,7 +252,7 @@ void updateDescriptorSet(VKRT* vkrt) {
     VkWriteDescriptorSet meshInfoWrite = {0};
     meshInfoWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     meshInfoWrite.dstSet = vkrt->core.descriptorSet;
-    meshInfoWrite.dstBinding = 7;
+    meshInfoWrite.dstBinding = 8;
     meshInfoWrite.dstArrayElement = 0;
     meshInfoWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     meshInfoWrite.descriptorCount = 1;
@@ -242,7 +266,7 @@ void updateDescriptorSet(VKRT* vkrt) {
     VkWriteDescriptorSet materialWrite = {0};
     materialWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     materialWrite.dstSet = vkrt->core.descriptorSet;
-    materialWrite.dstBinding = 8;
+    materialWrite.dstBinding = 9;
     materialWrite.dstArrayElement = 0;
     materialWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     materialWrite.descriptorCount = 1;
@@ -256,7 +280,7 @@ void updateDescriptorSet(VKRT* vkrt) {
     VkWriteDescriptorSet emissiveMeshWrite = {0};
     emissiveMeshWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     emissiveMeshWrite.dstSet = vkrt->core.descriptorSet;
-    emissiveMeshWrite.dstBinding = 9;
+    emissiveMeshWrite.dstBinding = 10;
     emissiveMeshWrite.dstArrayElement = 0;
     emissiveMeshWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     emissiveMeshWrite.descriptorCount = 1;
@@ -270,7 +294,7 @@ void updateDescriptorSet(VKRT* vkrt) {
     VkWriteDescriptorSet emissiveTriangleWrite = {0};
     emissiveTriangleWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     emissiveTriangleWrite.dstSet = vkrt->core.descriptorSet;
-    emissiveTriangleWrite.dstBinding = 10;
+    emissiveTriangleWrite.dstBinding = 11;
     emissiveTriangleWrite.dstArrayElement = 0;
     emissiveTriangleWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     emissiveTriangleWrite.descriptorCount = 1;
@@ -310,6 +334,7 @@ void updateDescriptorSet(VKRT* vkrt) {
         vertexBufferWrite,
         indexBufferWrite,
         sceneDataWrite,
+        pickBufferWrite,
         meshInfoWrite,
         materialWrite,
         emissiveMeshWrite,
