@@ -64,14 +64,6 @@ static int writePNGFile(const char* path, const uint16_t* rgba16, uint32_t width
     return 0;
 }
 
-static char* duplicateString(const char* value) {
-    if (!value) return NULL;
-    size_t length = strlen(value);
-    char* out = (char*)malloc(length + 1);
-    if (!out) return NULL;
-    memcpy(out, value, length + 1);
-    return out;
-}
 
 static pthread_once_t gPNGWorkerInitOnce = PTHREAD_ONCE_INIT;
 static pthread_mutex_t gPNGWorkerLock;
@@ -172,7 +164,7 @@ static int queuePNGWrite(const char* path, uint16_t* rgba16, uint32_t width, uin
         return -1;
     }
 
-    job->path = duplicateString(path);
+    job->path = strdup(path);
     if (!job->path) {
         free(rgba16);
         free(job);

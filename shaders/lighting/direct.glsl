@@ -105,7 +105,7 @@ bool sampleDirectLight(
     vec3 e1 = tri.e1Pad.xyz;
     vec3 e2 = tri.e2Pad.xyz;
     vec3 lightPoint = v0 + e1 * b1 + e2 * b2;
-    vec3 lightNormal = normalize(cross(e1, e2));
+    vec3 lightNormal = cross(e1, e2) / (2.0 * area);
 
     vec3 toLight = lightPoint - shadingPoint;
     float dist2 = dot(toLight, toLight);
@@ -147,13 +147,13 @@ float lightPdfForEmitterHit(uint meshIndex, uint primitiveIndex, vec3 previousPo
 
     vec3 e1 = tri.e1Pad.xyz;
     vec3 e2 = tri.e2Pad.xyz;
-    vec3 lightNormal = normalize(cross(e1, e2));
+    vec3 lightNormal = cross(e1, e2) / (2.0 * area);
 
     vec3 toLight = hitPoint - previousPoint;
     float dist2 = dot(toLight, toLight);
     if (!(dist2 > 1e-8)) return 0.0;
 
-    vec3 wi = normalize(toLight);
+    vec3 wi = toLight * inversesqrt(dist2);
     float cosLight = abs(dot(lightNormal, -wi));
     if (cosLight <= 1e-7) return 0.0;
 

@@ -143,13 +143,19 @@ void rebuildLightBuffers(VKRT* vkrt) {
                 if (!isfinite(area) || area < 0.0f) area = 0.0f;
                 totalArea += area;
 
-                vec3 objE1, objE2, objFace, avgNormal;
-                glm_vec3_sub(mesh->vertices[i1].position, mesh->vertices[i0].position, objE1);
-                glm_vec3_sub(mesh->vertices[i2].position, mesh->vertices[i0].position, objE2);
-                glm_vec3_cross(objE1, objE2, objFace);
+                float* v0p = mesh->vertices[i0].position;
+                float* v1p = mesh->vertices[i1].position;
+                float* v2p = mesh->vertices[i2].position;
+                vec3 e1Obj, e2Obj, objFace;
+                glm_vec3_sub(v1p, v0p, e1Obj);
+                glm_vec3_sub(v2p, v0p, e2Obj);
+                glm_vec3_cross(e1Obj, e2Obj, objFace);
 
-                glm_vec3_add(mesh->vertices[i0].normal, mesh->vertices[i1].normal, avgNormal);
-                glm_vec3_add(avgNormal, mesh->vertices[i2].normal, avgNormal);
+                float* n0 = mesh->vertices[i0].normal;
+                float* n1 = mesh->vertices[i1].normal;
+                float* n2 = mesh->vertices[i2].normal;
+                vec3 avgNormal = {n0[0]+n1[0]+n2[0], n0[1]+n1[1]+n2[1], n0[2]+n1[2]+n2[2]};
+
                 if (glm_vec3_norm2(objFace) > 1e-12f && glm_vec3_norm2(avgNormal) > 1e-12f) {
                     if (glm_vec3_dot(objFace, avgNormal) < 0.0f) {
                         glm_vec3_sub(p2, p0, e1World);
@@ -318,8 +324,6 @@ static void destroyMeshBLAS(VKRT* vkrt) {
 void rebuildMaterialBuffer(VKRT* vkrt) {
     if (!vkrt) return;
 
-    vkDeviceWaitIdle(vkrt->core.device);
-
     if (vkrt->core.materialData.buffer != VK_NULL_HANDLE) {
         vkDestroyBuffer(vkrt->core.device, vkrt->core.materialData.buffer, NULL);
         vkrt->core.materialData.buffer = VK_NULL_HANDLE;
@@ -462,11 +466,7 @@ static void rebuildMeshBuffersAndStructures(VKRT* vkrt) {
         vkrt->core.indexData.count = totalIndexCount;
 
         uint64_t buildBlasStartTime = getMicroseconds();
-        for (uint32_t i = 0; i < meshCount; i++) {
-            Mesh* mesh = &vkrt->core.meshes[i];
-            if (!mesh->ownsGeometry) continue;
-            createBottomLevelAccelerationStructure(vkrt, mesh);
-        }
+        buildAllBLAS(vkrt);
         buildBlasTime = getMicroseconds() - buildBlasStartTime;
 
         uint64_t syncInstancesStartTime = getMicroseconds();

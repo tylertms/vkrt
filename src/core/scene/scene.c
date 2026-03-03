@@ -59,22 +59,22 @@ static void writeTimelineUniform(SceneData* sceneData, const VKRT_PublicState* s
 
 void applyCameraInput(VKRT* vkrt, const VKRT_CameraInput* input) {
     if (!vkrt || !input) return;
+    if (input->captureMouse) return;
+
     const float panSpeed = 0.001f;
     const float orbitSpeed = 0.004f;
     const float zoomSpeed = -0.075f;
 
-    if (input->captureMouse) return;
-
-    vec3 viewDir;
-    glm_vec3_sub(vkrt->state.camera.target, vkrt->state.camera.pos, viewDir);
+    float* pos = vkrt->state.camera.pos;
+    float* tgt = vkrt->state.camera.target;
+    vec3 viewDir = {tgt[0] - pos[0], tgt[1] - pos[1], tgt[2] - pos[2]};
     float dist = glm_vec3_norm(viewDir);
 
-    vec3 worldUp = {0.0f, 0.0f, 1.0f};
     vec3 right, up;
-    glm_vec3_cross(viewDir, worldUp, right);
+    glm_vec3_cross(viewDir, (vec3){0, 0, 1}, right);
 
     if (glm_vec3_norm(right) < 1e-6f) {
-        right[0] = 0.0f; right[1] = 1.0f; right[2] = 0.0f;
+        right[0] = 0; right[1] = 1; right[2] = 0;
     } else {
         glm_vec3_normalize(right);
     }
@@ -83,53 +83,37 @@ void applyCameraInput(VKRT* vkrt, const VKRT_CameraInput* input) {
     glm_vec3_normalize(up);
 
     if (input->panning) {
-        float dx = input->panDx;
-        float dy = input->panDy;
-
-        vec3 move, tmp;
-        glm_vec3_scale(right, -dx * panSpeed * dist, move);
-        glm_vec3_scale(up,    -dy * panSpeed * dist, tmp);
-        glm_vec3_add(move, tmp, move);
-
-        glm_vec3_add(vkrt->state.camera.pos, move, vkrt->state.camera.pos);
-        glm_vec3_add(vkrt->state.camera.target, move, vkrt->state.camera.target);
+        float s = panSpeed * dist;
+        float mx = -input->panDx * s;
+        float my = -input->panDy * s;
+        for (int i = 0; i < 3; i++) {
+            float d = right[i] * mx + up[i] * my;
+            pos[i] += d;
+            tgt[i] += d;
+        }
         updateMatricesFromCamera(vkrt);
     }
 
     if (input->orbiting) {
-        float dx = input->orbitDx;
-        float dy = input->orbitDy;
-
         const float PI_2 = 1.5707963267948966f;
         const float EPS = 0.001f;
 
-        float yaw = atan2f(viewDir[1], viewDir[0]);
-        float xyLen = sqrtf(viewDir[0] * viewDir[0] + viewDir[1] * viewDir[1]);
-        float pitch = atan2f(viewDir[2], xyLen);
+        float yaw = atan2f(viewDir[1], viewDir[0]) - input->orbitDx * orbitSpeed;
+        float pitch = atan2f(viewDir[2], sqrtf(viewDir[0] * viewDir[0] + viewDir[1] * viewDir[1])) + input->orbitDy * orbitSpeed;
+        pitch = glm_clamp(pitch, -PI_2 + EPS, PI_2 - EPS);
 
-        yaw -= dx * orbitSpeed;
-        pitch += dy * orbitSpeed;
-
-        if (pitch >  PI_2 - EPS) pitch =  PI_2 - EPS;
-        if (pitch < -PI_2 + EPS) pitch = -PI_2 + EPS;
-
-        vec3 fwd = {
-            cosf(pitch) * cosf(yaw),
-            cosf(pitch) * sinf(yaw),
-            sinf(pitch)
-        };
-
-        vec3 offset;
-        glm_vec3_scale(fwd, dist, offset);
-        glm_vec3_sub(vkrt->state.camera.target, offset, vkrt->state.camera.pos);
+        float cp = cosf(pitch);
+        vec3 fwd = {cp * cosf(yaw), cp * sinf(yaw), sinf(pitch)};
+        for (int i = 0; i < 3; i++)
+            pos[i] = tgt[i] - fwd[i] * dist;
 
         updateMatricesFromCamera(vkrt);
     }
 
-    float scroll = input->scroll;
-    if (scroll != 0.0f) {
-        glm_vec3_scale(viewDir, scroll * zoomSpeed, viewDir);
-        glm_vec3_sub(vkrt->state.camera.pos, viewDir, vkrt->state.camera.pos);
+    if (input->scroll != 0.0f) {
+        float s = input->scroll * zoomSpeed;
+        for (int i = 0; i < 3; i++)
+            pos[i] -= viewDir[i] * s;
         updateMatricesFromCamera(vkrt);
     }
 }
@@ -335,25 +319,17 @@ void updateAutoSPP(VKRT* vkrt) {
 }
 
 VkTransformMatrixKHR getMeshTransform(MeshInfo* meshInfo) {
-    vec3 scale;
-    glm_vec3_copy(meshInfo->scale, scale);
-    scale[1] = -scale[1];
-
-    vec3 position;
-    glm_vec3_copy(meshInfo->position, position);
-
-    vec3 rotation = {
-        glm_rad(meshInfo->rotation[0] - 90),
-        glm_rad(meshInfo->rotation[1]),
-        glm_rad(meshInfo->rotation[2] - 90)
-    };
+    vec3 scale = {meshInfo->scale[0], -meshInfo->scale[1], meshInfo->scale[2]};
+    float rx = glm_rad(meshInfo->rotation[0] - 90);
+    float ry = glm_rad(meshInfo->rotation[1]);
+    float rz = glm_rad(meshInfo->rotation[2] - 90);
 
     mat4 matrix;
     glm_mat4_identity(matrix);
-    glm_translate(matrix, position);
-    glm_rotate(matrix, rotation[2], (vec3){0.f, 0.f, 1.f});
-    glm_rotate(matrix, rotation[1], (vec3){0.f, 1.f, 0.f});
-    glm_rotate(matrix, rotation[0], (vec3){1.f, 0.f, 0.f});
+    glm_translate(matrix, meshInfo->position);
+    glm_rotate(matrix, rz, (vec3){0.f, 0.f, 1.f});
+    glm_rotate(matrix, ry, (vec3){0.f, 1.f, 0.f});
+    glm_rotate(matrix, rx, (vec3){1.f, 0.f, 0.f});
     glm_scale(matrix, scale);
 
     VkTransformMatrixKHR transform = {0};

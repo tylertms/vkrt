@@ -89,12 +89,10 @@ static void queryRenderViewCrop(VkExtent2D renderExtent, uint32_t viewportWidth,
 }
 
 void createCommandPool(VKRT* vkrt) {
-    QueueFamily indices = findQueueFamilies(vkrt);
-
     VkCommandPoolCreateInfo commandPoolCreateInfo = {0};
     commandPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     commandPoolCreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-    commandPoolCreateInfo.queueFamilyIndex = indices.graphics;
+    commandPoolCreateInfo.queueFamilyIndex = vkrt->core.indices.graphics;
 
     if (vkCreateCommandPool(vkrt->core.device, &commandPoolCreateInfo, NULL, &vkrt->runtime.commandPool) != VK_SUCCESS) {
         LOG_ERROR("Failed to create command pool");

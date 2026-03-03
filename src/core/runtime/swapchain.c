@@ -1,7 +1,6 @@
 #include "swapchain.h"
 #include "command.h"
 #include "descriptor.h"
-#include "device.h"
 #include "scene.h"
 #include "debug.h"
 
@@ -85,10 +84,9 @@ void createSwapChain(VKRT* vkrt) {
     swapChainCreateInfo.imageArrayLayers = 1;
     swapChainCreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
-    QueueFamily indices = findQueueFamilies(vkrt);
-    uint32_t queueFamilyIndices[] = {indices.graphics, indices.present};
+    uint32_t queueFamilyIndices[] = {vkrt->core.indices.graphics, vkrt->core.indices.present};
 
-    if (indices.graphics != indices.present) {
+    if (vkrt->core.indices.graphics != vkrt->core.indices.present) {
         swapChainCreateInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
         swapChainCreateInfo.queueFamilyIndexCount = 2;
         swapChainCreateInfo.pQueueFamilyIndices = queueFamilyIndices;

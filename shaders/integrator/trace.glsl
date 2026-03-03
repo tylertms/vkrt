@@ -118,21 +118,18 @@ vec3 trace(ivec2 pixel, inout uint state) {
                         && directSample.pdf > 1e-8)
                     {
                         float shadowDistance = directSample.distance - rayMinDistance;
-                        if (shadowDistance > rayMinDistance
-                            && traceShadowVisibility(ray.origin,
-                                                     directSample.wi, shadowDistance, rayMinDistance))
+                        if (shadowDistance > rayMinDistance && traceShadowVisibility(ray.origin, directSample.wi, shadowDistance, rayMinDistance))
                         {
-                            float phase = mediumIsotropicPhase();
-                            float misWeight = misOn ? misPowerWeight(directSample.pdf, phase) : 1.0;
+                            float misWeight = misOn ? misPowerWeight(directSample.pdf, ISOTROPIC_PHASE) : 1.0;
                             radiance += throughput * directSample.radiance *
-                                (phase * exp(-fogDensity * directSample.distance) * misWeight / directSample.pdf);
+                                (ISOTROPIC_PHASE * exp(-fogDensity * directSample.distance) * misWeight / directSample.pdf);
                         }
                     }
                 }
 
                 ray.dir = randDir(state);
                 hasPrevSample = true;
-                prevSamplePdf = mediumIsotropicPhase();
+                prevSamplePdf = ISOTROPIC_PHASE;
 
                 if (!applyRussianRoulette(throughput, state, i)) break;
                 continue;

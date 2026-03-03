@@ -33,11 +33,13 @@ vec3 sampleGGX(vec3 normal, vec3 outgoing, float alpha, inout uint state) {
     float r1 = rand(state);
     float r2 = rand(state);
 
-    float theta = atan(alpha * sqrt(r1), sqrt(max(1.0 - r1, 1e-7)));
+    float alpha2 = alpha * alpha;
+    float cosTheta2 = (1.0 - r1) / (1.0 + (alpha2 - 1.0) * r1);
+    float cosTheta = sqrt(max(cosTheta2, 0.0));
+    float sinTheta = sqrt(max(1.0 - cosTheta2, 0.0));
     float phi = 2.0 * PI * r2;
 
-    float sinTheta = sin(theta);
-    vec3 halfLocal = vec3(sinTheta * cos(phi), sinTheta * sin(phi), cos(theta));
+    vec3 halfLocal = vec3(sinTheta * cos(phi), sinTheta * sin(phi), cosTheta);
 
     mat3 tbn = buildTBN(normal);
     vec3 halfVector = normalize(tbn * halfLocal);
