@@ -126,8 +126,8 @@ void meshControllerLoadDefaultAssets(VKRT* vkrt, Session* session) {
 
     MaterialData lightMaterial = neutralWhite;
     lightMaterial.emissionColor[0] = 1.0f;
-    lightMaterial.emissionColor[1] = 0.97f;
-    lightMaterial.emissionColor[2] = 0.90f;
+    lightMaterial.emissionColor[1] = 1.0f;
+    lightMaterial.emissionColor[2] = 1.0f;
     lightMaterial.emissionLuminance = 70.0f;
 
     if (floorMesh != UINT32_MAX) VKRT_setMeshMaterial(vkrt, floorMesh, &neutralWhite);
