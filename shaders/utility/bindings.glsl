@@ -63,8 +63,6 @@ layout(set = 0, binding = 6) uniform SceneUniform {
     uint timelineKeyframeCount;
     uint emissiveMeshCount;
     uint emissiveTriangleCount;
-    uint neeEnabled;
-    uint misEnabled;
     uint selectionEnabled;
     uint selectedMeshIndex;
     vec4 timelineTimeScale[VKRT_SCENE_TIMELINE_MAX_KEYFRAMES];

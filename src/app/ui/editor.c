@@ -1039,13 +1039,6 @@ static void drawDebugSection(VKRT* vkrt, bool controlsDisabled) {
         VKRT_setDebugMode(vkrt, (uint32_t)debugMode);
     }
 
-    bool nee = vkrt->state.neeEnabled != 0;
-    if (ImGui_Checkbox("NEE + MIS", &nee)) {
-        VKRT_setNEEEnabled(vkrt, nee ? 1 : 0);
-        VKRT_setMISEnabled(vkrt, nee ? 1 : 0);
-    }
-    tooltipOnHover("Next Event Estimation with Multiple Importance Sampling. Traces shadow rays to lights at each bounce for faster convergence.");
-
     if (controlsDisabled) ImGui_EndDisabled();
     ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing});
     ImGui_Unindent();

@@ -44,8 +44,6 @@ typedef struct SceneData {
     uint32_t timelineKeyframeCount;
     uint32_t emissiveMeshCount;
     uint32_t emissiveTriangleCount;
-    uint32_t neeEnabled;
-    uint32_t misEnabled;
     uint32_t selectionEnabled;
     uint32_t selectedMeshIndex;
     vec4 timelineTimeScale[VKRT_SCENE_TIMELINE_MAX_KEYFRAMES];
@@ -381,8 +379,6 @@ typedef struct VKRT_PublicState {
     float timeBase;
     float timeStep;
     uint32_t debugMode;
-    uint8_t neeEnabled;
-    uint8_t misEnabled;
     uint32_t selectionEnabled;
     uint32_t selectedMeshIndex;
     VKRT_SceneTimelineSettings sceneTimeline;
@@ -422,8 +418,6 @@ void VKRT_setAutoSPPTargetFPS(VKRT* vkrt, uint32_t targetFPS);
 void VKRT_setToneMappingMode(VKRT* vkrt, VKRT_ToneMappingMode toneMappingMode);
 void VKRT_setFogDensity(VKRT* vkrt, float fogDensity);
 void VKRT_setDebugMode(VKRT* vkrt, uint32_t mode);
-void VKRT_setNEEEnabled(VKRT* vkrt, uint8_t enabled);
-void VKRT_setMISEnabled(VKRT* vkrt, uint8_t enabled);
 void VKRT_setTimeRange(VKRT* vkrt, float timeBase, float timeStep);
 void VKRT_setSceneTimeline(VKRT* vkrt, const VKRT_SceneTimelineSettings* timeline);
 int VKRT_saveRenderPNG(VKRT* vkrt, const char* path);

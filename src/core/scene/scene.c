@@ -227,8 +227,6 @@ void createSceneUniform(VKRT* vkrt) {
     vkrt->state.timeStep = 0.5f;
     vkrt->state.fogDensity = 0.0f;
     vkrt->state.debugMode = 0;
-    vkrt->state.neeEnabled = 1;
-    vkrt->state.misEnabled = 1;
     vkrt->state.selectionEnabled = 1;
     vkrt->state.selectedMeshIndex = UINT32_MAX;
     resetTimelineDefaults(&vkrt->state);
@@ -238,8 +236,6 @@ void createSceneUniform(VKRT* vkrt) {
     vkrt->core.sceneData->debugMode = 0;
     vkrt->core.sceneData->emissiveMeshCount = 0;
     vkrt->core.sceneData->emissiveTriangleCount = 0;
-    vkrt->core.sceneData->neeEnabled = 1;
-    vkrt->core.sceneData->misEnabled = 1;
 
     updateMatricesFromCamera(vkrt);
 }
@@ -268,8 +264,6 @@ void resetSceneData(VKRT* vkrt) {
     vkrt->core.sceneData->debugMode = vkrt->state.debugMode;
     vkrt->core.sceneData->emissiveMeshCount = vkrt->core.emissiveMeshCount;
     vkrt->core.sceneData->emissiveTriangleCount = vkrt->core.emissiveTriangleCount;
-    vkrt->core.sceneData->neeEnabled = vkrt->state.neeEnabled ? 1u : 0u;
-    vkrt->core.sceneData->misEnabled = vkrt->state.misEnabled ? 1u : 0u;
     vkrt->core.sceneData->selectionEnabled = vkrt->state.selectionEnabled ? 1u : 0u;
     vkrt->core.sceneData->selectedMeshIndex = vkrt->state.selectedMeshIndex;
     writeTimelineUniform(vkrt->core.sceneData, &vkrt->state);

@@ -765,22 +765,6 @@ void VKRT_setDebugMode(VKRT* vkrt, uint32_t mode) {
     resetSceneData(vkrt);
 }
 
-void VKRT_setNEEEnabled(VKRT* vkrt, uint8_t enabled) {
-    if (!vkrt) return;
-    uint8_t val = enabled ? 1 : 0;
-    if (vkrt->state.neeEnabled == val) return;
-    vkrt->state.neeEnabled = val;
-    resetSceneData(vkrt);
-}
-
-void VKRT_setMISEnabled(VKRT* vkrt, uint8_t enabled) {
-    if (!vkrt) return;
-    uint8_t val = enabled ? 1 : 0;
-    if (vkrt->state.misEnabled == val) return;
-    vkrt->state.misEnabled = val;
-    resetSceneData(vkrt);
-}
-
 void VKRT_setTimeRange(VKRT* vkrt, float timeBase, float timeStep) {
     if (!vkrt) return;
 

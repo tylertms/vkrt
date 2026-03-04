@@ -68,8 +68,6 @@ vec3 trace(ivec2 pixel, inout uint state) {
         return vec3(debugDepthValue(payload.hitDistance));
     }
 
-    bool neeOn = scene.neeEnabled != 0u;
-    bool misOn = scene.misEnabled != 0u && neeOn;
     bool neeOnly = debugMode == 4u;
     bool bsdfOnly = debugMode == 5u;
 
@@ -112,7 +110,7 @@ vec3 trace(ivec2 pixel, inout uint state) {
                 ray.origin += ray.dir * traveledDistance;
                 bounceCount++;
 
-                if (neeOn && !bsdfOnly) {
+                if (!bsdfOnly) {
                     DirectLightSample directSample;
                     if (sampleDirectLight(ray.origin, payload.time, observationTime, tlActive, state, directSample)
                         && directSample.pdf > 1e-8)
@@ -120,7 +118,7 @@ vec3 trace(ivec2 pixel, inout uint state) {
                         float shadowDistance = directSample.distance - rayMinDistance;
                         if (shadowDistance > rayMinDistance && traceShadowVisibility(ray.origin, directSample.wi, shadowDistance, rayMinDistance))
                         {
-                            float misWeight = misOn ? misPowerWeight(directSample.pdf, ISOTROPIC_PHASE) : 1.0;
+                            float misWeight = misPowerWeight(directSample.pdf, ISOTROPIC_PHASE);
                             radiance += throughput * directSample.radiance *
                                 (ISOTROPIC_PHASE * exp(-fogDensity * directSample.distance) * misWeight / directSample.pdf);
                         }
@@ -152,18 +150,14 @@ vec3 trace(ivec2 pixel, inout uint state) {
         if (!neeOnly && material.emissionLuminance > 0.0) {
             vec3 emitted = material.emissionColor * material.emissionLuminance;
             float emissionWeight = 1.0;
-            if (neeOn && hasPrevSample) {
-                if (misOn) {
-                    float lightPdf = lightPdfForEmitterHit(payload.instanceIndex, payload.primitiveIndex, ray.origin, payload.point);
-                    emissionWeight = misPowerWeight(prevSamplePdf, lightPdf);
-                } else {
-                    emissionWeight = 0.0;
-                }
+            if (hasPrevSample) {
+                float lightPdf = lightPdfForEmitterHit(payload.instanceIndex, payload.primitiveIndex, ray.origin, payload.point);
+                emissionWeight = misPowerWeight(prevSamplePdf, lightPdf);
             }
             radiance += throughput * emitted * emissionWeight;
         }
 
-        if (neeOn && !bsdfOnly && !emissiveSurface) {
+        if (!bsdfOnly && !emissiveSurface) {
             DirectLightSample directSample;
             if (sampleDirectLight(payload.point, payload.time, observationTime, tlActive, state, directSample)
                 && directSample.pdf > 1e-8)
@@ -176,7 +170,7 @@ vec3 trace(ivec2 pixel, inout uint state) {
                 {
                     vec3 f = evalBSDF(payload.normal, directSample.wi, -ray.dir, material);
                     float bsdfPdf = pdfBSDF(payload.normal, directSample.wi, -ray.dir, material);
-                    float misWeight = misOn ? misPowerWeight(directSample.pdf, bsdfPdf) : 1.0;
+                    float misWeight = misPowerWeight(directSample.pdf, bsdfPdf);
                     radiance += throughput * f * directSample.radiance *
                         (cosSurface * exp(-fogDensity * directSample.distance) * misWeight / directSample.pdf);
                 }
