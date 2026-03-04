@@ -59,7 +59,7 @@ void createDescriptorSetLayout(VKRT* vkrt) {
     meshInfoLayoutBinding.binding = 8;
     meshInfoLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     meshInfoLayoutBinding.descriptorCount = 1;
-    meshInfoLayoutBinding.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+    meshInfoLayoutBinding.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR;
 
     VkDescriptorSetLayoutBinding materialLayoutBinding = {0};
     materialLayoutBinding.binding = 9;

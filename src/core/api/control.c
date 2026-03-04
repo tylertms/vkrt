@@ -154,7 +154,7 @@ void rebuildLightBuffers(VKRT* vkrt) {
                 float* n0 = mesh->vertices[i0].normal;
                 float* n1 = mesh->vertices[i1].normal;
                 float* n2 = mesh->vertices[i2].normal;
-                vec3 avgNormal = {n0[0]+n1[0]+n2[0], n0[1]+n1[1]+n2[1], n0[2]+n1[2]+n2[2]};
+                vec3 avgNormal = {n0[0] + n1[0] + n2[0], n0[1] + n1[1] + n2[1], n0[2] + n1[2] + n2[2]};
 
                 if (glm_vec3_norm2(objFace) > 1e-12f && glm_vec3_norm2(avgNormal) > 1e-12f) {
                     if (glm_vec3_dot(objFace, avgNormal) < 0.0f) {

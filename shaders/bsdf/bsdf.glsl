@@ -14,44 +14,52 @@ struct BSDFSample {
 };
 
 vec3 evalBSDF(vec3 normal, vec3 incoming, vec3 outgoing, Material material) {
-    float alpha = max(material.specularRoughness * material.specularRoughness, 0.001);
-    vec3 f0 = mix(vec3(0.04), material.baseColor, material.baseMetalness);
+    float cosNL = max(dot(normal, incoming), 0.0);
+    float cosNV = max(dot(normal, outgoing), 0.0);
+    if (cosNL <= 0.0 || cosNV <= 0.0) return vec3(0.0);
 
-    vec3 diffuse = (1.0 - material.baseMetalness) * evalDiffuse(material.baseColor);
-    vec3 specular = evalGGX(normal, incoming, outgoing, alpha, f0);
+    MaterialBSDFState state = buildMaterialBSDFState(material);
+
+    vec3 specular = evalGGX(normal, incoming, outgoing, state.alpha, state.f0);
+
+    vec3 h = normalize(incoming + outgoing);
+    float cosVH = max(dot(outgoing, h), 0.0);
+    vec3 F = F_Schlick(cosVH, state.f0);
+    vec3 diffuse = state.diffuseColor * (vec3(1.0) - F) * INV_PI;
 
     return diffuse + specular;
 }
 
 float pdfBSDF(vec3 normal, vec3 incoming, vec3 outgoing, Material material) {
-    float alpha = max(material.specularRoughness * material.specularRoughness, 0.001);
-    float specWeight = specularSampleWeight(material);
+    MaterialBSDFState state = buildMaterialBSDFState(material);
+    float specWeight = specularSampleWeight(state);
 
     float diffuse = (1.0 - specWeight) * pdfDiffuse(normal, incoming);
-    float specular = specWeight * pdfGGX(normal, incoming, outgoing, alpha);
+    float specular = specWeight * pdfGGX(normal, incoming, outgoing, state.alpha);
 
     return diffuse + specular;
 }
 
 BSDFSample sampleBSDF(vec3 normal, vec3 outgoing, Material material, inout uint state) {
-    float alpha = max(material.specularRoughness * material.specularRoughness, 0.001);
-    float specWeight = specularSampleWeight(material);
-    vec3 f0 = mix(vec3(0.04), material.baseColor, material.baseMetalness);
+    MaterialBSDFState materialState = buildMaterialBSDFState(material);
+    float specWeight = specularSampleWeight(materialState);
 
     BSDFSample result;
 
-    if (rand(state) < specWeight) {
-        result.incoming = sampleGGX(normal, outgoing, alpha, state);
+    if (specWeight <= 1e-6) {
+        result.incoming = sampleDiffuse(normal, state);
+    } else if (specWeight >= 1.0 - 1e-6) {
+        result.incoming = sampleGGX(normal, outgoing, materialState.alpha, state);
+    } else if (rand(state) < specWeight) {
+        result.incoming = sampleGGX(normal, outgoing, materialState.alpha, state);
     } else {
         result.incoming = sampleDiffuse(normal, state);
     }
 
-    vec3 diffuseF = (1.0 - material.baseMetalness) * evalDiffuse(material.baseColor);
-    vec3 specularF = evalGGX(normal, result.incoming, outgoing, alpha, f0);
-    result.f = diffuseF + specularF;
+    result.f = evalBSDF(normal, result.incoming, outgoing, material);
 
     float diffusePdf = (1.0 - specWeight) * pdfDiffuse(normal, result.incoming);
-    float specularPdf = specWeight * pdfGGX(normal, result.incoming, outgoing, alpha);
+    float specularPdf = specWeight * pdfGGX(normal, result.incoming, outgoing, materialState.alpha);
     result.pdf = diffusePdf + specularPdf;
 
     return result;

@@ -29,22 +29,24 @@ vec3 F_Schlick(float cosTheta, vec3 f0) {
     return f0 + (1.0 - f0) * (t2 * t2 * t);
 }
 
+// VNDF sampling with spherical caps (Dupuy & Benyoub 2023)
 vec3 sampleGGX(vec3 normal, vec3 outgoing, float alpha, inout uint state) {
+    mat3 tbn = buildTBN(normal);
+    vec3 Ve = transpose(tbn) * outgoing;
+
     float r1 = rand(state);
     float r2 = rand(state);
 
-    float alpha2 = alpha * alpha;
-    float cosTheta2 = (1.0 - r1) / (1.0 + (alpha2 - 1.0) * r1);
-    float cosTheta = sqrt(max(cosTheta2, 0.0));
-    float sinTheta = sqrt(max(1.0 - cosTheta2, 0.0));
-    float phi = 2.0 * PI * r2;
+    vec3 Vh = normalize(vec3(alpha * Ve.x, alpha * Ve.y, Ve.z));
 
-    vec3 halfLocal = vec3(sinTheta * cos(phi), sinTheta * sin(phi), cosTheta);
+    float phi = 2.0 * PI * r1;
+    float z = (1.0 - r2) * (1.0 + Vh.z) - Vh.z;
+    float sinTheta = sqrt(clamp(1.0 - z * z, 0.0, 1.0));
+    vec3 Nh = vec3(sinTheta * cos(phi), sinTheta * sin(phi), z) + Vh;
 
-    mat3 tbn = buildTBN(normal);
-    vec3 halfVector = normalize(tbn * halfLocal);
-
-    return reflect(-outgoing, halfVector);
+    vec3 halfLocal = normalize(vec3(alpha * Nh.x, alpha * Nh.y, max(Nh.z, 0.0)));
+    vec3 halfWorld = tbn * halfLocal;
+    return reflect(-outgoing, halfWorld);
 }
 
 vec3 evalGGX(vec3 normal, vec3 incoming, vec3 outgoing, float alpha, vec3 f0) {
@@ -67,10 +69,10 @@ vec3 evalGGX(vec3 normal, vec3 incoming, vec3 outgoing, float alpha, vec3 f0) {
     return D * G * F / (4.0 * cosNL * cosNV);
 }
 
+// VNDF PDF
 float pdfGGX(vec3 normal, vec3 incoming, vec3 outgoing, float alpha) {
-    float cosNL = max(dot(normal, incoming), 0.0);
     float cosNV = max(dot(normal, outgoing), 0.0);
-    if (cosNL <= 0.0 || cosNV <= 0.0) return 0.0;
+    if (cosNV <= 0.0) return 0.0;
 
     vec3 h = incoming + outgoing;
     float hLenSq = dot(h, h);
@@ -78,10 +80,8 @@ float pdfGGX(vec3 normal, vec3 incoming, vec3 outgoing, float alpha) {
     h *= inversesqrt(hLenSq);
 
     float cosNH = max(dot(normal, h), 0.0);
-    float cosVH = max(dot(outgoing, h), 0.0);
-    if (cosVH <= 1e-7) return 0.0;
 
-    return D_GGX(cosNH, alpha) * cosNH / (4.0 * cosVH);
+    return G1_Smith(cosNV, alpha) * D_GGX(cosNH, alpha) / (4.0 * cosNV);
 }
 
 #endif

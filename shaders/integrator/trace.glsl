@@ -10,7 +10,8 @@
 bool applyRussianRoulette(inout vec3 throughput, inout uint state, uint bounce) {
     if (bounce < 3u) return true;
 
-    float continueProbability = clamp(max(throughput.r, max(throughput.g, throughput.b)), 0.05, 0.95);
+    vec3 absThroughput = abs(throughput);
+    float continueProbability = clamp(max(absThroughput.r, max(absThroughput.g, absThroughput.b)), 0.05, 0.95);
     if (rand(state) > continueProbability) return false;
     throughput /= continueProbability;
     return true;
