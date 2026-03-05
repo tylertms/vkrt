@@ -6,7 +6,16 @@
 #include <stdlib.h>
 #include <string.h>
 
-void createBuffer(VKRT* vkrt, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer* buffer, VkDeviceMemory* bufferMemory) {
+VKRT_Result createBuffer(
+    VKRT* vkrt,
+    VkDeviceSize size,
+    VkBufferUsageFlags usage,
+    VkMemoryPropertyFlags properties,
+    VkBuffer* buffer,
+    VkDeviceMemory* bufferMemory
+) {
+    if (!vkrt || !buffer || !bufferMemory) return VKRT_ERROR_INVALID_ARGUMENT;
+
     VkBufferCreateInfo bufferCreateInfo = {0};
     bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     bufferCreateInfo.size = size;
@@ -15,7 +24,7 @@ void createBuffer(VKRT* vkrt, VkDeviceSize size, VkBufferUsageFlags usage, VkMem
 
     if (vkCreateBuffer(vkrt->core.device, &bufferCreateInfo, NULL, buffer) != VK_SUCCESS) {
         LOG_ERROR("Failed to create buffer");
-        exit(EXIT_FAILURE);
+        return VKRT_ERROR_OPERATION_FAILED;
     }
 
     VkMemoryRequirements memoryRequirements;
@@ -24,7 +33,13 @@ void createBuffer(VKRT* vkrt, VkDeviceSize size, VkBufferUsageFlags usage, VkMem
     VkMemoryAllocateInfo memoryAllocateInfo = {0};
     memoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     memoryAllocateInfo.allocationSize = memoryRequirements.size;
-    memoryAllocateInfo.memoryTypeIndex = findMemoryType(vkrt, memoryRequirements.memoryTypeBits, properties);
+    uint32_t memoryTypeIndex = 0;
+    if (findMemoryType(vkrt, memoryRequirements.memoryTypeBits, properties, &memoryTypeIndex) != VKRT_SUCCESS) {
+        vkDestroyBuffer(vkrt->core.device, *buffer, NULL);
+        *buffer = VK_NULL_HANDLE;
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+    memoryAllocateInfo.memoryTypeIndex = memoryTypeIndex;
 
     VkMemoryAllocateFlagsInfo memoryAllocateFlagsInfo = {0};
     if (usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) {
@@ -35,13 +50,25 @@ void createBuffer(VKRT* vkrt, VkDeviceSize size, VkBufferUsageFlags usage, VkMem
 
     if (vkAllocateMemory(vkrt->core.device, &memoryAllocateInfo, NULL, bufferMemory) != VK_SUCCESS) {
         LOG_ERROR("Failed to allocate buffer memory");
-        exit(EXIT_FAILURE);
+        vkDestroyBuffer(vkrt->core.device, *buffer, NULL);
+        *buffer = VK_NULL_HANDLE;
+        return VKRT_ERROR_OPERATION_FAILED;
     }
 
-    vkBindBufferMemory(vkrt->core.device, *buffer, *bufferMemory, 0);
+    if (vkBindBufferMemory(vkrt->core.device, *buffer, *bufferMemory, 0) != VK_SUCCESS) {
+        vkDestroyBuffer(vkrt->core.device, *buffer, NULL);
+        vkFreeMemory(vkrt->core.device, *bufferMemory, NULL);
+        *buffer = VK_NULL_HANDLE;
+        *bufferMemory = VK_NULL_HANDLE;
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+
+    return VKRT_SUCCESS;
 }
 
-void copyBuffer(VKRT* vkrt, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
+VKRT_Result copyBuffer(VKRT* vkrt, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
+    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+
     VkCommandBufferAllocateInfo commandBufferAllocateInfo = {0};
     commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
@@ -49,42 +76,96 @@ void copyBuffer(VKRT* vkrt, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize
     commandBufferAllocateInfo.commandBufferCount = 1;
 
     VkCommandBuffer commandBuffer;
-    vkAllocateCommandBuffers(vkrt->core.device, &commandBufferAllocateInfo, &commandBuffer);
+    if (vkAllocateCommandBuffers(vkrt->core.device, &commandBufferAllocateInfo, &commandBuffer) != VK_SUCCESS) {
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
 
     VkCommandBufferBeginInfo commandBufferBeginInfo = {0};
     commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     commandBufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo);
+    if (vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo) != VK_SUCCESS) {
+        vkFreeCommandBuffers(vkrt->core.device, vkrt->runtime.commandPool, 1, &commandBuffer);
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
 
     VkBufferCopy copyRegion = {0};
     copyRegion.size = size;
     vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
 
-    vkEndCommandBuffer(commandBuffer);
+    if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
+        vkFreeCommandBuffers(vkrt->core.device, vkrt->runtime.commandPool, 1, &commandBuffer);
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
 
     VkSubmitInfo submitInfo = {0};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &commandBuffer;
 
-    vkQueueSubmit(vkrt->core.graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
-    vkQueueWaitIdle(vkrt->core.graphicsQueue);
+    if (vkQueueSubmit(vkrt->core.graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE) != VK_SUCCESS) {
+        vkFreeCommandBuffers(vkrt->core.device, vkrt->runtime.commandPool, 1, &commandBuffer);
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+    if (vkQueueWaitIdle(vkrt->core.graphicsQueue) != VK_SUCCESS) {
+        vkFreeCommandBuffers(vkrt->core.device, vkrt->runtime.commandPool, 1, &commandBuffer);
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
     vkFreeCommandBuffers(vkrt->core.device, vkrt->runtime.commandPool, 1, &commandBuffer);
+    return VKRT_SUCCESS;
 }
 
-VkDeviceAddress createBufferFromHostData(VKRT* vkrt, const void* hostData, VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer* outBuffer, VkDeviceMemory* outMemory) {
-    VkBuffer stagingBuf;
-    VkDeviceMemory stagingMem;
-    createBuffer(vkrt, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBuf, &stagingMem);
+VKRT_Result createBufferFromHostData(
+    VKRT* vkrt,
+    const void* hostData,
+    VkDeviceSize size,
+    VkBufferUsageFlags usage,
+    VkBuffer* outBuffer,
+    VkDeviceMemory* outMemory,
+    VkDeviceAddress* outDeviceAddress
+) {
+    if (!vkrt || !hostData || !outBuffer || !outMemory || !outDeviceAddress) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    VkBuffer stagingBuf = VK_NULL_HANDLE;
+    VkDeviceMemory stagingMem = VK_NULL_HANDLE;
+    VKRT_Result result = VKRT_SUCCESS;
+    if ((result = createBuffer(
+        vkrt,
+        size,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        &stagingBuf,
+        &stagingMem)) != VKRT_SUCCESS) return result;
 
     void* mapped;
-    vkMapMemory(vkrt->core.device, stagingMem, 0, size, 0, &mapped);
+    if (vkMapMemory(vkrt->core.device, stagingMem, 0, size, 0, &mapped) != VK_SUCCESS || !mapped) {
+        vkDestroyBuffer(vkrt->core.device, stagingBuf, NULL);
+        vkFreeMemory(vkrt->core.device, stagingMem, NULL);
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
     memcpy(mapped, hostData, (size_t)size);
     vkUnmapMemory(vkrt->core.device, stagingMem);
 
-    createBuffer(vkrt, size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | usage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, outBuffer, outMemory);
+    if ((result = createBuffer(
+        vkrt,
+        size,
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | usage,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        outBuffer,
+        outMemory)) != VKRT_SUCCESS) {
+        vkDestroyBuffer(vkrt->core.device, stagingBuf, NULL);
+        vkFreeMemory(vkrt->core.device, stagingMem, NULL);
+        return result;
+    }
 
-    copyBuffer(vkrt, stagingBuf, *outBuffer, size);
+    if ((result = copyBuffer(vkrt, stagingBuf, *outBuffer, size)) != VKRT_SUCCESS) {
+        vkDestroyBuffer(vkrt->core.device, stagingBuf, NULL);
+        vkFreeMemory(vkrt->core.device, stagingMem, NULL);
+        vkDestroyBuffer(vkrt->core.device, *outBuffer, NULL);
+        vkFreeMemory(vkrt->core.device, *outMemory, NULL);
+        *outBuffer = VK_NULL_HANDLE;
+        *outMemory = VK_NULL_HANDLE;
+        return result;
+    }
 
     vkDestroyBuffer(vkrt->core.device, stagingBuf, NULL);
     vkFreeMemory(vkrt->core.device, stagingMem, NULL);
@@ -94,5 +175,6 @@ VkDeviceAddress createBufferFromHostData(VKRT* vkrt, const void* hostData, VkDev
         .buffer = *outBuffer
     };
 
-    return vkrt->core.procs.vkGetBufferDeviceAddressKHR(vkrt->core.device, &addrInfo);
+    *outDeviceAddress = vkrt->core.procs.vkGetBufferDeviceAddressKHR(vkrt->core.device, &addrInfo);
+    return VKRT_SUCCESS;
 }

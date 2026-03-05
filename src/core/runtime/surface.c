@@ -4,9 +4,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-void createSurface(VKRT* vkrt) {
+VKRT_Result createSurface(VKRT* vkrt) {
+    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
     if (glfwCreateWindowSurface(vkrt->core.instance, vkrt->runtime.window, NULL, &vkrt->runtime.surface) != VK_SUCCESS) {
         LOG_ERROR("Failed to create window surface");
-        exit(EXIT_FAILURE);
+        return VKRT_ERROR_OPERATION_FAILED;
     }
+    return VKRT_SUCCESS;
 }

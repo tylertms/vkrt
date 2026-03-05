@@ -1,26 +1,21 @@
-#include "buffer.h"
-#include "command.h"
+#include "command/record.h"
+#include "control/control_internal.h"
 #include "descriptor.h"
 #include "scene.h"
-#include "accel.h"
 #include "swapchain.h"
-#include "vkrt.h"
+#include "vkrt_internal.h"
 #include "debug.h"
 
-#include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
 
-void rebuildMaterialBuffer(VKRT* vkrt);
-void rebuildLightBuffers(VKRT* vkrt);
-
 static void waitForAllInFlightFrames(VKRT* vkrt) {
     if (!vkrt) return;
-    vkWaitForFences(vkrt->core.device, MAX_FRAMES_IN_FLIGHT, vkrt->runtime.inFlightFences, VK_TRUE, UINT64_MAX);
+    vkWaitForFences(vkrt->core.device, VKRT_MAX_FRAMES_IN_FLIGHT, vkrt->runtime.inFlightFences, VK_TRUE, UINT64_MAX);
 }
 
-void VKRT_beginFrame(VKRT* vkrt) {
-    if (!vkrt) return;
+VKRT_Result VKRT_beginFrame(VKRT* vkrt) {
+    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
 
     vkrt->runtime.frameAcquired = VK_FALSE;
     vkrt->runtime.frameSubmitted = VK_FALSE;
@@ -29,15 +24,9 @@ void VKRT_beginFrame(VKRT* vkrt) {
 
     vkWaitForFences(vkrt->core.device, 1, &vkrt->runtime.inFlightFences[vkrt->runtime.currentFrame], VK_TRUE, UINT64_MAX);
 
-    if (vkrt->core.topLevelAccelerationStructure.needsRebuild) {
-        vkDeviceWaitIdle(vkrt->core.device);
-        if (!vkrt->core.materialDataDirty) {
-            rebuildLightBuffers(vkrt);
-        }
-        createTopLevelAccelerationStructure(vkrt);
-        updateDescriptorSet(vkrt);
-        vkrt->core.topLevelAccelerationStructure.needsRebuild = 0;
-        resetSceneData(vkrt);
+    if (vkrt->core.topLevelAccelerationStructure.needsRebuild &&
+        rebuildTopLevelScene(vkrt) != VKRT_SUCCESS) {
+        return VKRT_ERROR_OPERATION_FAILED;
     }
 
     VkResult result = vkAcquireNextImageKHR(
@@ -50,34 +39,38 @@ void VKRT_beginFrame(VKRT* vkrt) {
     );
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-        recreateSwapChain(vkrt);
-        return;
+        return recreateSwapChain(vkrt);
     }
 
     if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
         LOG_ERROR("Failed to acquire next swapchain image");
-        exit(EXIT_FAILURE);
+        return VKRT_ERROR_OPERATION_FAILED;
     }
 
     vkrt->runtime.frameAcquired = VK_TRUE;
+    return VKRT_SUCCESS;
 }
 
-void VKRT_updateScene(VKRT* vkrt) {
-    if (!vkrt || !vkrt->runtime.frameAcquired) return;
+VKRT_Result VKRT_updateScene(VKRT* vkrt) {
+    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+    if (!vkrt->runtime.frameAcquired) return VKRT_SUCCESS;
 
     if (vkrt->core.materialDataDirty) {
         waitForAllInFlightFrames(vkrt);
-        rebuildMaterialBuffer(vkrt);
-        updateDescriptorSet(vkrt);
+        if (rebuildMaterialBuffer(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+        if (updateDescriptorSet(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
     }
+
+    return VKRT_SUCCESS;
 }
 
-void VKRT_trace(VKRT* vkrt) {
-    if (!vkrt || !vkrt->runtime.frameAcquired) return;
+VKRT_Result VKRT_trace(VKRT* vkrt) {
+    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+    if (!vkrt->runtime.frameAcquired) return VKRT_SUCCESS;
     vkResetFences(vkrt->core.device, 1, &vkrt->runtime.inFlightFences[vkrt->runtime.currentFrame]);
 
     vkResetCommandBuffer(vkrt->runtime.commandBuffers[vkrt->runtime.currentFrame], 0);
-    recordCommandBuffer(vkrt, vkrt->runtime.frameImageIndex);
+    if (recordCommandBuffer(vkrt, vkrt->runtime.frameImageIndex) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
 
     VkSemaphore waitSemaphores[] = {vkrt->runtime.imageAvailableSemaphores[vkrt->runtime.currentFrame]};
     VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_TRANSFER_BIT};
@@ -95,14 +88,16 @@ void VKRT_trace(VKRT* vkrt) {
 
     if (vkQueueSubmit(vkrt->core.graphicsQueue, 1, &submitInfo, vkrt->runtime.inFlightFences[vkrt->runtime.currentFrame]) != VK_SUCCESS) {
         LOG_ERROR("Failed to submit draw queue");
-        exit(EXIT_FAILURE);
+        return VKRT_ERROR_OPERATION_FAILED;
     }
 
     vkrt->runtime.frameSubmitted = VK_TRUE;
+    return VKRT_SUCCESS;
 }
 
-void VKRT_present(VKRT* vkrt) {
-    if (!vkrt || !vkrt->runtime.frameSubmitted) return;
+VKRT_Result VKRT_present(VKRT* vkrt) {
+    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+    if (!vkrt->runtime.frameSubmitted) return VKRT_SUCCESS;
     VkSemaphore signalSemaphores[] = {vkrt->runtime.renderFinishedSemaphores[vkrt->runtime.frameImageIndex]};
 
     VkPresentInfoKHR presentInfo = {0};
@@ -116,20 +111,20 @@ void VKRT_present(VKRT* vkrt) {
     VkResult result = vkQueuePresentKHR(vkrt->core.presentQueue, &presentInfo);
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || vkrt->runtime.framebufferResized) {
         vkrt->runtime.framebufferResized = VK_FALSE;
-        recreateSwapChain(vkrt);
-        return;
+        return recreateSwapChain(vkrt);
     }
 
     if (result != VK_SUCCESS) {
         LOG_ERROR("Failed to present draw queue");
-        exit(EXIT_FAILURE);
+        return VKRT_ERROR_OPERATION_FAILED;
     }
 
     vkrt->runtime.framePresented = VK_TRUE;
+    return VKRT_SUCCESS;
 }
 
-void VKRT_endFrame(VKRT* vkrt) {
-    if (!vkrt) return;
+VKRT_Result VKRT_endFrame(VKRT* vkrt) {
+    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
 
     if (vkrt->runtime.framePresented) {
         uint32_t renderedSPP = vkrt->core.sceneData->samplesPerPixel;
@@ -159,15 +154,19 @@ void VKRT_endFrame(VKRT* vkrt) {
     }
 
     if (vkrt->runtime.frameSubmitted) {
-        vkrt->runtime.currentFrame = (vkrt->runtime.currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+        vkrt->runtime.currentFrame = (vkrt->runtime.currentFrame + 1) % VKRT_MAX_FRAMES_IN_FLIGHT;
     }
+
+    return VKRT_SUCCESS;
 }
 
-void VKRT_draw(VKRT* vkrt) {
-    if (!vkrt) return;
-    VKRT_beginFrame(vkrt);
-    VKRT_updateScene(vkrt);
-    VKRT_trace(vkrt);
-    VKRT_present(vkrt);
-    VKRT_endFrame(vkrt);
+VKRT_Result VKRT_draw(VKRT* vkrt) {
+    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    if (VKRT_beginFrame(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    if (VKRT_updateScene(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    if (VKRT_trace(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    if (VKRT_present(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+
+    return VKRT_endFrame(vkrt);
 }

@@ -1,18 +1,19 @@
 #include "buffer.h"
-#include "command.h"
+#include "command/pool.h"
 #include "descriptor.h"
 #include "device.h"
 #include "procs.h"
+#include "image/storage_image.h"
 #include "instance.h"
 #include "pipeline.h"
 #include "scene.h"
-#include "accel.h"
+#include "accel/accel.h"
 #include "surface.h"
 #include "swapchain.h"
 #include "validation.h"
 #include "export.h"
 #include "debug.h"
-#include "vkrt.h"
+#include "vkrt_internal.h"
 
 #include <stdio.h>
 #include <stdint.h>
@@ -27,8 +28,8 @@ void VKRT_defaultCreateInfo(VKRT_CreateInfo* createInfo) {
     if (!createInfo) return;
 
     *createInfo = (VKRT_CreateInfo){
-        .width = WIDTH,
-        .height = HEIGHT,
+        .width = VKRT_DEFAULT_WIDTH,
+        .height = VKRT_DEFAULT_HEIGHT,
         .title = "VKRT",
         .vsync = 1,
         .shaders = {
@@ -39,15 +40,34 @@ void VKRT_defaultCreateInfo(VKRT_CreateInfo* createInfo) {
     };
 }
 
-int VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInfo) {
-    if (!vkrt || !createInfo) return -1;
+VKRT_Result VKRT_create(VKRT** outVkrt) {
+    if (!outVkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    VKRT* vkrt = (VKRT*)calloc(1, sizeof(VKRT));
+    if (!vkrt) return VKRT_ERROR_OPERATION_FAILED;
+
+    *outVkrt = vkrt;
+    return VKRT_SUCCESS;
+}
+
+void VKRT_destroy(VKRT* vkrt) {
+    if (!vkrt) return;
+    free(vkrt);
+}
+
+VKRT_Result VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInfo) {
+    if (!vkrt || !createInfo) return VKRT_ERROR_INVALID_ARGUMENT;
+    if (vkrt->runtime.window || vkrt->core.instance || vkrt->core.device) {
+        LOG_ERROR("VKRT_initWithCreateInfo called on an already initialized instance");
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
 
     uint64_t initStartTime = getMicroseconds();
     uint64_t stepStartTime = initStartTime;
 
     if (!glfwInit()) {
         LOG_ERROR("Failed to initialize GLFW");
-        return -1;
+        return VKRT_ERROR_OPERATION_FAILED;
     }
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
@@ -58,14 +78,15 @@ int VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInfo) {
     vkrt->runtime.swapchainFormatLogInitialized = VK_FALSE;
     vkrt->runtime.lastLoggedSwapchainFormat = VK_FORMAT_UNDEFINED;
     vkrt->runtime.lastLoggedSwapchainColorSpace = VK_COLOR_SPACE_MAX_ENUM_KHR;
+    vkrt->runtime.appInitialized = 0;
     vkrt->core.shaders = createInfo->shaders;
     vkrt->core.descriptorSetReady = VK_FALSE;
     vkrt->core.emissiveMeshCount = 0;
     vkrt->core.emissiveTriangleCount = 0;
 
     const char* title = createInfo->title ? createInfo->title : "VKRT";
-    uint32_t width = createInfo->width ? createInfo->width : WIDTH;
-    uint32_t height = createInfo->height ? createInfo->height : HEIGHT;
+    uint32_t width = createInfo->width ? createInfo->width : VKRT_DEFAULT_WIDTH;
+    uint32_t height = createInfo->height ? createInfo->height : VKRT_DEFAULT_HEIGHT;
 
     if (!vkrt->core.shaders.rgenPath) vkrt->core.shaders.rgenPath = "./shaders/rgen.spv";
     if (!vkrt->core.shaders.rmissPath) vkrt->core.shaders.rmissPath = "./shaders/rmiss.spv";
@@ -75,8 +96,7 @@ int VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInfo) {
     vkrt->runtime.window = glfwCreateWindow((int)width, (int)height, title, 0, 0);
     if (!vkrt->runtime.window) {
         LOG_ERROR("Failed to create GLFW window");
-        glfwTerminate();
-        return -1;
+        goto init_failed;
     }
 
     glfwSetWindowUserPointer(vkrt->runtime.window, vkrt);
@@ -84,85 +104,90 @@ int VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInfo) {
     logStepTime("Window setup complete", stepStartTime);
 
     stepStartTime = getMicroseconds();
-    createInstance(vkrt);
+    if (createInstance(vkrt) != VKRT_SUCCESS) goto init_failed;
     logStepTime("Vulkan instance created", stepStartTime);
 
     stepStartTime = getMicroseconds();
-    setupDebugMessenger(vkrt);
+    if (setupDebugMessenger(vkrt) != VKRT_SUCCESS) goto init_failed;
     logStepTime("Debug messenger setup complete", stepStartTime);
 
     stepStartTime = getMicroseconds();
-    createSurface(vkrt);
+    if (createSurface(vkrt) != VKRT_SUCCESS) goto init_failed;
     logStepTime("Surface created", stepStartTime);
 
     stepStartTime = getMicroseconds();
-    pickPhysicalDevice(vkrt);
+    if (pickPhysicalDevice(vkrt) != VKRT_SUCCESS) goto init_failed;
     logStepTime("Physical device selection complete", stepStartTime);
 
     stepStartTime = getMicroseconds();
-    createLogicalDevice(vkrt);
+    if (createLogicalDevice(vkrt) != VKRT_SUCCESS) goto init_failed;
     logStepTime("Logical device created", stepStartTime);
 
     stepStartTime = getMicroseconds();
-    loadDeviceProcs(vkrt);
+    if (loadDeviceProcs(vkrt) != VKRT_SUCCESS) goto init_failed;
     logStepTime("Device procedures loaded", stepStartTime);
 
     stepStartTime = getMicroseconds();
-    createQueryPool(vkrt);
+    if (createQueryPool(vkrt) != VKRT_SUCCESS) goto init_failed;
     logStepTime("Query pool created", stepStartTime);
 
     stepStartTime = getMicroseconds();
-    createSwapChain(vkrt);
-    createImageViews(vkrt);
-    createRenderPass(vkrt);
-    createFramebuffers(vkrt);
+    if (createSwapChain(vkrt) != VKRT_SUCCESS) goto init_failed;
+    if (createImageViews(vkrt) != VKRT_SUCCESS) goto init_failed;
+    if (createRenderPass(vkrt) != VKRT_SUCCESS) goto init_failed;
+    if (createFramebuffers(vkrt) != VKRT_SUCCESS) goto init_failed;
     logStepTime("Swapchain and framebuffers ready", stepStartTime);
 
     stepStartTime = getMicroseconds();
-    createCommandPool(vkrt);
-    createDescriptorSetLayout(vkrt);
+    if (createCommandPool(vkrt) != VKRT_SUCCESS) goto init_failed;
+    if (createDescriptorSetLayout(vkrt) != VKRT_SUCCESS) goto init_failed;
     logStepTime("Command pool and descriptor layout ready", stepStartTime);
 
     stepStartTime = getMicroseconds();
-    createRayTracingPipeline(vkrt);
+    if (createRayTracingPipeline(vkrt) != VKRT_SUCCESS) goto init_failed;
     logStepTime("Ray tracing pipeline ready", stepStartTime);
 
     stepStartTime = getMicroseconds();
-    createStorageImage(vkrt);
+    if (createStorageImage(vkrt) != VKRT_SUCCESS) goto init_failed;
     logStepTime("Storage image ready", stepStartTime);
 
     stepStartTime = getMicroseconds();
-    createSceneUniform(vkrt);
+    if (createSceneUniform(vkrt) != VKRT_SUCCESS) goto init_failed;
     logStepTime("Scene uniform ready", stepStartTime);
 
     stepStartTime = getMicroseconds();
-    createDescriptorPool(vkrt);
+    if (createDescriptorPool(vkrt) != VKRT_SUCCESS) goto init_failed;
     logStepTime("Descriptor pool ready", stepStartTime);
 
     stepStartTime = getMicroseconds();
-    createDescriptorSet(vkrt);
+    if (createDescriptorSet(vkrt) != VKRT_SUCCESS) goto init_failed;
     logStepTime("Descriptor set ready", stepStartTime);
 
     stepStartTime = getMicroseconds();
-    createShaderBindingTable(vkrt);
+    if (createShaderBindingTable(vkrt) != VKRT_SUCCESS) goto init_failed;
     logStepTime("Shader binding table ready", stepStartTime);
 
     stepStartTime = getMicroseconds();
-    createCommandBuffers(vkrt);
-    createSyncObjects(vkrt);
+    if (createCommandBuffers(vkrt) != VKRT_SUCCESS) goto init_failed;
+    if (createSyncObjects(vkrt) != VKRT_SUCCESS) goto init_failed;
     logStepTime("Command buffers and sync objects ready", stepStartTime);
 
     stepStartTime = getMicroseconds();
     if (vkrt->appHooks.init) {
         vkrt->appHooks.init(vkrt, vkrt->appHooks.userData);
     }
+    vkrt->runtime.appInitialized = 1;
     logStepTime("Application initialization complete", stepStartTime);
 
     LOG_INFO("VKRT initialization complete in %.3f ms", (double)(getMicroseconds() - initStartTime) / 1e3);
-    return 0;
+    return VKRT_SUCCESS;
+
+init_failed:
+    VKRT_deinit(vkrt);
+    return VKRT_ERROR_OPERATION_FAILED;
 }
 
-int VKRT_init(VKRT* vkrt) {
+VKRT_Result VKRT_init(VKRT* vkrt) {
     VKRT_CreateInfo createInfo = {0};
     VKRT_defaultCreateInfo(&createInfo);
     return VKRT_initWithCreateInfo(vkrt, &createInfo);
@@ -188,9 +213,10 @@ void VKRT_deinit(VKRT* vkrt) {
         logStepTime("PNG export worker shutdown complete", stepStartTime);
 
         stepStartTime = getMicroseconds();
-        if (vkrt->appHooks.deinit) {
+        if (vkrt->runtime.appInitialized && vkrt->appHooks.deinit) {
             vkrt->appHooks.deinit(vkrt, vkrt->appHooks.userData);
         }
+        vkrt->runtime.appInitialized = 0;
         logStepTime("Application shutdown complete", stepStartTime);
 
         stepStartTime = getMicroseconds();
@@ -281,7 +307,7 @@ void VKRT_deinit(VKRT* vkrt) {
         logStepTime("Descriptor and pipeline cleanup complete", stepStartTime);
 
         stepStartTime = getMicroseconds();
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        for (size_t i = 0; i < VKRT_MAX_FRAMES_IN_FLIGHT; i++) {
             if (vkrt->runtime.imageAvailableSemaphores[i] != VK_NULL_HANDLE) {
                 vkDestroySemaphore(vkrt->core.device, vkrt->runtime.imageAvailableSemaphores[i], NULL);
             }
@@ -303,7 +329,7 @@ void VKRT_deinit(VKRT* vkrt) {
 
         stepStartTime = getMicroseconds();
         if (vkrt->runtime.commandPool != VK_NULL_HANDLE) {
-            vkFreeCommandBuffers(vkrt->core.device, vkrt->runtime.commandPool, COUNT_OF(vkrt->runtime.commandBuffers), vkrt->runtime.commandBuffers);
+            vkFreeCommandBuffers(vkrt->core.device, vkrt->runtime.commandPool, VKRT_ARRAY_COUNT(vkrt->runtime.commandBuffers), vkrt->runtime.commandBuffers);
             vkDestroyCommandPool(vkrt->core.device, vkrt->runtime.commandPool, NULL);
         }
         if (vkrt->runtime.timestampPool != VK_NULL_HANDLE) {
@@ -325,6 +351,7 @@ void VKRT_deinit(VKRT* vkrt) {
         vkrt->core.meshes = NULL;
         free(vkrt->runtime.renderFinishedSemaphores);
         vkrt->runtime.renderFinishedSemaphores = NULL;
+        vkrt->runtime.appInitialized = 0;
     }
 
     stepStartTime = getMicroseconds();
@@ -347,6 +374,12 @@ void VKRT_deinit(VKRT* vkrt) {
     glfwTerminate();
     logStepTime("GLFW shutdown complete", stepStartTime);
 
+    VKRT_AppHooks hooks = vkrt->appHooks;
+    memset(&vkrt->core, 0, sizeof(vkrt->core));
+    memset(&vkrt->runtime, 0, sizeof(vkrt->runtime));
+    memset(&vkrt->state, 0, sizeof(vkrt->state));
+    vkrt->appHooks = hooks;
+
     LOG_INFO("VKRT deinitialization complete in %.3f ms", (double)(getMicroseconds() - deinitStartTime) / 1e3);
 }
 
@@ -363,6 +396,8 @@ void VKRT_framebufferResizedCallback(GLFWwindow* window, int width, int height) 
     (void)width;
     (void)height;
 
+    if (!window) return;
     VKRT* vkrt = (VKRT*)glfwGetWindowUserPointer(window);
+    if (!vkrt) return;
     vkrt->runtime.framebufferResized = VK_TRUE;
 }

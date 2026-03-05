@@ -20,8 +20,12 @@ endif
 
 glslc = find_program('glslc', required: true)
 
-includes = include_directories(
+project_includes = include_directories(
   'shared',
+  'assets/fonts',
+)
+
+external_includes = include_directories(
   'external/glfw3/include',
   'external/imgui/include',
   'external/imgui/icons',
@@ -29,17 +33,45 @@ includes = include_directories(
   'external/cgltf/include',
   'external/spng',
   'external/nfd/src/include',
-  'assets/fonts',
+  is_system: true,
+)
+
+core_includes = include_directories(
   'src/core/api',
   'src/core/runtime',
   'src/core/render',
   'src/core/scene',
   'src/core/utility',
+)
+
+app_local_includes = include_directories(
   'src/app',
   'src/app/session',
   'src/app/mesh',
-  'src/app/ui',
-  is_system: true,
+  'src/app/render',
+  'src/app/editor',
+)
+
+app_core_includes = include_directories(
+  'src/core/api',
+  'src/core/utility',
+)
+
+app_includes = [
+  project_includes,
+  external_includes,
+  app_local_includes,
+  app_core_includes,
+]
+
+core_build_includes = [
+  project_includes,
+  external_includes,
+  core_includes,
+]
+
+core_internal_includes = include_directories(
+  'src/core/internal',
 )
 
 dependencies = [
@@ -104,7 +136,7 @@ nfd = static_library('nfd',
 )
 
 dcimgui = static_library('dcimgui',
-  include_directories: includes,
+  include_directories: [external_includes],
   dependencies: dependencies,
   sources: files(
     'external/imgui/src/dcimgui.cpp',
@@ -128,7 +160,7 @@ executable('vkrt',
   c_args: c_args,
   sources: app_sources,
   dependencies: dependencies,
-  include_directories: includes,
+  include_directories: app_includes,
   link_with: [vkrt, dcimgui, nfd],
   link_language: 'cpp',
 )

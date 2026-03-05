@@ -1,5 +1,5 @@
 #pragma once
 
-#include "vkrt.h"
+#include "vkrt_internal.h"
 
-void createInstance(VKRT* vkrt);
+VKRT_Result createInstance(VKRT* vkrt);

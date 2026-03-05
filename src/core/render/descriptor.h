@@ -1,9 +1,9 @@
 #pragma once
 
-#include "vkrt.h"
+#include "vkrt_internal.h"
 
-void createDescriptorSetLayout(VKRT* vkrt);
-void createDescriptorPool(VKRT* vkrt);
-void createDescriptorSet(VKRT* vkrt);
-void updateDescriptorSet(VKRT* vkrt);
+VKRT_Result createDescriptorSetLayout(VKRT* vkrt);
+VKRT_Result createDescriptorPool(VKRT* vkrt);
+VKRT_Result createDescriptorSet(VKRT* vkrt);
+VKRT_Result updateDescriptorSet(VKRT* vkrt);
 VkBool32 descriptorResourcesReady(VKRT* vkrt);

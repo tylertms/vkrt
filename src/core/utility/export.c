@@ -1,7 +1,8 @@
 #include "export.h"
 
 #include "buffer.h"
-#include "command.h"
+#include "command/pool.h"
+#include "command/record.h"
 #include "debug.h"
 
 #define SPNG_STATIC
@@ -64,16 +65,15 @@ static int writePNGFile(const char* path, const uint16_t* rgba16, uint32_t width
     return 0;
 }
 
-
-static pthread_once_t gPNGWorkerInitOnce = PTHREAD_ONCE_INIT;
+static pthread_mutex_t gPNGWorkerStateLock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t gPNGWorkerLock;
 static pthread_cond_t gPNGWorkerCondition;
 static pthread_t gPNGWorkerThread;
 static PNGEncodeJob* gPNGWorkerHead = NULL;
 static PNGEncodeJob* gPNGWorkerTail = NULL;
 static int gPNGWorkerStop = 0;
-static int gPNGWorkerInitialized = 0;
-static int gPNGWorkerInitFailed = 0;
+static int gPNGWorkerPrimitivesInitialized = 0;
+static int gPNGWorkerThreadRunning = 0;
 
 static void freePNGEncodeJob(PNGEncodeJob* job) {
     if (!job) return;
@@ -113,33 +113,41 @@ static void* pngWorkerMain(void* userData) {
     return NULL;
 }
 
-static void initializePNGWorkerOnce(void) {
+static int initializePNGWorkerPrimitivesLocked(void) {
+    if (gPNGWorkerPrimitivesInitialized) return 0;
+
     if (pthread_mutex_init(&gPNGWorkerLock, NULL) != 0) {
-        gPNGWorkerInitFailed = 1;
-        return;
+        return -1;
     }
     if (pthread_cond_init(&gPNGWorkerCondition, NULL) != 0) {
         pthread_mutex_destroy(&gPNGWorkerLock);
-        gPNGWorkerInitFailed = 1;
-        return;
+        return -1;
     }
+    gPNGWorkerPrimitivesInitialized = 1;
+    return 0;
+}
+
+static int startPNGWorkerLocked(void) {
+    if (gPNGWorkerThreadRunning) return 0;
+    if (initializePNGWorkerPrimitivesLocked() != 0) return -1;
+
     gPNGWorkerStop = 0;
     gPNGWorkerHead = NULL;
     gPNGWorkerTail = NULL;
 
     if (pthread_create(&gPNGWorkerThread, NULL, pngWorkerMain, NULL) != 0) {
-        pthread_cond_destroy(&gPNGWorkerCondition);
-        pthread_mutex_destroy(&gPNGWorkerLock);
-        gPNGWorkerInitFailed = 1;
-        return;
+        return -1;
     }
-
-    gPNGWorkerInitialized = 1;
+    gPNGWorkerThreadRunning = 1;
+    return 0;
 }
 
 static int ensurePNGWorkerStarted(void) {
-    pthread_once(&gPNGWorkerInitOnce, initializePNGWorkerOnce);
-    if (!gPNGWorkerInitialized || gPNGWorkerInitFailed) {
+    pthread_mutex_lock(&gPNGWorkerStateLock);
+    int result = startPNGWorkerLocked();
+    pthread_mutex_unlock(&gPNGWorkerStateLock);
+
+    if (result != 0) {
         LOG_ERROR("Failed to initialize PNG exporter worker");
         return -1;
     }
@@ -198,20 +206,28 @@ static int queuePNGWrite(const char* path, uint16_t* rgba16, uint32_t width, uin
 }
 
 void shutdownRenderPNGExporter(void) {
-    if (!gPNGWorkerInitialized) return;
+    pthread_mutex_lock(&gPNGWorkerStateLock);
+    if (!gPNGWorkerThreadRunning) {
+        pthread_mutex_unlock(&gPNGWorkerStateLock);
+        return;
+    }
 
     pthread_mutex_lock(&gPNGWorkerLock);
     gPNGWorkerStop = 1;
     pthread_cond_broadcast(&gPNGWorkerCondition);
     pthread_mutex_unlock(&gPNGWorkerLock);
 
-    pthread_join(gPNGWorkerThread, NULL);
+    pthread_t workerThread = gPNGWorkerThread;
+    gPNGWorkerThreadRunning = 0;
+    pthread_join(workerThread, NULL);
 
     pthread_mutex_lock(&gPNGWorkerLock);
     PNGEncodeJob* job = gPNGWorkerHead;
     gPNGWorkerHead = NULL;
     gPNGWorkerTail = NULL;
+    gPNGWorkerStop = 0;
     pthread_mutex_unlock(&gPNGWorkerLock);
+    pthread_mutex_unlock(&gPNGWorkerStateLock);
 
     while (job) {
         PNGEncodeJob* next = job->next;
@@ -219,9 +235,6 @@ void shutdownRenderPNGExporter(void) {
         job = next;
     }
 
-    pthread_cond_destroy(&gPNGWorkerCondition);
-    pthread_mutex_destroy(&gPNGWorkerLock);
-    gPNGWorkerInitialized = 0;
 }
 
 int saveCurrentRenderPNG(VKRT* vkrt, const char* path) {
@@ -254,14 +267,21 @@ int saveCurrentRenderPNG(VKRT* vkrt, const char* path) {
     void* mapped = NULL;
     int result = -1;
 
-    createBuffer(vkrt,
+    if (createBuffer(vkrt,
         readbackBytes,
         VK_BUFFER_USAGE_TRANSFER_DST_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
         &stagingBuffer,
-        &stagingMemory);
+        &stagingMemory) != VKRT_SUCCESS) {
+        return -1;
+    }
 
-    VkCommandBuffer commandBuffer = beginSingleTimeCommands(vkrt);
+    VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+    if (beginSingleTimeCommands(vkrt, &commandBuffer) != VKRT_SUCCESS) {
+        vkDestroyBuffer(vkrt->core.device, stagingBuffer, NULL);
+        vkFreeMemory(vkrt->core.device, stagingMemory, NULL);
+        return -1;
+    }
     transitionImageLayout(commandBuffer, vkrt->core.storageImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 
     VkBufferImageCopy copyRegion = {0};
@@ -283,7 +303,11 @@ int saveCurrentRenderPNG(VKRT* vkrt, const char* path) {
         &copyRegion);
 
     transitionImageLayout(commandBuffer, vkrt->core.storageImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
-    endSingleTimeCommands(vkrt, commandBuffer);
+    if (endSingleTimeCommands(vkrt, commandBuffer) != VKRT_SUCCESS) {
+        vkDestroyBuffer(vkrt->core.device, stagingBuffer, NULL);
+        vkFreeMemory(vkrt->core.device, stagingMemory, NULL);
+        return -1;
+    }
 
     if (vkMapMemory(vkrt->core.device, stagingMemory, 0, readbackBytes, 0, &mapped) == VK_SUCCESS) {
         uint16_t* readbackCopy = (uint16_t*)malloc((size_t)readbackBytes);

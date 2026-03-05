@@ -3,10 +3,11 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <vkrt.h>
+#include "vkrt_internal.h"
 #include <vulkan/vulkan_core.h>
 
-void createDescriptorSetLayout(VKRT* vkrt) {
+VKRT_Result createDescriptorSetLayout(VKRT* vkrt) {
+    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
     VkDescriptorSetLayoutBinding accelerationStructureLayoutBinding = {0};
     accelerationStructureLayoutBinding.binding = 0;
     accelerationStructureLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
@@ -96,16 +97,18 @@ void createDescriptorSetLayout(VKRT* vkrt) {
 
     VkDescriptorSetLayoutCreateInfo descriptorSetlayoutCreateInfo = {0};
     descriptorSetlayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    descriptorSetlayoutCreateInfo.bindingCount = COUNT_OF(bindings);
+    descriptorSetlayoutCreateInfo.bindingCount = VKRT_ARRAY_COUNT(bindings);
     descriptorSetlayoutCreateInfo.pBindings = bindings;
 
     if (vkCreateDescriptorSetLayout(vkrt->core.device, &descriptorSetlayoutCreateInfo, NULL, &vkrt->core.descriptorSetLayout) != VK_SUCCESS) {
         LOG_ERROR("Failed to create descriptor set layout");
-        exit(EXIT_FAILURE);
+        return VKRT_ERROR_OPERATION_FAILED;
     }
+    return VKRT_SUCCESS;
 }
 
-void createDescriptorPool(VKRT* vkrt) {
+VKRT_Result createDescriptorPool(VKRT* vkrt) {
+    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
     VkDescriptorPoolSize poolSizes[] = {
         {VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1},
         {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 3},
@@ -116,18 +119,20 @@ void createDescriptorPool(VKRT* vkrt) {
 
     VkDescriptorPoolCreateInfo descriptorPoolCreateInfo = {0};
     descriptorPoolCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    descriptorPoolCreateInfo.poolSizeCount = COUNT_OF(poolSizes);
+    descriptorPoolCreateInfo.poolSizeCount = VKRT_ARRAY_COUNT(poolSizes);
     descriptorPoolCreateInfo.pPoolSizes = poolSizes;
     descriptorPoolCreateInfo.maxSets = 2;
     descriptorPoolCreateInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
 
     if (vkCreateDescriptorPool(vkrt->core.device, &descriptorPoolCreateInfo, NULL, &vkrt->core.descriptorPool) != VK_SUCCESS) {
         LOG_ERROR("Failed to create descriptor pool");
-        exit(EXIT_FAILURE);
+        return VKRT_ERROR_OPERATION_FAILED;
     }
+    return VKRT_SUCCESS;
 }
 
-void createDescriptorSet(VKRT* vkrt) {
+VKRT_Result createDescriptorSet(VKRT* vkrt) {
+    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
     VkDescriptorSetAllocateInfo descriptorSetAllocateInfo = {0};
     descriptorSetAllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     descriptorSetAllocateInfo.descriptorPool = vkrt->core.descriptorPool;
@@ -136,16 +141,24 @@ void createDescriptorSet(VKRT* vkrt) {
 
     if (vkAllocateDescriptorSets(vkrt->core.device, &descriptorSetAllocateInfo, &vkrt->core.descriptorSet) != VK_SUCCESS) {
         LOG_ERROR("Failed to allocate descriptor sets");
-        exit(EXIT_FAILURE);
+        return VKRT_ERROR_OPERATION_FAILED;
     }
 
     vkrt->core.descriptorSetReady = VK_FALSE;
+    return VKRT_SUCCESS;
 }
 
 VkBool32 descriptorResourcesReady(VKRT* vkrt) {
     if (!vkrt) return VK_FALSE;
+    if (vkrt->core.accumulationReadIndex >= 2u || vkrt->core.accumulationWriteIndex >= 2u) {
+        return VK_FALSE;
+    }
 
     return vkrt->core.topLevelAccelerationStructure.structure != VK_NULL_HANDLE &&
+           vkrt->core.sceneDataBuffer != VK_NULL_HANDLE &&
+           vkrt->core.storageImageView != VK_NULL_HANDLE &&
+           vkrt->core.accumulationImageViews[vkrt->core.accumulationReadIndex] != VK_NULL_HANDLE &&
+           vkrt->core.accumulationImageViews[vkrt->core.accumulationWriteIndex] != VK_NULL_HANDLE &&
            vkrt->core.vertexData.buffer != VK_NULL_HANDLE &&
            vkrt->core.indexData.buffer != VK_NULL_HANDLE &&
            vkrt->core.pickBuffer.buffer != VK_NULL_HANDLE &&
@@ -155,10 +168,12 @@ VkBool32 descriptorResourcesReady(VKRT* vkrt) {
            vkrt->core.emissiveTriangleData.buffer != VK_NULL_HANDLE;
 }
 
-void updateDescriptorSet(VKRT* vkrt) {
+VKRT_Result updateDescriptorSet(VKRT* vkrt) {
+    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
     if (!descriptorResourcesReady(vkrt)) {
         vkrt->core.descriptorSetReady = VK_FALSE;
-        return;
+        // Empty scenes or transient rebuild states are valid; keep descriptor set disabled.
+        return VKRT_SUCCESS;
     }
 
     VkWriteDescriptorSetAccelerationStructureKHR accelerationStructureInfo = {0};
@@ -341,6 +356,7 @@ void updateDescriptorSet(VKRT* vkrt) {
         emissiveTriangleWrite,
     };
 
-    vkUpdateDescriptorSets(vkrt->core.device, COUNT_OF(writeDescriptorSets), writeDescriptorSets, 0, VK_NULL_HANDLE);
+    vkUpdateDescriptorSets(vkrt->core.device, VKRT_ARRAY_COUNT(writeDescriptorSets), writeDescriptorSets, 0, VK_NULL_HANDLE);
     vkrt->core.descriptorSetReady = VK_TRUE;
+    return VKRT_SUCCESS;
 }

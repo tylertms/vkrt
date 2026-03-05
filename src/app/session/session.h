@@ -74,7 +74,7 @@ typedef struct Session {
 void sessionInit(Session* session);
 void sessionDeinit(Session* session);
 
-void sessionSetMeshName(Session* session, const char* filePath, uint32_t meshIndex);
+int sessionSetMeshName(Session* session, const char* filePath, uint32_t meshIndex);
 void sessionRemoveMeshName(Session* session, uint32_t meshIndex);
 const char* sessionGetMeshName(const Session* session, uint32_t meshIndex);
 

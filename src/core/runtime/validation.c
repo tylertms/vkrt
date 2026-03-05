@@ -21,6 +21,7 @@ int checkValidationLayerSupport() {
     vkEnumerateInstanceLayerProperties(&layerCount, 0);
 
     VkLayerProperties* availableLayers = (VkLayerProperties*)malloc(layerCount * sizeof(VkLayerProperties));
+    if (!availableLayers) return VK_FALSE;
     vkEnumerateInstanceLayerProperties(&layerCount, availableLayers);
 
     for (uint32_t i = 0; i < numValidationLayers; i++) {
@@ -45,6 +46,9 @@ int checkValidationLayerSupport() {
 
 const char** getRequiredExtensions(uint32_t* extensionCount) {
     const char** glfwExtensions = glfwGetRequiredInstanceExtensions(extensionCount);
+    if (!glfwExtensions || !extensionCount) {
+        return NULL;
+    }
 
     uint32_t count = *extensionCount;
 
@@ -53,6 +57,9 @@ const char** getRequiredExtensions(uint32_t* extensionCount) {
     }
 
     const char** extensions = (const char**)malloc(sizeof(const char*) * count);
+    if (!extensions) {
+        return NULL;
+    }
 
     for (uint32_t i = 0; i < *extensionCount; ++i) {
         extensions[i] = glfwExtensions[i];
@@ -85,17 +92,21 @@ void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT* create
     createInfo->pfnUserCallback = debugCallback;
 }
 
-void setupDebugMessenger(VKRT* vkrt) {
+VKRT_Result setupDebugMessenger(VKRT* vkrt) {
+    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+
     if (!enableValidationLayers)
-        return;
+        return VKRT_SUCCESS;
 
     VkDebugUtilsMessengerCreateInfoEXT createInfo = {0};
     populateDebugMessengerCreateInfo(&createInfo);
 
     if (createDebugUtilsMessengerEXT(vkrt->core.instance, &createInfo, 0, &vkrt->core.debugMessenger) != VK_SUCCESS) {
         LOG_ERROR("Failed to set up debug messenger");
-        exit(EXIT_FAILURE);
+        return VKRT_ERROR_OPERATION_FAILED;
     }
+
+    return VKRT_SUCCESS;
 }
 
 VkResult createDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {

@@ -44,31 +44,57 @@ static void gatherMeshSize(const cgltf_data* data, size_t* vertexCount, size_t* 
     }
 }
 
-static uint32_t readIndexValue(const cgltf_accessor* accessor, const uint8_t* baseAddress, size_t index) {
+static int readIndexValue(const cgltf_accessor* accessor, const uint8_t* baseAddress, size_t index, uint32_t* outValue) {
+    if (!accessor || !baseAddress || !outValue) return -1;
+
     const uint8_t* location = baseAddress + index * accessor->stride;
 
     if (accessor->component_type == cgltf_component_type_r_16u) {
         uint16_t value = 0;
         memcpy(&value, location, sizeof(value));
-        return (uint32_t)value;
+        *outValue = (uint32_t)value;
+        return 0;
     }
 
     if (accessor->component_type == cgltf_component_type_r_32u) {
         uint32_t value = 0;
         memcpy(&value, location, sizeof(value));
-        return value;
+        *outValue = value;
+        return 0;
     }
 
     LOG_ERROR("Unsupported index component type %u", accessor->component_type);
-    exit(EXIT_FAILURE);
+    return -1;
 }
 
-static ParsedMeshData parseMeshData(const cgltf_data* data) {
+static void releaseParsedMeshData(ParsedMeshData* parsed) {
+    if (!parsed) return;
+    free(parsed->vertices);
+    free(parsed->indices);
+    parsed->vertices = NULL;
+    parsed->indices = NULL;
+    parsed->vertexCount = 0;
+    parsed->indexCount = 0;
+}
+
+static int parseMeshData(const cgltf_data* data, ParsedMeshData* outParsed) {
+    if (!data || !outParsed) return -1;
+
     ParsedMeshData parsed = {0};
     gatherMeshSize(data, &parsed.vertexCount, &parsed.indexCount);
 
+    if (parsed.vertexCount == 0 || parsed.indexCount == 0) {
+        LOG_ERROR("No triangle mesh primitives with positions/normals were found");
+        return -1;
+    }
+
     parsed.vertices = (Vertex*)malloc(parsed.vertexCount * sizeof(Vertex));
     parsed.indices = (uint32_t*)malloc(parsed.indexCount * sizeof(uint32_t));
+    if (!parsed.vertices || !parsed.indices) {
+        LOG_ERROR("Failed to allocate mesh staging buffers");
+        releaseParsedMeshData(&parsed);
+        return -1;
+    }
 
     size_t vertexBase = 0;
     size_t indexBase = 0;
@@ -116,8 +142,13 @@ static ParsedMeshData parseMeshData(const cgltf_data* data) {
                 indexAccessor->offset;
 
             for (size_t indexOffset = 0; indexOffset < indexAccessor->count; indexOffset++) {
+                uint32_t indexValue = 0;
+                if (readIndexValue(indexAccessor, baseAddress, indexOffset, &indexValue) != 0) {
+                    releaseParsedMeshData(&parsed);
+                    return -1;
+                }
                 parsed.indices[indexBase + indexOffset] =
-                    readIndexValue(indexAccessor, baseAddress, indexOffset) + (uint32_t)vertexBase;
+                    indexValue + (uint32_t)vertexBase;
             }
 
             indexBase += indexAccessor->count;
@@ -125,28 +156,41 @@ static ParsedMeshData parseMeshData(const cgltf_data* data) {
         }
     }
 
-    return parsed;
+    *outParsed = parsed;
+    return 0;
 }
 
-void meshLoadFromFile(VKRT* vkrt, const char* filePath) {
+int meshLoadFromFile(VKRT* vkrt, const char* filePath) {
+    if (!vkrt || !filePath || !filePath[0]) return -1;
+
     cgltf_options options = {0};
     cgltf_data* data = NULL;
 
     if (cgltf_parse_file(&options, filePath, &data) != cgltf_result_success) {
         LOG_ERROR("Failed to parse GLTF '%s'", filePath);
-        exit(EXIT_FAILURE);
+        return -1;
     }
 
     if (cgltf_load_buffers(&options, data, filePath) != cgltf_result_success) {
         cgltf_free(data);
         LOG_ERROR("Failed to load buffers for '%s'", filePath);
-        exit(EXIT_FAILURE);
+        return -1;
     }
 
-    ParsedMeshData parsed = parseMeshData(data);
-    VKRT_uploadMeshData(vkrt, parsed.vertices, parsed.vertexCount, parsed.indices, parsed.indexCount);
+    ParsedMeshData parsed = {0};
+    if (parseMeshData(data, &parsed) != 0) {
+        cgltf_free(data);
+        return -1;
+    }
 
-    free(parsed.vertices);
-    free(parsed.indices);
+    if (VKRT_uploadMeshData(vkrt, parsed.vertices, parsed.vertexCount, parsed.indices, parsed.indexCount) != VKRT_SUCCESS) {
+        LOG_ERROR("Failed to upload mesh data for '%s'", filePath);
+        releaseParsedMeshData(&parsed);
+        cgltf_free(data);
+        return -1;
+    }
+
+    releaseParsedMeshData(&parsed);
     cgltf_free(data);
+    return 0;
 }

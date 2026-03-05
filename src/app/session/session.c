@@ -76,13 +76,13 @@ static void clearOwnedString(char** value) {
     *value = NULL;
 }
 
-static void ensureMeshSlotCount(Session* session, uint32_t requiredCount) {
-    if (!session || requiredCount <= session->meshCount) return;
+static int ensureMeshSlotCount(Session* session, uint32_t requiredCount) {
+    if (!session || requiredCount <= session->meshCount) return 1;
 
     char** resized = (char**)realloc(session->meshNames, (size_t)requiredCount * sizeof(char*));
     if (!resized) {
         LOG_ERROR("Failed to resize mesh label list");
-        exit(EXIT_FAILURE);
+        return 0;
     }
 
     for (uint32_t index = session->meshCount; index < requiredCount; index++) {
@@ -91,6 +91,7 @@ static void ensureMeshSlotCount(Session* session, uint32_t requiredCount) {
 
     session->meshNames = resized;
     session->meshCount = requiredCount;
+    return 1;
 }
 
 void sessionInit(Session* session) {
@@ -122,12 +123,13 @@ void sessionDeinit(Session* session) {
     clearOwnedString(&session->renderSequenceFolderPath);
 }
 
-void sessionSetMeshName(Session* session, const char* filePath, uint32_t meshIndex) {
-    if (!session) return;
+int sessionSetMeshName(Session* session, const char* filePath, uint32_t meshIndex) {
+    if (!session) return 0;
 
-    ensureMeshSlotCount(session, meshIndex + 1);
+    if (!ensureMeshSlotCount(session, meshIndex + 1)) return 0;
     free(session->meshNames[meshIndex]);
     session->meshNames[meshIndex] = stringDuplicate(fileBasename(filePath));
+    return session->meshNames[meshIndex] != NULL;
 }
 
 void sessionRemoveMeshName(Session* session, uint32_t meshIndex) {

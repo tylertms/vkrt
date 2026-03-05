@@ -1,0 +1,110 @@
+#pragma once
+
+#include "vkrt.h"
+#include "vkrt_engine_types.h"
+
+typedef struct VKRT_DeviceProcedures {
+    PFN_vkCreateRayTracingPipelinesKHR vkCreateRayTracingPipelinesKHR;
+    PFN_vkGetRayTracingShaderGroupHandlesKHR vkGetRayTracingShaderGroupHandlesKHR;
+    PFN_vkCreateAccelerationStructureKHR vkCreateAccelerationStructureKHR;
+    PFN_vkDestroyAccelerationStructureKHR vkDestroyAccelerationStructureKHR;
+    PFN_vkGetAccelerationStructureBuildSizesKHR vkGetAccelerationStructureBuildSizesKHR;
+    PFN_vkGetAccelerationStructureDeviceAddressKHR vkGetAccelerationStructureDeviceAddressKHR;
+    PFN_vkCmdBuildAccelerationStructuresKHR vkCmdBuildAccelerationStructuresKHR;
+    PFN_vkGetBufferDeviceAddressKHR vkGetBufferDeviceAddressKHR;
+    PFN_vkCmdTraceRaysKHR vkCmdTraceRaysKHR;
+} VKRT_DeviceProcedures;
+
+typedef struct VKRT_Core {
+    VkInstance instance;
+    VkDebugUtilsMessengerEXT debugMessenger;
+    VkPhysicalDevice physicalDevice;
+    VkDevice device;
+    VkQueue graphicsQueue;
+    VkQueue presentQueue;
+    QueueFamily indices;
+    VkDescriptorSetLayout descriptorSetLayout;
+    VkDescriptorPool descriptorPool;
+    VkDescriptorSet descriptorSet;
+    VkPipelineLayout pipelineLayout;
+    VkPipeline rayTracingPipeline;
+    VkBuffer shaderBindingTableBuffer;
+    VkDeviceMemory shaderBindingTableMemory;
+    VkStridedDeviceAddressRegionKHR shaderBindingTables[4];
+    VkBuffer sceneDataBuffer;
+    VkDeviceMemory sceneDataMemory;
+    SceneData* sceneData;
+    PickBuffer* pickData;
+    VkImage storageImage;
+    VkImageView storageImageView;
+    VkDeviceMemory storageImageMemory;
+    VkImage accumulationImages[2];
+    VkImageView accumulationImageViews[2];
+    VkDeviceMemory accumulationImageMemories[2];
+    uint32_t accumulationReadIndex;
+    uint32_t accumulationWriteIndex;
+    VkBool32 accumulationNeedsReset;
+    Mesh* meshes;
+    AccelerationStructure topLevelAccelerationStructure;
+    Buffer pickBuffer;
+    Buffer vertexData;
+    Buffer indexData;
+    Buffer meshData;
+    Buffer materialData;
+    Buffer emissiveMeshData;
+    Buffer emissiveTriangleData;
+    VkBool32 materialDataDirty;
+    VkBool32 descriptorSetReady;
+    uint32_t emissiveMeshCount;
+    uint32_t emissiveTriangleCount;
+    char deviceName[256];
+    uint32_t vendorID;
+    uint32_t driverVersion;
+    VKRT_ShaderConfig shaders;
+    VKRT_DeviceProcedures procs;
+} VKRT_Core;
+
+typedef struct VKRT_Runtime {
+    GLFWwindow* window;
+    VkSurfaceKHR surface;
+    VkSwapchainKHR swapChain;
+    VkImage* swapChainImages;
+    VkImageView* swapChainImageViews;
+    size_t swapChainImageCount;
+    VkFormat swapChainImageFormat;
+    VkExtent2D swapChainExtent;
+    VkExtent2D renderExtent;
+    uint32_t displayViewportRect[4];
+    VkRenderPass renderPass;
+    VkFramebuffer* framebuffers;
+    VkCommandPool commandPool;
+    VkCommandBuffer commandBuffers[VKRT_MAX_FRAMES_IN_FLIGHT];
+    VkSemaphore imageAvailableSemaphores[VKRT_MAX_FRAMES_IN_FLIGHT];
+    VkSemaphore* renderFinishedSemaphores;
+    VkFence inFlightFences[VKRT_MAX_FRAMES_IN_FLIGHT];
+    uint32_t currentFrame;
+    VkBool32 framebufferResized;
+    VkQueryPool timestampPool;
+    float timestampPeriod;
+    uint8_t vsync;
+    uint8_t savedVsync;
+    uint32_t frameImageIndex;
+    VkBool32 frameAcquired;
+    VkBool32 frameSubmitted;
+    VkBool32 framePresented;
+    VkBool32 frameTraced;
+    VkPresentModeKHR presentMode;
+    float displayRefreshHz;
+    uint32_t autoSPPFastAdaptFrames;
+    VkBool32 swapchainFormatLogInitialized;
+    VkFormat lastLoggedSwapchainFormat;
+    VkColorSpaceKHR lastLoggedSwapchainColorSpace;
+    uint8_t appInitialized;
+} VKRT_Runtime;
+
+typedef struct VKRT {
+    VKRT_Core core;
+    VKRT_Runtime runtime;
+    VKRT_PublicState state;
+    VKRT_AppHooks appHooks;
+} VKRT;

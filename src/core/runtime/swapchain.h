@@ -1,6 +1,6 @@
 #pragma once
 
-#include "vkrt.h"
+#include "vkrt_internal.h"
 
 typedef struct SwapChainSupportDetails {
     VkSurfaceCapabilitiesKHR capabilities;
@@ -10,12 +10,12 @@ typedef struct SwapChainSupportDetails {
     uint32_t presentModeCount;
 } SwapChainSupportDetails;
 
-void createSwapChain(VKRT* vkrt);
-void recreateSwapChain(VKRT* vkrt);
+VKRT_Result createSwapChain(VKRT* vkrt);
+VKRT_Result recreateSwapChain(VKRT* vkrt);
 void cleanupSwapChain(VKRT* vkrt);
-void createImageViews(VKRT* vkrt);
-void createFramebuffers(VKRT* vkrt);
-SwapChainSupportDetails querySwapChainSupport(VKRT* vkrt);
-VkSurfaceFormatKHR chooseSwapSurfaceFormat(SwapChainSupportDetails* supportDetails);
+VKRT_Result createImageViews(VKRT* vkrt);
+VKRT_Result createFramebuffers(VKRT* vkrt);
+VKRT_Result querySwapChainSupport(VKRT* vkrt, SwapChainSupportDetails* outSupportDetails);
+VKRT_Result chooseSwapSurfaceFormat(const SwapChainSupportDetails* supportDetails, VkSurfaceFormatKHR* outSurfaceFormat);
 VkPresentModeKHR chooseSwapPresentMode(SwapChainSupportDetails* supportDetails, uint8_t vsync);
 VkExtent2D chooseSwapExtent(VKRT* vkrt, SwapChainSupportDetails* supportDetails);

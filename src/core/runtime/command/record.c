@@ -1,0 +1,278 @@
+#include "record.h"
+#include "debug.h"
+
+#include <stdlib.h>
+
+static float clampFloat(float value, float minValue, float maxValue) {
+    if (value < minValue) return minValue;
+    if (value > maxValue) return maxValue;
+    return value;
+}
+
+static const VkClearColorValue kViewportClearColor = {.float32 = {0.02f, 0.02f, 0.025f, 1.0f}};
+
+static void clampRectToExtent(uint32_t* x, uint32_t* y, uint32_t* width, uint32_t* height, VkExtent2D extent) {
+    if (!x || !y || !width || !height) return;
+
+    if (extent.width == 0 || extent.height == 0) {
+        *x = 0;
+        *y = 0;
+        *width = 0;
+        *height = 0;
+        return;
+    }
+
+    if (*width == 0 || *height == 0) {
+        *x = 0;
+        *y = 0;
+        *width = extent.width;
+        *height = extent.height;
+    }
+
+    if (*x >= extent.width) *x = extent.width - 1;
+    if (*y >= extent.height) *y = extent.height - 1;
+    if (*x + *width > extent.width) *width = extent.width - *x;
+    if (*y + *height > extent.height) *height = extent.height - *y;
+
+    if (*width == 0 || *height == 0) {
+        *x = 0;
+        *y = 0;
+        *width = extent.width;
+        *height = extent.height;
+    }
+}
+
+static void queryRenderViewCrop(VkExtent2D renderExtent, uint32_t viewportWidth, uint32_t viewportHeight, float zoom,
+                                uint32_t* outWidth, uint32_t* outHeight, VkBool32* outFillViewport) {
+    if (!outWidth || !outHeight) return;
+
+    float renderWidth = (float)renderExtent.width;
+    float renderHeight = (float)renderExtent.height;
+    float clampedZoom = clampFloat(zoom, VKRT_RENDER_VIEW_ZOOM_MIN, VKRT_RENDER_VIEW_ZOOM_MAX);
+    VkBool32 fillViewport = (clampedZoom > (VKRT_RENDER_VIEW_ZOOM_MIN + 0.0001f)) &&
+                            viewportWidth > 0 &&
+                            viewportHeight > 0;
+
+    uint32_t cropWidth = renderExtent.width;
+    uint32_t cropHeight = renderExtent.height;
+    if (fillViewport) {
+        float renderAspect = renderWidth / renderHeight;
+        float viewAspect = (float)viewportWidth / (float)viewportHeight;
+        float baseWidth = renderWidth;
+        float baseHeight = renderHeight;
+        if (viewAspect > renderAspect) {
+            baseHeight = renderWidth / viewAspect;
+        } else {
+            baseWidth = renderHeight * viewAspect;
+        }
+
+        float cropWidthF = baseWidth / clampedZoom;
+        float cropHeightF = baseHeight / clampedZoom;
+        if (cropWidthF < 1.0f) cropWidthF = 1.0f;
+        if (cropHeightF < 1.0f) cropHeightF = 1.0f;
+        if (cropWidthF > renderWidth) cropWidthF = renderWidth;
+        if (cropHeightF > renderHeight) cropHeightF = renderHeight;
+
+        cropWidth = (uint32_t)(cropWidthF + 0.5f);
+        cropHeight = (uint32_t)(cropHeightF + 0.5f);
+    }
+
+    if (cropWidth < 1) cropWidth = 1;
+    if (cropHeight < 1) cropHeight = 1;
+    if (cropWidth > renderExtent.width) cropWidth = renderExtent.width;
+    if (cropHeight > renderExtent.height) cropHeight = renderExtent.height;
+
+    *outWidth = cropWidth;
+    *outHeight = cropHeight;
+    if (outFillViewport) *outFillViewport = fillViewport;
+}
+
+VKRT_Result recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
+    if (!vkrt || imageIndex >= vkrt->runtime.swapChainImageCount) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    VkCommandBuffer commandBuffer = vkrt->runtime.commandBuffers[vkrt->runtime.currentFrame];
+    VkExtent2D swapchainExtent = vkrt->runtime.swapChainExtent;
+    VkExtent2D renderExtent = vkrt->runtime.renderExtent;
+    if (renderExtent.width == 0 || renderExtent.height == 0) {
+        renderExtent = swapchainExtent;
+    }
+    VkImage accumulationReadImage = vkrt->core.accumulationImages[vkrt->core.accumulationReadIndex];
+    VkImage accumulationWriteImage = vkrt->core.accumulationImages[vkrt->core.accumulationWriteIndex];
+    VkImage outputImage = vkrt->core.storageImage;
+    VkImage destImage = vkrt->runtime.swapChainImages[imageIndex];
+
+    VkCommandBufferBeginInfo commandBufferBeginInfo = {0};
+    commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+
+    if (vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo) != VK_SUCCESS) {
+        LOG_ERROR("Failed to begin command buffer");
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+
+    uint32_t qbase = vkrt->runtime.currentFrame * 2;
+    vkCmdResetQueryPool(commandBuffer, vkrt->runtime.timestampPool, qbase, 2);
+
+    vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, vkrt->runtime.timestampPool, qbase);
+
+    transitionImageLayout(commandBuffer, destImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+    VkImageSubresourceRange clearRange = {0};
+    clearRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    clearRange.baseMipLevel = 0;
+    clearRange.levelCount = 1;
+    clearRange.baseArrayLayer = 0;
+    clearRange.layerCount = 1;
+
+    VkBool32 renderModeActive = vkrt->state.renderModeActive != 0;
+    VkBool32 renderFinished = renderModeActive && vkrt->state.renderModeFinished;
+    VkBool32 shouldTrace = vkrt->core.descriptorSetReady && !renderFinished;
+    vkrt->runtime.frameTraced = VK_FALSE;
+
+    if (shouldTrace) {
+        vkrt->runtime.frameTraced = VK_TRUE;
+    }
+
+    if (vkrt->core.descriptorSetReady) {
+        if (vkrt->core.accumulationNeedsReset) {
+            vkrt->state.accumulationFrame = 0;
+            vkrt->state.totalSamples = 0;
+            VkClearColorValue clearZero = {.float32 = {0.0f, 0.0f, 0.0f, 0.0f}};
+            transitionImageLayout(commandBuffer, accumulationReadImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+            transitionImageLayout(commandBuffer, accumulationWriteImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+            transitionImageLayout(commandBuffer, outputImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+            vkCmdClearColorImage(commandBuffer, accumulationReadImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearZero, 1, &clearRange);
+            vkCmdClearColorImage(commandBuffer, accumulationWriteImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearZero, 1, &clearRange);
+            vkCmdClearColorImage(commandBuffer, outputImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearZero, 1, &clearRange);
+            transitionImageLayout(commandBuffer, accumulationReadImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+            transitionImageLayout(commandBuffer, accumulationWriteImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+            transitionImageLayout(commandBuffer, outputImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+            vkrt->core.accumulationNeedsReset = VK_FALSE;
+        }
+
+        if (shouldTrace) {
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, vkrt->core.rayTracingPipeline);
+            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, vkrt->core.pipelineLayout, 0, 1,
+                                   &vkrt->core.descriptorSet, 0, NULL);
+            vkrt->core.procs.vkCmdTraceRaysKHR(commandBuffer, &vkrt->core.shaderBindingTables[0], &vkrt->core.shaderBindingTables[1],
+                                               &vkrt->core.shaderBindingTables[2], &vkrt->core.shaderBindingTables[3],
+                                               renderExtent.width, renderExtent.height, 1);
+            transitionImageLayout(commandBuffer, accumulationWriteImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+            transitionImageLayout(commandBuffer, accumulationReadImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+        }
+
+        transitionImageLayout(commandBuffer, outputImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+
+        VkImageBlit blit = {0};
+        blit.srcSubresource = (VkImageSubresourceLayers){VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        blit.srcOffsets[0] = (VkOffset3D){0, 0, 0};
+        blit.srcOffsets[1] = (VkOffset3D){(int32_t)renderExtent.width, (int32_t)renderExtent.height, 1};
+        blit.dstSubresource = (VkImageSubresourceLayers){VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+
+        if (vkrt->state.renderModeActive) {
+            uint32_t x = vkrt->runtime.displayViewportRect[0];
+            uint32_t y = vkrt->runtime.displayViewportRect[1];
+            uint32_t width = vkrt->runtime.displayViewportRect[2];
+            uint32_t height = vkrt->runtime.displayViewportRect[3];
+            uint32_t srcWidth = renderExtent.width;
+            uint32_t srcHeight = renderExtent.height;
+            VkBool32 fillViewport = VK_FALSE;
+            int32_t srcX = 0;
+            int32_t srcY = 0;
+
+            clampRectToExtent(&x, &y, &width, &height, swapchainExtent);
+            vkCmdClearColorImage(commandBuffer, destImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &kViewportClearColor, 1, &clearRange);
+
+            queryRenderViewCrop(renderExtent, width, height, vkrt->state.renderViewZoom, &srcWidth, &srcHeight, &fillViewport);
+
+            int32_t maxSrcX = (int32_t)renderExtent.width - (int32_t)srcWidth;
+            int32_t maxSrcY = (int32_t)renderExtent.height - (int32_t)srcHeight;
+            float maxPanX = (float)maxSrcX * 0.5f;
+            float maxPanY = (float)maxSrcY * 0.5f;
+            float panX = clampFloat(vkrt->state.renderViewPanX, -maxPanX, maxPanX);
+            float panY = clampFloat(vkrt->state.renderViewPanY, -maxPanY, maxPanY);
+            if (maxSrcX > 0) srcX = (int32_t)((float)maxSrcX * 0.5f + panX + 0.5f);
+            if (maxSrcY > 0) srcY = (int32_t)((float)maxSrcY * 0.5f + panY + 0.5f);
+            if (srcX < 0) srcX = 0;
+            if (srcY < 0) srcY = 0;
+            if (srcX > maxSrcX) srcX = maxSrcX;
+            if (srcY > maxSrcY) srcY = maxSrcY;
+
+            blit.srcOffsets[0] = (VkOffset3D){srcX, srcY, 0};
+            blit.srcOffsets[1] = (VkOffset3D){srcX + (int32_t)srcWidth, srcY + (int32_t)srcHeight, 1};
+
+            if (fillViewport) {
+                blit.dstOffsets[0] = (VkOffset3D){(int32_t)x, (int32_t)y, 0};
+                blit.dstOffsets[1] = (VkOffset3D){(int32_t)(x + width), (int32_t)(y + height), 1};
+            } else {
+                float srcAspect = (float)srcWidth / (float)srcHeight;
+                float dstAspect = (float)width / (float)height;
+                uint32_t fitWidth = width;
+                uint32_t fitHeight = height;
+                if (dstAspect > srcAspect) {
+                    fitWidth = (uint32_t)((float)height * srcAspect + 0.5f);
+                    if (fitWidth == 0) fitWidth = 1;
+                } else {
+                    fitHeight = (uint32_t)((float)width / srcAspect + 0.5f);
+                    if (fitHeight == 0) fitHeight = 1;
+                }
+
+                uint32_t dstX = x + (width - fitWidth) / 2;
+                uint32_t dstY = y + (height - fitHeight) / 2;
+
+                blit.dstOffsets[0] = (VkOffset3D){(int32_t)dstX, (int32_t)dstY, 0};
+                blit.dstOffsets[1] = (VkOffset3D){(int32_t)(dstX + fitWidth), (int32_t)(dstY + fitHeight), 1};
+            }
+        } else {
+            blit.dstOffsets[0] = (VkOffset3D){0, 0, 0};
+            blit.dstOffsets[1] = (VkOffset3D){(int32_t)swapchainExtent.width, (int32_t)swapchainExtent.height, 1};
+        }
+
+        vkCmdBlitImage(commandBuffer, outputImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, destImage,
+                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
+
+        if (shouldTrace) {
+            VkImageCopy copyRegion = {0};
+            copyRegion.srcSubresource = (VkImageSubresourceLayers){VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+            copyRegion.dstSubresource = (VkImageSubresourceLayers){VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+            copyRegion.extent = (VkExtent3D){renderExtent.width, renderExtent.height, 1};
+            vkCmdCopyImage(commandBuffer, accumulationWriteImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                           accumulationReadImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+        }
+    } else {
+        vkCmdClearColorImage(commandBuffer, destImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &kViewportClearColor, 1, &clearRange);
+    }
+
+    VkRenderPassBeginInfo renderPassBeginInfo = {0};
+    renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    renderPassBeginInfo.renderPass = vkrt->runtime.renderPass;
+    renderPassBeginInfo.framebuffer = vkrt->runtime.framebuffers[imageIndex];
+    renderPassBeginInfo.renderArea.offset = (VkOffset2D){0, 0};
+    renderPassBeginInfo.renderArea.extent = swapchainExtent;
+    renderPassBeginInfo.clearValueCount = 0;
+    renderPassBeginInfo.pClearValues = NULL;
+
+    vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+    if (vkrt->appHooks.drawOverlay) {
+        vkrt->appHooks.drawOverlay(vkrt, commandBuffer, vkrt->appHooks.userData);
+    }
+
+    vkCmdEndRenderPass(commandBuffer);
+
+    if (vkrt->core.descriptorSetReady) {
+        if (shouldTrace) {
+            transitionImageLayout(commandBuffer, accumulationReadImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+            transitionImageLayout(commandBuffer, accumulationWriteImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+        }
+        transitionImageLayout(commandBuffer, outputImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+    }
+
+    vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, vkrt->runtime.timestampPool, qbase + 1);
+
+    if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
+        LOG_ERROR("Failed to end command buffer");
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+
+    return VKRT_SUCCESS;
+}

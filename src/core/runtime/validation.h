@@ -1,6 +1,6 @@
 #pragma once
 
-#include "vkrt.h"
+#include "vkrt_internal.h"
 
 extern const char* validationLayers[];
 extern const uint32_t numValidationLayers;
@@ -10,7 +10,7 @@ int checkValidationLayerSupport();
 const char** getRequiredExtensions(uint32_t* extensionCount);
 
 void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT* createInfo);
-void setupDebugMessenger(VKRT* vkrt);
+VKRT_Result setupDebugMessenger(VKRT* vkrt);
 
 VkResult createDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger);
 void destroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator);

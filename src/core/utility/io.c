@@ -60,10 +60,15 @@ static FILE* fopen_exe_relative(const char* relpath, const char* mode) {
 }
 
 const char* readFile(const char* filename, size_t* fileSize) {
+    if (!filename || !fileSize) {
+        LOG_ERROR("Invalid readFile arguments");
+        return NULL;
+    }
+
     FILE* file = fopen_exe_relative(filename, "rb");
     if (!file) {
-        LOG_ERROR("Failed to open file");
-        exit(EXIT_FAILURE);
+        LOG_ERROR("Failed to open file: %s", filename);
+        return NULL;
     }
     fseek(file, 0, SEEK_END);
     *fileSize = (size_t)ftell(file);
@@ -72,17 +77,17 @@ const char* readFile(const char* filename, size_t* fileSize) {
     size_t allocSize = *fileSize > 0 ? *fileSize : 1;
     char* buffer = (char*)malloc(allocSize);
     if (!buffer) {
-        LOG_ERROR("Failed to allocate file buffer");
+        LOG_ERROR("Failed to allocate file buffer for %s", filename);
         fclose(file);
-        exit(EXIT_FAILURE);
+        return NULL;
     }
 
     size_t bytesRead = fread(buffer, 1, *fileSize, file);
     fclose(file);
     if (bytesRead != *fileSize) {
         free(buffer);
-        LOG_ERROR("Failed to read complete file");
-        exit(EXIT_FAILURE);
+        LOG_ERROR("Failed to read complete file: %s", filename);
+        return NULL;
     }
 
     return buffer;

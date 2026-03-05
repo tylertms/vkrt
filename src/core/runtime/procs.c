@@ -2,21 +2,20 @@
 #include "debug.h"
 
 #include <stdio.h>
-#include <stdlib.h>
 
 #define LOAD_DEVICE_PROC(vkrt, proc_name)                                                                         \
     do {                                                                                                          \
         (vkrt)->core.procs.proc_name = (PFN_##proc_name)vkGetDeviceProcAddr((vkrt)->core.device, #proc_name);   \
         if (!(vkrt)->core.procs.proc_name) {                                                                      \
             LOG_ERROR("Failed to load Vulkan procedure %s", #proc_name);                     \
-            exit(EXIT_FAILURE);                                                                                   \
+            return VKRT_ERROR_OPERATION_FAILED;                                                                   \
         }                                                                                                         \
     } while (0)
 
-void loadDeviceProcs(VKRT* vkrt) {
+VKRT_Result loadDeviceProcs(VKRT* vkrt) {
     if (!vkrt || vkrt->core.device == VK_NULL_HANDLE) {
         LOG_ERROR("Cannot load device procedures before logical device creation");
-        exit(EXIT_FAILURE);
+        return VKRT_ERROR_INVALID_ARGUMENT;
     }
 
     LOAD_DEVICE_PROC(vkrt, vkCreateRayTracingPipelinesKHR);
@@ -28,4 +27,5 @@ void loadDeviceProcs(VKRT* vkrt) {
     LOAD_DEVICE_PROC(vkrt, vkCmdBuildAccelerationStructuresKHR);
     LOAD_DEVICE_PROC(vkrt, vkGetBufferDeviceAddressKHR);
     LOAD_DEVICE_PROC(vkrt, vkCmdTraceRaysKHR);
+    return VKRT_SUCCESS;
 }

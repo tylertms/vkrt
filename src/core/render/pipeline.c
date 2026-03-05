@@ -5,7 +5,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-void createRayTracingPipeline(VKRT* vkrt) {
+VKRT_Result createRayTracingPipeline(VKRT* vkrt) {
+    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+
     uint64_t startTime = getMicroseconds();
 
     VkPipelineLayoutCreateInfo pipelineLayoutInfo = {0};
@@ -16,7 +18,7 @@ void createRayTracingPipeline(VKRT* vkrt) {
 
     if (vkCreatePipelineLayout(vkrt->core.device, &pipelineLayoutInfo, NULL, &vkrt->core.pipelineLayout) != VK_SUCCESS) {
         LOG_ERROR("Failed to create pipeline layout");
-        exit(EXIT_FAILURE);
+        return VKRT_ERROR_OPERATION_FAILED;
     }
 
     size_t rayGenLen, closestHitLen, missLen;
@@ -24,13 +26,30 @@ void createRayTracingPipeline(VKRT* vkrt) {
     const char* rayGenCode = readFile(vkrt->core.shaders.rgenPath, &rayGenLen);
     const char* closestHitCode = readFile(vkrt->core.shaders.rchitPath, &closestHitLen);
     const char* missCode = readFile(vkrt->core.shaders.rmissPath, &missLen);
+    if (!rayGenCode || !closestHitCode || !missCode) {
+        free((void*)rayGenCode);
+        free((void*)closestHitCode);
+        free((void*)missCode);
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
 
     LOG_INFO("Using shaders \"%s\", \"%s\", \"%s\"",
         vkrt->core.shaders.rgenPath, vkrt->core.shaders.rchitPath, vkrt->core.shaders.rmissPath);
 
-    VkShaderModule rayGenModule = createShaderModule(vkrt, rayGenCode, rayGenLen);
-    VkShaderModule closestHitModule = createShaderModule(vkrt, closestHitCode, closestHitLen);
-    VkShaderModule missModule = createShaderModule(vkrt, missCode, missLen);
+    VkShaderModule rayGenModule = VK_NULL_HANDLE;
+    VkShaderModule closestHitModule = VK_NULL_HANDLE;
+    VkShaderModule missModule = VK_NULL_HANDLE;
+    if (createShaderModule(vkrt, rayGenCode, rayGenLen, &rayGenModule) != VKRT_SUCCESS ||
+        createShaderModule(vkrt, closestHitCode, closestHitLen, &closestHitModule) != VKRT_SUCCESS ||
+        createShaderModule(vkrt, missCode, missLen, &missModule) != VKRT_SUCCESS) {
+        if (rayGenModule != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, rayGenModule, NULL);
+        if (closestHitModule != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, closestHitModule, NULL);
+        if (missModule != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, missModule, NULL);
+        free((void*)rayGenCode);
+        free((void*)closestHitCode);
+        free((void*)missCode);
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
 
     VkPipelineShaderStageCreateInfo rayGenStageInfo = {0};
     rayGenStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -88,16 +107,22 @@ void createRayTracingPipeline(VKRT* vkrt) {
 
     VkRayTracingPipelineCreateInfoKHR pipelineCreateInfo = {0};
     pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR;
-    pipelineCreateInfo.stageCount = COUNT_OF(shaderStages);
+    pipelineCreateInfo.stageCount = VKRT_ARRAY_COUNT(shaderStages);
     pipelineCreateInfo.pStages = shaderStages;
-    pipelineCreateInfo.groupCount = COUNT_OF(shaderGroups);
+    pipelineCreateInfo.groupCount = VKRT_ARRAY_COUNT(shaderGroups);
     pipelineCreateInfo.pGroups = shaderGroups;
     pipelineCreateInfo.maxPipelineRayRecursionDepth = 1;
     pipelineCreateInfo.layout = vkrt->core.pipelineLayout;
 
     if (vkrt->core.procs.vkCreateRayTracingPipelinesKHR(vkrt->core.device, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &pipelineCreateInfo, NULL, &vkrt->core.rayTracingPipeline) != VK_SUCCESS) {
         LOG_ERROR("Failed to create ray tracing pipeline");
-        exit(EXIT_FAILURE);
+        vkDestroyShaderModule(vkrt->core.device, rayGenModule, NULL);
+        vkDestroyShaderModule(vkrt->core.device, closestHitModule, NULL);
+        vkDestroyShaderModule(vkrt->core.device, missModule, NULL);
+        free((void*)rayGenCode);
+        free((void*)closestHitCode);
+        free((void*)missCode);
+        return VKRT_ERROR_OPERATION_FAILED;
     }
 
     vkDestroyShaderModule(vkrt->core.device, rayGenModule, NULL);
@@ -108,12 +133,15 @@ void createRayTracingPipeline(VKRT* vkrt) {
     free((void*)missCode);
 
     LOG_INFO("Ray tracing pipeline created. Shader Stages: %u, Shader Groups: %u, in %.3f ms",
-        (uint32_t)COUNT_OF(shaderStages),
-        (uint32_t)COUNT_OF(shaderGroups),
+        (uint32_t)VKRT_ARRAY_COUNT(shaderStages),
+        (uint32_t)VKRT_ARRAY_COUNT(shaderGroups),
         (double)(getMicroseconds() - startTime) / 1e3);
+    return VKRT_SUCCESS;
 }
 
-void createSyncObjects(VKRT* vkrt) {
+VKRT_Result createSyncObjects(VKRT* vkrt) {
+    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+
     VkSemaphoreCreateInfo semaphoreCreateInfo = {0};
     semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
@@ -124,16 +152,16 @@ void createSyncObjects(VKRT* vkrt) {
     vkrt->runtime.renderFinishedSemaphores = (VkSemaphore*)malloc(vkrt->runtime.swapChainImageCount * sizeof(VkSemaphore));
     if (!vkrt->runtime.renderFinishedSemaphores) {
         LOG_ERROR("Failed to allocate render-finished semaphore list");
-        exit(EXIT_FAILURE);
+        return VKRT_ERROR_OPERATION_FAILED;
     }
 
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+    for (size_t i = 0; i < VKRT_MAX_FRAMES_IN_FLIGHT; i++) {
         VkResult imageAvailableSemaphoreResult = vkCreateSemaphore(vkrt->core.device, &semaphoreCreateInfo, NULL, &vkrt->runtime.imageAvailableSemaphores[i]);
         VkResult inFlightFenceResult = vkCreateFence(vkrt->core.device, &fenceInfo, NULL, &vkrt->runtime.inFlightFences[i]);
 
         if (imageAvailableSemaphoreResult != VK_SUCCESS || inFlightFenceResult != VK_SUCCESS) {
             LOG_ERROR("Failed to create sync objects");
-            exit(EXIT_FAILURE);
+            return VKRT_ERROR_OPERATION_FAILED;
         }
     }
 
@@ -141,12 +169,16 @@ void createSyncObjects(VKRT* vkrt) {
         VkResult renderFinishedSemaphoreResult = vkCreateSemaphore(vkrt->core.device, &semaphoreCreateInfo, NULL, &vkrt->runtime.renderFinishedSemaphores[i]);
         if (renderFinishedSemaphoreResult != VK_SUCCESS) {
             LOG_ERROR("Failed to create render-finished semaphore");
-            exit(EXIT_FAILURE);
+            return VKRT_ERROR_OPERATION_FAILED;
         }
     }
+
+    return VKRT_SUCCESS;
 }
 
-VkShaderModule createShaderModule(VKRT* vkrt, const char* spirv, size_t length) {
+VKRT_Result createShaderModule(VKRT* vkrt, const char* spirv, size_t length, VkShaderModule* outShaderModule) {
+    if (!vkrt || !spirv || !outShaderModule) return VKRT_ERROR_INVALID_ARGUMENT;
+
     VkShaderModuleCreateInfo shaderModuleCreateInfo = {0};
     shaderModuleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     shaderModuleCreateInfo.codeSize = length;
@@ -155,13 +187,15 @@ VkShaderModule createShaderModule(VKRT* vkrt, const char* spirv, size_t length) 
     VkShaderModule shaderModule;
     if (vkCreateShaderModule(vkrt->core.device, &shaderModuleCreateInfo, NULL, &shaderModule) != VK_SUCCESS) {
         LOG_ERROR("Failed to create shader module");
-        exit(EXIT_FAILURE);
+        return VKRT_ERROR_OPERATION_FAILED;
     }
 
-    return shaderModule;
+    *outShaderModule = shaderModule;
+    return VKRT_SUCCESS;
 }
 
-void createRenderPass(VKRT* vkrt) {
+VKRT_Result createRenderPass(VKRT* vkrt) {
+    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
     VkAttachmentDescription colorAttachment = {0};
     colorAttachment.format = vkrt->runtime.swapChainImageFormat;
     colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -200,6 +234,7 @@ void createRenderPass(VKRT* vkrt) {
 
     if (vkCreateRenderPass(vkrt->core.device, &renderPassCreateInfo, NULL, &vkrt->runtime.renderPass) != VK_SUCCESS) {
         LOG_ERROR("Failed to create UI render pass");
-        exit(EXIT_FAILURE);
+        return VKRT_ERROR_OPERATION_FAILED;
     }
+    return VKRT_SUCCESS;
 }

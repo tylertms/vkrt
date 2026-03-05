@@ -1,5 +1,5 @@
 #pragma once
 
-#include "vkrt.h"
+#include "vkrt_internal.h"
 
-void loadDeviceProcs(VKRT* vkrt);
+VKRT_Result loadDeviceProcs(VKRT* vkrt);

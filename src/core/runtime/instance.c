@@ -5,10 +5,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-void createInstance(VKRT* vkrt) {
+VKRT_Result createInstance(VKRT* vkrt) {
+    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+
     if (enableValidationLayers && !checkValidationLayerSupport()) {
         LOG_ERROR("Validation layers requested but not available");
-        exit(EXIT_FAILURE);
+        return VKRT_ERROR_OPERATION_FAILED;
     }
 
     VkApplicationInfo applicationInfo = {0};
@@ -26,6 +28,9 @@ void createInstance(VKRT* vkrt) {
 
     uint32_t extensionCount;
     const char** extensions = getRequiredExtensions(&extensionCount);
+    if (!extensions) {
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
 
     instanceCreateInfo.enabledExtensionCount = extensionCount;
     instanceCreateInfo.ppEnabledExtensionNames = extensions;
@@ -45,9 +50,9 @@ void createInstance(VKRT* vkrt) {
     if (vkCreateInstance(&instanceCreateInfo, 0, &vkrt->core.instance) != VK_SUCCESS) {
         LOG_ERROR("Failed to create instance");
         free(extensions);
-        exit(EXIT_FAILURE);
+        return VKRT_ERROR_OPERATION_FAILED;
     }
 
     free(extensions);
-    return;
+    return VKRT_SUCCESS;
 }

@@ -1,8 +1,8 @@
 #pragma once
 
-#include "vkrt.h"
+#include "vkrt_internal.h"
 
-void createRayTracingPipeline(VKRT* vkrt);
-void createSyncObjects(VKRT* vkrt);
-VkShaderModule createShaderModule(VKRT* vkrt, const char* spirv, size_t length);
-void createRenderPass(VKRT* vkrt);
+VKRT_Result createRayTracingPipeline(VKRT* vkrt);
+VKRT_Result createSyncObjects(VKRT* vkrt);
+VKRT_Result createShaderModule(VKRT* vkrt, const char* spirv, size_t length, VkShaderModule* outShaderModule);
+VKRT_Result createRenderPass(VKRT* vkrt);
