@@ -1,5 +1,6 @@
 #include "pipeline.h"
 #include "io.h"
+#include "sync.h"
 #include "debug.h"
 
 #include <stdio.h>
@@ -149,31 +150,56 @@ VKRT_Result createSyncObjects(VKRT* vkrt) {
     fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
     fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-    vkrt->runtime.renderFinishedSemaphores = (VkSemaphore*)malloc(vkrt->runtime.swapChainImageCount * sizeof(VkSemaphore));
-    if (!vkrt->runtime.renderFinishedSemaphores) {
-        LOG_ERROR("Failed to allocate render-finished semaphore list");
-        return VKRT_ERROR_OPERATION_FAILED;
+    for (size_t i = 0; i < VKRT_MAX_FRAMES_IN_FLIGHT; i++) {
+        vkrt->runtime.imageAvailableSemaphores[i] = VK_NULL_HANDLE;
+        vkrt->runtime.inFlightFences[i] = VK_NULL_HANDLE;
     }
+
+    size_t createdImageAvailableCount = 0;
+    size_t createdFenceCount = 0;
 
     for (size_t i = 0; i < VKRT_MAX_FRAMES_IN_FLIGHT; i++) {
-        VkResult imageAvailableSemaphoreResult = vkCreateSemaphore(vkrt->core.device, &semaphoreCreateInfo, NULL, &vkrt->runtime.imageAvailableSemaphores[i]);
-        VkResult inFlightFenceResult = vkCreateFence(vkrt->core.device, &fenceInfo, NULL, &vkrt->runtime.inFlightFences[i]);
-
-        if (imageAvailableSemaphoreResult != VK_SUCCESS || inFlightFenceResult != VK_SUCCESS) {
-            LOG_ERROR("Failed to create sync objects");
-            return VKRT_ERROR_OPERATION_FAILED;
+        VkResult imageAvailableSemaphoreResult =
+            vkCreateSemaphore(vkrt->core.device, &semaphoreCreateInfo, NULL, &vkrt->runtime.imageAvailableSemaphores[i]);
+        if (imageAvailableSemaphoreResult != VK_SUCCESS) {
+            LOG_ERROR("Failed to create image-available semaphore");
+            goto create_sync_objects_failed;
         }
+        createdImageAvailableCount++;
+
+        VkResult inFlightFenceResult =
+            vkCreateFence(vkrt->core.device, &fenceInfo, NULL, &vkrt->runtime.inFlightFences[i]);
+        if (inFlightFenceResult != VK_SUCCESS) {
+            LOG_ERROR("Failed to create in-flight fence");
+            goto create_sync_objects_failed;
+        }
+        createdFenceCount++;
     }
 
-    for (size_t i = 0; i < vkrt->runtime.swapChainImageCount; i++) {
-        VkResult renderFinishedSemaphoreResult = vkCreateSemaphore(vkrt->core.device, &semaphoreCreateInfo, NULL, &vkrt->runtime.renderFinishedSemaphores[i]);
-        if (renderFinishedSemaphoreResult != VK_SUCCESS) {
-            LOG_ERROR("Failed to create render-finished semaphore");
-            return VKRT_ERROR_OPERATION_FAILED;
-        }
+    if (resetRenderFinishedSemaphores(
+            vkrt,
+            vkrt->runtime.swapChainImageCount,
+            vkrt->runtime.swapChainImageCount) != VKRT_SUCCESS) {
+        goto create_sync_objects_failed;
     }
 
     return VKRT_SUCCESS;
+
+create_sync_objects_failed:
+    for (size_t i = 0; i < createdImageAvailableCount; i++) {
+        if (vkrt->runtime.imageAvailableSemaphores[i] != VK_NULL_HANDLE) {
+            vkDestroySemaphore(vkrt->core.device, vkrt->runtime.imageAvailableSemaphores[i], NULL);
+            vkrt->runtime.imageAvailableSemaphores[i] = VK_NULL_HANDLE;
+        }
+    }
+    for (size_t i = 0; i < createdFenceCount; i++) {
+        if (vkrt->runtime.inFlightFences[i] != VK_NULL_HANDLE) {
+            vkDestroyFence(vkrt->core.device, vkrt->runtime.inFlightFences[i], NULL);
+            vkrt->runtime.inFlightFences[i] = VK_NULL_HANDLE;
+        }
+    }
+    resetRenderFinishedSemaphores(vkrt, vkrt->runtime.swapChainImageCount, 0);
+    return VKRT_ERROR_OPERATION_FAILED;
 }
 
 VKRT_Result createShaderModule(VKRT* vkrt, const char* spirv, size_t length, VkShaderModule* outShaderModule) {

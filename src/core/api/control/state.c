@@ -1,3 +1,4 @@
+#include "control_internal.h"
 #include "scene.h"
 #include "vkrt_internal.h"
 
@@ -20,13 +21,16 @@ static uint32_t sanitizeMeshSelection(const VKRT* vkrt, uint32_t meshIndex) {
 }
 
 VKRT_Result VKRT_applyCameraInput(VKRT* vkrt, const VKRT_CameraInput* input) {
-    if (!vkrt || !input) return VKRT_ERROR_INVALID_ARGUMENT;
+    if (!input) return VKRT_ERROR_INVALID_ARGUMENT;
+    VKRT_Result stateReady = requireSceneStateReady(vkrt);
+    if (stateReady != VKRT_SUCCESS) return stateReady;
     applyCameraInput(vkrt, input);
     return VKRT_SUCCESS;
 }
 
 VKRT_Result VKRT_invalidateAccumulation(VKRT* vkrt) {
-    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+    VKRT_Result stateReady = requireSceneStateReady(vkrt);
+    if (stateReady != VKRT_SUCCESS) return stateReady;
     resetSceneData(vkrt);
     return VKRT_SUCCESS;
 }
@@ -45,7 +49,8 @@ VKRT_Result VKRT_setSamplesPerPixel(VKRT* vkrt, uint32_t samplesPerPixel) {
 }
 
 VKRT_Result VKRT_setPathDepth(VKRT* vkrt, uint32_t rrMinDepth, uint32_t rrMaxDepth) {
-    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+    VKRT_Result stateReady = requireSceneStateReady(vkrt);
+    if (stateReady != VKRT_SUCCESS) return stateReady;
 
     if (rrMaxDepth < 1u) rrMaxDepth = 1u;
     if (rrMaxDepth > 64u) rrMaxDepth = 64u;
@@ -86,7 +91,8 @@ VKRT_Result VKRT_setAutoSPPTargetFPS(VKRT* vkrt, uint32_t targetFPS) {
 }
 
 VKRT_Result VKRT_setToneMappingMode(VKRT* vkrt, VKRT_ToneMappingMode toneMappingMode) {
-    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+    VKRT_Result stateReady = requireSceneStateReady(vkrt);
+    if (stateReady != VKRT_SUCCESS) return stateReady;
 
     if (vkrt->state.toneMappingMode == toneMappingMode) return VKRT_SUCCESS;
     vkrt->state.toneMappingMode = toneMappingMode;
@@ -95,7 +101,8 @@ VKRT_Result VKRT_setToneMappingMode(VKRT* vkrt, VKRT_ToneMappingMode toneMapping
 }
 
 VKRT_Result VKRT_setFogDensity(VKRT* vkrt, float fogDensity) {
-    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+    VKRT_Result stateReady = requireSceneStateReady(vkrt);
+    if (stateReady != VKRT_SUCCESS) return stateReady;
     if (!isfinite(fogDensity) || fogDensity < 0.0f) fogDensity = 0.0f;
 
     if (vkrt->state.fogDensity == fogDensity) return VKRT_SUCCESS;
@@ -105,7 +112,8 @@ VKRT_Result VKRT_setFogDensity(VKRT* vkrt, float fogDensity) {
 }
 
 VKRT_Result VKRT_setDebugMode(VKRT* vkrt, uint32_t mode) {
-    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+    VKRT_Result stateReady = requireSceneStateReady(vkrt);
+    if (stateReady != VKRT_SUCCESS) return stateReady;
     if (vkrt->state.debugMode == mode) return VKRT_SUCCESS;
     vkrt->state.debugMode = mode;
     resetSceneData(vkrt);
@@ -113,7 +121,8 @@ VKRT_Result VKRT_setDebugMode(VKRT* vkrt, uint32_t mode) {
 }
 
 VKRT_Result VKRT_setMISNEEEnabled(VKRT* vkrt, uint32_t enabled) {
-    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+    VKRT_Result stateReady = requireSceneStateReady(vkrt);
+    if (stateReady != VKRT_SUCCESS) return stateReady;
     enabled = enabled ? 1u : 0u;
     if (vkrt->state.misNeeEnabled == enabled) return VKRT_SUCCESS;
     vkrt->state.misNeeEnabled = enabled;
@@ -122,7 +131,8 @@ VKRT_Result VKRT_setMISNEEEnabled(VKRT* vkrt, uint32_t enabled) {
 }
 
 VKRT_Result VKRT_setTimeRange(VKRT* vkrt, float timeBase, float timeStep) {
-    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+    VKRT_Result stateReady = requireSceneStateReady(vkrt);
+    if (stateReady != VKRT_SUCCESS) return stateReady;
 
     if (timeBase < 0.0f) {
         timeBase = -1.0f;
@@ -140,7 +150,8 @@ VKRT_Result VKRT_setTimeRange(VKRT* vkrt, float timeBase, float timeStep) {
 }
 
 VKRT_Result VKRT_setSceneTimeline(VKRT* vkrt, const VKRT_SceneTimelineSettings* timeline) {
-    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+    VKRT_Result stateReady = requireSceneStateReady(vkrt);
+    if (stateReady != VKRT_SUCCESS) return stateReady;
 
     VKRT_SceneTimelineSettings sanitized = {0};
 
@@ -198,7 +209,8 @@ VKRT_Result VKRT_pickMeshAtPixel(const VKRT* vkrt, uint32_t x, uint32_t y, uint3
 }
 
 VKRT_Result VKRT_setSelectedMesh(VKRT* vkrt, uint32_t meshIndex) {
-    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+    VKRT_Result stateReady = requireSceneStateReady(vkrt);
+    if (stateReady != VKRT_SUCCESS) return stateReady;
 
     uint32_t nextSelectedMesh = sanitizeMeshSelection(vkrt, meshIndex);
     if (vkrt->state.selectedMeshIndex == nextSelectedMesh) return VKRT_SUCCESS;

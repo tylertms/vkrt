@@ -1,91 +1,10 @@
 #include "record.h"
 #include "debug.h"
+#include "view.h"
 
 #include <stdlib.h>
 
-static float clampFloat(float value, float minValue, float maxValue) {
-    if (value < minValue) return minValue;
-    if (value > maxValue) return maxValue;
-    return value;
-}
-
 static const VkClearColorValue kViewportClearColor = {.float32 = {0.02f, 0.02f, 0.025f, 1.0f}};
-
-static void clampRectToExtent(uint32_t* x, uint32_t* y, uint32_t* width, uint32_t* height, VkExtent2D extent) {
-    if (!x || !y || !width || !height) return;
-
-    if (extent.width == 0 || extent.height == 0) {
-        *x = 0;
-        *y = 0;
-        *width = 0;
-        *height = 0;
-        return;
-    }
-
-    if (*width == 0 || *height == 0) {
-        *x = 0;
-        *y = 0;
-        *width = extent.width;
-        *height = extent.height;
-    }
-
-    if (*x >= extent.width) *x = extent.width - 1;
-    if (*y >= extent.height) *y = extent.height - 1;
-    if (*x + *width > extent.width) *width = extent.width - *x;
-    if (*y + *height > extent.height) *height = extent.height - *y;
-
-    if (*width == 0 || *height == 0) {
-        *x = 0;
-        *y = 0;
-        *width = extent.width;
-        *height = extent.height;
-    }
-}
-
-static void queryRenderViewCrop(VkExtent2D renderExtent, uint32_t viewportWidth, uint32_t viewportHeight, float zoom,
-                                uint32_t* outWidth, uint32_t* outHeight, VkBool32* outFillViewport) {
-    if (!outWidth || !outHeight) return;
-
-    float renderWidth = (float)renderExtent.width;
-    float renderHeight = (float)renderExtent.height;
-    float clampedZoom = clampFloat(zoom, VKRT_RENDER_VIEW_ZOOM_MIN, VKRT_RENDER_VIEW_ZOOM_MAX);
-    VkBool32 fillViewport = (clampedZoom > (VKRT_RENDER_VIEW_ZOOM_MIN + 0.0001f)) &&
-                            viewportWidth > 0 &&
-                            viewportHeight > 0;
-
-    uint32_t cropWidth = renderExtent.width;
-    uint32_t cropHeight = renderExtent.height;
-    if (fillViewport) {
-        float renderAspect = renderWidth / renderHeight;
-        float viewAspect = (float)viewportWidth / (float)viewportHeight;
-        float baseWidth = renderWidth;
-        float baseHeight = renderHeight;
-        if (viewAspect > renderAspect) {
-            baseHeight = renderWidth / viewAspect;
-        } else {
-            baseWidth = renderHeight * viewAspect;
-        }
-
-        float cropWidthF = baseWidth / clampedZoom;
-        float cropHeightF = baseHeight / clampedZoom;
-        if (cropWidthF < 1.0f) cropWidthF = 1.0f;
-        if (cropHeightF < 1.0f) cropHeightF = 1.0f;
-        if (cropWidthF > renderWidth) cropWidthF = renderWidth;
-        if (cropHeightF > renderHeight) cropHeightF = renderHeight;
-
-        cropWidth = (uint32_t)(cropWidthF + 0.5f);
-        cropHeight = (uint32_t)(cropHeightF + 0.5f);
-    }
-
-    if (cropWidth < 1) cropWidth = 1;
-    if (cropHeight < 1) cropHeight = 1;
-    if (cropWidth > renderExtent.width) cropWidth = renderExtent.width;
-    if (cropHeight > renderExtent.height) cropHeight = renderExtent.height;
-
-    *outWidth = cropWidth;
-    *outHeight = cropHeight;
-    if (outFillViewport) *outFillViewport = fillViewport;
-}
 
 VKRT_Result recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
     if (!vkrt || imageIndex >= vkrt->runtime.swapChainImageCount) return VKRT_ERROR_INVALID_ARGUMENT;
@@ -179,17 +98,17 @@ VKRT_Result recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
             int32_t srcX = 0;
             int32_t srcY = 0;
 
-            clampRectToExtent(&x, &y, &width, &height, swapchainExtent);
+            vkrtClampViewportRect(swapchainExtent, &x, &y, &width, &height);
             vkCmdClearColorImage(commandBuffer, destImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &kViewportClearColor, 1, &clearRange);
 
-            queryRenderViewCrop(renderExtent, width, height, vkrt->state.renderViewZoom, &srcWidth, &srcHeight, &fillViewport);
+            VkExtent2D viewportExtent = {width, height};
+            vkrtQueryRenderViewCropExtent(renderExtent, viewportExtent, vkrt->state.renderViewZoom, &srcWidth, &srcHeight, &fillViewport);
 
             int32_t maxSrcX = (int32_t)renderExtent.width - (int32_t)srcWidth;
             int32_t maxSrcY = (int32_t)renderExtent.height - (int32_t)srcHeight;
-            float maxPanX = (float)maxSrcX * 0.5f;
-            float maxPanY = (float)maxSrcY * 0.5f;
-            float panX = clampFloat(vkrt->state.renderViewPanX, -maxPanX, maxPanX);
-            float panY = clampFloat(vkrt->state.renderViewPanY, -maxPanY, maxPanY);
+            float panX = vkrt->state.renderViewPanX;
+            float panY = vkrt->state.renderViewPanY;
+            vkrtClampRenderViewPanOffset(renderExtent, viewportExtent, vkrt->state.renderViewZoom, &panX, &panY);
             if (maxSrcX > 0) srcX = (int32_t)((float)maxSrcX * 0.5f + panX + 0.5f);
             if (maxSrcY > 0) srcY = (int32_t)((float)maxSrcY * 0.5f + panY + 0.5f);
             if (srcX < 0) srcX = 0;

@@ -20,7 +20,7 @@ static int compareTimelineKeyframesByTime(const void* lhs, const void* rhs) {
     return 0;
 }
 
-static float clampFloat(float value, float minValue, float maxValue) {
+static float clampFloatValue(float value, float minValue, float maxValue) {
     if (value < minValue) return minValue;
     if (value > maxValue) return maxValue;
     return value;
@@ -308,16 +308,16 @@ static void sessionSanitizeTimelineSettings(SessionSceneTimelineSettings* timeli
     for (uint32_t keyIndex = 0; keyIndex < timeline->keyframeCount; keyIndex++) {
         SessionSceneTimelineKeyframe* key = &timeline->keyframes[keyIndex];
         if (!isfinite(key->time)) key->time = kDefaultTimelineStartTime;
-        key->time = clampFloat(key->time, SESSION_SCENE_TIMELINE_TIME_MIN, SESSION_SCENE_TIMELINE_TIME_MAX);
+        key->time = clampFloatValue(key->time, SESSION_SCENE_TIMELINE_TIME_MIN, SESSION_SCENE_TIMELINE_TIME_MAX);
 
         if (!isfinite(key->emissionScale)) key->emissionScale = 0.0f;
-        key->emissionScale = clampFloat(key->emissionScale,
+        key->emissionScale = clampFloatValue(key->emissionScale,
             SESSION_SCENE_TIMELINE_EMISSION_SCALE_MIN,
             SESSION_SCENE_TIMELINE_EMISSION_SCALE_MAX);
 
         for (int channel = 0; channel < 3; channel++) {
             if (!isfinite(key->emissionTint[channel])) key->emissionTint[channel] = 1.0f;
-            key->emissionTint[channel] = clampFloat(key->emissionTint[channel],
+            key->emissionTint[channel] = clampFloatValue(key->emissionTint[channel],
                 SESSION_SCENE_TIMELINE_EMISSION_TINT_MIN,
                 SESSION_SCENE_TIMELINE_EMISSION_TINT_MAX);
         }

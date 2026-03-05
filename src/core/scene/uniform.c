@@ -157,6 +157,8 @@ VKRT_Result createSceneUniform(VKRT* vkrt) {
 }
 
 void resetSceneData(VKRT* vkrt) {
+    if (!vkrt || !vkrt->core.sceneData) return;
+
     vkrt->core.sceneData->frameNumber = 0;
     vkrt->core.sceneData->samplesPerPixel = vkrt->state.samplesPerPixel;
     vkrt->core.sceneData->rrMaxDepth = vkrt->state.rrMaxDepth;

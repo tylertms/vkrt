@@ -220,7 +220,7 @@ static bool drawViewportWindow(VKRT* vkrt) {
     return viewportHovered;
 }
 
-static float clampRenderViewValue(float value, float minValue, float maxValue) {
+static float clampFloatValue(float value, float minValue, float maxValue) {
     if (value < minValue) return minValue;
     if (value > maxValue) return maxValue;
     return value;
@@ -240,7 +240,7 @@ static void applyEditorCameraInput(VKRT* vkrt, bool viewportHovered) {
 
         if (io->MouseWheel != 0.0f) {
             zoom = zoom * powf(kRenderViewWheelStep, io->MouseWheel);
-            zoom = clampRenderViewValue(zoom, VKRT_RENDER_VIEW_ZOOM_MIN, VKRT_RENDER_VIEW_ZOOM_MAX);
+            zoom = clampFloatValue(zoom, VKRT_RENDER_VIEW_ZOOM_MIN, VKRT_RENDER_VIEW_ZOOM_MAX);
             VKRT_Result result = VKRT_setRenderViewState(vkrt, zoom, panX, panY);
             if (result != VKRT_SUCCESS) {
                 LOG_ERROR("Updating render zoom failed (%d)", (int)result);

@@ -1,13 +1,14 @@
 #include "swapchain.h"
 #include "image/storage_image.h"
 #include "descriptor.h"
+#include "sync.h"
 #include "scene.h"
 #include "debug.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 
-static const char* swapchainFormatName(VkFormat format) {
+static const char* swapChainFormatName(VkFormat format) {
     switch (format) {
     case VK_FORMAT_R16G16B16A16_SFLOAT:
         return "VK_FORMAT_R16G16B16A16_SFLOAT";
@@ -26,7 +27,7 @@ static const char* swapchainFormatName(VkFormat format) {
     }
 }
 
-static const char* swapchainColorSpaceName(VkColorSpaceKHR colorSpace) {
+static const char* swapChainColorSpaceName(VkColorSpaceKHR colorSpace) {
     switch (colorSpace) {
     case VK_COLOR_SPACE_SRGB_NONLINEAR_KHR:
         return "VK_COLOR_SPACE_SRGB_NONLINEAR_KHR";
@@ -64,15 +65,15 @@ VKRT_Result createSwapChain(VKRT* vkrt) {
     VkExtent2D extent = chooseSwapExtent(vkrt, &supportDetails);
     vkrt->runtime.presentMode = presentMode;
     vkrt->runtime.displayRefreshHz = queryDisplayRefreshHz(vkrt);
-    if (!vkrt->runtime.swapchainFormatLogInitialized ||
-        vkrt->runtime.lastLoggedSwapchainFormat != surfaceFormat.format ||
-        vkrt->runtime.lastLoggedSwapchainColorSpace != surfaceFormat.colorSpace) {
+    if (!vkrt->runtime.swapChainFormatLogInitialized ||
+        vkrt->runtime.lastLoggedSwapChainFormat != surfaceFormat.format ||
+        vkrt->runtime.lastLoggedSwapChainColorSpace != surfaceFormat.colorSpace) {
         LOG_INFO("Swapchain format selected: %s (%d), color space: %s (%d)",
-            swapchainFormatName(surfaceFormat.format), (int)surfaceFormat.format,
-            swapchainColorSpaceName(surfaceFormat.colorSpace), (int)surfaceFormat.colorSpace);
-        vkrt->runtime.swapchainFormatLogInitialized = VK_TRUE;
-        vkrt->runtime.lastLoggedSwapchainFormat = surfaceFormat.format;
-        vkrt->runtime.lastLoggedSwapchainColorSpace = surfaceFormat.colorSpace;
+            swapChainFormatName(surfaceFormat.format), (int)surfaceFormat.format,
+            swapChainColorSpaceName(surfaceFormat.colorSpace), (int)surfaceFormat.colorSpace);
+        vkrt->runtime.swapChainFormatLogInitialized = VK_TRUE;
+        vkrt->runtime.lastLoggedSwapChainFormat = surfaceFormat.format;
+        vkrt->runtime.lastLoggedSwapChainColorSpace = surfaceFormat.colorSpace;
     }
 
     uint32_t imageCount = supportDetails.capabilities.minImageCount + 1;
@@ -168,12 +169,9 @@ VKRT_Result recreateSwapChain(VKRT* vkrt) {
     vkDeviceWaitIdle(vkrt->core.device);
 
     size_t oldSwapChainImageCount = vkrt->runtime.swapChainImageCount;
-
-    for (size_t i = 0; i < oldSwapChainImageCount; i++) {
-        vkDestroySemaphore(vkrt->core.device, vkrt->runtime.renderFinishedSemaphores[i], NULL);
+    if (resetRenderFinishedSemaphores(vkrt, oldSwapChainImageCount, 0) != VKRT_SUCCESS) {
+        return VKRT_ERROR_OPERATION_FAILED;
     }
-    free(vkrt->runtime.renderFinishedSemaphores);
-    vkrt->runtime.renderFinishedSemaphores = NULL;
 
     cleanupSwapChain(vkrt);
 
@@ -186,23 +184,11 @@ VKRT_Result recreateSwapChain(VKRT* vkrt) {
         if (createStorageImage(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
     }
 
-    vkrt->runtime.renderFinishedSemaphores = (VkSemaphore*)malloc(vkrt->runtime.swapChainImageCount * sizeof(VkSemaphore));
-    if (!vkrt->runtime.renderFinishedSemaphores) {
+    if (resetRenderFinishedSemaphores(
+            vkrt,
+            0,
+            vkrt->runtime.swapChainImageCount) != VKRT_SUCCESS) {
         return VKRT_ERROR_OPERATION_FAILED;
-    }
-
-    VkSemaphoreCreateInfo semaphoreCreateInfo = {0};
-    semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-
-    for (size_t i = 0; i < vkrt->runtime.swapChainImageCount; i++) {
-        if (vkCreateSemaphore(vkrt->core.device, &semaphoreCreateInfo, NULL, &vkrt->runtime.renderFinishedSemaphores[i]) != VK_SUCCESS) {
-            for (size_t j = 0; j < i; j++) {
-                vkDestroySemaphore(vkrt->core.device, vkrt->runtime.renderFinishedSemaphores[j], NULL);
-            }
-            free(vkrt->runtime.renderFinishedSemaphores);
-            vkrt->runtime.renderFinishedSemaphores = NULL;
-            return VKRT_ERROR_OPERATION_FAILED;
-        }
     }
 
     if (updateDescriptorSet(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
@@ -392,11 +378,25 @@ VKRT_Result chooseSwapSurfaceFormat(const SwapChainSupportDetails* supportDetail
         }
     }
 
-    LOG_ERROR("No VK_COLOR_SPACE_SRGB_NONLINEAR_KHR surface format matches the supported non-sRGB format list");
-    return VKRT_ERROR_OPERATION_FAILED;
+    for (uint32_t formatIndex = 0; formatIndex < supportDetails->formatCount; formatIndex++) {
+        VkSurfaceFormatKHR candidate = supportDetails->formats[formatIndex];
+        if (candidate.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+            *outSurfaceFormat = candidate;
+            LOG_INFO("Falling back to non-preferred swapchain format: %s (%d), color space: %s (%d)",
+                swapChainFormatName(candidate.format), (int)candidate.format,
+                swapChainColorSpaceName(candidate.colorSpace), (int)candidate.colorSpace);
+            return VKRT_SUCCESS;
+        }
+    }
+
+    *outSurfaceFormat = supportDetails->formats[0];
+    LOG_INFO("Falling back to first available swapchain format: %s (%d), color space: %s (%d)",
+        swapChainFormatName(outSurfaceFormat->format), (int)outSurfaceFormat->format,
+        swapChainColorSpaceName(outSurfaceFormat->colorSpace), (int)outSurfaceFormat->colorSpace);
+    return VKRT_SUCCESS;
 }
 
-VkPresentModeKHR chooseSwapPresentMode(SwapChainSupportDetails* supportDetails, uint8_t vsync) {
+VkPresentModeKHR chooseSwapPresentMode(const SwapChainSupportDetails* supportDetails, uint8_t vsync) {
     if (vsync) {
         return VK_PRESENT_MODE_FIFO_KHR;
     }
@@ -416,7 +416,7 @@ VkPresentModeKHR chooseSwapPresentMode(SwapChainSupportDetails* supportDetails, 
     return VK_PRESENT_MODE_FIFO_KHR;
 }
 
-VkExtent2D chooseSwapExtent(VKRT* vkrt, SwapChainSupportDetails* supportDetails) {
+VkExtent2D chooseSwapExtent(VKRT* vkrt, const SwapChainSupportDetails* supportDetails) {
     VkSurfaceCapabilitiesKHR capabilities = supportDetails->capabilities;
     if (capabilities.currentExtent.width != UINT32_MAX) {
         return capabilities.currentExtent;

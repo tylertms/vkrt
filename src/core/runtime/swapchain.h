@@ -17,5 +17,5 @@ VKRT_Result createImageViews(VKRT* vkrt);
 VKRT_Result createFramebuffers(VKRT* vkrt);
 VKRT_Result querySwapChainSupport(VKRT* vkrt, SwapChainSupportDetails* outSupportDetails);
 VKRT_Result chooseSwapSurfaceFormat(const SwapChainSupportDetails* supportDetails, VkSurfaceFormatKHR* outSurfaceFormat);
-VkPresentModeKHR chooseSwapPresentMode(SwapChainSupportDetails* supportDetails, uint8_t vsync);
-VkExtent2D chooseSwapExtent(VKRT* vkrt, SwapChainSupportDetails* supportDetails);
+VkPresentModeKHR chooseSwapPresentMode(const SwapChainSupportDetails* supportDetails, uint8_t vsync);
+VkExtent2D chooseSwapExtent(VKRT* vkrt, const SwapChainSupportDetails* supportDetails);

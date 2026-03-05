@@ -96,9 +96,9 @@ typedef struct VKRT_Runtime {
     VkPresentModeKHR presentMode;
     float displayRefreshHz;
     uint32_t autoSPPFastAdaptFrames;
-    VkBool32 swapchainFormatLogInitialized;
-    VkFormat lastLoggedSwapchainFormat;
-    VkColorSpaceKHR lastLoggedSwapchainColorSpace;
+    VkBool32 swapChainFormatLogInitialized;
+    VkFormat lastLoggedSwapChainFormat;
+    VkColorSpaceKHR lastLoggedSwapChainColorSpace;
     uint8_t appInitialized;
 } VKRT_Runtime;
 

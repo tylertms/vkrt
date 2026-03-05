@@ -1,6 +1,8 @@
 #include "image/storage_image.h"
+#include "control_internal.h"
 #include "descriptor.h"
 #include "scene.h"
+#include "view.h"
 #include "export.h"
 #include "vkrt_internal.h"
 
@@ -14,49 +16,28 @@ VKRT_Result VKRT_saveRenderPNG(VKRT* vkrt, const char* path) {
         : VKRT_ERROR_OPERATION_FAILED;
 }
 
-static float clampFloat(float value, float minValue, float maxValue) {
-    if (value < minValue) return minValue;
-    if (value > maxValue) return maxValue;
-    return value;
+static VkExtent2D queryEffectiveRenderExtent(const VKRT* vkrt) {
+    if (!vkrt) return (VkExtent2D){1u, 1u};
+
+    VkExtent2D extent = vkrt->runtime.renderExtent;
+    if (extent.width == 0 || extent.height == 0) {
+        extent = vkrt->runtime.swapChainExtent;
+    }
+    if (extent.width == 0) extent.width = 1u;
+    if (extent.height == 0) extent.height = 1u;
+    return extent;
 }
 
-static void clampViewportToSwapchain(const VKRT* vkrt, uint32_t* x, uint32_t* y, uint32_t* width, uint32_t* height) {
-    if (!vkrt || !x || !y || !width || !height) return;
-    uint32_t fullWidth = vkrt->runtime.swapChainExtent.width;
-    uint32_t fullHeight = vkrt->runtime.swapChainExtent.height;
-    if (fullWidth == 0 || fullHeight == 0) {
-        *x = 0;
-        *y = 0;
-        *width = 0;
-        *height = 0;
-        return;
-    }
+static VkExtent2D queryEffectiveDisplayViewportExtent(const VKRT* vkrt) {
+    if (!vkrt) return (VkExtent2D){1u, 1u};
 
-    if (*width == 0 || *height == 0) {
-        *x = 0;
-        *y = 0;
-        *width = fullWidth;
-        *height = fullHeight;
-    }
+    VkExtent2D extent = {
+        .width = vkrt->runtime.displayViewportRect[2],
+        .height = vkrt->runtime.displayViewportRect[3],
+    };
 
-    if (*width <= 1 || *height <= 1) {
-        *x = 0;
-        *y = 0;
-        *width = fullWidth;
-        *height = fullHeight;
-    }
-
-    if (*x >= fullWidth) *x = fullWidth - 1;
-    if (*y >= fullHeight) *y = fullHeight - 1;
-    if (*x + *width > fullWidth) *width = fullWidth - *x;
-    if (*y + *height > fullHeight) *height = fullHeight - *y;
-}
-
-static void queryRenderSourceExtentInternal(const VKRT* vkrt, float* outWidth, float* outHeight) {
-    if (!vkrt || !outWidth || !outHeight) return;
-
-    uint32_t width = vkrt->runtime.renderExtent.width;
-    uint32_t height = vkrt->runtime.renderExtent.height;
+    uint32_t width = extent.width;
+    uint32_t height = extent.height;
     if (width == 0 || height == 0) {
         width = vkrt->runtime.swapChainExtent.width;
         height = vkrt->runtime.swapChainExtent.height;
@@ -64,84 +45,9 @@ static void queryRenderSourceExtentInternal(const VKRT* vkrt, float* outWidth, f
     if (width == 0) width = 1;
     if (height == 0) height = 1;
 
-    *outWidth = (float)width;
-    *outHeight = (float)height;
-}
-
-static void queryDisplayViewportExtentInternal(const VKRT* vkrt, float* outWidth, float* outHeight) {
-    if (!vkrt || !outWidth || !outHeight) return;
-
-    uint32_t width = vkrt->runtime.displayViewportRect[2];
-    uint32_t height = vkrt->runtime.displayViewportRect[3];
-    if (width == 0 || height == 0) {
-        width = vkrt->runtime.swapChainExtent.width;
-        height = vkrt->runtime.swapChainExtent.height;
-    }
-    if (width == 0) width = 1;
-    if (height == 0) height = 1;
-
-    *outWidth = (float)width;
-    *outHeight = (float)height;
-}
-
-static void queryRenderViewCropInternal(const VKRT* vkrt, float zoom, float* outWidth, float* outHeight) {
-    if (!vkrt || !outWidth || !outHeight) return;
-
-    float sourceWidth = 1.0f;
-    float sourceHeight = 1.0f;
-    queryRenderSourceExtentInternal(vkrt, &sourceWidth, &sourceHeight);
-
-    float clampedZoom = clampFloat(zoom, VKRT_RENDER_VIEW_ZOOM_MIN, VKRT_RENDER_VIEW_ZOOM_MAX);
-    VkBool32 fillViewport = clampedZoom > (VKRT_RENDER_VIEW_ZOOM_MIN + 0.0001f);
-    float cropWidth = sourceWidth;
-    float cropHeight = sourceHeight;
-
-    if (fillViewport) {
-        float viewWidth = 1.0f;
-        float viewHeight = 1.0f;
-        queryDisplayViewportExtentInternal(vkrt, &viewWidth, &viewHeight);
-
-        float sourceAspect = sourceWidth / sourceHeight;
-        float viewAspect = viewWidth / viewHeight;
-        float baseWidth = sourceWidth;
-        float baseHeight = sourceHeight;
-        if (viewAspect > sourceAspect) {
-            baseHeight = sourceWidth / viewAspect;
-        } else {
-            baseWidth = sourceHeight * viewAspect;
-        }
-
-        cropWidth = baseWidth / clampedZoom;
-        cropHeight = baseHeight / clampedZoom;
-        if (cropWidth < 1.0f) cropWidth = 1.0f;
-        if (cropHeight < 1.0f) cropHeight = 1.0f;
-        if (cropWidth > sourceWidth) cropWidth = sourceWidth;
-        if (cropHeight > sourceHeight) cropHeight = sourceHeight;
-    }
-
-    *outWidth = cropWidth;
-    *outHeight = cropHeight;
-}
-
-static void clampRenderViewPanInternal(const VKRT* vkrt, float zoom, float* panX, float* panY) {
-    if (!vkrt || !panX || !panY) return;
-
-    float sourceWidth = 1.0f;
-    float sourceHeight = 1.0f;
-    queryRenderSourceExtentInternal(vkrt, &sourceWidth, &sourceHeight);
-
-    float cropWidth = sourceWidth;
-    float cropHeight = sourceHeight;
-    queryRenderViewCropInternal(vkrt, zoom, &cropWidth, &cropHeight);
-
-    float maxPanX = (sourceWidth - cropWidth) * 0.5f;
-    float maxPanY = (sourceHeight - cropHeight) * 0.5f;
-
-    if (maxPanX <= 0.0f) *panX = 0.0f;
-    else *panX = clampFloat(*panX, -maxPanX, maxPanX);
-
-    if (maxPanY <= 0.0f) *panY = 0.0f;
-    else *panY = clampFloat(*panY, -maxPanY, maxPanY);
+    extent.width = width;
+    extent.height = height;
+    return extent;
 }
 
 static void applySceneViewport(VKRT* vkrt, uint32_t x, uint32_t y, uint32_t width, uint32_t height) {
@@ -271,7 +177,7 @@ VKRT_Result VKRT_stopRender(VKRT* vkrt) {
     uint32_t y = vkrt->runtime.displayViewportRect[1];
     uint32_t width = vkrt->runtime.displayViewportRect[2];
     uint32_t height = vkrt->runtime.displayViewportRect[3];
-    clampViewportToSwapchain(vkrt, &x, &y, &width, &height);
+    vkrtClampViewportRect(vkrt->runtime.swapChainExtent, &x, &y, &width, &height);
     applySceneViewport(vkrt, x, y, width, height);
     return VKRT_SUCCESS;
 }
@@ -279,7 +185,7 @@ VKRT_Result VKRT_stopRender(VKRT* vkrt) {
 VKRT_Result VKRT_setRenderViewport(VKRT* vkrt, uint32_t x, uint32_t y, uint32_t width, uint32_t height) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
 
-    clampViewportToSwapchain(vkrt, &x, &y, &width, &height);
+    vkrtClampViewportRect(vkrt->runtime.swapChainExtent, &x, &y, &width, &height);
     vkrt->runtime.displayViewportRect[0] = x;
     vkrt->runtime.displayViewportRect[1] = y;
     vkrt->runtime.displayViewportRect[2] = width;
@@ -292,19 +198,29 @@ VKRT_Result VKRT_setRenderViewport(VKRT* vkrt, uint32_t x, uint32_t y, uint32_t 
 
 VKRT_Result VKRT_getRenderSourceExtent(const VKRT* vkrt, float* outWidth, float* outHeight) {
     if (!vkrt || !outWidth || !outHeight) return VKRT_ERROR_INVALID_ARGUMENT;
-    queryRenderSourceExtentInternal(vkrt, outWidth, outHeight);
+    VkExtent2D extent = queryEffectiveRenderExtent(vkrt);
+    *outWidth = (float)extent.width;
+    *outHeight = (float)extent.height;
     return VKRT_SUCCESS;
 }
 
 VKRT_Result VKRT_getDisplayViewportExtent(const VKRT* vkrt, float* outWidth, float* outHeight) {
     if (!vkrt || !outWidth || !outHeight) return VKRT_ERROR_INVALID_ARGUMENT;
-    queryDisplayViewportExtentInternal(vkrt, outWidth, outHeight);
+    VkExtent2D extent = queryEffectiveDisplayViewportExtent(vkrt);
+    *outWidth = (float)extent.width;
+    *outHeight = (float)extent.height;
     return VKRT_SUCCESS;
 }
 
 VKRT_Result VKRT_getRenderViewCrop(const VKRT* vkrt, float zoom, float* outWidth, float* outHeight) {
     if (!vkrt || !outWidth || !outHeight) return VKRT_ERROR_INVALID_ARGUMENT;
-    queryRenderViewCropInternal(vkrt, zoom, outWidth, outHeight);
+    VkExtent2D renderExtent = queryEffectiveRenderExtent(vkrt);
+    VkExtent2D viewportExtent = queryEffectiveDisplayViewportExtent(vkrt);
+    uint32_t cropWidth = 1u;
+    uint32_t cropHeight = 1u;
+    vkrtQueryRenderViewCropExtent(renderExtent, viewportExtent, zoom, &cropWidth, &cropHeight, NULL);
+    *outWidth = (float)cropWidth;
+    *outHeight = (float)cropHeight;
     return VKRT_SUCCESS;
 }
 
@@ -323,8 +239,10 @@ VKRT_Result VKRT_setRenderViewState(VKRT* vkrt, float zoom, float panX, float pa
     if (!isfinite(panX)) panX = 0.0f;
     if (!isfinite(panY)) panY = 0.0f;
 
-    zoom = clampFloat(zoom, VKRT_RENDER_VIEW_ZOOM_MIN, VKRT_RENDER_VIEW_ZOOM_MAX);
-    clampRenderViewPanInternal(vkrt, zoom, &panX, &panY);
+    zoom = vkrtClampFloatValue(zoom, VKRT_RENDER_VIEW_ZOOM_MIN, VKRT_RENDER_VIEW_ZOOM_MAX);
+    VkExtent2D renderExtent = queryEffectiveRenderExtent(vkrt);
+    VkExtent2D viewportExtent = queryEffectiveDisplayViewportExtent(vkrt);
+    vkrtClampRenderViewPanOffset(renderExtent, viewportExtent, zoom, &panX, &panY);
 
     vkrt->state.renderViewZoom = zoom;
     vkrt->state.renderViewPanX = panX;
@@ -333,7 +251,8 @@ VKRT_Result VKRT_setRenderViewState(VKRT* vkrt, float zoom, float panX, float pa
 }
 
 VKRT_Result VKRT_cameraSetPose(VKRT* vkrt, vec3 position, vec3 target, vec3 up, float vfov) {
-    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+    VKRT_Result stateReady = requireSceneStateReady(vkrt);
+    if (stateReady != VKRT_SUCCESS) return stateReady;
 
     if (position) glm_vec3_copy(position, vkrt->state.camera.pos);
     if (target) glm_vec3_copy(target, vkrt->state.camera.target);
