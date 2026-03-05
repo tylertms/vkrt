@@ -6,46 +6,8 @@
 #include "core/mis.glsl"
 #include "bsdf/bsdf.glsl"
 #include "lighting/direct.glsl"
-
-bool applyRussianRoulette(inout vec3 throughput, inout uint state, uint bounce, uint rrMinDepth) {
-    if (bounce < rrMinDepth) return true;
-
-    vec3 absThroughput = abs(throughput);
-    float continueProbability = max(absThroughput.r, max(absThroughput.g, absThroughput.b));
-    if (continueProbability <= 0.0) return false;
-    continueProbability = clamp(continueProbability, 0.05, 1.0);
-    if (rand(state) > continueProbability) return false;
-    throughput /= continueProbability;
-    return true;
-}
-
-bool traceShadowVisibility(vec3 origin, vec3 direction, float maxDistance, float rayMinDistance) {
-    if (maxDistance <= rayMinDistance) return false;
-
-    const uint shadowRayFlags = gl_RayFlagsOpaqueEXT
-        | gl_RayFlagsTerminateOnFirstHitEXT
-        | gl_RayFlagsSkipClosestHitShaderEXT;
-
-    payload.didHit = true;
-    traceRayEXT(topLevelAS, shadowRayFlags, 0xFF, 0, 0, 0, origin, rayMinDistance, direction, maxDistance, 0);
-    return !payload.didHit;
-}
-
-vec3 debugBounceHeatmap(uint bounces, uint rrMaxDepth) {
-    float t = clamp(float(bounces) / float(rrMaxDepth), 0.0, 1.0);
-    if (t < 0.5) return mix(vec3(0.0, 0.0, 1.0), vec3(0.0, 1.0, 0.0), t * 2.0);
-    return mix(vec3(0.0, 1.0, 0.0), vec3(1.0, 0.0, 0.0), (t - 0.5) * 2.0);
-}
-
-float debugDepthValue(float distance) {
-    float scaledDistance = max(distance, 0.0) * 0.25;
-    return 1.0 / (1.0 + scaledDistance);
-}
-
-bool eventTimeInWindow(float eventTime, bool timeWindowEnabled, float timeMin, float timeMax) {
-    if (!timeWindowEnabled) return true;
-    return eventTime >= timeMin && eventTime <= timeMax;
-}
+#include "integrator/path.glsl"
+#include "integrator/debug.glsl"
 
 vec3 trace(ivec2 pixel, inout uint state) {
     ivec2 viewportOrigin = ivec2(scene.viewportRect.xy);

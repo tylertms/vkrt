@@ -18,7 +18,7 @@ uint initRngBase(uvec2 pixel, uint frame) {
 }
 
 uint initRngState(uint baseSeed, uint sampleIndex) {
-    return baseSeed + sampleIndex * 0x9E3779B9u;
+    return pcgHash(baseSeed ^ (sampleIndex * 0x9E3779B9u));
 }
 
 uint randUint(inout uint state) {
