@@ -16,6 +16,7 @@ extern "C" {
 
 #define VKRT_RENDER_VIEW_ZOOM_MIN 1.0f
 #define VKRT_RENDER_VIEW_ZOOM_MAX 64.0f
+
 typedef struct VKRT_SceneTimelineKeyframe {
     float time;
     float emissionScale;
@@ -33,13 +34,15 @@ typedef struct SceneData {
     mat4 projInverse;
     uint32_t frameNumber;
     uint32_t samplesPerPixel;
-    uint32_t maxBounces;
-    uint32_t toneMappingMode;
+    uint32_t rrMaxDepth;
+    uint32_t rrMinDepth;
     uint32_t viewportRect[4];
+    uint32_t toneMappingMode;
     float timeBase;
     float timeStep;
     float fogDensity;
     uint32_t debugMode;
+    uint32_t misNeeEnabled;
     uint32_t timelineEnabled;
     uint32_t timelineKeyframeCount;
     uint32_t emissiveMeshCount;
@@ -113,102 +116,41 @@ typedef struct MeshInfo {
 } MeshInfo;
 
 typedef struct MaterialData {
-    float baseWeight;
-    float paddingBaseWeight[3];
     vec3 baseColor;
-    float baseMetalness;
-    float baseDiffuseRoughness;
-    float specularWeight;
-    float paddingSpecularWeight[2];
-    vec3 specularColor;
-    float specularRoughness;
-    float specularRoughnessAnisotropy;
-    float specularIor;
-    float transmissionWeight;
-    float paddingTransmissionWeight;
-    vec3 transmissionColor;
-    float transmissionDepth;
-    vec3 transmissionScatter;
-    float transmissionScatterAnisotropy;
-    float transmissionDispersionScale;
-    float transmissionDispersionAbbeNumber;
-    float subsurfaceWeight;
-    float paddingSubsurfaceWeight;
-    vec3 subsurfaceColor;
-    float subsurfaceRadius;
-    vec3 subsurfaceRadiusScale;
-    float subsurfaceScatterAnisotropy;
-    float coatWeight;
-    float paddingCoatWeight[3];
-    vec3 coatColor;
-    float coatRoughness;
-    float coatRoughnessAnisotropy;
-    float coatIor;
-    float coatDarkening;
-    float fuzzWeight;
-    vec3 fuzzColor;
-    float fuzzRoughness;
-    float emissionLuminance;
-    float paddingEmissionLuminance[3];
+    float metallic;
+    float roughness;
+    float specular;
+    float specularTint;
+    float anisotropic;
+    float sheen;
+    float sheenTint;
+    float clearcoat;
+    float clearcoatGloss;
+    float subsurface;
+    float transmission;
+    float ior;
+    float padding0[5];
     vec3 emissionColor;
-    float thinFilmWeight;
-    float thinFilmThickness;
-    float thinFilmIor;
-    float geometryOpacity;
-    uint32_t geometryThinWalled;
-    vec3 geometryNormal;
-    float paddingGeometryNormal;
-    vec3 geometryTangent;
-    float paddingGeometryTangent;
-    vec3 geometryCoatNormal;
-    float paddingGeometryCoatNormal;
-    vec3 geometryCoatTangent;
-    float paddingGeometryCoatTangent;
+    float emissionLuminance;
 } MaterialData;
 
-static inline MaterialData VKRT_materialDataOpenPBRDefault(void) {
+static inline MaterialData VKRT_materialDataDisneyDefault(void) {
     return (MaterialData){
-        .baseWeight = 1.0f,
         .baseColor = {0.8f, 0.8f, 0.8f},
-        .baseMetalness = 0.0f,
-        .baseDiffuseRoughness = 0.0f,
-        .specularWeight = 1.0f,
-        .specularColor = {1.0f, 1.0f, 1.0f},
-        .specularRoughness = 0.3f,
-        .specularRoughnessAnisotropy = 0.0f,
-        .specularIor = 1.5f,
-        .transmissionWeight = 0.0f,
-        .transmissionColor = {1.0f, 1.0f, 1.0f},
-        .transmissionDepth = 0.0f,
-        .transmissionScatter = {0.0f, 0.0f, 0.0f},
-        .transmissionScatterAnisotropy = 0.0f,
-        .transmissionDispersionScale = 0.0f,
-        .transmissionDispersionAbbeNumber = 20.0f,
-        .subsurfaceWeight = 0.0f,
-        .subsurfaceColor = {0.8f, 0.8f, 0.8f},
-        .subsurfaceRadius = 1.0f,
-        .subsurfaceRadiusScale = {1.0f, 0.5f, 0.25f},
-        .subsurfaceScatterAnisotropy = 0.0f,
-        .coatWeight = 0.0f,
-        .coatColor = {1.0f, 1.0f, 1.0f},
-        .coatRoughness = 0.0f,
-        .coatRoughnessAnisotropy = 0.0f,
-        .coatIor = 1.6f,
-        .coatDarkening = 1.0f,
-        .fuzzWeight = 0.0f,
-        .fuzzColor = {1.0f, 1.0f, 1.0f},
-        .fuzzRoughness = 0.5f,
-        .emissionLuminance = 0.0f,
+        .metallic = 0.0f,
+        .roughness = 0.3f,
+        .specular = 0.5f,
+        .specularTint = 0.0f,
+        .anisotropic = 0.0f,
+        .sheen = 0.0f,
+        .sheenTint = 0.5f,
+        .clearcoat = 0.0f,
+        .clearcoatGloss = 1.0f,
+        .subsurface = 0.0f,
+        .transmission = 0.0f,
+        .ior = 1.5f,
         .emissionColor = {1.0f, 1.0f, 1.0f},
-        .thinFilmWeight = 0.0f,
-        .thinFilmThickness = 0.5f,
-        .thinFilmIor = 1.4f,
-        .geometryOpacity = 1.0f,
-        .geometryThinWalled = 0u,
-        .geometryNormal = {0.0f, 0.0f, 1.0f},
-        .geometryTangent = {1.0f, 0.0f, 0.0f},
-        .geometryCoatNormal = {0.0f, 0.0f, 1.0f},
-        .geometryCoatTangent = {1.0f, 0.0f, 0.0f},
+        .emissionLuminance = 0.0f,
     };
 }
 
@@ -368,7 +310,8 @@ typedef struct VKRT_PublicState {
     float renderViewPanY;
     float displayRenderTimeMs;
     float displayFrameTimeMs;
-    uint32_t maxBounces;
+    uint32_t rrMaxDepth;
+    uint32_t rrMinDepth;
     VKRT_ToneMappingMode toneMappingMode;
     uint8_t autoSPPEnabled;
     uint32_t autoSPPTargetFPS;
@@ -379,6 +322,7 @@ typedef struct VKRT_PublicState {
     float timeBase;
     float timeStep;
     uint32_t debugMode;
+    uint32_t misNeeEnabled;
     uint32_t selectionEnabled;
     uint32_t selectedMeshIndex;
     VKRT_SceneTimelineSettings sceneTimeline;
@@ -413,11 +357,13 @@ void VKRT_updateTLAS(VKRT* vkrt);
 void VKRT_applyCameraInput(VKRT* vkrt, const VKRT_CameraInput* input);
 void VKRT_invalidateAccumulation(VKRT* vkrt);
 void VKRT_setSamplesPerPixel(VKRT* vkrt, uint32_t samplesPerPixel);
+void VKRT_setPathDepth(VKRT* vkrt, uint32_t rrMinDepth, uint32_t rrMaxDepth);
 void VKRT_setAutoSPPEnabled(VKRT* vkrt, uint8_t enabled);
 void VKRT_setAutoSPPTargetFPS(VKRT* vkrt, uint32_t targetFPS);
 void VKRT_setToneMappingMode(VKRT* vkrt, VKRT_ToneMappingMode toneMappingMode);
 void VKRT_setFogDensity(VKRT* vkrt, float fogDensity);
 void VKRT_setDebugMode(VKRT* vkrt, uint32_t mode);
+void VKRT_setMISNEEEnabled(VKRT* vkrt, uint32_t enabled);
 void VKRT_setTimeRange(VKRT* vkrt, float timeBase, float timeStep);
 void VKRT_setSceneTimeline(VKRT* vkrt, const VKRT_SceneTimelineSettings* timeline);
 int VKRT_saveRenderPNG(VKRT* vkrt, const char* path);
@@ -428,7 +374,6 @@ void VKRT_stopRender(VKRT* vkrt);
 uint32_t VKRT_getMeshCount(const VKRT* vkrt);
 int VKRT_setMeshTransform(VKRT* vkrt, uint32_t meshIndex, vec3 position, vec3 rotation, vec3 scale);
 int VKRT_setMeshMaterial(VKRT* vkrt, uint32_t meshIndex, const MaterialData* material);
-int VKRT_setMeshRenderBackfaces(VKRT* vkrt, uint32_t meshIndex, uint8_t renderBackfaces);
 void VKRT_pickMeshAtPixel(const VKRT* vkrt, uint32_t x, uint32_t y, uint32_t* outMeshIndex);
 void VKRT_setSelectedMesh(VKRT* vkrt, uint32_t meshIndex);
 void VKRT_getSelectedMesh(const VKRT* vkrt, uint32_t* outMeshIndex);

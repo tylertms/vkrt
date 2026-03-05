@@ -187,7 +187,8 @@ void createSceneUniform(VKRT* vkrt) {
     vkrt->runtime.displayViewportRect[3] = initialHeight;
 
     vkrt->state.samplesPerPixel = 8;
-    vkrt->state.maxBounces = 8;
+    vkrt->state.rrMaxDepth = 8;
+    vkrt->state.rrMinDepth = 4;
     vkrt->state.toneMappingMode = VKRT_TONE_MAPPING_ACES;
     vkrt->state.renderModeActive = 0;
     vkrt->state.renderModeFinished = 0;
@@ -215,7 +216,8 @@ void createSceneUniform(VKRT* vkrt) {
         .up = {0.0f, 0.0f, 1.0f}
     };
 
-    vkrt->core.sceneData->maxBounces = vkrt->state.maxBounces;
+    vkrt->core.sceneData->rrMaxDepth = vkrt->state.rrMaxDepth;
+    vkrt->core.sceneData->rrMinDepth = vkrt->state.rrMinDepth;
     vkrt->core.sceneData->toneMappingMode = vkrt->state.toneMappingMode;
 
     vkrt->core.sceneData->viewportRect[0] = 0;
@@ -227,6 +229,7 @@ void createSceneUniform(VKRT* vkrt) {
     vkrt->state.timeStep = 0.5f;
     vkrt->state.fogDensity = 0.0f;
     vkrt->state.debugMode = 0;
+    vkrt->state.misNeeEnabled = 1u;
     vkrt->state.selectionEnabled = 1;
     vkrt->state.selectedMeshIndex = UINT32_MAX;
     resetTimelineDefaults(&vkrt->state);
@@ -234,6 +237,7 @@ void createSceneUniform(VKRT* vkrt) {
     vkrt->core.sceneData->timeStep = vkrt->state.timeStep;
     vkrt->core.sceneData->fogDensity = vkrt->state.fogDensity;
     vkrt->core.sceneData->debugMode = 0;
+    vkrt->core.sceneData->misNeeEnabled = 1u;
     vkrt->core.sceneData->emissiveMeshCount = 0;
     vkrt->core.sceneData->emissiveTriangleCount = 0;
 
@@ -256,12 +260,14 @@ void updateMatricesFromCamera(VKRT* vkrt) {
 void resetSceneData(VKRT* vkrt) {
     vkrt->core.sceneData->frameNumber = 0;
     vkrt->core.sceneData->samplesPerPixel = vkrt->state.samplesPerPixel;
-    vkrt->core.sceneData->maxBounces = vkrt->state.maxBounces;
+    vkrt->core.sceneData->rrMaxDepth = vkrt->state.rrMaxDepth;
+    vkrt->core.sceneData->rrMinDepth = vkrt->state.rrMinDepth;
     vkrt->core.sceneData->toneMappingMode = vkrt->state.toneMappingMode;
     vkrt->core.sceneData->timeBase = vkrt->state.timeBase;
     vkrt->core.sceneData->timeStep = vkrt->state.timeStep;
     vkrt->core.sceneData->fogDensity = vkrt->state.fogDensity;
     vkrt->core.sceneData->debugMode = vkrt->state.debugMode;
+    vkrt->core.sceneData->misNeeEnabled = vkrt->state.misNeeEnabled ? 1u : 0u;
     vkrt->core.sceneData->emissiveMeshCount = vkrt->core.emissiveMeshCount;
     vkrt->core.sceneData->emissiveTriangleCount = vkrt->core.emissiveTriangleCount;
     vkrt->core.sceneData->selectionEnabled = vkrt->state.selectionEnabled ? 1u : 0u;
@@ -293,7 +299,7 @@ void updateAutoSPP(VKRT* vkrt) {
     if (spp == 0) spp = 1;
 
     float measuredMsPerSPP = controlMs / (float)spp;
-    if (!(measuredMsPerSPP > 0.0f)) return;
+    if (measuredMsPerSPP <= 0.0f) return;
 
     VkBool32 warmup = vkrt->runtime.autoSPPFastAdaptFrames > 0;
     if (warmup) {
@@ -309,7 +315,7 @@ void updateAutoSPP(VKRT* vkrt) {
 
     float budgetMs = targetMs * 0.95f;
     float desired = budgetMs / vkrt->state.autoSPPControlMs;
-    if (!(desired > 0.0f)) return;
+    if (desired <= 0.0f) return;
 
     float delta = fabsf(desired - (float)spp) / (float)spp;
     if (!warmup && delta < 0.06f) return;

@@ -5,7 +5,10 @@
 
 #include <stdint.h>
 
-enum { RENDER_SEQUENCE_PATH_CAPACITY = 1024 };
+enum {
+    RENDER_SEQUENCE_PATH_CAPACITY = 1024,
+    RENDER_SEQUENCE_ETA_WINDOW = 4
+};
 
 typedef struct RenderSequencer {
     uint8_t active;
@@ -18,6 +21,10 @@ typedef struct RenderSequencer {
     uint64_t frameStartTimeUs;
     uint32_t timedFrameCount;
     float averageFrameSeconds;
+    uint32_t recentFrameCount;
+    uint32_t recentFrameWriteIndex;
+    float recentFrameSumSeconds;
+    float recentFrameSeconds[RENDER_SEQUENCE_ETA_WINDOW];
     char outputFolder[RENDER_SEQUENCE_PATH_CAPACITY];
 } RenderSequencer;
 

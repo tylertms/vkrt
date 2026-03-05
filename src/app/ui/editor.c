@@ -28,6 +28,10 @@ static const float kInspectorSectionIndent = 10.0f;
 static const float kInspectorCollapsedWidth = 46.0f;
 static const float kInspectorMinExpandedWidth = 140.0f;
 static const ImVec2 kTooltipPadding = {8.0f, 4.0f};
+static const ImVec4 kMenuBgColor = {0.10f, 0.10f, 0.10f, 1.00f};
+static const ImVec4 kProgressBgColor = {0.16f, 0.16f, 0.16f, 1.00f};
+static const ImVec4 kProgressFillColor = {0.34f, 0.34f, 0.34f, 1.00f};
+static const ImVec4 kProgressTextColor = {0.97f, 0.97f, 0.97f, 1.00f};
 
 typedef struct VerticalIconTab {
     const char* icon;
@@ -386,12 +390,6 @@ static void drawCameraEffectsSection(VKRT* vkrt, bool controlsDisabled) {
     ImGui_Indent();
     if (controlsDisabled) ImGui_BeginDisabled(true);
 
-    int maxBounces = (int)vkrt->state.maxBounces;
-    if (ImGui_SliderIntEx("Max Bounces", &maxBounces, 1, 64, "%d", ImGuiSliderFlags_AlwaysClamp)) {
-        vkrt->state.maxBounces = (uint32_t)maxBounces;
-        VKRT_invalidateAccumulation(vkrt);
-    }
-
     float fogDensity = vkrt->state.fogDensity;
     if (ImGui_DragFloatEx("Fog Density", &fogDensity, 0.0005f, 0.0f, 4.0f, "%.4f", ImGuiSliderFlags_AlwaysClamp)) {
         VKRT_setFogDensity(vkrt, fogDensity);
@@ -643,7 +641,7 @@ static void initializeRenderConfig(Session* session) {
 
 static void formatTime(float seconds, char* out, size_t outSize) {
     if (!out || outSize == 0) return;
-    if (!(seconds > 0.0f)) {
+    if (seconds <= 0.0f) {
         snprintf(out, outSize, "0ms");
         return;
     }
@@ -698,13 +696,8 @@ static void drawRenderSection(VKRT* vkrt, Session* session) {
     initializeRenderConfig(session);
 
     static uint8_t sRenderTimerWasActive = 0;
-    static uint8_t sRenderTimerWasFinished = 0;
     static uint64_t sRenderTimerStartUs = 0;
-    static float sRenderElapsedSeconds = 0.0f;
     static float sRenderTotalSeconds = 0.0f;
-    static uint64_t sEtaLastTotalSamples = 0;
-    static uint64_t sEtaMeasureBaseTimeUs = 0;
-    static uint64_t sEtaMeasureBaseSamples = 0;
 
     uint8_t renderModeActive = vkrt->state.renderModeActive != 0;
     uint8_t renderModeFinished = (renderModeActive && vkrt->state.renderModeFinished != 0) ? 1u : 0u;
@@ -712,39 +705,23 @@ static void drawRenderSection(VKRT* vkrt, Session* session) {
 
     if (renderModeActive && !sRenderTimerWasActive) {
         sRenderTimerStartUs = nowUs;
-        sRenderElapsedSeconds = 0.0f;
         sRenderTotalSeconds = 0.0f;
-        sEtaLastTotalSamples = 0;
-        sEtaMeasureBaseTimeUs = 0;
-        sEtaMeasureBaseSamples = 0;
     }
 
-    if (renderModeActive && !renderModeFinished && sRenderTimerStartUs > 0 && nowUs >= sRenderTimerStartUs) {
-        sRenderElapsedSeconds = (float)(nowUs - sRenderTimerStartUs) / 1000000.0f;
-    }
-
-    if (renderModeActive && renderModeFinished && !sRenderTimerWasFinished) {
+    if (renderModeActive && renderModeFinished && sRenderTotalSeconds <= 0.0f) {
         if (sRenderTimerStartUs > 0 && nowUs >= sRenderTimerStartUs) {
             sRenderTotalSeconds = (float)(nowUs - sRenderTimerStartUs) / 1000000.0f;
-        } else {
-            sRenderTotalSeconds = sRenderElapsedSeconds;
         }
-        sRenderElapsedSeconds = sRenderTotalSeconds;
     }
 
     if (!renderModeActive && sRenderTimerWasActive) {
-        if (!sRenderTimerWasFinished && sRenderTimerStartUs > 0 && nowUs >= sRenderTimerStartUs) {
+        if (sRenderTotalSeconds <= 0.0f && sRenderTimerStartUs > 0 && nowUs >= sRenderTimerStartUs) {
             sRenderTotalSeconds = (float)(nowUs - sRenderTimerStartUs) / 1000000.0f;
         }
-        sRenderElapsedSeconds = 0.0f;
         sRenderTimerStartUs = 0;
-        sEtaLastTotalSamples = 0;
-        sEtaMeasureBaseTimeUs = 0;
-        sEtaMeasureBaseSamples = 0;
     }
 
     sRenderTimerWasActive = renderModeActive;
-    sRenderTimerWasFinished = renderModeFinished;
 
     SessionRenderAnimationSettings* anim = &session->renderConfig.animation;
 
@@ -777,7 +754,7 @@ static void drawRenderSection(VKRT* vkrt, Session* session) {
             ImGui_Unindent();
         }
 
-        if (ImGui_CollapsingHeader("Animation", ImGuiTreeNodeFlags_DefaultOpen)) {
+        if (ImGui_CollapsingHeader("Animation", ImGuiTreeNodeFlags_None)) {
             ImGui_Indent();
             if (ImGui_Checkbox("Enabled##render_animation_enabled", &animationEnabled)) {
                 anim->enabled = animationEnabled ? 1 : 0;
@@ -934,9 +911,17 @@ static void drawRenderSection(VKRT* vkrt, Session* session) {
     }
 
     const SessionSequenceProgress* seq = &session->sequenceProgress;
+    float elapsedActiveSeconds = 0.0f;
+    if (sRenderTimerStartUs > 0 && nowUs >= sRenderTimerStartUs) {
+        elapsedActiveSeconds = (float)(nowUs - sRenderTimerStartUs) / 1000000.0f;
+    }
 
     if (ImGui_CollapsingHeader("Progress", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui_Indent();
+        ImGui_PushStyleColorImVec4(ImGuiCol_FrameBg, kProgressBgColor);
+        ImGui_PushStyleColorImVec4(ImGuiCol_PlotHistogram, kProgressFillColor);
+        ImGui_PushStyleColorImVec4(ImGuiCol_PlotHistogramHovered, (ImVec4){0.40f, 0.40f, 0.40f, 1.00f});
+        ImGui_PushStyleColorImVec4(ImGuiCol_Text, kProgressTextColor);
         ImGui_Text(ICON_FA_CAMERA_RETRO " Output: %ux%u", vkrt->runtime.renderExtent.width, vkrt->runtime.renderExtent.height);
         if (vkrt->state.renderTargetSamples > 0) {
             uint64_t shownSamples = vkrt->state.totalSamples;
@@ -946,57 +931,70 @@ static void drawRenderSection(VKRT* vkrt, Session* session) {
             float progress = (float)shownSamples / (float)vkrt->state.renderTargetSamples;
             if (progress < 0.0f) progress = 0.0f;
             if (progress > 1.0f) progress = 1.0f;
-            ImGui_Text("Progress: %llu / %u Samples (%.1f%%)",
-                (unsigned long long)shownSamples,
-                vkrt->state.renderTargetSamples,
-                progress * 100.0f);
+            char overlay[96] = {0};
+            snprintf(overlay, sizeof(overlay), "%llu / %u Samples",
+                (unsigned long long)shownSamples, vkrt->state.renderTargetSamples);
+            ImGui_ProgressBar(progress, (ImVec2){-1.0f, 0.0f}, overlay);
         } else {
-            ImGui_Text("Progress: %llu Samples", (unsigned long long)vkrt->state.totalSamples);
+            char overlay[96] = {0};
+            snprintf(overlay, sizeof(overlay), "%llu Samples",
+                (unsigned long long)vkrt->state.totalSamples);
+            ImGui_ProgressBar(0.0f, (ImVec2){-1.0f, 0.0f}, overlay);
         }
         ImGui_Text("%s", vkrt->state.renderModeFinished ? "Status: Complete" : "Status: Rendering");
 
-        char elapsedText[32] = {0};
-        formatTime(sRenderElapsedSeconds, elapsedText, sizeof(elapsedText));
-        ImGui_Text(ICON_FA_CLOCK " Elapsed: %s", elapsedText);
-        if (vkrt->state.renderModeFinished) {
-            char totalText[32] = {0};
-            formatTime(sRenderTotalSeconds, totalText, sizeof(totalText));
-            ImGui_Text(ICON_FA_CLOCK " Total: %s", totalText);
-        }
-
         if (seq->active) {
-            ImGui_Text(ICON_FA_TIMELINE " Sequence: %u / %u  (t = %.3f)",
-                seq->frameIndex, seq->frameCount, seq->currentTime);
-            if (seq->hasEstimatedRemaining) {
-                char etaText[32] = {0};
-                formatTime(seq->estimatedRemainingSeconds, etaText, sizeof(etaText));
-                ImGui_Text(ICON_FA_CLOCK " Remaining: %s", etaText);
+            float sequenceProgress = 0.0f;
+            if (seq->frameCount > 0u) {
+                uint32_t frameShown = seq->frameIndex;
+                if (frameShown > seq->frameCount) frameShown = seq->frameCount;
+                sequenceProgress = (float)frameShown / (float)seq->frameCount;
             }
-        } else if (!vkrt->state.renderModeFinished &&
-                   vkrt->state.renderTargetSamples > 0 &&
-                   vkrt->state.totalSamples > 0) {
-            if (vkrt->state.totalSamples < sEtaLastTotalSamples) {
-                sEtaMeasureBaseTimeUs = 0;
-                sEtaMeasureBaseSamples = 0;
-            }
-            sEtaLastTotalSamples = vkrt->state.totalSamples;
-            if (sEtaMeasureBaseTimeUs == 0 && sRenderElapsedSeconds >= 2.0f) {
-                sEtaMeasureBaseTimeUs = nowUs;
-                sEtaMeasureBaseSamples = vkrt->state.totalSamples;
-            }
-            if (sEtaMeasureBaseTimeUs != 0) {
-                float elapsed = (float)(nowUs - sEtaMeasureBaseTimeUs) / 1000000.0f;
-                uint64_t samplesDelta = vkrt->state.totalSamples - sEtaMeasureBaseSamples;
-                if (elapsed > 0.5f && samplesDelta > 0) {
-                    float rate = (float)samplesDelta / elapsed;
-                    uint64_t remaining = vkrt->state.renderTargetSamples - vkrt->state.totalSamples;
-                    float etaSeconds = (float)remaining / rate;
+            if (sequenceProgress < 0.0f) sequenceProgress = 0.0f;
+            if (sequenceProgress > 1.0f) sequenceProgress = 1.0f;
+
+            char sequenceOverlay[96] = {0};
+            snprintf(sequenceOverlay, sizeof(sequenceOverlay), "Sequence %u / %u",
+                seq->frameIndex, seq->frameCount);
+            ImGui_ProgressBar(sequenceProgress, (ImVec2){-1.0f, 0.0f}, sequenceOverlay);
+
+            if (!vkrt->state.renderModeFinished) {
+                if (seq->hasEstimatedRemaining) {
                     char etaText[32] = {0};
-                    formatTime(etaSeconds, etaText, sizeof(etaText));
-                    ImGui_Text(ICON_FA_CLOCK " Remaining: %s", etaText);
+                    formatTime(fmaxf(seq->estimatedRemainingSeconds, 0.0f), etaText, sizeof(etaText));
+                    ImGui_Text(ICON_FA_CLOCK " ETA: %s", etaText);
+                } else {
+                    ImGui_Text(ICON_FA_CLOCK " ETA: --");
                 }
             }
+        } else if (!vkrt->state.renderModeFinished) {
+            if (vkrt->state.renderTargetSamples > 0 && vkrt->state.totalSamples > 0 && elapsedActiveSeconds > 0.0f) {
+                float samplesPerSecond = (float)vkrt->state.totalSamples / elapsedActiveSeconds;
+                uint64_t remainingSamples = 0;
+                if (vkrt->state.renderTargetSamples > vkrt->state.totalSamples) {
+                    remainingSamples = vkrt->state.renderTargetSamples - vkrt->state.totalSamples;
+                }
+
+                if (samplesPerSecond > 0.0f) {
+                    float etaSeconds = (float)remainingSamples / samplesPerSecond;
+                    char etaText[32] = {0};
+                    formatTime(fmaxf(etaSeconds, 0.0f), etaText, sizeof(etaText));
+                    ImGui_Text(ICON_FA_CLOCK " ETA: %s", etaText);
+                } else {
+                    ImGui_Text(ICON_FA_CLOCK " ETA: --");
+                }
+            } else {
+                ImGui_Text(ICON_FA_CLOCK " ETA: --");
+            }
         }
+
+        if (vkrt->state.renderModeFinished) {
+            float elapsedDoneSeconds = sRenderTotalSeconds > 0.0f ? sRenderTotalSeconds : elapsedActiveSeconds;
+            char elapsedText[32] = {0};
+            formatTime(fmaxf(elapsedDoneSeconds, 0.0f), elapsedText, sizeof(elapsedText));
+            ImGui_Text(ICON_FA_CLOCK " Elapsed: %s", elapsedText);
+        }
+        ImGui_PopStyleColorEx(4);
         ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing});
         ImGui_Unindent();
     }
@@ -1038,6 +1036,22 @@ static void drawDebugSection(VKRT* vkrt, bool controlsDisabled) {
     if (ImGui_ComboCharEx("Debug Mode", &debugMode, debugModeLabels, 6, 6)) {
         VKRT_setDebugMode(vkrt, (uint32_t)debugMode);
     }
+
+    int rrMinDepth = (int)vkrt->state.rrMinDepth;
+    int rrMaxDepth = (int)vkrt->state.rrMaxDepth;
+    bool depthChanged = false;
+    depthChanged |= ImGui_SliderIntEx("RR Min Depth", &rrMinDepth, 0, 64, "%d", ImGuiSliderFlags_AlwaysClamp);
+    depthChanged |= ImGui_SliderIntEx("RR Max Depth", &rrMaxDepth, 1, 64, "%d", ImGuiSliderFlags_AlwaysClamp);
+    if (depthChanged) {
+        VKRT_setPathDepth(vkrt, (uint32_t)rrMinDepth, (uint32_t)rrMaxDepth);
+    }
+    tooltipOnHover("Russian roulette starts at RR Min Depth. Set RR Min Depth == RR Max Depth to disable RR.");
+
+    bool misNeeEnabled = vkrt->state.misNeeEnabled != 0u;
+    if (ImGui_Checkbox("MIS + NEE", &misNeeEnabled)) {
+        VKRT_setMISNEEEnabled(vkrt, misNeeEnabled ? 1u : 0u);
+    }
+    tooltipOnHover("Enable Multiple Importance Sampling and Next Event Estimation.");
 
     if (controlsDisabled) ImGui_EndDisabled();
     ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing});
@@ -1125,11 +1139,6 @@ static void drawMeshInspector(VKRT* vkrt, Session* session) {
                 VKRT_setMeshTransform(vkrt, meshIndex, position, rotation, scale);
             }
 
-            bool renderBackfaces = meshInfo->renderBackfaces != 0;
-            if (ImGui_Checkbox("Render Backfaces", &renderBackfaces)) {
-                VKRT_setMeshRenderBackfaces(vkrt, meshIndex, renderBackfaces ? 1 : 0);
-            }
-            tooltipOnHover("Disable backface culling for this mesh instance.");
             ImGui_Unindent();
         }
 
@@ -1138,93 +1147,36 @@ static void drawMeshInspector(VKRT* vkrt, Session* session) {
 
         if (ImGui_CollapsingHeader("Base", ImGuiTreeNodeFlags_None)) {
             ImGui_Indent();
-            materialChanged |= ImGui_SliderFloatEx("Weight##baseWeight", &material.baseWeight, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
             materialChanged |= ImGui_ColorEdit3("Color##baseColor", material.baseColor, ImGuiColorEditFlags_Float);
-            materialChanged |= ImGui_SliderFloatEx("Metalness##baseMetalness", &material.baseMetalness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            materialChanged |= ImGui_SliderFloatEx("Diffuse Roughness##baseDiffuseRoughness", &material.baseDiffuseRoughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            materialChanged |= ImGui_SliderFloatEx("Metallic##metallic", &material.metallic, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            materialChanged |= ImGui_SliderFloatEx("Roughness##roughness", &material.roughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            materialChanged |= ImGui_SliderFloatEx("Subsurface##subsurface", &material.subsurface, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            materialChanged |= ImGui_SliderFloatEx("Transmission##transmission", &material.transmission, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
             ImGui_Unindent();
         }
 
         if (ImGui_CollapsingHeader("Specular", ImGuiTreeNodeFlags_None)) {
             ImGui_Indent();
-            materialChanged |= ImGui_DragFloatEx("Weight##specularWeight", &material.specularWeight, 0.01f, 0.0f, 32.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            materialChanged |= ImGui_ColorEdit3("Color##specularColor", material.specularColor, ImGuiColorEditFlags_Float);
-            materialChanged |= ImGui_SliderFloatEx("Roughness##specularRoughness", &material.specularRoughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            materialChanged |= ImGui_SliderFloatEx("Anisotropy##specularRoughnessAnisotropy", &material.specularRoughnessAnisotropy, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            materialChanged |= ImGui_DragFloatEx("IOR##specularIor", &material.specularIor, 0.01f, 1.0f, 3.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            materialChanged |= ImGui_SliderFloatEx("Specular##specular", &material.specular, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            materialChanged |= ImGui_SliderFloatEx("Specular Tint##specularTint", &material.specularTint, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            materialChanged |= ImGui_SliderFloatEx("Anisotropic##anisotropic", &material.anisotropic, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            materialChanged |= ImGui_DragFloatEx("IOR##ior", &material.ior, 0.01f, 1.0f, 3.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
             ImGui_Unindent();
         }
 
-        if (ImGui_CollapsingHeader("Transmission", ImGuiTreeNodeFlags_None)) {
+        if (ImGui_CollapsingHeader("Sheen & Coat", ImGuiTreeNodeFlags_None)) {
             ImGui_Indent();
-            materialChanged |= ImGui_SliderFloatEx("Weight##transmissionWeight", &material.transmissionWeight, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            materialChanged |= ImGui_ColorEdit3("Color##transmissionColor", material.transmissionColor, ImGuiColorEditFlags_Float);
-            materialChanged |= ImGui_DragFloatEx("Depth##transmissionDepth", &material.transmissionDepth, 0.01f, 0.0f, 10.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            materialChanged |= ImGui_ColorEdit3("Scatter##transmissionScatter", material.transmissionScatter, ImGuiColorEditFlags_Float);
-            materialChanged |= ImGui_SliderFloatEx("Scatter Anisotropy##transmissionScatterAnisotropy", &material.transmissionScatterAnisotropy, -1.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            materialChanged |= ImGui_SliderFloatEx("Dispersion Scale##transmissionDispersionScale", &material.transmissionDispersionScale, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            materialChanged |= ImGui_DragFloatEx("Abbe Number##transmissionDispersionAbbeNumber", &material.transmissionDispersionAbbeNumber, 0.1f, 1.0f, 256.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            ImGui_Unindent();
-        }
-
-        if (ImGui_CollapsingHeader("Subsurface", ImGuiTreeNodeFlags_None)) {
-            ImGui_Indent();
-            materialChanged |= ImGui_SliderFloatEx("Weight##subsurfaceWeight", &material.subsurfaceWeight, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            materialChanged |= ImGui_ColorEdit3("Color##subsurfaceColor", material.subsurfaceColor, ImGuiColorEditFlags_Float);
-            materialChanged |= ImGui_DragFloatEx("Radius##subsurfaceRadius", &material.subsurfaceRadius, 0.01f, 0.0f, 10.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            materialChanged |= ImGui_ColorEdit3("Radius Scale##subsurfaceRadiusScale", material.subsurfaceRadiusScale, ImGuiColorEditFlags_Float);
-            materialChanged |= ImGui_SliderFloatEx("Anisotropy##subsurfaceScatterAnisotropy", &material.subsurfaceScatterAnisotropy, -1.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            ImGui_Unindent();
-        }
-
-        if (ImGui_CollapsingHeader("Coat", ImGuiTreeNodeFlags_None)) {
-            ImGui_Indent();
-            materialChanged |= ImGui_SliderFloatEx("Weight##coatWeight", &material.coatWeight, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            materialChanged |= ImGui_ColorEdit3("Color##coatColor", material.coatColor, ImGuiColorEditFlags_Float);
-            materialChanged |= ImGui_SliderFloatEx("Roughness##coatRoughness", &material.coatRoughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            materialChanged |= ImGui_SliderFloatEx("Anisotropy##coatRoughnessAnisotropy", &material.coatRoughnessAnisotropy, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            materialChanged |= ImGui_DragFloatEx("IOR##coatIor", &material.coatIor, 0.01f, 1.0f, 3.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            materialChanged |= ImGui_SliderFloatEx("Darkening##coatDarkening", &material.coatDarkening, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            ImGui_Unindent();
-        }
-
-        if (ImGui_CollapsingHeader("Fuzz", ImGuiTreeNodeFlags_None)) {
-            ImGui_Indent();
-            materialChanged |= ImGui_SliderFloatEx("Weight##fuzzWeight", &material.fuzzWeight, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            materialChanged |= ImGui_ColorEdit3("Color##fuzzColor", material.fuzzColor, ImGuiColorEditFlags_Float);
-            materialChanged |= ImGui_SliderFloatEx("Roughness##fuzzRoughness", &material.fuzzRoughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            materialChanged |= ImGui_SliderFloatEx("Sheen##sheen", &material.sheen, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            materialChanged |= ImGui_SliderFloatEx("Sheen Tint##sheenTint", &material.sheenTint, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            materialChanged |= ImGui_SliderFloatEx("Clearcoat##clearcoat", &material.clearcoat, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            materialChanged |= ImGui_SliderFloatEx("Clearcoat Gloss##clearcoatGloss", &material.clearcoatGloss, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
             ImGui_Unindent();
         }
 
         if (ImGui_CollapsingHeader("Emission", ImGuiTreeNodeFlags_None)) {
             ImGui_Indent();
-            materialChanged |= ImGui_DragFloatEx("Luminance (nits)##emissionLuminance", &material.emissionLuminance, 0.1f, 0.0f, 10000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            materialChanged |= ImGui_DragFloatEx("Luminance##emissionLuminance", &material.emissionLuminance, 0.1f, 0.0f, 1000000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
             materialChanged |= ImGui_ColorEdit3("Color##emissionColor", material.emissionColor, ImGuiColorEditFlags_Float);
-            ImGui_Unindent();
-        }
-
-        if (ImGui_CollapsingHeader("Thin-film", ImGuiTreeNodeFlags_None)) {
-            ImGui_Indent();
-            materialChanged |= ImGui_SliderFloatEx("Weight##thinFilmWeight", &material.thinFilmWeight, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            materialChanged |= ImGui_SliderFloatEx("Thickness (\xC2\xB5m)##thinFilmThickness", &material.thinFilmThickness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            materialChanged |= ImGui_DragFloatEx("IOR##thinFilmIor", &material.thinFilmIor, 0.01f, 1.0f, 3.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            ImGui_Unindent();
-        }
-
-        if (ImGui_CollapsingHeader("Geometry", ImGuiTreeNodeFlags_None)) {
-            ImGui_Indent();
-            materialChanged |= ImGui_SliderFloatEx("Opacity##geometryOpacity", &material.geometryOpacity, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-
-            bool thinWalled = material.geometryThinWalled != 0u;
-            if (ImGui_Checkbox("Thin Walled##geometryThinWalled", &thinWalled)) {
-                material.geometryThinWalled = thinWalled ? 1u : 0u;
-                materialChanged = true;
-            }
-
-            materialChanged |= ImGui_DragFloat3Ex("Normal##geometryNormal", material.geometryNormal, 0.01f, -1.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            materialChanged |= ImGui_DragFloat3Ex("Tangent##geometryTangent", material.geometryTangent, 0.01f, -1.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            materialChanged |= ImGui_DragFloat3Ex("Coat Normal##geometryCoatNormal", material.geometryCoatNormal, 0.01f, -1.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            materialChanged |= ImGui_DragFloat3Ex("Coat Tangent##geometryCoatTangent", material.geometryCoatTangent, 0.01f, -1.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
             ImGui_Unindent();
         }
 
@@ -1269,7 +1221,7 @@ static void drawSceneInspectorWindow(VKRT* vkrt, Session* session) {
                                                     ImGuiDockNodeFlags_NoCloseButton;
     ImGui_SetNextWindowClass(&inspectorWindowClass);
 
-    ImGui_PushStyleColorImVec4(ImGuiCol_WindowBg, (ImVec4){0.08f, 0.08f, 0.08f, 1.00f});
+    ImGui_PushStyleColorImVec4(ImGuiCol_WindowBg, kMenuBgColor);
     ImGui_PushStyleVarImVec2(ImGuiStyleVar_WindowPadding, (ImVec2){0.0f, 8.0f});
     ImGui_Begin("Scene Inspector", NULL, 0);
     ImGui_PopStyleVar();

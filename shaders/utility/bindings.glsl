@@ -52,13 +52,15 @@ layout(set = 0, binding = 6) uniform SceneUniform {
     mat4 projInverse;
     uint frameNumber;
     uint samplesPerPixel;
-    uint maxBounces;
-    uint toneMappingMode;
+    uint rrMaxDepth;
+    uint rrMinDepth;
     uvec4 viewportRect;
+    uint toneMappingMode;
     float timeBase;
     float timeStep;
     float fogDensity;
     uint debugMode;
+    uint misNeeEnabled;
     uint timelineEnabled;
     uint timelineKeyframeCount;
     uint emissiveMeshCount;

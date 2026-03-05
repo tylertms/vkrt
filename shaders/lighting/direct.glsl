@@ -74,7 +74,7 @@ bool sampleDirectLight(
     uint triangleCount = light.indices.z;
     if (triangleCount == 0u) return false;
     float totalArea = light.stats.y;
-    if (!(totalArea > 0.0)) return false;
+    if (totalArea <= 0.0) return false;
 
     float chooseArea = rand(state) * totalArea;
     uint lo = 0u;
@@ -93,7 +93,7 @@ bool sampleDirectLight(
 
     EmissiveTriangle tri = emissiveTriangleBuffer.triangles[triIndex];
     float area = tri.v0Area.w;
-    if (!(area > 0.0)) return false;
+    if (area <= 0.0) return false;
 
     float r1 = rand(state);
     float r2 = rand(state);
@@ -109,7 +109,7 @@ bool sampleDirectLight(
 
     vec3 toLight = lightPoint - shadingPoint;
     float dist2 = dot(toLight, toLight);
-    if (!(dist2 > 1e-8)) return false;
+    if (dist2 <= 1e-8) return false;
     float dist = sqrt(dist2);
     vec3 wi = toLight / dist;
 
@@ -119,7 +119,7 @@ bool sampleDirectLight(
     float pSelectMesh = light.stats.z;
     float pArea = pSelectMesh / totalArea;
     float pOmega = pArea * dist2 / max(cosLight, 1e-6);
-    if (!(pOmega > 1e-8)) return false;
+    if (pOmega <= 1e-8) return false;
 
     outSample.wi = wi;
     outSample.distance = dist;
@@ -136,14 +136,16 @@ float lightPdfForEmitterHit(uint meshIndex, uint primitiveIndex, vec3 previousPo
 
     EmissiveMesh light = emissiveMeshBuffer.meshes[lightIndex];
     if (primitiveIndex >= light.indices.z || light.indices.z == 0u) return 0.0;
-    if (!(light.stats.y > 0.0) || !(light.stats.z > 0.0)) return 0.0;
+    float totalArea = light.stats.y;
+    float meshSelectionPdf = light.stats.z;
+    if (totalArea <= 0.0 || meshSelectionPdf <= 0.0) return 0.0;
 
     uint triIndex = light.indices.y + primitiveIndex;
     if (triIndex >= scene.emissiveTriangleCount) return 0.0;
 
     EmissiveTriangle tri = emissiveTriangleBuffer.triangles[triIndex];
     float area = tri.v0Area.w;
-    if (!(area > 0.0)) return 0.0;
+    if (area <= 0.0) return 0.0;
 
     vec3 e1 = tri.e1Pad.xyz;
     vec3 e2 = tri.e2Pad.xyz;
@@ -151,13 +153,13 @@ float lightPdfForEmitterHit(uint meshIndex, uint primitiveIndex, vec3 previousPo
 
     vec3 toLight = hitPoint - previousPoint;
     float dist2 = dot(toLight, toLight);
-    if (!(dist2 > 1e-8)) return 0.0;
+    if (dist2 <= 1e-8) return 0.0;
 
     vec3 wi = toLight * inversesqrt(dist2);
     float cosLight = abs(dot(lightNormal, -wi));
     if (cosLight <= 1e-7) return 0.0;
 
-    float pArea = light.stats.z / light.stats.y;
+    float pArea = meshSelectionPdf / totalArea;
     return pArea * dist2 / max(cosLight, 1e-6);
 }
 

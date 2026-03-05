@@ -138,14 +138,26 @@ static void noteCompletedFrameTime(RenderSequencer* sequencer, uint64_t frameEnd
     if (!sequencer || sequencer->frameStartTimeUs == 0 || frameEndTimeUs <= sequencer->frameStartTimeUs) return;
 
     float seconds = (float)(frameEndTimeUs - sequencer->frameStartTimeUs) / 1000000.0f;
-    if (!(seconds > 0.0f)) return;
+    if (seconds <= 0.0f) return;
 
     sequencer->timedFrameCount++;
-    if (sequencer->timedFrameCount == 1) {
-        sequencer->averageFrameSeconds = seconds;
+    if (sequencer->recentFrameCount < RENDER_SEQUENCE_ETA_WINDOW) {
+        uint32_t insertIndex = sequencer->recentFrameCount;
+        sequencer->recentFrameSeconds[insertIndex] = seconds;
+        sequencer->recentFrameSumSeconds += seconds;
+        sequencer->recentFrameCount++;
+        sequencer->recentFrameWriteIndex = sequencer->recentFrameCount % RENDER_SEQUENCE_ETA_WINDOW;
     } else {
-        static const float kEmaAlpha = 0.3f;
-        sequencer->averageFrameSeconds = kEmaAlpha * seconds + (1.0f - kEmaAlpha) * sequencer->averageFrameSeconds;
+        uint32_t insertIndex = sequencer->recentFrameWriteIndex;
+        sequencer->recentFrameSumSeconds -= sequencer->recentFrameSeconds[insertIndex];
+        sequencer->recentFrameSeconds[insertIndex] = seconds;
+        sequencer->recentFrameSumSeconds += seconds;
+        sequencer->recentFrameWriteIndex = (insertIndex + 1u) % RENDER_SEQUENCE_ETA_WINDOW;
+    }
+
+    if (sequencer->recentFrameCount > 0u) {
+        sequencer->averageFrameSeconds =
+            sequencer->recentFrameSumSeconds / (float)sequencer->recentFrameCount;
     }
 }
 
@@ -227,6 +239,9 @@ static int beginSequence(VKRT* vkrt, Session* session, const SessionRenderSettin
     sequencer->frameStartTimeUs = getMicroseconds();
     sequencer->timedFrameCount = 0;
     sequencer->averageFrameSeconds = 0.0f;
+    sequencer->recentFrameCount = 0;
+    sequencer->recentFrameWriteIndex = 0;
+    sequencer->recentFrameSumSeconds = 0.0f;
 
     applyTimelineTrack(vkrt, &sanitizedSettings.animation.sceneTimeline);
 
@@ -308,7 +323,7 @@ void renderSequencerUpdate(RenderSequencer* sequencer, VKRT* vkrt, Session* sess
     uint32_t remainingFrames = sequencer->frameCount - nextFrame;
     float estimatedRemainingSeconds = 0.0f;
     uint8_t hasEstimatedRemaining = 0;
-    if (sequencer->timedFrameCount > 0 && remainingFrames > 0) {
+    if (sequencer->recentFrameCount >= 2 && remainingFrames > 0) {
         estimatedRemainingSeconds = sequencer->averageFrameSeconds * (float)remainingFrames;
         hasEstimatedRemaining = 1;
     }

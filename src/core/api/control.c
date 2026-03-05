@@ -25,15 +25,49 @@ typedef struct EmissiveTriangleGPU {
     vec4 e2Pad;
 } EmissiveTriangleGPU;
 
+static float clampf(float value, float lo, float hi) {
+    if (value < lo) return lo;
+    if (value > hi) return hi;
+    return value;
+}
+
+static MaterialData sanitizeDisneyMaterial(MaterialData material) {
+    for (int c = 0; c < 3; c++) {
+        material.baseColor[c] = clampf(material.baseColor[c], 0.0f, 1.0f);
+        material.emissionColor[c] = fmaxf(material.emissionColor[c], 0.0f);
+    }
+
+    material.metallic = clampf(material.metallic, 0.0f, 1.0f);
+    material.roughness = clampf(material.roughness, 0.0f, 1.0f);
+    material.specular = clampf(material.specular, 0.0f, 1.0f);
+    material.specularTint = clampf(material.specularTint, 0.0f, 1.0f);
+    material.anisotropic = clampf(material.anisotropic, 0.0f, 1.0f);
+    material.sheen = clampf(material.sheen, 0.0f, 1.0f);
+    material.sheenTint = clampf(material.sheenTint, 0.0f, 1.0f);
+    material.clearcoat = clampf(material.clearcoat, 0.0f, 1.0f);
+    material.clearcoatGloss = clampf(material.clearcoatGloss, 0.0f, 1.0f);
+    material.subsurface = clampf(material.subsurface, 0.0f, 1.0f);
+    material.transmission = clampf(material.transmission, 0.0f, 1.0f);
+    material.ior = fmaxf(material.ior, 1.0f);
+    material.emissionLuminance = fmaxf(material.emissionLuminance, 0.0f);
+    memset(material.padding0, 0, sizeof(material.padding0));
+
+    return material;
+}
+
+static uint32_t materialRequiresBackfaces(const MaterialData* material) {
+    return (material && material->transmission > 0.0f) ? 1u : 0u;
+}
+
 static float luminance3(const vec3 value) {
     return value[0] * 0.2126f + value[1] * 0.7152f + value[2] * 0.0722f;
 }
 
 static float materialEmissionWeight(const MaterialData* material) {
     if (!material) return 0.0f;
-    if (!(material->emissionLuminance > 0.0f)) return 0.0f;
+    if (!isfinite(material->emissionLuminance) || material->emissionLuminance <= 0.0f) return 0.0f;
     float lum = luminance3(material->emissionColor);
-    if (!(lum > 0.0f)) return 0.0f;
+    if (!isfinite(lum) || lum <= 0.0f) return 0.0f;
     return lum * material->emissionLuminance;
 }
 
@@ -83,7 +117,7 @@ void rebuildLightBuffers(VKRT* vkrt) {
 
     for (uint32_t meshIndex = 0; meshIndex < meshCount; meshIndex++) {
         Mesh* mesh = &vkrt->core.meshes[meshIndex];
-        if (!(materialEmissionWeight(&mesh->material) > 0.0f)) continue;
+        if (materialEmissionWeight(&mesh->material) <= 0.0f) continue;
         uint32_t triangleCount = mesh->info.indexCount / 3u;
         if (triangleCount == 0) continue;
         emissiveMeshCount++;
@@ -109,7 +143,7 @@ void rebuildLightBuffers(VKRT* vkrt) {
     for (uint32_t meshIndex = 0; meshIndex < meshCount; meshIndex++) {
         Mesh* mesh = &vkrt->core.meshes[meshIndex];
         float emissionWeight = materialEmissionWeight(&mesh->material);
-        if (!(emissionWeight > 0.0f)) continue;
+        if (emissionWeight <= 0.0f) continue;
 
         uint32_t triangleCount = mesh->info.indexCount / 3u;
         if (triangleCount == 0) continue;
@@ -184,7 +218,7 @@ void rebuildLightBuffers(VKRT* vkrt) {
         }
 
         float selectionWeight = totalArea * emissionWeight;
-        if (!(selectionWeight > 0.0f)) {
+        if (selectionWeight <= 0.0f) {
             triangleWriteIndex = triangleOffset;
             continue;
         }
@@ -588,10 +622,10 @@ void VKRT_uploadMeshData(VKRT* vkrt, const Vertex* vertices, size_t vertexCount,
     mesh->info.vertexCount = (uint32_t)vertexCount;
     mesh->info.indexCount = (uint32_t)indexCount;
     mesh->info.materialIndex = newIndex;
-    mesh->info.renderBackfaces = 0;
     mesh->info.padding = 0;
 
-    mesh->material = VKRT_materialDataOpenPBRDefault();
+    mesh->material = VKRT_materialDataDisneyDefault();
+    mesh->info.renderBackfaces = materialRequiresBackfaces(&mesh->material);
 
     vec3 scale = {1.f, 1.f, 1.f};
     memcpy(&mesh->info.scale, &scale, sizeof(vec3));
@@ -710,6 +744,20 @@ void VKRT_setSamplesPerPixel(VKRT* vkrt, uint32_t samplesPerPixel) {
     }
 }
 
+void VKRT_setPathDepth(VKRT* vkrt, uint32_t rrMinDepth, uint32_t rrMaxDepth) {
+    if (!vkrt) return;
+
+    if (rrMaxDepth < 1u) rrMaxDepth = 1u;
+    if (rrMaxDepth > 64u) rrMaxDepth = 64u;
+    if (rrMinDepth > rrMaxDepth) rrMinDepth = rrMaxDepth;
+
+    if (vkrt->state.rrMinDepth == rrMinDepth && vkrt->state.rrMaxDepth == rrMaxDepth) return;
+
+    vkrt->state.rrMinDepth = rrMinDepth;
+    vkrt->state.rrMaxDepth = rrMaxDepth;
+    resetSceneData(vkrt);
+}
+
 void VKRT_setAutoSPPEnabled(VKRT* vkrt, uint8_t enabled) {
     if (!vkrt) return;
     vkrt->state.autoSPPEnabled = enabled ? 1 : 0;
@@ -747,7 +795,7 @@ void VKRT_setToneMappingMode(VKRT* vkrt, VKRT_ToneMappingMode toneMappingMode) {
 
 void VKRT_setFogDensity(VKRT* vkrt, float fogDensity) {
     if (!vkrt) return;
-    if (!(fogDensity >= 0.0f)) fogDensity = 0.0f;
+    if (!isfinite(fogDensity) || fogDensity < 0.0f) fogDensity = 0.0f;
 
     if (vkrt->state.fogDensity == fogDensity) return;
     vkrt->state.fogDensity = fogDensity;
@@ -762,6 +810,14 @@ void VKRT_setDebugMode(VKRT* vkrt, uint32_t mode) {
     if (!vkrt) return;
     if (vkrt->state.debugMode == mode) return;
     vkrt->state.debugMode = mode;
+    resetSceneData(vkrt);
+}
+
+void VKRT_setMISNEEEnabled(VKRT* vkrt, uint32_t enabled) {
+    if (!vkrt) return;
+    enabled = enabled ? 1u : 0u;
+    if (vkrt->state.misNeeEnabled == enabled) return;
+    vkrt->state.misNeeEnabled = enabled;
     resetSceneData(vkrt);
 }
 
@@ -847,21 +903,16 @@ int VKRT_setMeshTransform(VKRT* vkrt, uint32_t meshIndex, vec3 position, vec3 ro
 int VKRT_setMeshMaterial(VKRT* vkrt, uint32_t meshIndex, const MaterialData* material) {
     if (!vkrt || !material || meshIndex >= vkrt->core.meshData.count) return -1;
 
-    vkrt->core.meshes[meshIndex].material = *material;
+    Mesh* mesh = &vkrt->core.meshes[meshIndex];
+    mesh->material = sanitizeDisneyMaterial(*material);
+
+    uint32_t nextBackfaces = materialRequiresBackfaces(&mesh->material);
+    if (mesh->info.renderBackfaces != nextBackfaces) {
+        mesh->info.renderBackfaces = nextBackfaces;
+        vkrt->core.topLevelAccelerationStructure.needsRebuild = 1;
+    }
+
     vkrt->core.materialDataDirty = VK_TRUE;
-    resetSceneData(vkrt);
-    return 0;
-}
-
-int VKRT_setMeshRenderBackfaces(VKRT* vkrt, uint32_t meshIndex, uint8_t renderBackfaces) {
-    if (!vkrt || meshIndex >= vkrt->core.meshData.count) return -1;
-
-    uint32_t next = renderBackfaces ? 1u : 0u;
-    MeshInfo* info = &vkrt->core.meshes[meshIndex].info;
-    if (info->renderBackfaces == next) return 0;
-
-    info->renderBackfaces = next;
-    vkrt->core.topLevelAccelerationStructure.needsRebuild = 1;
     resetSceneData(vkrt);
     return 0;
 }

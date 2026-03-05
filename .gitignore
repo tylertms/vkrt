@@ -3,3 +3,4 @@
 /subprojects/*
 !/subprojects/*.wrap
 captures/
+imgui.ini
