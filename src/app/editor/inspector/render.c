@@ -47,6 +47,61 @@ static float queryActiveRenderSeconds(const SessionRenderTimer* timer, uint64_t 
     return (float)(nowUs - timer->startTimeUs) / 1000000.0f;
 }
 
+void inspectorPrepareRenderState(VKRT* vkrt, Session* session) {
+    if (!vkrt || !session) return;
+
+    initializeRenderConfig(session);
+
+    const VKRT_PublicState* state = VKRT_getPublicState(vkrt);
+    if (!state) return;
+
+    uint64_t nowUs = getMicroseconds();
+    SessionRenderTimer* timer = &session->runtime.renderTimer;
+    updateRenderTimer(state, timer, nowUs);
+}
+
+static void drawDebugSection(VKRT* vkrt, const VKRT_PublicState* state, bool controlsDisabled) {
+    if (!vkrt || !state) return;
+    if (!ImGui_CollapsingHeader("Debug", ImGuiTreeNodeFlags_None)) return;
+
+    inspectorIndentSection();
+    if (controlsDisabled) ImGui_BeginDisabled(true);
+
+    const char* debugModeLabels[] = {"None", "Normals", "Depth", "Bounce Count", "NEE Only", "BSDF Only"};
+    int debugMode = (int)state->debugMode;
+    if (ImGui_ComboCharEx("Debug Mode", &debugMode, debugModeLabels, (int)VKRT_DEBUG_MODE_COUNT, (int)VKRT_DEBUG_MODE_COUNT)) {
+        VKRT_Result result = VKRT_setDebugMode(vkrt, (uint32_t)debugMode);
+        if (result != VKRT_SUCCESS) {
+            LOG_ERROR("Updating debug mode failed (%d)", (int)result);
+        }
+    }
+
+    int rrMinDepth = (int)state->rrMinDepth;
+    int rrMaxDepth = (int)state->rrMaxDepth;
+    bool depthChanged = false;
+    depthChanged |= ImGui_SliderIntEx("RR Min Depth", &rrMinDepth, 0, 64, "%d", ImGuiSliderFlags_AlwaysClamp);
+    depthChanged |= ImGui_SliderIntEx("RR Max Depth", &rrMaxDepth, 1, 64, "%d", ImGuiSliderFlags_AlwaysClamp);
+    if (depthChanged) {
+        VKRT_Result result = VKRT_setPathDepth(vkrt, (uint32_t)rrMinDepth, (uint32_t)rrMaxDepth);
+        if (result != VKRT_SUCCESS) {
+            LOG_ERROR("Updating path depth failed (%d)", (int)result);
+        }
+    }
+    tooltipOnHover("Russian roulette starts at RR Min Depth. Set equal to disable RR.");
+
+    bool misNeeEnabled = state->misNeeEnabled != 0u;
+    if (ImGui_Checkbox("MIS + NEE", &misNeeEnabled)) {
+        VKRT_Result result = VKRT_setMISNEEEnabled(vkrt, misNeeEnabled ? 1u : 0u);
+        if (result != VKRT_SUCCESS) {
+            LOG_ERROR("Updating MIS/NEE toggle failed (%d)", (int)result);
+        }
+    }
+    tooltipOnHover("Multiple Importance Sampling + Next Event Estimation.");
+
+    if (controlsDisabled) ImGui_EndDisabled();
+    inspectorUnindentSection();
+}
+
 static void drawIdleOutputSection(Session* session, float inputWidth) {
     int outputSize[2] = {
         (int)session->editor.renderConfig.width,
@@ -56,21 +111,20 @@ static void drawIdleOutputSection(Session* session, float inputWidth) {
 
     if (!ImGui_CollapsingHeader("Output", ImGuiTreeNodeFlags_DefaultOpen)) return;
 
-    ImGui_Indent();
+    inspectorIndentSection();
     ImGui_SetNextItemWidth(inputWidth);
-    if (ImGui_DragInt2Ex(ICON_FA_CAMERA_RETRO " Output Size", outputSize, 1.0f, 1, 16384, "%d", ImGuiSliderFlags_AlwaysClamp)) {
+    if (ImGui_DragInt2Ex("Output Size", outputSize, 1.0f, 1, 16384, "%d", ImGuiSliderFlags_AlwaysClamp)) {
         session->editor.renderConfig.width = clampRenderDimension(outputSize[0]);
         session->editor.renderConfig.height = clampRenderDimension(outputSize[1]);
     }
 
     ImGui_SetNextItemWidth(inputWidth);
-    if (ImGui_DragIntEx(ICON_FA_IMAGES " Samples", &targetSamples, 1.0f, 0, INT_MAX, "%d", ImGuiSliderFlags_AlwaysClamp)) {
+    if (ImGui_DragIntEx("Samples", &targetSamples, 1.0f, 0, INT_MAX, "%d", ImGuiSliderFlags_AlwaysClamp)) {
         if (targetSamples < 0) targetSamples = 0;
         session->editor.renderConfig.targetSamples = (uint32_t)targetSamples;
     }
     tooltipOnHover("Total samples to render. Set to 0 for manual stop.");
-    ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing});
-    ImGui_Unindent();
+    inspectorUnindentSection();
 }
 
 static void drawTimelineEditor(SessionRenderAnimationSettings* animation, float inputWidth) {
@@ -79,19 +133,17 @@ static void drawTimelineEditor(SessionRenderAnimationSettings* animation, float 
 
     if (!ImGui_CollapsingHeader("Timeline", ImGuiTreeNodeFlags_None)) return;
 
-    ImGui_Indent();
     if (ImGui_Checkbox("Enabled##render_timeline_enabled", &timelineEnabled)) {
         sceneTimeline->enabled = timelineEnabled ? 1 : 0;
         sessionSanitizeAnimationSettings(animation);
     }
     tooltipOnHover("Step emission values at discrete points in source time.");
-    ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing});
 
     ImGui_BeginDisabled(!timelineEnabled);
     bool timelineEdited = false;
     bool timeActivelyEditing = false;
 
-    if (ImGui_Button(ICON_FA_PLUS " Add")) {
+    if (inspectorPaddedButton(ICON_FA_PLUS " Add")) {
         if (sceneTimeline->keyframeCount < SESSION_SCENE_TIMELINE_KEYFRAME_CAPACITY) {
             SessionSceneTimelineKeyframe newKey = {
                 .time = 0.0f,
@@ -110,7 +162,7 @@ static void drawTimelineEditor(SessionRenderAnimationSettings* animation, float 
 
     if (sceneTimeline->keyframeCount > 1) {
         ImGui_SameLine();
-        if (ImGui_Button(ICON_FA_MINUS " Remove")) {
+        if (inspectorPaddedButton(ICON_FA_MINUS " Remove")) {
             sceneTimeline->keyframeCount--;
             timelineEdited = true;
         }
@@ -146,7 +198,6 @@ static void drawTimelineEditor(SessionRenderAnimationSettings* animation, float 
     }
 
     ImGui_EndDisabled();
-    ImGui_Unindent();
 }
 
 static void drawIdleAnimationSection(Session* session, float inputWidth, float folderWidth) {
@@ -156,9 +207,9 @@ static void drawIdleAnimationSection(Session* session, float inputWidth, float f
     const char* sequenceFolder = sessionGetRenderSequenceFolder(session);
     if (!sequenceFolder || !sequenceFolder[0]) sequenceFolder = "(not set)";
 
-    if (!ImGui_CollapsingHeader("Animation", ImGuiTreeNodeFlags_None)) return;
+    if (!ImGui_CollapsingHeader("Sequence", ImGuiTreeNodeFlags_None)) return;
 
-    ImGui_Indent();
+    inspectorIndentSection();
     if (ImGui_Checkbox("Enabled##render_animation_enabled", &animationEnabled)) {
         animation->enabled = animationEnabled ? 1 : 0;
         if (!animationEnabled) {
@@ -166,7 +217,6 @@ static void drawIdleAnimationSection(Session* session, float inputWidth, float f
         }
     }
     tooltipOnHover("Render a sequence by stepping light travel time from Min to Max.");
-    ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing});
 
     float timeMin = animation->minTime;
     float timeMax = animation->maxTime;
@@ -175,33 +225,29 @@ static void drawIdleAnimationSection(Session* session, float inputWidth, float f
     ImGui_BeginDisabled(!animationEnabled);
 
     ImGui_SetNextItemWidth(inputWidth);
-    if (ImGui_DragFloatEx(ICON_FA_TIMELINE " Time Min", &timeMin, 0.01f, 0.0f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+    if (ImGui_DragFloatEx("Time Min", &timeMin, 0.01f, 0.0f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
         animation->minTime = timeMin;
         sessionSanitizeAnimationSettings(animation);
         frameCount = sessionComputeAnimationFrameCount(animation);
     }
-    tooltipOnHover("Sequence start time.");
 
     ImGui_SetNextItemWidth(inputWidth);
-    if (ImGui_DragFloatEx(ICON_FA_TIMELINE " Time Max", &timeMax, 0.01f, 0.0f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+    if (ImGui_DragFloatEx("Time Max", &timeMax, 0.01f, 0.0f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
         animation->maxTime = timeMax;
         sessionSanitizeAnimationSettings(animation);
         frameCount = sessionComputeAnimationFrameCount(animation);
     }
-    tooltipOnHover("Sequence end time.");
 
     ImGui_SetNextItemWidth(inputWidth);
-    if (ImGui_DragFloatEx(ICON_FA_CLOCK " Step", &timeStep, 0.005f, 0.001f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+    if (ImGui_DragFloatEx("Step", &timeStep, 0.005f, 0.001f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
         animation->timeStep = timeStep;
         sessionSanitizeAnimationSettings(animation);
         frameCount = sessionComputeAnimationFrameCount(animation);
     }
-    tooltipOnHover("Time increment per sequence frame.");
 
-    ImGui_Text(ICON_FA_IMAGES " Frames: %u", frameCount);
-    ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing});
+    ImGui_TextDisabled("Frames: %u", frameCount);
 
-    if (ImGui_Button(ICON_FA_FOLDER_OPEN " Select Folder")) {
+    if (inspectorPaddedButton(ICON_FA_FOLDER_OPEN " Select Folder")) {
         sessionRequestRenderSequenceFolderDialog(session);
     }
 
@@ -211,31 +257,36 @@ static void drawIdleAnimationSection(Session* session, float inputWidth, float f
     ImGui_InputTextEx("Folder", folderPathBuffer, sizeof(folderPathBuffer), ImGuiInputTextFlags_ReadOnly, NULL, NULL);
     tooltipOnHover(sequenceFolder);
 
-    ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing * 1.25f});
     drawTimelineEditor(animation, inputWidth);
 
     if (session->editor.renderConfig.targetSamples == 0) {
-        ImGui_TextDisabled("Sequence mode needs finite samples. `0` will be promoted to `1`.");
+        ImGui_Spacing();
+        ImGui_TextWrapped("Sequence mode needs finite samples. 0 will be promoted to 1.");
     }
 
     ImGui_EndDisabled();
-    ImGui_Unindent();
+    inspectorUnindentSection();
 }
 
-static void drawIdleRenderState(Session* session, const SessionRenderTimer* timer) {
+static void drawIdleRenderState(VKRT* vkrt, Session* session, const SessionRenderTimer* timer) {
+    const VKRT_PublicState* state = VKRT_getPublicState(vkrt);
+    if (!state) return;
+
+    bool renderModeActive = state->renderModeActive != 0;
     float inputWidth = queryInspectorInputWidth(220.0f, 132.0f);
     float folderWidth = queryInspectorInputWidth(260.0f, 100.0f);
     bool animationEnabled = session->editor.renderConfig.animation.enabled != 0;
 
     drawIdleOutputSection(session, inputWidth);
+    drawDebugSection(vkrt, state, renderModeActive);
     drawIdleAnimationSection(session, inputWidth, folderWidth);
 
-    ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing * 1.5f});
+    ImGui_Spacing();
 
     const char* startLabel = animationEnabled
         ? ICON_FA_CLAPPERBOARD " Start Sequence"
         : ICON_FA_CAMERA " Start Render";
-    if (ImGui_Button(startLabel)) {
+    if (inspectorPaddedButton(startLabel)) {
         uint32_t startSamples = session->editor.renderConfig.targetSamples;
         if (animationEnabled && startSamples == 0) startSamples = 1;
         sessionQueueRenderStart(session,
@@ -248,8 +299,7 @@ static void drawIdleRenderState(Session* session, const SessionRenderTimer* time
     if (timer->completedSeconds > 0.0f) {
         char totalText[32] = {0};
         formatTime(timer->completedSeconds, totalText, sizeof(totalText));
-        ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing});
-        ImGui_Text(ICON_FA_CLOCK " Last Render Time: %s", totalText);
+        ImGui_TextDisabled(ICON_FA_CLOCK " Last render: %s", totalText);
     }
 }
 
@@ -261,15 +311,13 @@ static void drawRenderProgressSection(
     float completedSeconds
 ) {
     if (!state || !runtime || !sequence) return;
-    if (!ImGui_CollapsingHeader("Progress", ImGuiTreeNodeFlags_DefaultOpen)) return;
 
-    ImGui_Indent();
     ImGui_PushStyleColorImVec4(ImGuiCol_FrameBg, kProgressBgColor);
     ImGui_PushStyleColorImVec4(ImGuiCol_PlotHistogram, kProgressFillColor);
-    ImGui_PushStyleColorImVec4(ImGuiCol_PlotHistogramHovered, (ImVec4){0.40f, 0.40f, 0.40f, 1.00f});
     ImGui_PushStyleColorImVec4(ImGuiCol_Text, kProgressTextColor);
 
-    ImGui_Text(ICON_FA_CAMERA_RETRO " Output: %ux%u", runtime->renderWidth, runtime->renderHeight);
+    ImGui_TextDisabled("Output %ux%u", runtime->renderWidth, runtime->renderHeight);
+
     if (state->renderTargetSamples > 0) {
         uint64_t shownSamples = state->totalSamples;
         if (shownSamples > state->renderTargetSamples) {
@@ -279,16 +327,15 @@ static void drawRenderProgressSection(
         if (progress < 0.0f) progress = 0.0f;
         if (progress > 1.0f) progress = 1.0f;
         char overlay[96] = {0};
-        snprintf(overlay, sizeof(overlay), "%llu / %u Samples",
+        snprintf(overlay, sizeof(overlay), "%llu / %u samples",
             (unsigned long long)shownSamples, state->renderTargetSamples);
         ImGui_ProgressBar(progress, (ImVec2){-1.0f, 0.0f}, overlay);
     } else {
         char overlay[96] = {0};
-        snprintf(overlay, sizeof(overlay), "%llu Samples",
+        snprintf(overlay, sizeof(overlay), "%llu samples",
             (unsigned long long)state->totalSamples);
         ImGui_ProgressBar(0.0f, (ImVec2){-1.0f, 0.0f}, overlay);
     }
-    ImGui_Text("%s", state->renderModeFinished ? "Status: Complete" : "Status: Rendering");
 
     if (sequence->active) {
         float sequenceProgress = 0.0f;
@@ -301,63 +348,52 @@ static void drawRenderProgressSection(
         if (sequenceProgress > 1.0f) sequenceProgress = 1.0f;
 
         char sequenceOverlay[96] = {0};
-        snprintf(sequenceOverlay, sizeof(sequenceOverlay), "Sequence %u / %u",
+        snprintf(sequenceOverlay, sizeof(sequenceOverlay), "Frame %u / %u",
             sequence->frameIndex, sequence->frameCount);
         ImGui_ProgressBar(sequenceProgress, (ImVec2){-1.0f, 0.0f}, sequenceOverlay);
-
-        if (!state->renderModeFinished) {
-            if (sequence->hasEstimatedRemaining) {
-                char etaText[32] = {0};
-                formatTime(fmaxf(sequence->estimatedRemainingSeconds, 0.0f), etaText, sizeof(etaText));
-                ImGui_Text(ICON_FA_CLOCK " ETA: %s", etaText);
-            } else {
-                ImGui_Text(ICON_FA_CLOCK " ETA: --");
-            }
-        }
-    } else if (!state->renderModeFinished) {
-        if (state->renderTargetSamples > 0 && state->totalSamples > 0 && elapsedActiveSeconds > 0.0f) {
-            float samplesPerSecond = (float)state->totalSamples / elapsedActiveSeconds;
-            uint64_t remainingSamples = 0;
-            if (state->renderTargetSamples > state->totalSamples) {
-                remainingSamples = state->renderTargetSamples - state->totalSamples;
-            }
-
-            if (samplesPerSecond > 0.0f) {
-                float etaSeconds = (float)remainingSamples / samplesPerSecond;
-                char etaText[32] = {0};
-                formatTime(fmaxf(etaSeconds, 0.0f), etaText, sizeof(etaText));
-                ImGui_Text(ICON_FA_CLOCK " ETA: %s", etaText);
-            } else {
-                ImGui_Text(ICON_FA_CLOCK " ETA: --");
-            }
-        } else {
-            ImGui_Text(ICON_FA_CLOCK " ETA: --");
-        }
     }
+
+    ImGui_PopStyleColorEx(3);
+
+    ImGui_Spacing();
 
     if (state->renderModeFinished) {
         float elapsedDoneSeconds = completedSeconds > 0.0f ? completedSeconds : elapsedActiveSeconds;
         char elapsedText[32] = {0};
         formatTime(fmaxf(elapsedDoneSeconds, 0.0f), elapsedText, sizeof(elapsedText));
-        ImGui_Text(ICON_FA_CLOCK " Elapsed: %s", elapsedText);
-    }
+        ImGui_Text(ICON_FA_CHECK " Complete  " ICON_FA_CLOCK " %s", elapsedText);
+    } else {
+        float etaSeconds = -1.0f;
+        if (sequence->active && sequence->hasEstimatedRemaining) {
+            etaSeconds = fmaxf(sequence->estimatedRemainingSeconds, 0.0f);
+        } else if (state->renderTargetSamples > 0 && state->totalSamples > 0 && elapsedActiveSeconds > 0.0f) {
+            float samplesPerSecond = (float)state->totalSamples / elapsedActiveSeconds;
+            if (samplesPerSecond > 0.0f && state->renderTargetSamples > state->totalSamples) {
+                etaSeconds = (float)(state->renderTargetSamples - state->totalSamples) / samplesPerSecond;
+            }
+        }
 
-    ImGui_PopStyleColorEx(4);
-    ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing});
-    ImGui_Unindent();
+        if (etaSeconds >= 0.0f) {
+            char etaText[32] = {0};
+            formatTime(etaSeconds, etaText, sizeof(etaText));
+            ImGui_Text("Rendering  " ICON_FA_CLOCK " ETA %s", etaText);
+        } else {
+            ImGui_Text("Rendering...");
+        }
+    }
 }
 
 static void drawRenderActionsSection(VKRT* vkrt, Session* session, const VKRT_PublicState* state, const SessionSequenceProgress* sequence) {
     if (!vkrt || !session || !state || !sequence) return;
-    if (!ImGui_CollapsingHeader("Actions", ImGuiTreeNodeFlags_DefaultOpen)) return;
 
-    ImGui_Indent();
+    ImGui_Spacing();
+
     if (!state->renderModeFinished) {
         if (sequence->active) {
-            if (ImGui_Button(ICON_FA_STOP " Stop Sequence")) {
+            if (inspectorPaddedButton(ICON_FA_STOP " Stop Sequence")) {
                 sessionQueueRenderStop(session);
             }
-        } else if (ImGui_Button(ICON_FA_STOP " Stop Render")) {
+        } else if (inspectorPaddedButton(ICON_FA_STOP " Stop Render")) {
             VKRT_Result result = VKRT_stopRenderSampling(vkrt);
             if (result != VKRT_SUCCESS) {
                 LOG_ERROR("Stopping render sampling failed (%d)", (int)result);
@@ -365,23 +401,20 @@ static void drawRenderActionsSection(VKRT* vkrt, Session* session, const VKRT_Pu
         }
     } else {
         if (!sequence->active) {
-            if (ImGui_Button(ICON_FA_FLOPPY_DISK " Save Image")) {
+            if (inspectorPaddedButton(ICON_FA_FLOPPY_DISK " Save Image")) {
                 sessionRequestRenderSaveDialog(session);
             }
             ImGui_SameLine();
         }
-        if (ImGui_Button(ICON_FA_ARROW_RIGHT_FROM_BRACKET " Exit Render")) {
+        if (inspectorPaddedButton(ICON_FA_ARROW_RIGHT_FROM_BRACKET " Exit Render")) {
             sessionQueueRenderStop(session);
         }
     }
-    ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing});
-    ImGui_Unindent();
 }
 
 void inspectorDrawRenderTab(VKRT* vkrt, Session* session) {
     if (!vkrt || !session) return;
-
-    initializeRenderConfig(session);
+    inspectorPrepareRenderState(vkrt, session);
 
     const VKRT_PublicState* state = VKRT_getPublicState(vkrt);
     VKRT_RuntimeSnapshot runtime = {0};
@@ -391,10 +424,9 @@ void inspectorDrawRenderTab(VKRT* vkrt, Session* session) {
 
     uint64_t nowUs = getMicroseconds();
     SessionRenderTimer* timer = &session->runtime.renderTimer;
-    updateRenderTimer(state, timer, nowUs);
 
     if (!state->renderModeActive) {
-        drawIdleRenderState(session, timer);
+        drawIdleRenderState(vkrt, session, timer);
         return;
     }
 

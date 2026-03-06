@@ -4,4 +4,4 @@
 #include "vkrt.h"
 #include "inspector/common.h"
 
-void editorUIDrawSceneInspector(VKRT* vkrt, Session* session);
+void editorUIDrawWorkspacePanels(VKRT* vkrt, Session* session);

@@ -215,3 +215,11 @@ void resetSceneData(VKRT* vkrt) {
     vkrt->core.accumulationNeedsReset = VK_TRUE;
     memset(vkrt->state.frametimes, 0, sizeof(vkrt->state.frametimes));
 }
+
+void syncSelectionSceneData(VKRT* vkrt) {
+    if (!vkrt || !vkrt->core.sceneData) return;
+
+    vkrt->core.sceneData->selectionEnabled = vkrt->state.selectionEnabled ? 1u : 0u;
+    vkrt->core.sceneData->selectedMeshIndex = vkrt->state.selectedMeshIndex;
+    syncAllSceneDataFrames(vkrt);
+}

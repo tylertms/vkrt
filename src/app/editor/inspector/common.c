@@ -5,12 +5,12 @@
 #include <math.h>
 #include <stdio.h>
 
-const float kInspectorControlSpacing = 1.0f;
-const float kInspectorSectionIndent = 10.0f;
-const ImVec4 kMenuBgColor = {0.10f, 0.10f, 0.10f, 1.00f};
-const ImVec4 kProgressBgColor = {0.16f, 0.16f, 0.16f, 1.00f};
-const ImVec4 kProgressFillColor = {0.34f, 0.34f, 0.34f, 1.00f};
-const ImVec4 kProgressTextColor = {0.97f, 0.97f, 0.97f, 1.00f};
+const float kInspectorControlSpacing = 4.0f;
+const float kInspectorSectionIndent = 8.0f;
+const ImVec4 kMenuBgColor = {0.08f, 0.09f, 0.11f, 1.00f};
+const ImVec4 kProgressBgColor = {0.11f, 0.13f, 0.16f, 1.00f};
+const ImVec4 kProgressFillColor = {0.35f, 0.45f, 0.55f, 1.00f};
+const ImVec4 kProgressTextColor = {0.88f, 0.90f, 0.92f, 1.00f};
 
 static const float kInspectorCollapsedWidth = 44.0f;
 static const float kInspectorMinExpandedWidth = 140.0f;
@@ -64,6 +64,56 @@ float queryInspectorInputWidth(float preferredWidth, float labelReserve) {
     return width;
 }
 
+void inspectorIndentSection(void) {
+    ImGui_IndentEx(kInspectorSectionIndent);
+}
+
+void inspectorUnindentSection(void) {
+    ImGui_UnindentEx(kInspectorSectionIndent);
+}
+
+void inspectorTightSeparatorText(const char* label) {
+    if (!label) return;
+    ImGui_PushStyleVarImVec2(ImGuiStyleVar_SeparatorTextPadding, (ImVec2){8.0f, 1.0f});
+    ImGui_SeparatorText(label);
+    ImGui_PopStyleVar();
+}
+
+bool inspectorBeginKeyValueTable(const char* id) {
+    if (!id) return false;
+
+    ImGuiTableFlags flags = ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings;
+    if (!ImGui_BeginTableEx(id, 2, flags, (ImVec2){-1.0f, 0.0f}, 0.0f)) {
+        return false;
+    }
+
+    ImGui_TableSetupColumnEx("Label", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoHide, 86.0f, 0);
+    ImGui_TableSetupColumnEx("Value", ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_NoHide, 0.0f, 0);
+    return true;
+}
+
+void inspectorKeyValueRow(const char* label, const char* value) {
+    if (!label || !value) return;
+
+    ImGui_TableNextRow();
+    ImGui_TableSetColumnIndex(0);
+    ImGui_TextDisabled("%s", label);
+    ImGui_TableSetColumnIndex(1);
+    ImGui_TextWrapped("%s", value);
+}
+
+void inspectorEndKeyValueTable(void) {
+    ImGui_EndTable();
+}
+
+bool inspectorPaddedButton(const char* label) {
+    if (!label) return false;
+    ImGui_PushStyleVarImVec2(ImGuiStyleVar_FramePadding, (ImVec2){8.0f, 5.0f});
+    bool pressed = ImGui_Button(label);
+    ImGui_PopStyleVar();
+    return pressed;
+}
+
 void formatDriverVersionText(uint32_t vendorID, uint32_t driverVersion, char* out, size_t outSize) {
     if (!out || outSize == 0) return;
 
@@ -87,6 +137,19 @@ void formatDriverVersionText(uint32_t vendorID, uint32_t driverVersion, char* ou
         VK_API_VERSION_MAJOR(driverVersion),
         VK_API_VERSION_MINOR(driverVersion),
         VK_API_VERSION_PATCH(driverVersion));
+}
+
+void formatByteSize(uint64_t bytes, char* out, size_t outSize) {
+    if (!out || outSize == 0) return;
+    if (bytes < 1024ull) {
+        snprintf(out, outSize, "%llu B", (unsigned long long)bytes);
+    } else if (bytes < 1024ull * 1024ull) {
+        snprintf(out, outSize, "%.1f KB", (double)bytes / 1024.0);
+    } else if (bytes < 1024ull * 1024ull * 1024ull) {
+        snprintf(out, outSize, "%.1f MB", (double)bytes / (1024.0 * 1024.0));
+    } else {
+        snprintf(out, outSize, "%.2f GB", (double)bytes / (1024.0 * 1024.0 * 1024.0));
+    }
 }
 
 void drawPaddedTooltip(const char* text) {

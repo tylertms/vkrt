@@ -216,7 +216,7 @@ VKRT_Result VKRT_setSelectedMesh(VKRT* vkrt, uint32_t meshIndex) {
     if (vkrt->state.selectedMeshIndex == nextSelectedMesh) return VKRT_SUCCESS;
 
     vkrt->state.selectedMeshIndex = nextSelectedMesh;
-    resetSceneData(vkrt);
+    syncSelectionSceneData(vkrt);
     return VKRT_SUCCESS;
 }
 

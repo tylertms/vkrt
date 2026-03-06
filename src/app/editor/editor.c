@@ -87,11 +87,63 @@ static void applyEditorUIScale(float uiScale, bool refreshVulkanFonts) {
     }
 }
 
+static float queryTopMenuBarHeight(void) {
+    return ImGui_GetFrameHeight();
+}
+
+static void drawMainMenuBar(VKRT* vkrt, Session* session, const VKRT_PublicState* state) {
+    if (!vkrt || !session) return;
+    if (!ImGui_BeginMainMenuBar()) return;
+
+    if (ImGui_BeginMenu("File")) {
+        if (ImGui_MenuItem("Import Mesh")) {
+            sessionRequestMeshImportDialog(session);
+        }
+
+        bool canSaveRender = state &&
+            state->renderModeActive &&
+            state->renderModeFinished &&
+            !session->runtime.sequenceProgress.active;
+        if (ImGui_MenuItemEx("Save Render", NULL, false, canSaveRender)) {
+            sessionRequestRenderSaveDialog(session);
+        }
+
+        ImGui_Separator();
+        ImGui_MenuItemEx("Open Scene", NULL, false, false);
+        ImGui_MenuItemEx("Recent Scenes", NULL, false, false);
+        ImGui_EndMenu();
+    }
+
+    if (ImGui_BeginMenu("View")) {
+        if (ImGui_MenuItemEx("Reset Accumulation", NULL, false, state != NULL)) {
+            VKRT_Result result = VKRT_invalidateAccumulation(vkrt);
+            if (result != VKRT_SUCCESS) {
+                LOG_ERROR("Resetting accumulation failed (%d)", (int)result);
+            }
+        }
+
+        ImGui_Separator();
+        ImGui_MenuItemEx("Panels", NULL, false, false);
+        ImGui_EndMenu();
+    }
+
+    if (ImGui_BeginMenu("Help")) {
+        ImGui_MenuItemEx("Controls", NULL, false, false);
+        ImGui_MenuItemEx("About", NULL, false, false);
+        ImGui_EndMenu();
+    }
+
+    ImGui_EndMainMenuBar();
+}
+
 static void initializeDockLayout(void) {
     static bool isInitialized = false;
     if (isInitialized) return;
 
     const ImGuiViewport* viewport = ImGui_GetMainViewport();
+    ImVec2 dockspaceSize = viewport->Size;
+    dockspaceSize.y -= queryTopMenuBarHeight();
+    if (dockspaceSize.y < 1.0f) dockspaceSize.y = 1.0f;
     ImGuiID dockspaceID = ImGui_GetID("WorkspaceDockspace");
     ImGuiDockNode* existingDockNode = ImGui_DockBuilderGetNode(dockspaceID);
     if (existingDockNode &&
@@ -102,21 +154,35 @@ static void initializeDockLayout(void) {
 
     ImGui_DockBuilderRemoveNode(dockspaceID);
     ImGui_DockBuilderAddNodeEx(dockspaceID, ImGuiDockNodeFlags_DockSpace);
-    ImGui_DockBuilderSetNodeSize(dockspaceID, viewport->Size);
+    ImGui_DockBuilderSetNodeSize(dockspaceID, dockspaceSize);
 
-    ImGuiID inspectorDockID = 0;
-    ImGuiID viewportDockID = dockspaceID;
-    ImGui_DockBuilderSplitNode(dockspaceID, ImGuiDir_Left, 0.26f, &inspectorDockID, &viewportDockID);
-    ImGui_DockBuilderDockWindow("Scene Inspector", inspectorDockID);
+    ImGuiID sceneDockID = 0;
+    ImGuiID propertiesDockID = 0;
+    ImGuiID centerWorkspaceDockID = 0;
+    ImGuiID viewportDockID = 0;
+
+    ImGui_DockBuilderSplitNode(dockspaceID, ImGuiDir_Left, 0.18f, &sceneDockID, &centerWorkspaceDockID);
+    ImGui_DockBuilderSplitNode(centerWorkspaceDockID, ImGuiDir_Right, 0.28f, &propertiesDockID, &viewportDockID);
+
+    ImGui_DockBuilderDockWindow("Scene Browser", sceneDockID);
+    ImGui_DockBuilderDockWindow("Properties", propertiesDockID);
     ImGui_DockBuilderDockWindow("Viewport###ViewWindow", viewportDockID);
 
-    ImGuiDockNode* inspectorDockNode = ImGui_DockBuilderGetNode(inspectorDockID);
-    if (inspectorDockNode) {
-        ImGuiDockNodeFlags localFlags = inspectorDockNode->LocalFlags |
+    ImGuiDockNode* sceneDockNode = ImGui_DockBuilderGetNode(sceneDockID);
+    if (sceneDockNode) {
+        ImGuiDockNodeFlags localFlags = sceneDockNode->LocalFlags |
             ImGuiDockNodeFlags_NoTabBar |
             ImGuiDockNodeFlags_NoWindowMenuButton |
             ImGuiDockNodeFlags_NoCloseButton;
-        ImGuiDockNode_SetLocalFlags(inspectorDockNode, localFlags);
+        ImGuiDockNode_SetLocalFlags(sceneDockNode, localFlags);
+    }
+    ImGuiDockNode* propertiesDockNode = ImGui_DockBuilderGetNode(propertiesDockID);
+    if (propertiesDockNode) {
+        ImGuiDockNodeFlags localFlags = propertiesDockNode->LocalFlags |
+            ImGuiDockNodeFlags_NoTabBar |
+            ImGuiDockNodeFlags_NoWindowMenuButton |
+            ImGuiDockNodeFlags_NoCloseButton;
+        ImGuiDockNode_SetLocalFlags(propertiesDockNode, localFlags);
     }
     ImGuiDockNode* viewportDockNode = ImGui_DockBuilderGetNode(viewportDockID);
     if (viewportDockNode) {
@@ -134,9 +200,14 @@ static void initializeDockLayout(void) {
 
 static bool drawWorkspaceDockspace(void) {
     const ImGuiViewport* mainViewport = ImGui_GetMainViewport();
+    ImVec2 dockspacePos = mainViewport->Pos;
+    dockspacePos.y += queryTopMenuBarHeight() - 1.0f;
+    ImVec2 dockspaceSize = mainViewport->Size;
+    dockspaceSize.y -= queryTopMenuBarHeight() - 1.0f;
+    if (dockspaceSize.y < 1.0f) dockspaceSize.y = 1.0f;
 
-    ImGui_SetNextWindowPos(mainViewport->Pos, ImGuiCond_Always);
-    ImGui_SetNextWindowSize(mainViewport->Size, ImGuiCond_Always);
+    ImGui_SetNextWindowPos(dockspacePos, ImGuiCond_Always);
+    ImGui_SetNextWindowSize(dockspaceSize, ImGuiCond_Always);
     ImGui_SetNextWindowViewport(mainViewport->ID);
 
     ImGuiWindowFlags hostFlags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
@@ -400,12 +471,13 @@ void editorUIUpdate(VKRT* vkrt, Session* session) {
     VKRT_RuntimeSnapshot runtime = {0};
     const VKRT_PublicState* state = queryEditorFrameState(vkrt, &runtime);
 
+    drawMainMenuBar(vkrt, session, state);
     drawWorkspaceDockspace();
 
     bool viewportHovered = false;
     if (state) {
         viewportHovered = drawViewportWindow(vkrt, state, &runtime);
-        editorUIDrawSceneInspector(vkrt, session);
+        editorUIDrawWorkspacePanels(vkrt, session);
         applyEditorCameraInput(vkrt, state, &runtime, viewportHovered);
     }
 

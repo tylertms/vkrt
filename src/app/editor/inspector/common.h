@@ -28,6 +28,14 @@ extern const ImVec4 kProgressTextColor;
 
 float queryInspectorInputWidth(float preferredWidth, float labelReserve);
 void formatDriverVersionText(uint32_t vendorID, uint32_t driverVersion, char* out, size_t outSize);
+void formatByteSize(uint64_t bytes, char* out, size_t outSize);
+void inspectorIndentSection(void);
+void inspectorUnindentSection(void);
+void inspectorTightSeparatorText(const char* label);
+bool inspectorBeginKeyValueTable(const char* id);
+void inspectorKeyValueRow(const char* label, const char* value);
+void inspectorEndKeyValueTable(void);
+bool inspectorPaddedButton(const char* label);
 void drawVerticalIconTabs(const VerticalIconTab* tabs, int tabCount, int* currentTab);
 void drawPaddedTooltip(const char* text);
 void tooltipOnHover(const char* text);
@@ -36,7 +44,9 @@ void syncInspectorDockWidthForTabState(int* currentTab);
 uint32_t clampRenderDimension(int value);
 void formatTime(float seconds, char* out, size_t outSize);
 
-void inspectorDrawConfigTab(VKRT* vkrt);
+void inspectorDrawMonitoringPanel(VKRT* vkrt);
 void inspectorDrawCameraTab(VKRT* vkrt);
+void inspectorPrepareRenderState(VKRT* vkrt, Session* session);
 void inspectorDrawRenderTab(VKRT* vkrt, Session* session);
-void inspectorDrawSceneTab(VKRT* vkrt, Session* session);
+void inspectorDrawSceneBrowser(VKRT* vkrt, Session* session);
+void inspectorDrawSelectionPanel(VKRT* vkrt, Session* session);

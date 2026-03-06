@@ -7,144 +7,286 @@
 #include <math.h>
 #include <stdio.h>
 
-static void drawMeshInspector(VKRT* vkrt, Session* session) {
-    if (!vkrt || !session) return;
+static void formatMeshGeometryText(const VKRT_MeshSnapshot* mesh, char* out, size_t outSize) {
+    if (!mesh || !out || outSize == 0) return;
 
-    uint32_t meshCount = 0;
-    if (VKRT_getMeshCount(vkrt, &meshCount) != VKRT_SUCCESS || meshCount == 0) {
-        ImGui_TextDisabled("No meshes loaded.");
+    if (mesh->ownsGeometry) {
+        snprintf(out, outSize, "Unique");
         return;
     }
 
-    for (uint32_t meshIndex = 0; meshIndex < meshCount; meshIndex++) {
-        VKRT_MeshSnapshot mesh = {0};
-        if (VKRT_getMeshSnapshot(vkrt, meshIndex, &mesh) != VKRT_SUCCESS) continue;
+    snprintf(out, outSize, "Instanced");
+}
 
-        char header[160] = {0};
-        snprintf(header, sizeof(header), "Mesh %u (%s)", meshIndex, sessionGetMeshName(session, meshIndex));
+static bool drawSceneBrowserEntry(Session* session, uint32_t meshIndex, const VKRT_MeshSnapshot* mesh, bool isSelected) {
+    if (!session || !mesh) return false;
 
-        ImGui_PushIDInt((int)meshIndex);
-        bool visible = true;
-        bool open = ImGui_CollapsingHeaderBoolPtr(header, &visible, ImGuiTreeNodeFlags_None);
-        if (!visible) {
-            sessionQueueMeshRemoval(session, meshIndex);
-            ImGui_PopID();
-            continue;
-        }
+    char id[32] = {0};
+    char nameText[192] = {0};
+    char sourceText[32] = {0};
+    const float rowHeight = ImGui_GetTextLineHeight() + 2.0f;
+    snprintf(id, sizeof(id), "##mesh_%u", meshIndex);
 
-        if (!mesh.ownsGeometry && mesh.geometrySource < meshCount) {
-            ImGui_SameLine();
-            ImGui_TextDisabled("-> %u", mesh.geometrySource);
-            tooltipOnHover("This mesh instance reuses geometry from the shown source mesh index.");
-        }
+    const char* meshName = sessionGetMeshName(session, meshIndex);
+    snprintf(nameText, sizeof(nameText), "%s %s",
+        mesh->ownsGeometry ? ICON_FA_CUBE : ICON_FA_CLONE,
+        meshName);
 
-        if (!open) {
-            ImGui_PopID();
-            continue;
-        }
+    if (!mesh->ownsGeometry) {
+        snprintf(sourceText, sizeof(sourceText), ICON_FA_ARROW_RIGHT " %u", mesh->geometrySource);
+    }
 
-        ImGui_Indent();
-        if (ImGui_CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen)) {
-            ImGui_Indent();
-            float position[3] = {mesh.info.position[0], mesh.info.position[1], mesh.info.position[2]};
-            float rotation[3] = {mesh.info.rotation[0], mesh.info.rotation[1], mesh.info.rotation[2]};
-            float scale[3] = {mesh.info.scale[0], mesh.info.scale[1], mesh.info.scale[2]};
+    const ImVec4 transparent = {0.0f, 0.0f, 0.0f, 0.0f};
+    ImGui_PushStyleColorImVec4(ImGuiCol_Header, transparent);
+    ImGui_PushStyleColorImVec4(ImGuiCol_HeaderHovered, transparent);
+    ImGui_PushStyleColorImVec4(ImGuiCol_HeaderActive, transparent);
+    bool clicked = ImGui_SelectableEx(id, isSelected, ImGuiSelectableFlags_None, (ImVec2){0.0f, rowHeight});
+    ImGui_PopStyleColorEx(3);
 
-            bool transformChanged = false;
-            transformChanged |= ImGui_DragFloat3Ex("Translate", position, 0.001f, 0.0f, 0.0f, "%.3f", ImGuiSliderFlags_None);
-            transformChanged |= ImGui_DragFloat3Ex("Rotate", rotation, 0.05f, 0.0f, 0.0f, "%.2f", ImGuiSliderFlags_None);
-            transformChanged |= ImGui_DragFloat3Ex("Scale", scale, 0.001f, 0.001f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    ImVec2 min = ImGui_GetItemRectMin();
+    ImVec2 max = ImGui_GetItemRectMax();
+    ImVec2 nameSize = ImGui_CalcTextSize(nameText);
+    const ImGuiStyle* style = ImGui_GetStyle();
+    float textY = floorf(min.y + (max.y - min.y - nameSize.y) * 0.5f);
+    float textX = min.x + style->FramePadding.x;
+    bool hovered = ImGui_IsItemHovered(ImGuiHoveredFlags_None);
+    bool held = ImGui_IsItemActive();
 
-            if (transformChanged) {
-                for (int axis = 0; axis < 3; axis++) {
-                    rotation[axis] = fmodf(rotation[axis], 360.0f);
-                    if (rotation[axis] < -180.0f) rotation[axis] += 360.0f;
-                    if (rotation[axis] >= 180.0f) rotation[axis] -= 360.0f;
-                }
-                VKRT_Result result = VKRT_setMeshTransform(vkrt, meshIndex, position, rotation, scale);
-                if (result != VKRT_SUCCESS) {
-                    LOG_ERROR("Updating mesh transform failed (%d)", (int)result);
-                }
-            }
+    ImU32 bgColor = 0;
+    if (held) bgColor = ImGui_GetColorU32(ImGuiCol_HeaderActive);
+    else if (hovered) bgColor = ImGui_GetColorU32(ImGuiCol_HeaderHovered);
+    else if (isSelected) bgColor = ImGui_GetColorU32(ImGuiCol_Header);
 
-            ImGui_Unindent();
-        }
+    if (bgColor != 0) {
+        ImDrawList_AddRectFilledEx(ImGui_GetWindowDrawList(), min, max, bgColor, 4.0f, 0);
+    }
 
-        Material material = mesh.material;
-        bool materialChanged = false;
+    if (!mesh->ownsGeometry) {
+        ImVec2 sourceSize = ImGui_CalcTextSize(sourceText);
+        float sourceX = max.x - style->FramePadding.x - sourceSize.x;
+        float sourceY = floorf(min.y + (max.y - min.y - sourceSize.y) * 0.5f);
 
-        if (ImGui_CollapsingHeader("Base", ImGuiTreeNodeFlags_DefaultOpen)) {
-            ImGui_Indent();
-            materialChanged |= ImGui_ColorEdit3("Color##baseColor", material.baseColor, ImGuiColorEditFlags_Float);
-            materialChanged |= ImGui_SliderFloatEx("Metallic##metallic", &material.metallic, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            materialChanged |= ImGui_SliderFloatEx("Roughness##roughness", &material.roughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            materialChanged |= ImGui_SliderFloatEx("Subsurface##subsurface", &material.subsurface, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            materialChanged |= ImGui_SliderFloatEx("Transmission##transmission", &material.transmission, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            ImGui_Unindent();
-        }
+        ImGui_PushClipRect((ImVec2){min.x, min.y}, (ImVec2){sourceX - 8.0f, max.y}, true);
+        ImDrawList_AddTextEx(ImGui_GetWindowDrawList(),
+            (ImVec2){textX, textY},
+            ImGui_GetColorU32(ImGuiCol_Text),
+            nameText,
+            NULL);
+        ImGui_PopClipRect();
 
-        if (ImGui_CollapsingHeader("Specular", ImGuiTreeNodeFlags_None)) {
-            ImGui_Indent();
-            materialChanged |= ImGui_SliderFloatEx("Specular##specular", &material.specular, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            materialChanged |= ImGui_SliderFloatEx("Specular Tint##specularTint", &material.specularTint, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            materialChanged |= ImGui_SliderFloatEx("Anisotropic##anisotropic", &material.anisotropic, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            materialChanged |= ImGui_DragFloatEx("IOR##ior", &material.ior, 0.01f, 1.0f, 3.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            ImGui_Unindent();
-        }
+        ImDrawList_AddTextEx(ImGui_GetWindowDrawList(),
+            (ImVec2){sourceX, sourceY},
+            ImGui_GetColorU32(ImGuiCol_TextDisabled),
+            sourceText,
+            NULL);
+        return clicked;
+    }
 
-        if (ImGui_CollapsingHeader("Sheen & Coat", ImGuiTreeNodeFlags_None)) {
-            ImGui_Indent();
-            materialChanged |= ImGui_SliderFloatEx("Sheen##sheen", &material.sheen, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            materialChanged |= ImGui_SliderFloatEx("Sheen Tint##sheenTint", &material.sheenTint, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            materialChanged |= ImGui_SliderFloatEx("Clearcoat##clearcoat", &material.clearcoat, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            materialChanged |= ImGui_SliderFloatEx("Clearcoat Gloss##clearcoatGloss", &material.clearcoatGloss, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            ImGui_Unindent();
-        }
+    ImDrawList_AddTextEx(ImGui_GetWindowDrawList(),
+        (ImVec2){textX, textY},
+        ImGui_GetColorU32(ImGuiCol_Text),
+        nameText,
+        NULL);
+    return clicked;
+}
 
-        if (ImGui_CollapsingHeader("Emission", ImGuiTreeNodeFlags_None)) {
-            ImGui_Indent();
-            materialChanged |= ImGui_DragFloatEx("Luminance##emissionLuminance", &material.emissionLuminance, 0.1f, 0.0f, 1000000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            materialChanged |= ImGui_ColorEdit3("Color##emissionColor", material.emissionColor, ImGuiColorEditFlags_Float);
-            ImGui_Unindent();
-        }
+static uint32_t querySelectedMeshIndex(VKRT* vkrt) {
+    uint32_t selectedMeshIndex = VKRT_INVALID_INDEX;
+    if (VKRT_getSelectedMesh(vkrt, &selectedMeshIndex) != VKRT_SUCCESS) {
+        return VKRT_INVALID_INDEX;
+    }
+    return selectedMeshIndex;
+}
 
-        if (materialChanged) {
-            VKRT_Result result = VKRT_setMeshMaterial(vkrt, meshIndex, &material);
-            if (result != VKRT_SUCCESS) {
-                LOG_ERROR("Updating mesh material failed (%d)", (int)result);
-            }
-        }
-
-        ImGui_Unindent();
-        ImGui_PopID();
+static void updateSelectedMesh(VKRT* vkrt, uint32_t meshIndex) {
+    if (!vkrt) return;
+    VKRT_Result result = VKRT_setSelectedMesh(vkrt, meshIndex);
+    if (result != VKRT_SUCCESS) {
+        LOG_ERROR("Updating selected mesh failed (%d)", (int)result);
     }
 }
 
-void inspectorDrawSceneTab(VKRT* vkrt, Session* session) {
+static void drawMeshInfoHeader(Session* session, uint32_t meshIndex, const VKRT_MeshSnapshot* mesh) {
+    if (!session || !mesh) return;
+
+    uint32_t triangleCount = mesh->info.indexCount / 3;
+    uint64_t vertexBytes = (uint64_t)mesh->info.vertexCount * 32;
+    uint64_t indexBytes = (uint64_t)mesh->info.indexCount * 4;
+
+    char countText[48] = {0};
+    char sizeText[32] = {0};
+    char geometryText[48] = {0};
+    snprintf(countText, sizeof(countText), "%u verts / %u tris", mesh->info.vertexCount, triangleCount);
+    formatByteSize(vertexBytes + indexBytes, sizeText, sizeof(sizeText));
+    formatMeshGeometryText(mesh, geometryText, sizeof(geometryText));
+
+    inspectorTightSeparatorText(ICON_FA_CIRCLE_INFO " Stats");
+    inspectorIndentSection();
+    if (inspectorBeginKeyValueTable("##mesh_stats")) {
+        inspectorKeyValueRow("Name", sessionGetMeshName(session, meshIndex));
+        inspectorKeyValueRow("Geometry", geometryText);
+        inspectorKeyValueRow("Counts", countText);
+        inspectorKeyValueRow("Size", sizeText);
+        inspectorEndKeyValueTable();
+    }
+    inspectorUnindentSection();
+}
+
+static void drawMeshTransformEditor(VKRT* vkrt, uint32_t meshIndex, const VKRT_MeshSnapshot* mesh) {
+    if (!vkrt || !mesh) return;
+    float position[3] = {mesh->info.position[0], mesh->info.position[1], mesh->info.position[2]};
+    float rotation[3] = {mesh->info.rotation[0], mesh->info.rotation[1], mesh->info.rotation[2]};
+    float scale[3] = {mesh->info.scale[0], mesh->info.scale[1], mesh->info.scale[2]};
+
+    bool transformChanged = false;
+    transformChanged |= ImGui_DragFloat3Ex("Translate", position, 0.001f, 0.0f, 0.0f, "%.3f", ImGuiSliderFlags_None);
+    transformChanged |= ImGui_DragFloat3Ex("Rotate", rotation, 0.05f, 0.0f, 0.0f, "%.2f", ImGuiSliderFlags_None);
+    transformChanged |= ImGui_DragFloat3Ex("Scale", scale, 0.001f, 0.001f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+
+    if (transformChanged) {
+        for (int axis = 0; axis < 3; axis++) {
+            rotation[axis] = fmodf(rotation[axis], 360.0f);
+            if (rotation[axis] < -180.0f) rotation[axis] += 360.0f;
+            if (rotation[axis] >= 180.0f) rotation[axis] -= 360.0f;
+        }
+        VKRT_Result result = VKRT_setMeshTransform(vkrt, meshIndex, position, rotation, scale);
+        if (result != VKRT_SUCCESS) {
+            LOG_ERROR("Updating mesh transform failed (%d)", (int)result);
+        }
+    }
+}
+
+static void drawMeshMaterialEditor(VKRT* vkrt, uint32_t meshIndex, const VKRT_MeshSnapshot* mesh) {
+    if (!vkrt || !mesh) return;
+
+    Material material = mesh->material;
+    bool materialChanged = false;
+
+    materialChanged |= ImGui_ColorEdit3("Base Color", material.baseColor, ImGuiColorEditFlags_Float);
+    materialChanged |= ImGui_SliderFloatEx("Metallic", &material.metallic, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    materialChanged |= ImGui_SliderFloatEx("Roughness", &material.roughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    materialChanged |= ImGui_SliderFloatEx("Transmission", &material.transmission, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    materialChanged |= ImGui_SliderFloatEx("IOR", &material.ior, 1.0f, 3.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+
+    if (ImGui_CollapsingHeader("Specular##material_specular_section", ImGuiTreeNodeFlags_None)) {
+        inspectorIndentSection();
+        materialChanged |= ImGui_SliderFloatEx("Specular", &material.specular, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        materialChanged |= ImGui_SliderFloatEx("Specular Tint", &material.specularTint, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        materialChanged |= ImGui_SliderFloatEx("Anisotropic", &material.anisotropic, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        inspectorUnindentSection();
+    }
+
+    if (ImGui_CollapsingHeader("Coating", ImGuiTreeNodeFlags_None)) {
+        inspectorIndentSection();
+        materialChanged |= ImGui_SliderFloatEx("Clearcoat", &material.clearcoat, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        materialChanged |= ImGui_SliderFloatEx("Clearcoat Gloss", &material.clearcoatGloss, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        materialChanged |= ImGui_SliderFloatEx("Sheen", &material.sheen, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        materialChanged |= ImGui_SliderFloatEx("Sheen Tint", &material.sheenTint, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        materialChanged |= ImGui_SliderFloatEx("Subsurface", &material.subsurface, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        inspectorUnindentSection();
+    }
+
+    if (ImGui_CollapsingHeader("Emission", ImGuiTreeNodeFlags_None)) {
+        inspectorIndentSection();
+        materialChanged |= ImGui_DragFloatEx("Luminance", &material.emissionLuminance, 0.1f, 0.0f, 1000000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        materialChanged |= ImGui_ColorEdit3("Emission Color", material.emissionColor, ImGuiColorEditFlags_Float);
+        inspectorUnindentSection();
+    }
+
+    if (!materialChanged) return;
+
+    VKRT_Result result = VKRT_setMeshMaterial(vkrt, meshIndex, &material);
+    if (result != VKRT_SUCCESS) {
+        LOG_ERROR("Updating mesh material failed (%d)", (int)result);
+    }
+}
+
+static void drawSelectedMeshEditor(VKRT* vkrt, Session* session, uint32_t meshIndex, bool renderModeActive) {
+    if (!vkrt || !session || meshIndex == VKRT_INVALID_INDEX) return;
+
+    VKRT_MeshSnapshot mesh = {0};
+    if (VKRT_getMeshSnapshot(vkrt, meshIndex, &mesh) != VKRT_SUCCESS) {
+        ImGui_TextDisabled("Selected mesh is no longer available.");
+        return;
+    }
+
+    drawMeshInfoHeader(session, meshIndex, &mesh);
+
+    ImGui_BeginDisabled(renderModeActive);
+
+    inspectorTightSeparatorText(ICON_FA_ARROWS_UP_DOWN_LEFT_RIGHT " Transform");
+    inspectorIndentSection();
+    drawMeshTransformEditor(vkrt, meshIndex, &mesh);
+    inspectorUnindentSection();
+
+    inspectorTightSeparatorText(ICON_FA_PALETTE " Material");
+    inspectorIndentSection();
+    drawMeshMaterialEditor(vkrt, meshIndex, &mesh);
+    inspectorUnindentSection();
+
+    ImGui_Spacing();
+    if (inspectorPaddedButton(ICON_FA_TRASH " Remove Mesh")) {
+        sessionQueueMeshRemoval(session, meshIndex);
+    }
+    tooltipOnHover("Remove this mesh from the scene.");
+
+    ImGui_EndDisabled();
+
+    if (renderModeActive) {
+        ImGui_Spacing();
+        ImGui_TextDisabled("Mesh editing is locked while rendering.");
+    }
+}
+
+void inspectorDrawSceneBrowser(VKRT* vkrt, Session* session) {
     if (!vkrt || !session) return;
 
     const VKRT_PublicState* state = VKRT_getPublicState(vkrt);
     if (!state) return;
 
-    bool renderModeActive = state->renderModeActive != 0;
-
-    if (ImGui_CollapsingHeader("Import", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui_Indent();
-        ImGui_BeginDisabled(renderModeActive);
-        if (ImGui_Button(ICON_FA_FOLDER_PLUS " Import mesh")) {
-            sessionRequestMeshImportDialog(session);
-        }
-        ImGui_EndDisabled();
-        ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing});
-        ImGui_Unindent();
+    uint32_t meshCount = 0;
+    if (VKRT_getMeshCount(vkrt, &meshCount) != VKRT_SUCCESS) {
+        ImGui_TextDisabled("Mesh list unavailable.");
+        return;
     }
 
-    if (!ImGui_CollapsingHeader("Meshes", ImGuiTreeNodeFlags_DefaultOpen)) return;
+    uint32_t selectedMeshIndex = querySelectedMeshIndex(vkrt);
 
-    ImGui_Indent();
-    ImGui_BeginDisabled(renderModeActive);
-    drawMeshInspector(vkrt, session);
-    ImGui_EndDisabled();
-    ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing});
-    ImGui_Unindent();
+    inspectorIndentSection();
+    ImGui_PushStyleVarImVec2(ImGuiStyleVar_ItemSpacing, (ImVec2){6.0f, 2.0f});
+    for (uint32_t meshIndex = 0; meshIndex < meshCount; meshIndex++) {
+        VKRT_MeshSnapshot mesh = {0};
+        if (VKRT_getMeshSnapshot(vkrt, meshIndex, &mesh) != VKRT_SUCCESS) continue;
+
+        bool isSelected = selectedMeshIndex == meshIndex;
+        if (drawSceneBrowserEntry(session, meshIndex, &mesh, isSelected)) {
+            updateSelectedMesh(vkrt, isSelected ? VKRT_INVALID_INDEX : meshIndex);
+            selectedMeshIndex = isSelected ? VKRT_INVALID_INDEX : meshIndex;
+        }
+    }
+    ImGui_PopStyleVar();
+    inspectorUnindentSection();
+
+    if (meshCount == 0) {
+        inspectorIndentSection();
+        ImGui_TextDisabled("No meshes. Use File > Import Mesh.");
+        inspectorUnindentSection();
+    }
+
+    (void)state;
+}
+
+void inspectorDrawSelectionPanel(VKRT* vkrt, Session* session) {
+    if (!vkrt || !session) return;
+
+    const VKRT_PublicState* state = VKRT_getPublicState(vkrt);
+    if (!state) return;
+
+    uint32_t selectedMeshIndex = querySelectedMeshIndex(vkrt);
+    if (selectedMeshIndex == VKRT_INVALID_INDEX) {
+        ImGui_TextDisabled("Select a mesh from the Scene panel.");
+        return;
+    }
+
+    drawSelectedMeshEditor(vkrt, session, selectedMeshIndex, state->renderModeActive != 0);
 }
