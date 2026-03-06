@@ -1,5 +1,5 @@
 #include "swapchain.h"
-#include "image/storage_image.h"
+#include "storage.h"
 #include "descriptor.h"
 #include "sync.h"
 #include "scene.h"
@@ -176,7 +176,6 @@ VKRT_Result recreateSwapChain(VKRT* vkrt) {
     cleanupSwapChain(vkrt);
 
     if (createSwapChain(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
-
     if (createImageViews(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
 
     if (!vkrt->state.renderModeActive) {
@@ -191,8 +190,7 @@ VKRT_Result recreateSwapChain(VKRT* vkrt) {
         return VKRT_ERROR_OPERATION_FAILED;
     }
 
-    if (updateDescriptorSet(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
-
+    if (updateAllDescriptorSets(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
     if (createFramebuffers(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
 
     if (vkrt->state.renderModeActive) {

@@ -7,23 +7,11 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-typedef struct EmissiveMeshGPU {
-    uint32_t indices[4];
-    vec4 emission;
-    vec4 stats;
-} EmissiveMeshGPU;
-
-typedef struct EmissiveTriangleGPU {
-    vec4 v0Area;
-    vec4 e1Pad;
-    vec4 e2Pad;
-} EmissiveTriangleGPU;
-
 static float luminance3(const vec3 value) {
     return value[0] * 0.2126f + value[1] * 0.7152f + value[2] * 0.0722f;
 }
 
-static float materialEmissionWeight(const MaterialData* material) {
+static float materialEmissionWeight(const Material* material) {
     if (!material) return 0.0f;
     if (!isfinite(material->emissionLuminance) || material->emissionLuminance <= 0.0f) return 0.0f;
     float lum = luminance3(material->emissionColor);
@@ -37,30 +25,41 @@ static void transformPosition(const VkTransformMatrixKHR* transform, const vec4 
     outWorld[2] = transform->matrix[2][0] * position[0] + transform->matrix[2][1] * position[1] + transform->matrix[2][2] * position[2] + transform->matrix[2][3];
 }
 
+static Buffer* getEmissiveMeshData(VKRT* vkrt) {
+    return &vkrt->core.sceneEmissiveMeshData;
+}
+
+static Buffer* getEmissiveTriangleData(VKRT* vkrt) {
+    return &vkrt->core.sceneEmissiveTriangleData;
+}
+
 static void destroyLightBuffers(VKRT* vkrt) {
     if (!vkrt) return;
 
-    if (vkrt->core.emissiveMeshData.buffer != VK_NULL_HANDLE) {
-        vkDestroyBuffer(vkrt->core.device, vkrt->core.emissiveMeshData.buffer, NULL);
-        vkrt->core.emissiveMeshData.buffer = VK_NULL_HANDLE;
-    }
-    if (vkrt->core.emissiveMeshData.memory != VK_NULL_HANDLE) {
-        vkFreeMemory(vkrt->core.device, vkrt->core.emissiveMeshData.memory, NULL);
-        vkrt->core.emissiveMeshData.memory = VK_NULL_HANDLE;
-    }
-    vkrt->core.emissiveMeshData.deviceAddress = 0;
-    vkrt->core.emissiveMeshData.count = 0;
+    Buffer* emissiveMeshData = getEmissiveMeshData(vkrt);
+    Buffer* emissiveTriangleData = getEmissiveTriangleData(vkrt);
 
-    if (vkrt->core.emissiveTriangleData.buffer != VK_NULL_HANDLE) {
-        vkDestroyBuffer(vkrt->core.device, vkrt->core.emissiveTriangleData.buffer, NULL);
-        vkrt->core.emissiveTriangleData.buffer = VK_NULL_HANDLE;
+    if (emissiveMeshData->buffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(vkrt->core.device, emissiveMeshData->buffer, NULL);
+        emissiveMeshData->buffer = VK_NULL_HANDLE;
     }
-    if (vkrt->core.emissiveTriangleData.memory != VK_NULL_HANDLE) {
-        vkFreeMemory(vkrt->core.device, vkrt->core.emissiveTriangleData.memory, NULL);
-        vkrt->core.emissiveTriangleData.memory = VK_NULL_HANDLE;
+    if (emissiveMeshData->memory != VK_NULL_HANDLE) {
+        vkFreeMemory(vkrt->core.device, emissiveMeshData->memory, NULL);
+        emissiveMeshData->memory = VK_NULL_HANDLE;
     }
-    vkrt->core.emissiveTriangleData.deviceAddress = 0;
-    vkrt->core.emissiveTriangleData.count = 0;
+    emissiveMeshData->deviceAddress = 0;
+    emissiveMeshData->count = 0;
+
+    if (emissiveTriangleData->buffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(vkrt->core.device, emissiveTriangleData->buffer, NULL);
+        emissiveTriangleData->buffer = VK_NULL_HANDLE;
+    }
+    if (emissiveTriangleData->memory != VK_NULL_HANDLE) {
+        vkFreeMemory(vkrt->core.device, emissiveTriangleData->memory, NULL);
+        emissiveTriangleData->memory = VK_NULL_HANDLE;
+    }
+    emissiveTriangleData->deviceAddress = 0;
+    emissiveTriangleData->count = 0;
 
     vkrt->core.emissiveMeshCount = 0;
     vkrt->core.emissiveTriangleCount = 0;
@@ -71,7 +70,7 @@ VKRT_Result rebuildLightBuffers(VKRT* vkrt) {
 
     destroyLightBuffers(vkrt);
 
-    const uint32_t meshCount = vkrt->core.meshData.count;
+    const uint32_t meshCount = vkrt->core.meshCount;
     uint32_t emissiveMeshCount = 0;
     uint32_t emissiveTriangleCount = 0;
 
@@ -87,8 +86,8 @@ VKRT_Result rebuildLightBuffers(VKRT* vkrt) {
     uint32_t allocMeshCount = emissiveMeshCount > 0 ? emissiveMeshCount : 1u;
     uint32_t allocTriangleCount = emissiveTriangleCount > 0 ? emissiveTriangleCount : 1u;
 
-    EmissiveMeshGPU* emissiveMeshes = (EmissiveMeshGPU*)calloc(allocMeshCount, sizeof(EmissiveMeshGPU));
-    EmissiveTriangleGPU* emissiveTriangles = (EmissiveTriangleGPU*)calloc(allocTriangleCount, sizeof(EmissiveTriangleGPU));
+    EmissiveMesh* emissiveMeshes = (EmissiveMesh*)calloc(allocMeshCount, sizeof(EmissiveMesh));
+    EmissiveTriangle* emissiveTriangles = (EmissiveTriangle*)calloc(allocTriangleCount, sizeof(EmissiveTriangle));
     if (!emissiveMeshes || !emissiveTriangles) {
         free(emissiveMeshes);
         free(emissiveTriangles);
@@ -158,7 +157,7 @@ VKRT_Result rebuildLightBuffers(VKRT* vkrt) {
                 }
             }
 
-            EmissiveTriangleGPU triGPU = {0};
+            EmissiveTriangle triGPU = {0};
             triGPU.v0Area[0] = p0[0];
             triGPU.v0Area[1] = p0[1];
             triGPU.v0Area[2] = p0[2];
@@ -192,7 +191,7 @@ VKRT_Result rebuildLightBuffers(VKRT* vkrt) {
             emissiveTriangles[triangleWriteIndex - 1u].e1Pad[3] = totalArea;
         }
 
-        EmissiveMeshGPU meshGPU = {0};
+        EmissiveMesh meshGPU = {0};
         meshGPU.indices[0] = meshIndex;
         meshGPU.indices[1] = triangleOffset;
         meshGPU.indices[2] = triangleCount;
@@ -239,35 +238,37 @@ VKRT_Result rebuildLightBuffers(VKRT* vkrt) {
     uint32_t uploadTriangleCount = emissiveTriangleCount > 0 ? emissiveTriangleCount : 1u;
 
     VKRT_Result result = VKRT_SUCCESS;
-    if ((result = createBufferFromHostData(
+    Buffer* emissiveMeshData = getEmissiveMeshData(vkrt);
+    Buffer* emissiveTriangleData = getEmissiveTriangleData(vkrt);
+    if ((result = createDeviceBufferFromData(
         vkrt,
         emissiveMeshes,
-        (VkDeviceSize)uploadMeshCount * sizeof(EmissiveMeshGPU),
+        (VkDeviceSize)uploadMeshCount * sizeof(EmissiveMesh),
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-        &vkrt->core.emissiveMeshData.buffer,
-        &vkrt->core.emissiveMeshData.memory,
-        &vkrt->core.emissiveMeshData.deviceAddress)) != VKRT_SUCCESS) {
+        &emissiveMeshData->buffer,
+        &emissiveMeshData->memory,
+        &emissiveMeshData->deviceAddress)) != VKRT_SUCCESS) {
         free(emissiveMeshes);
         free(emissiveTriangles);
         destroyLightBuffers(vkrt);
         return result;
     }
-    vkrt->core.emissiveMeshData.count = emissiveMeshCount;
+    emissiveMeshData->count = emissiveMeshCount;
 
-    if ((result = createBufferFromHostData(
+    if ((result = createDeviceBufferFromData(
         vkrt,
         emissiveTriangles,
-        (VkDeviceSize)uploadTriangleCount * sizeof(EmissiveTriangleGPU),
+        (VkDeviceSize)uploadTriangleCount * sizeof(EmissiveTriangle),
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-        &vkrt->core.emissiveTriangleData.buffer,
-        &vkrt->core.emissiveTriangleData.memory,
-        &vkrt->core.emissiveTriangleData.deviceAddress)) != VKRT_SUCCESS) {
+        &emissiveTriangleData->buffer,
+        &emissiveTriangleData->memory,
+        &emissiveTriangleData->deviceAddress)) != VKRT_SUCCESS) {
         free(emissiveMeshes);
         free(emissiveTriangles);
         destroyLightBuffers(vkrt);
         return result;
     }
-    vkrt->core.emissiveTriangleData.count = emissiveTriangleCount;
+    emissiveTriangleData->count = emissiveTriangleCount;
 
     vkrt->core.emissiveMeshCount = emissiveMeshCount;
     vkrt->core.emissiveTriangleCount = emissiveTriangleCount;

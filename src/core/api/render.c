@@ -1,5 +1,5 @@
-#include "image/storage_image.h"
-#include "control_internal.h"
+#include "storage.h"
+#include "shared.h"
 #include "descriptor.h"
 #include "scene.h"
 #include "view.h"
@@ -71,10 +71,47 @@ static void applySceneViewport(VKRT* vkrt, uint32_t x, uint32_t y, uint32_t widt
 static VKRT_Result recreateRenderTargets(VKRT* vkrt) {
     if (!vkrt || vkrt->core.device == VK_NULL_HANDLE) return VKRT_ERROR_INVALID_ARGUMENT;
 
-    vkDeviceWaitIdle(vkrt->core.device);
+    if (vkrtWaitForAllInFlightFrames(vkrt) != VKRT_SUCCESS) {
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
     destroyStorageImage(vkrt);
     if (createStorageImage(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
-    if (updateDescriptorSet(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    if (updateAllDescriptorSets(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    return VKRT_SUCCESS;
+}
+
+static void resetRenderSessionState(VKRT* vkrt, VkBool32 resetViewTransform) {
+    if (!vkrt) return;
+
+    if (resetViewTransform) {
+        vkrt->state.renderViewZoom = 1.0f;
+        vkrt->state.renderViewPanX = 0.0f;
+        vkrt->state.renderViewPanY = 0.0f;
+    }
+
+    vkrt->state.displayRenderTimeMs = 0.0f;
+    vkrt->state.displayFrameTimeMs = 0.0f;
+    vkrt->state.lastFrameTimestamp = 0;
+    vkrt->state.autoSPPControlMs = 0.0f;
+    vkrt->state.autoSPPFramesUntilNextAdjust = 0;
+    vkrt->runtime.autoSPPFastAdaptFrames = vkrt->state.autoSPPEnabled ? 8u : 0u;
+}
+
+static VKRT_Result updateRenderExtent(VKRT* vkrt, VkExtent2D extent) {
+    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    if (vkrt->runtime.renderExtent.width == extent.width &&
+        vkrt->runtime.renderExtent.height == extent.height) {
+        return VKRT_SUCCESS;
+    }
+
+    VkExtent2D previousExtent = vkrt->runtime.renderExtent;
+    vkrt->runtime.renderExtent = extent;
+    if (recreateRenderTargets(vkrt) != VKRT_SUCCESS) {
+        vkrt->runtime.renderExtent = previousExtent;
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+
     return VKRT_SUCCESS;
 }
 
@@ -87,6 +124,9 @@ VKRT_Result VKRT_startRender(VKRT* vkrt, uint32_t width, uint32_t height, uint32
 
     VkBool32 wasRenderModeActive = vkrt->state.renderModeActive != 0;
     VkBool32 extentChanged = vkrt->runtime.renderExtent.width != width || vkrt->runtime.renderExtent.height != height;
+    VkExtent2D requestedExtent = {width, height};
+    uint8_t previousVsync = vkrt->runtime.vsync;
+    VkBool32 previousFramebufferResized = vkrt->runtime.framebufferResized;
 
     if (!wasRenderModeActive) {
         vkrt->runtime.savedVsync = vkrt->runtime.vsync;
@@ -100,30 +140,19 @@ VKRT_Result VKRT_startRender(VKRT* vkrt, uint32_t width, uint32_t height, uint32
         vkrt->core.sceneData->samplesPerPixel = 1;
     }
 
-    vkrt->runtime.renderExtent = (VkExtent2D){width, height};
-    if (recreateRenderTargets(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
-
-    vkrt->state.renderModeActive = 1;
-    vkrt->state.renderModeFinished = 0;
-    vkrt->state.renderTargetSamples = targetSamples;
-
-    if (!wasRenderModeActive || extentChanged) {
-        vkrt->state.renderViewZoom = 1.0f;
-        vkrt->state.renderViewPanX = 0.0f;
-        vkrt->state.renderViewPanY = 0.0f;
-        vkrt->state.displayRenderTimeMs = 0.0f;
-        vkrt->state.displayFrameTimeMs = 0.0f;
-        vkrt->state.lastFrameTimestamp = 0;
-        vkrt->state.autoSPPControlMs = 0.0f;
-        vkrt->state.autoSPPFramesUntilNextAdjust = 0;
-        vkrt->runtime.autoSPPFastAdaptFrames = vkrt->state.autoSPPEnabled ? 8 : 0;
-    } else if (!vkrt->state.autoSPPEnabled) {
-        vkrt->state.autoSPPControlMs = 0.0f;
-        vkrt->state.autoSPPFramesUntilNextAdjust = 0;
-        vkrt->runtime.autoSPPFastAdaptFrames = 0;
+    if (updateRenderExtent(vkrt, requestedExtent) != VKRT_SUCCESS) {
+        if (!wasRenderModeActive) {
+            vkrt->runtime.vsync = previousVsync;
+            vkrt->runtime.framebufferResized = previousFramebufferResized;
+        }
+        return VKRT_ERROR_OPERATION_FAILED;
     }
 
+    vkrt->state.renderModeActive = 1;
+    vkrt->state.renderTargetSamples = targetSamples;
+    resetRenderSessionState(vkrt, !wasRenderModeActive || extentChanged);
     applySceneViewport(vkrt, 0, 0, width, height);
+    resetSceneData(vkrt);
     return VKRT_SUCCESS;
 }
 
@@ -158,27 +187,25 @@ static void restoreSavedVsync(VKRT* vkrt) {
 VKRT_Result VKRT_stopRender(VKRT* vkrt) {
     if (!vkrt || !vkrt->state.renderModeActive) return VKRT_ERROR_INVALID_ARGUMENT;
 
+    uint8_t previousVsync = vkrt->runtime.vsync;
+    VkBool32 previousFramebufferResized = vkrt->runtime.framebufferResized;
     restoreSavedVsync(vkrt);
+    if (updateRenderExtent(vkrt, vkrt->runtime.swapChainExtent) != VKRT_SUCCESS) {
+        vkrt->runtime.vsync = previousVsync;
+        vkrt->runtime.framebufferResized = previousFramebufferResized;
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+
     vkrt->state.renderModeActive = 0;
-    vkrt->state.renderModeFinished = 0;
     vkrt->state.renderTargetSamples = 0;
-    vkrt->state.renderViewZoom = 1.0f;
-    vkrt->state.renderViewPanX = 0.0f;
-    vkrt->state.renderViewPanY = 0.0f;
-
-    vkrt->state.autoSPPControlMs = 0.0f;
-    vkrt->state.autoSPPFramesUntilNextAdjust = 0;
-    vkrt->runtime.autoSPPFastAdaptFrames = vkrt->state.autoSPPEnabled ? 8 : 0;
-
-    vkrt->runtime.renderExtent = vkrt->runtime.swapChainExtent;
-    if (recreateRenderTargets(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
-
+    resetRenderSessionState(vkrt, VK_TRUE);
     uint32_t x = vkrt->runtime.displayViewportRect[0];
     uint32_t y = vkrt->runtime.displayViewportRect[1];
     uint32_t width = vkrt->runtime.displayViewportRect[2];
     uint32_t height = vkrt->runtime.displayViewportRect[3];
     vkrtClampViewportRect(vkrt->runtime.swapChainExtent, &x, &y, &width, &height);
     applySceneViewport(vkrt, x, y, width, height);
+    resetSceneData(vkrt);
     return VKRT_SUCCESS;
 }
 
@@ -186,6 +213,15 @@ VKRT_Result VKRT_setRenderViewport(VKRT* vkrt, uint32_t x, uint32_t y, uint32_t 
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
 
     vkrtClampViewportRect(vkrt->runtime.swapChainExtent, &x, &y, &width, &height);
+    if (vkrt->runtime.displayViewportRect[0] == x &&
+        vkrt->runtime.displayViewportRect[1] == y &&
+        vkrt->runtime.displayViewportRect[2] == width &&
+        vkrt->runtime.displayViewportRect[3] == height) {
+        if (vkrt->state.renderModeActive) return VKRT_SUCCESS;
+        applySceneViewport(vkrt, x, y, width, height);
+        return VKRT_SUCCESS;
+    }
+
     vkrt->runtime.displayViewportRect[0] = x;
     vkrt->runtime.displayViewportRect[1] = y;
     vkrt->runtime.displayViewportRect[2] = width;
@@ -244,6 +280,12 @@ VKRT_Result VKRT_setRenderViewState(VKRT* vkrt, float zoom, float panX, float pa
     VkExtent2D viewportExtent = queryEffectiveDisplayViewportExtent(vkrt);
     vkrtClampRenderViewPanOffset(renderExtent, viewportExtent, zoom, &panX, &panY);
 
+    if (vkrt->state.renderViewZoom == zoom &&
+        vkrt->state.renderViewPanX == panX &&
+        vkrt->state.renderViewPanY == panY) {
+        return VKRT_SUCCESS;
+    }
+
     vkrt->state.renderViewZoom = zoom;
     vkrt->state.renderViewPanX = panX;
     vkrt->state.renderViewPanY = panY;
@@ -251,7 +293,7 @@ VKRT_Result VKRT_setRenderViewState(VKRT* vkrt, float zoom, float panX, float pa
 }
 
 VKRT_Result VKRT_cameraSetPose(VKRT* vkrt, vec3 position, vec3 target, vec3 up, float vfov) {
-    VKRT_Result stateReady = requireSceneStateReady(vkrt);
+    VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
     if (stateReady != VKRT_SUCCESS) return stateReady;
 
     if (position) glm_vec3_copy(position, vkrt->state.camera.pos);

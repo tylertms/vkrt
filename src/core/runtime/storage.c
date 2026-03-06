@@ -1,4 +1,4 @@
-#include "storage_image.h"
+#include "storage.h"
 
 #include "command/pool.h"
 #include "command/record.h"

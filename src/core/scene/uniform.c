@@ -57,22 +57,53 @@ static void writeTimelineUniform(SceneData* sceneData, const VKRT_PublicState* s
     }
 }
 
+static void syncSceneDataToFrame(VKRT* vkrt, uint32_t frameIndex) {
+    if (!vkrt || !vkrt->core.sceneData || frameIndex >= VKRT_MAX_FRAMES_IN_FLIGHT) return;
+    if (!vkrt->core.sceneFrameData[frameIndex]) return;
+    memcpy(vkrt->core.sceneFrameData[frameIndex], vkrt->core.sceneData, sizeof(*vkrt->core.sceneData));
+}
+
+static void syncAllSceneDataFrames(VKRT* vkrt) {
+    if (!vkrt) return;
+    for (uint32_t frameIndex = 0; frameIndex < VKRT_MAX_FRAMES_IN_FLIGHT; frameIndex++) {
+        syncSceneDataToFrame(vkrt, frameIndex);
+    }
+}
+
+void syncCurrentFrameSceneData(VKRT* vkrt) {
+    if (!vkrt) return;
+    syncSceneDataToFrame(vkrt, vkrt->runtime.currentFrame);
+}
+
 VKRT_Result createSceneUniform(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
 
     VkDeviceSize uniformBufferSize = sizeof(SceneData);
-    if (createBuffer(vkrt,
-        uniformBufferSize,
-        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        &vkrt->core.sceneDataBuffer,
-        &vkrt->core.sceneDataMemory) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    vkrt->core.sceneData = &vkrt->core.sceneDataHost;
+    memset(vkrt->core.sceneData, 0, sizeof(*vkrt->core.sceneData));
 
-    if (vkMapMemory(vkrt->core.device, vkrt->core.sceneDataMemory, 0, uniformBufferSize, 0, (void**)&vkrt->core.sceneData) !=
-        VK_SUCCESS || !vkrt->core.sceneData) {
-        return VKRT_ERROR_OPERATION_FAILED;
+    for (uint32_t frameIndex = 0; frameIndex < VKRT_MAX_FRAMES_IN_FLIGHT; frameIndex++) {
+        if (createBuffer(vkrt,
+            uniformBufferSize,
+            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            &vkrt->core.sceneDataBuffers[frameIndex],
+            &vkrt->core.sceneDataMemories[frameIndex]) != VKRT_SUCCESS) {
+            return VKRT_ERROR_OPERATION_FAILED;
+        }
+
+        if (vkMapMemory(vkrt->core.device,
+                vkrt->core.sceneDataMemories[frameIndex],
+                0,
+                uniformBufferSize,
+                0,
+                (void**)&vkrt->core.sceneFrameData[frameIndex]) != VK_SUCCESS ||
+            !vkrt->core.sceneFrameData[frameIndex]) {
+            return VKRT_ERROR_OPERATION_FAILED;
+        }
+
+        memset(vkrt->core.sceneFrameData[frameIndex], 0, uniformBufferSize);
     }
-    memset(vkrt->core.sceneData, 0, uniformBufferSize);
 
     VkDeviceSize pickBufferSize = sizeof(PickBuffer);
     if (createBuffer(vkrt,
@@ -85,7 +116,7 @@ VKRT_Result createSceneUniform(VKRT* vkrt) {
     if (vkMapMemory(vkrt->core.device, vkrt->core.pickBuffer.memory, 0, pickBufferSize, 0, (void**)&vkrt->core.pickData) !=
         VK_SUCCESS || !vkrt->core.pickData) return VKRT_ERROR_OPERATION_FAILED;
     memset(vkrt->core.pickData, 0, sizeof(*vkrt->core.pickData));
-    vkrt->core.pickData->hitMeshIndex = UINT32_MAX;
+    vkrt->core.pickData->hitMeshIndex = VKRT_INVALID_INDEX;
     vkrt->core.pickBuffer.deviceAddress = 0;
     vkrt->core.pickBuffer.count = 1;
 
@@ -139,20 +170,21 @@ VKRT_Result createSceneUniform(VKRT* vkrt) {
     vkrt->state.timeBase = -1.0f;
     vkrt->state.timeStep = 0.5f;
     vkrt->state.fogDensity = 0.0f;
-    vkrt->state.debugMode = 0;
+    vkrt->state.debugMode = VKRT_DEBUG_MODE_NONE;
     vkrt->state.misNeeEnabled = 1u;
     vkrt->state.selectionEnabled = 1;
-    vkrt->state.selectedMeshIndex = UINT32_MAX;
+    vkrt->state.selectedMeshIndex = VKRT_INVALID_INDEX;
     resetTimelineDefaults(&vkrt->state);
     vkrt->core.sceneData->timeBase = vkrt->state.timeBase;
     vkrt->core.sceneData->timeStep = vkrt->state.timeStep;
     vkrt->core.sceneData->fogDensity = vkrt->state.fogDensity;
-    vkrt->core.sceneData->debugMode = 0;
+    vkrt->core.sceneData->debugMode = VKRT_DEBUG_MODE_NONE;
     vkrt->core.sceneData->misNeeEnabled = 1u;
     vkrt->core.sceneData->emissiveMeshCount = 0;
     vkrt->core.sceneData->emissiveTriangleCount = 0;
 
     updateMatricesFromCamera(vkrt);
+    syncAllSceneDataFrames(vkrt);
     return VKRT_SUCCESS;
 }
 

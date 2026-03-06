@@ -1,9 +1,10 @@
 #include "buffer.h"
+#include "shared.h"
 #include "command/pool.h"
 #include "descriptor.h"
 #include "device.h"
 #include "procs.h"
-#include "image/storage_image.h"
+#include "storage.h"
 #include "instance.h"
 #include "pipeline.h"
 #include "scene.h"
@@ -52,17 +53,16 @@ static void destroyAccelerationStructureResources(VKRT* vkrt, AccelerationStruct
 
     destroyBufferAndMemory(vkrt, &accelerationStructure->buffer, &accelerationStructure->memory);
     accelerationStructure->deviceAddress = 0;
-    accelerationStructure->needsRebuild = 0;
 }
 
 static void releaseMeshHostGeometry(VKRT* vkrt) {
     if (!vkrt) return;
     if (!vkrt->core.meshes) {
-        vkrt->core.meshData.count = 0;
+        vkrt->core.meshCount = 0;
         return;
     }
 
-    for (uint32_t i = 0; i < vkrt->core.meshData.count; i++) {
+    for (uint32_t i = 0; i < vkrt->core.meshCount; i++) {
         if (!vkrt->core.meshes[i].ownsGeometry) continue;
         free(vkrt->core.meshes[i].vertices);
         free(vkrt->core.meshes[i].indices);
@@ -72,7 +72,13 @@ static void releaseMeshHostGeometry(VKRT* vkrt) {
 
     free(vkrt->core.meshes);
     vkrt->core.meshes = NULL;
-    vkrt->core.meshData.count = 0;
+    vkrt->core.meshCount = 0;
+}
+
+static void releaseGeometryLayout(VKRT* vkrt) {
+    if (!vkrt) return;
+    vkrt->core.geometryLayout.vertexCapacity = 0;
+    vkrt->core.geometryLayout.indexCapacity = 0;
 }
 
 static void cleanupSwapChainAndStorageResources(VKRT* vkrt) {
@@ -98,9 +104,16 @@ static void cleanupRayTracingAndRenderPassResources(VKRT* vkrt) {
 static void cleanupSceneAndAccelerationResources(VKRT* vkrt) {
     if (!vkrt || vkrt->core.device == VK_NULL_HANDLE) return;
 
-    destroyAccelerationStructureResources(vkrt, &vkrt->core.topLevelAccelerationStructure);
+    for (uint32_t i = 0; i < VKRT_MAX_FRAMES_IN_FLIGHT; i++) {
+        cleanupFrameSceneUpdate(vkrt, i);
+    }
+    destroyAccelerationStructureResources(vkrt, &vkrt->core.sceneTopLevelAccelerationStructure);
+    destroyBufferAndMemory(vkrt, &vkrt->core.sceneMeshData.buffer, &vkrt->core.sceneMeshData.memory);
+    destroyBufferAndMemory(vkrt, &vkrt->core.sceneMaterialData.buffer, &vkrt->core.sceneMaterialData.memory);
+    destroyBufferAndMemory(vkrt, &vkrt->core.sceneEmissiveMeshData.buffer, &vkrt->core.sceneEmissiveMeshData.memory);
+    destroyBufferAndMemory(vkrt, &vkrt->core.sceneEmissiveTriangleData.buffer, &vkrt->core.sceneEmissiveTriangleData.memory);
 
-    for (uint32_t i = 0; i < vkrt->core.meshData.count; i++) {
+    for (uint32_t i = 0; i < vkrt->core.meshCount; i++) {
         if (!vkrt->core.meshes[i].ownsGeometry) continue;
         destroyAccelerationStructureResources(vkrt, &vkrt->core.meshes[i].bottomLevelAccelerationStructure);
     }
@@ -109,7 +122,6 @@ static void cleanupSceneAndAccelerationResources(VKRT* vkrt) {
 
     destroyBufferAndMemory(vkrt, &vkrt->core.vertexData.buffer, &vkrt->core.vertexData.memory);
     destroyBufferAndMemory(vkrt, &vkrt->core.indexData.buffer, &vkrt->core.indexData.memory);
-    destroyBufferAndMemory(vkrt, &vkrt->core.meshData.buffer, &vkrt->core.meshData.memory);
 
     if (vkrt->core.pickData && vkrt->core.pickBuffer.memory != VK_NULL_HANDLE) {
         vkUnmapMemory(vkrt->core.device, vkrt->core.pickBuffer.memory);
@@ -117,15 +129,14 @@ static void cleanupSceneAndAccelerationResources(VKRT* vkrt) {
     }
     destroyBufferAndMemory(vkrt, &vkrt->core.pickBuffer.buffer, &vkrt->core.pickBuffer.memory);
 
-    destroyBufferAndMemory(vkrt, &vkrt->core.materialData.buffer, &vkrt->core.materialData.memory);
-    destroyBufferAndMemory(vkrt, &vkrt->core.emissiveMeshData.buffer, &vkrt->core.emissiveMeshData.memory);
-    destroyBufferAndMemory(vkrt, &vkrt->core.emissiveTriangleData.buffer, &vkrt->core.emissiveTriangleData.memory);
-
-    if (vkrt->core.sceneData && vkrt->core.sceneDataMemory != VK_NULL_HANDLE) {
-        vkUnmapMemory(vkrt->core.device, vkrt->core.sceneDataMemory);
-        vkrt->core.sceneData = NULL;
+    for (uint32_t i = 0; i < VKRT_MAX_FRAMES_IN_FLIGHT; i++) {
+        if (vkrt->core.sceneFrameData[i] && vkrt->core.sceneDataMemories[i] != VK_NULL_HANDLE) {
+            vkUnmapMemory(vkrt->core.device, vkrt->core.sceneDataMemories[i]);
+            vkrt->core.sceneFrameData[i] = NULL;
+        }
+        destroyBufferAndMemory(vkrt, &vkrt->core.sceneDataBuffers[i], &vkrt->core.sceneDataMemories[i]);
     }
-    destroyBufferAndMemory(vkrt, &vkrt->core.sceneDataBuffer, &vkrt->core.sceneDataMemory);
+    vkrt->core.sceneData = NULL;
 }
 
 static void cleanupDescriptorAndPipelineResources(VKRT* vkrt) {
@@ -189,6 +200,7 @@ static void cleanupCommandAndQueryResources(VKRT* vkrt) {
 static void cleanupHostOnlyResources(VKRT* vkrt) {
     if (!vkrt) return;
     releaseMeshHostGeometry(vkrt);
+    releaseGeometryLayout(vkrt);
     resetRenderFinishedSemaphores(vkrt, vkrt->runtime.swapChainImageCount, 0);
 }
 
@@ -248,7 +260,13 @@ VKRT_Result VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInf
     vkrt->runtime.lastLoggedSwapChainColorSpace = VK_COLOR_SPACE_MAX_ENUM_KHR;
     vkrt->runtime.appInitialized = 0;
     vkrt->core.shaders = createInfo->shaders;
-    vkrt->core.descriptorSetReady = VK_FALSE;
+    for (uint32_t i = 0; i < VKRT_MAX_FRAMES_IN_FLIGHT; i++) {
+        vkrt->core.descriptorSetReady[i] = VK_FALSE;
+    }
+    vkrt->core.sceneResourceRevision = 0;
+    vkrt->core.materialResourceRevision = 0;
+    vkrt->core.sceneRevision = 1;
+    vkrt->core.materialRevision = 1;
     vkrt->core.emissiveMeshCount = 0;
     vkrt->core.emissiveTriangleCount = 0;
 

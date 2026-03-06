@@ -27,7 +27,6 @@ VKRT_Result VKRT_draw(VKRT* vkrt);
 
 VKRT_Result VKRT_uploadMeshData(VKRT* vkrt, const Vertex* vertices, size_t vertexCount, const uint32_t* indices, size_t indexCount);
 VKRT_Result VKRT_removeMesh(VKRT* vkrt, uint32_t meshIndex);
-VKRT_Result VKRT_updateTLAS(VKRT* vkrt);
 VKRT_Result VKRT_applyCameraInput(VKRT* vkrt, const VKRT_CameraInput* input);
 VKRT_Result VKRT_invalidateAccumulation(VKRT* vkrt);
 VKRT_Result VKRT_setSamplesPerPixel(VKRT* vkrt, uint32_t samplesPerPixel);

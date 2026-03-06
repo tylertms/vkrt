@@ -1,4 +1,4 @@
-#include "control_internal.h"
+#include "shared.h"
 #include "scene.h"
 #include "vkrt_internal.h"
 
@@ -11,7 +11,7 @@ static float clampFloatValue(float value, float minValue, float maxValue) {
     return value;
 }
 
-static MaterialData sanitizeDisneyMaterial(MaterialData material) {
+static Material sanitizeMaterial(Material material) {
     for (int c = 0; c < 3; c++) {
         material.baseColor[c] = clampFloatValue(material.baseColor[c], 0.0f, 1.0f);
         material.emissionColor[c] = fmaxf(material.emissionColor[c], 0.0f);
@@ -35,46 +35,73 @@ static MaterialData sanitizeDisneyMaterial(MaterialData material) {
     return material;
 }
 
-static uint32_t materialRequiresBackfaces(const MaterialData* material) {
-    return (material && material->transmission > 0.0f) ? 1u : 0u;
+static int updateMeshVector(vec3 destination, vec3 source) {
+    if (!source) return 0;
+    if (memcmp(destination, source, sizeof(vec3)) == 0) return 0;
+    glm_vec3_copy(source, destination);
+    return 1;
 }
 
 VKRT_Result VKRT_getMeshCount(const VKRT* vkrt, uint32_t* outMeshCount) {
     if (!vkrt || !outMeshCount) return VKRT_ERROR_INVALID_ARGUMENT;
-    *outMeshCount = vkrt->core.meshData.count;
+    *outMeshCount = vkrt->core.meshCount;
     return VKRT_SUCCESS;
 }
 
 VKRT_Result VKRT_setMeshTransform(VKRT* vkrt, uint32_t meshIndex, vec3 position, vec3 rotation, vec3 scale) {
-    VKRT_Result stateReady = requireSceneStateReady(vkrt);
+    VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
     if (stateReady != VKRT_SUCCESS) return stateReady;
-    if (meshIndex >= vkrt->core.meshData.count) return VKRT_ERROR_INVALID_ARGUMENT;
+    if (meshIndex >= vkrt->core.meshCount) return VKRT_ERROR_INVALID_ARGUMENT;
 
     MeshInfo* info = &vkrt->core.meshes[meshIndex].info;
-    if (position) glm_vec3_copy(position, info->position);
-    if (rotation) glm_vec3_copy(rotation, info->rotation);
-    if (scale) glm_vec3_copy(scale, info->scale);
+    int changed = 0;
+    changed |= updateMeshVector(info->position, position);
+    changed |= updateMeshVector(info->rotation, rotation);
+    changed |= updateMeshVector(info->scale, scale);
 
-    vkrt->core.topLevelAccelerationStructure.needsRebuild = 1;
+    if (!changed) return VKRT_SUCCESS;
+
+    vkrtMarkSceneResourcesDirty(vkrt);
     resetSceneData(vkrt);
     return VKRT_SUCCESS;
 }
 
-VKRT_Result VKRT_setMeshMaterial(VKRT* vkrt, uint32_t meshIndex, const MaterialData* material) {
-    VKRT_Result stateReady = requireSceneStateReady(vkrt);
+VKRT_Result VKRT_setMeshMaterial(VKRT* vkrt, uint32_t meshIndex, const Material* material) {
+    VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
     if (stateReady != VKRT_SUCCESS) return stateReady;
-    if (!material || meshIndex >= vkrt->core.meshData.count) return VKRT_ERROR_INVALID_ARGUMENT;
+    if (!material || meshIndex >= vkrt->core.meshCount) return VKRT_ERROR_INVALID_ARGUMENT;
 
     Mesh* mesh = &vkrt->core.meshes[meshIndex];
-    mesh->material = sanitizeDisneyMaterial(*material);
+    Material sanitized = sanitizeMaterial(*material);
+    if (memcmp(&mesh->material, &sanitized, sizeof(sanitized)) == 0) return VKRT_SUCCESS;
+    mesh->material = sanitized;
 
-    uint32_t nextBackfaces = materialRequiresBackfaces(&mesh->material);
+    uint32_t nextBackfaces = vkrtResolveMeshRenderBackfaces(mesh);
     if (mesh->info.renderBackfaces != nextBackfaces) {
         mesh->info.renderBackfaces = nextBackfaces;
-        vkrt->core.topLevelAccelerationStructure.needsRebuild = 1;
+        vkrtMarkSceneResourcesDirty(vkrt);
     }
 
-    vkrt->core.materialDataDirty = VK_TRUE;
+    vkrtMarkMaterialResourcesDirty(vkrt);
+    resetSceneData(vkrt);
+    return VKRT_SUCCESS;
+}
+
+VKRT_Result VKRT_setMeshRenderBackfaces(VKRT* vkrt, uint32_t meshIndex, uint32_t enabled) {
+    VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
+    if (stateReady != VKRT_SUCCESS) return stateReady;
+    if (meshIndex >= vkrt->core.meshCount) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    Mesh* mesh = &vkrt->core.meshes[meshIndex];
+    MeshInfo* info = &mesh->info;
+    uint32_t normalized = enabled ? 1u : 0u;
+    if (mesh->renderBackfacesOverride == (int8_t)normalized && info->renderBackfaces == normalized) {
+        return VKRT_SUCCESS;
+    }
+
+    mesh->renderBackfacesOverride = (int8_t)normalized;
+    info->renderBackfaces = vkrtResolveMeshRenderBackfaces(mesh);
+    vkrtMarkSceneResourcesDirty(vkrt);
     resetSceneData(vkrt);
     return VKRT_SUCCESS;
 }

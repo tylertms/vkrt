@@ -1,10 +1,109 @@
 #include "record.h"
+#include "accel/accel.h"
 #include "debug.h"
 #include "view.h"
 
 #include <stdlib.h>
 
 static const VkClearColorValue kViewportClearColor = {.float32 = {0.02f, 0.02f, 0.025f, 1.0f}};
+
+static FrameSceneUpdate* getCurrentFrameSceneUpdate(VKRT* vkrt) {
+    return &vkrt->runtime.frameSceneUpdates[vkrt->runtime.currentFrame];
+}
+
+static void recordSceneUpdateCommands(VKRT* vkrt, VkCommandBuffer commandBuffer) {
+    FrameSceneUpdate* update = getCurrentFrameSceneUpdate(vkrt);
+    VkBool32 hasTransferWrites = VK_FALSE;
+    VkBool32 hasBLASBuilds = update->blasBuildCount > 0 ? VK_TRUE : VK_FALSE;
+    VkBool32 hasTLASBuild = update->tlasBuildPending;
+
+    for (uint32_t i = 0; i < update->sceneTransferCount; i++) {
+        PendingBufferCopy* transfer = &update->sceneTransfers[i];
+        VkBufferCopy copyRegion = {
+            .size = transfer->size,
+        };
+        vkCmdCopyBuffer(commandBuffer, transfer->stagingBuffer, transfer->dstBuffer, 1, &copyRegion);
+        hasTransferWrites = VK_TRUE;
+    }
+
+    for (uint32_t i = 0; i < update->geometryUploadCount; i++) {
+        PendingGeometryUpload* upload = &update->geometryUploads[i];
+        Mesh* mesh = &vkrt->core.meshes[upload->meshIndex];
+        VkBufferCopy copyRegions[2] = {
+            {
+                .srcOffset = 0,
+                .dstOffset = (VkDeviceSize)mesh->info.vertexBase * sizeof(Vertex),
+                .size = (VkDeviceSize)mesh->info.vertexCount * sizeof(Vertex),
+            },
+            {
+                .srcOffset = upload->indexOffset,
+                .dstOffset = (VkDeviceSize)mesh->info.indexBase * sizeof(uint32_t),
+                .size = (VkDeviceSize)mesh->info.indexCount * sizeof(uint32_t),
+            },
+        };
+        vkCmdCopyBuffer(commandBuffer, upload->stagingBuffer, vkrt->core.vertexData.buffer, 1, &copyRegions[0]);
+        vkCmdCopyBuffer(commandBuffer, upload->stagingBuffer, vkrt->core.indexData.buffer, 1, &copyRegions[1]);
+        hasTransferWrites = VK_TRUE;
+    }
+
+
+    if (hasTransferWrites) {
+        VkMemoryBarrier transferBarrier = {0};
+        transferBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+        transferBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        transferBarrier.dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR | VK_ACCESS_SHADER_READ_BIT;
+        vkCmdPipelineBarrier(commandBuffer,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR | VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
+            0,
+            1,
+            &transferBarrier,
+            0,
+            NULL,
+            0,
+            NULL);
+    }
+
+    if (hasBLASBuilds) {
+        recordBottomLevelAccelerationStructureBuilds(vkrt, commandBuffer);
+
+        VkMemoryBarrier blasBarrier = {0};
+        blasBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+        blasBarrier.srcAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
+        blasBarrier.dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR;
+        vkCmdPipelineBarrier(commandBuffer,
+            VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
+            VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR | VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
+            0,
+            1,
+            &blasBarrier,
+            0,
+            NULL,
+            0,
+            NULL);
+    }
+
+    if (hasTLASBuild) {
+        recordTopLevelAccelerationStructureBuild(vkrt, commandBuffer);
+    }
+
+    if (hasTransferWrites || hasBLASBuilds || hasTLASBuild) {
+        VkMemoryBarrier sceneReadyBarrier = {0};
+        sceneReadyBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+        sceneReadyBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
+        sceneReadyBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR;
+        vkCmdPipelineBarrier(commandBuffer,
+            VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
+            VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
+            0,
+            1,
+            &sceneReadyBarrier,
+            0,
+            NULL,
+            0,
+            NULL);
+    }
+}
 
 VKRT_Result recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
     if (!vkrt || imageIndex >= vkrt->runtime.swapChainImageCount) return VKRT_ERROR_INVALID_ARGUMENT;
@@ -32,6 +131,7 @@ VKRT_Result recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
     vkCmdResetQueryPool(commandBuffer, vkrt->runtime.timestampPool, qbase, 2);
 
     vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, vkrt->runtime.timestampPool, qbase);
+    recordSceneUpdateCommands(vkrt, commandBuffer);
 
     transitionImageLayout(commandBuffer, destImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
@@ -44,14 +144,15 @@ VKRT_Result recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
 
     VkBool32 renderModeActive = vkrt->state.renderModeActive != 0;
     VkBool32 renderFinished = renderModeActive && vkrt->state.renderModeFinished;
-    VkBool32 shouldTrace = vkrt->core.descriptorSetReady && !renderFinished;
+    VkBool32 descriptorReady = vkrt->core.descriptorSetReady[vkrt->runtime.currentFrame];
+    VkBool32 shouldTrace = descriptorReady && !renderFinished;
     vkrt->runtime.frameTraced = VK_FALSE;
 
     if (shouldTrace) {
         vkrt->runtime.frameTraced = VK_TRUE;
     }
 
-    if (vkrt->core.descriptorSetReady) {
+    if (descriptorReady) {
         if (vkrt->core.accumulationNeedsReset) {
             vkrt->state.accumulationFrame = 0;
             vkrt->state.totalSamples = 0;
@@ -71,12 +172,35 @@ VKRT_Result recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
         if (shouldTrace) {
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, vkrt->core.rayTracingPipeline);
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, vkrt->core.pipelineLayout, 0, 1,
-                                   &vkrt->core.descriptorSet, 0, NULL);
+                                   &vkrt->core.descriptorSets[vkrt->runtime.currentFrame], 0, NULL);
             vkrt->core.procs.vkCmdTraceRaysKHR(commandBuffer, &vkrt->core.shaderBindingTables[0], &vkrt->core.shaderBindingTables[1],
                                                &vkrt->core.shaderBindingTables[2], &vkrt->core.shaderBindingTables[3],
                                                renderExtent.width, renderExtent.height, 1);
-            transitionImageLayout(commandBuffer, accumulationWriteImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-            transitionImageLayout(commandBuffer, accumulationReadImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+            VkImageMemoryBarrier accumulationBarrier = {0};
+            accumulationBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            accumulationBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+            accumulationBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+            accumulationBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            accumulationBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            accumulationBarrier.image = accumulationWriteImage;
+            accumulationBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            accumulationBarrier.subresourceRange.baseMipLevel = 0;
+            accumulationBarrier.subresourceRange.levelCount = 1;
+            accumulationBarrier.subresourceRange.baseArrayLayer = 0;
+            accumulationBarrier.subresourceRange.layerCount = 1;
+            accumulationBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+            accumulationBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+            vkCmdPipelineBarrier(commandBuffer,
+                VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
+                VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
+                0,
+                0,
+                NULL,
+                0,
+                NULL,
+                1,
+                &accumulationBarrier);
         }
 
         transitionImageLayout(commandBuffer, outputImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
@@ -148,15 +272,6 @@ VKRT_Result recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
 
         vkCmdBlitImage(commandBuffer, outputImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, destImage,
                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
-
-        if (shouldTrace) {
-            VkImageCopy copyRegion = {0};
-            copyRegion.srcSubresource = (VkImageSubresourceLayers){VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-            copyRegion.dstSubresource = (VkImageSubresourceLayers){VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-            copyRegion.extent = (VkExtent3D){renderExtent.width, renderExtent.height, 1};
-            vkCmdCopyImage(commandBuffer, accumulationWriteImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                           accumulationReadImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
-        }
     } else {
         vkCmdClearColorImage(commandBuffer, destImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &kViewportClearColor, 1, &clearRange);
     }
@@ -178,11 +293,7 @@ VKRT_Result recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
 
     vkCmdEndRenderPass(commandBuffer);
 
-    if (vkrt->core.descriptorSetReady) {
-        if (shouldTrace) {
-            transitionImageLayout(commandBuffer, accumulationReadImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
-            transitionImageLayout(commandBuffer, accumulationWriteImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
-        }
+    if (descriptorReady) {
         transitionImageLayout(commandBuffer, outputImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
     }
 

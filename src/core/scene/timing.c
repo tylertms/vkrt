@@ -4,27 +4,8 @@
 
 #include <math.h>
 
-void recordFrameTime(VKRT* vkrt) {
-    uint64_t currentTime = getMicroseconds();
-
-    if (vkrt->state.lastFrameTimestamp == 0) {
-        vkrt->state.lastFrameTimestamp = currentTime;
-        return;
-    }
-
-    vkrt->state.displayTimeMs = (currentTime - vkrt->state.lastFrameTimestamp) / 1000.0f;
-    vkrt->state.lastFrameTimestamp = currentTime;
-
-    uint64_t ts[2];
-    vkGetQueryPoolResults(vkrt->core.device,
-        vkrt->runtime.timestampPool,
-        vkrt->runtime.currentFrame * 2,
-        2,
-        sizeof(ts),
-        ts,
-        sizeof(uint64_t),
-        VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
-    vkrt->state.renderTimeMs = (float)((ts[1] - ts[0]) * vkrt->runtime.timestampPeriod / 1e6);
+static void updateFrameTimes(VKRT* vkrt) {
+    if (!vkrt) return;
 
     const float displaySmoothing = 0.12f;
     if (vkrt->state.displayFrameTimeMs <= 0.0f) vkrt->state.displayFrameTimeMs = vkrt->state.displayTimeMs;
@@ -46,6 +27,43 @@ void recordFrameTime(VKRT* vkrt) {
     vkrt->state.framesPerSecond = (uint32_t)(1000.0f / vkrt->state.displayFrameTimeMs);
     vkrt->state.frametimes[vkrt->state.frametimeStartIndex] = vkrt->state.displayFrameTimeMs;
     vkrt->state.frametimeStartIndex = (vkrt->state.frametimeStartIndex + 1) % VKRT_ARRAY_COUNT(vkrt->state.frametimes);
+}
+
+void recordFrameTime(VKRT* vkrt, uint32_t frameIndex) {
+    if (!vkrt) return;
+
+    uint64_t currentTime = getMicroseconds();
+
+    if (vkrt->state.lastFrameTimestamp == 0) {
+        vkrt->state.lastFrameTimestamp = currentTime;
+        return;
+    }
+
+    vkrt->state.displayTimeMs = (currentTime - vkrt->state.lastFrameTimestamp) / 1000.0f;
+    vkrt->state.lastFrameTimestamp = currentTime;
+
+    if (frameIndex >= VKRT_MAX_FRAMES_IN_FLIGHT || !vkrt->runtime.frameTimingPending[frameIndex]) {
+        updateFrameTimes(vkrt);
+        return;
+    }
+
+    uint64_t ts[2] = {0};
+    VkResult queryResult = vkGetQueryPoolResults(vkrt->core.device,
+        vkrt->runtime.timestampPool,
+        frameIndex * 2,
+        2,
+        sizeof(ts),
+        ts,
+        sizeof(uint64_t),
+        VK_QUERY_RESULT_64_BIT);
+    if (queryResult != VK_SUCCESS) {
+        LOG_ERROR("Failed to collect frame timing query (%d)", (int)queryResult);
+        return;
+    }
+
+    vkrt->runtime.frameTimingPending[frameIndex] = VK_FALSE;
+    vkrt->state.renderTimeMs = (float)((ts[1] - ts[0]) * vkrt->runtime.timestampPeriod / 1e6);
+    updateFrameTimes(vkrt);
 }
 
 void updateAutoSPP(VKRT* vkrt) {

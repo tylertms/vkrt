@@ -1,17 +1,20 @@
 #include "command/record.h"
-#include "control/control_internal.h"
+#include "shared.h"
 #include "descriptor.h"
 #include "scene.h"
 #include "swapchain.h"
+#include "accel/accel.h"
 #include "vkrt_internal.h"
 #include "debug.h"
 
 #include <stdint.h>
 #include <stdlib.h>
 
-static void waitForAllInFlightFrames(VKRT* vkrt) {
+static void invalidateDescriptorSets(VKRT* vkrt) {
     if (!vkrt) return;
-    vkWaitForFences(vkrt->core.device, VKRT_MAX_FRAMES_IN_FLIGHT, vkrt->runtime.inFlightFences, VK_TRUE, UINT64_MAX);
+    for (uint32_t i = 0; i < VKRT_MAX_FRAMES_IN_FLIGHT; i++) {
+        vkrt->core.descriptorSetReady[i] = VK_FALSE;
+    }
 }
 
 VKRT_Result VKRT_beginFrame(VKRT* vkrt) {
@@ -23,11 +26,8 @@ VKRT_Result VKRT_beginFrame(VKRT* vkrt) {
     vkrt->runtime.frameTraced = VK_FALSE;
 
     vkWaitForFences(vkrt->core.device, 1, &vkrt->runtime.inFlightFences[vkrt->runtime.currentFrame], VK_TRUE, UINT64_MAX);
-
-    if (vkrt->core.topLevelAccelerationStructure.needsRebuild &&
-        rebuildTopLevelScene(vkrt) != VKRT_SUCCESS) {
-        return VKRT_ERROR_OPERATION_FAILED;
-    }
+    cleanupFrameSceneUpdate(vkrt, vkrt->runtime.currentFrame);
+    recordFrameTime(vkrt, vkrt->runtime.currentFrame);
 
     VkResult result = vkAcquireNextImageKHR(
         vkrt->core.device,
@@ -55,12 +55,42 @@ VKRT_Result VKRT_updateScene(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
     if (!vkrt->runtime.frameAcquired) return VKRT_SUCCESS;
 
-    if (vkrt->core.materialDataDirty) {
-        waitForAllInFlightFrames(vkrt);
-        if (rebuildMaterialBuffer(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
-        if (updateDescriptorSet(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    VkBool32 materialDirty = vkrt->core.materialResourceRevision != vkrt->core.materialRevision;
+    VkBool32 sceneDirty = vkrt->core.sceneResourceRevision != vkrt->core.sceneRevision;
+    if ((materialDirty || sceneDirty) && vkrtWaitForAllInFlightFrames(vkrt) != VKRT_SUCCESS) {
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+    if (materialDirty || sceneDirty) {
+        invalidateDescriptorSets(vkrt);
     }
 
+    if (materialDirty) {
+        if (rebuildMaterialBuffer(vkrt) != VKRT_SUCCESS) {
+            return VKRT_ERROR_OPERATION_FAILED;
+        }
+    }
+
+    if (preparePendingGeometryUploads(vkrt) != VKRT_SUCCESS) {
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+
+    if (prepareBottomLevelAccelerationStructureBuilds(vkrt) != VKRT_SUCCESS) {
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+
+    if (sceneDirty) {
+        if (!materialDirty && rebuildLightBuffers(vkrt) != VKRT_SUCCESS) {
+            return VKRT_ERROR_OPERATION_FAILED;
+        }
+        if (rebuildTopLevelScene(vkrt) != VKRT_SUCCESS) {
+            return VKRT_ERROR_OPERATION_FAILED;
+        }
+    }
+
+    syncCurrentFrameSceneData(vkrt);
+    if (updateDescriptorSet(vkrt) != VKRT_SUCCESS) {
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
     return VKRT_SUCCESS;
 }
 
@@ -91,6 +121,13 @@ VKRT_Result VKRT_trace(VKRT* vkrt) {
         return VKRT_ERROR_OPERATION_FAILED;
     }
 
+    vkrt->core.materialResourceRevision = vkrt->core.materialRevision;
+    vkrt->core.sceneResourceRevision = vkrt->core.sceneRevision;
+    for (uint32_t i = 0; i < vkrt->core.meshCount; i++) {
+        vkrt->core.meshes[i].geometryUploadPending = 0;
+        vkrt->core.meshes[i].blasBuildPending = 0;
+    }
+    vkrt->runtime.frameTimingPending[vkrt->runtime.currentFrame] = VK_TRUE;
     vkrt->runtime.frameSubmitted = VK_TRUE;
     return VKRT_SUCCESS;
 }
@@ -128,17 +165,20 @@ VKRT_Result VKRT_endFrame(VKRT* vkrt) {
 
     if (vkrt->runtime.framePresented) {
         uint32_t renderedSPP = vkrt->core.sceneData->samplesPerPixel;
-        VkBool32 traceContributed = vkrt->core.descriptorSetReady &&
+        VkBool32 traceContributed = vkrt->core.descriptorSetReady[vkrt->runtime.currentFrame] &&
                                     !vkrt->core.accumulationNeedsReset &&
                                     vkrt->runtime.frameTraced &&
                                     !(vkrt->state.renderModeActive && vkrt->state.renderModeFinished);
 
-        recordFrameTime(vkrt);
         if (traceContributed) {
             updateAutoSPP(vkrt);
             vkrt->state.accumulationFrame++;
             vkrt->state.totalSamples += renderedSPP;
             vkrt->core.sceneData->frameNumber++;
+
+            uint32_t nextReadIndex = vkrt->core.accumulationWriteIndex;
+            vkrt->core.accumulationWriteIndex = vkrt->core.accumulationReadIndex;
+            vkrt->core.accumulationReadIndex = nextReadIndex;
         }
 
         if (vkrt->state.renderModeActive &&

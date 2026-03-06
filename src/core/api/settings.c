@@ -1,4 +1,4 @@
-#include "control_internal.h"
+#include "shared.h"
 #include "scene.h"
 #include "vkrt_internal.h"
 
@@ -17,19 +17,19 @@ static int compareTimelineKeyframesByTime(const void* lhs, const void* rhs) {
 
 static uint32_t sanitizeMeshSelection(const VKRT* vkrt, uint32_t meshIndex) {
     if (!vkrt || meshIndex == UINT32_MAX) return UINT32_MAX;
-    return meshIndex < vkrt->core.meshData.count ? meshIndex : UINT32_MAX;
+    return meshIndex < vkrt->core.meshCount ? meshIndex : UINT32_MAX;
 }
 
 VKRT_Result VKRT_applyCameraInput(VKRT* vkrt, const VKRT_CameraInput* input) {
     if (!input) return VKRT_ERROR_INVALID_ARGUMENT;
-    VKRT_Result stateReady = requireSceneStateReady(vkrt);
+    VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
     if (stateReady != VKRT_SUCCESS) return stateReady;
     applyCameraInput(vkrt, input);
     return VKRT_SUCCESS;
 }
 
 VKRT_Result VKRT_invalidateAccumulation(VKRT* vkrt) {
-    VKRT_Result stateReady = requireSceneStateReady(vkrt);
+    VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
     if (stateReady != VKRT_SUCCESS) return stateReady;
     resetSceneData(vkrt);
     return VKRT_SUCCESS;
@@ -49,7 +49,7 @@ VKRT_Result VKRT_setSamplesPerPixel(VKRT* vkrt, uint32_t samplesPerPixel) {
 }
 
 VKRT_Result VKRT_setPathDepth(VKRT* vkrt, uint32_t rrMinDepth, uint32_t rrMaxDepth) {
-    VKRT_Result stateReady = requireSceneStateReady(vkrt);
+    VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
     if (stateReady != VKRT_SUCCESS) return stateReady;
 
     if (rrMaxDepth < 1u) rrMaxDepth = 1u;
@@ -91,7 +91,7 @@ VKRT_Result VKRT_setAutoSPPTargetFPS(VKRT* vkrt, uint32_t targetFPS) {
 }
 
 VKRT_Result VKRT_setToneMappingMode(VKRT* vkrt, VKRT_ToneMappingMode toneMappingMode) {
-    VKRT_Result stateReady = requireSceneStateReady(vkrt);
+    VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
     if (stateReady != VKRT_SUCCESS) return stateReady;
 
     if (vkrt->state.toneMappingMode == toneMappingMode) return VKRT_SUCCESS;
@@ -101,7 +101,7 @@ VKRT_Result VKRT_setToneMappingMode(VKRT* vkrt, VKRT_ToneMappingMode toneMapping
 }
 
 VKRT_Result VKRT_setFogDensity(VKRT* vkrt, float fogDensity) {
-    VKRT_Result stateReady = requireSceneStateReady(vkrt);
+    VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
     if (stateReady != VKRT_SUCCESS) return stateReady;
     if (!isfinite(fogDensity) || fogDensity < 0.0f) fogDensity = 0.0f;
 
@@ -112,7 +112,7 @@ VKRT_Result VKRT_setFogDensity(VKRT* vkrt, float fogDensity) {
 }
 
 VKRT_Result VKRT_setDebugMode(VKRT* vkrt, uint32_t mode) {
-    VKRT_Result stateReady = requireSceneStateReady(vkrt);
+    VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
     if (stateReady != VKRT_SUCCESS) return stateReady;
     if (vkrt->state.debugMode == mode) return VKRT_SUCCESS;
     vkrt->state.debugMode = mode;
@@ -121,7 +121,7 @@ VKRT_Result VKRT_setDebugMode(VKRT* vkrt, uint32_t mode) {
 }
 
 VKRT_Result VKRT_setMISNEEEnabled(VKRT* vkrt, uint32_t enabled) {
-    VKRT_Result stateReady = requireSceneStateReady(vkrt);
+    VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
     if (stateReady != VKRT_SUCCESS) return stateReady;
     enabled = enabled ? 1u : 0u;
     if (vkrt->state.misNeeEnabled == enabled) return VKRT_SUCCESS;
@@ -131,7 +131,7 @@ VKRT_Result VKRT_setMISNEEEnabled(VKRT* vkrt, uint32_t enabled) {
 }
 
 VKRT_Result VKRT_setTimeRange(VKRT* vkrt, float timeBase, float timeStep) {
-    VKRT_Result stateReady = requireSceneStateReady(vkrt);
+    VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
     if (stateReady != VKRT_SUCCESS) return stateReady;
 
     if (timeBase < 0.0f) {
@@ -150,7 +150,7 @@ VKRT_Result VKRT_setTimeRange(VKRT* vkrt, float timeBase, float timeStep) {
 }
 
 VKRT_Result VKRT_setSceneTimeline(VKRT* vkrt, const VKRT_SceneTimelineSettings* timeline) {
-    VKRT_Result stateReady = requireSceneStateReady(vkrt);
+    VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
     if (stateReady != VKRT_SUCCESS) return stateReady;
 
     VKRT_SceneTimelineSettings sanitized = {0};
@@ -209,7 +209,7 @@ VKRT_Result VKRT_pickMeshAtPixel(const VKRT* vkrt, uint32_t x, uint32_t y, uint3
 }
 
 VKRT_Result VKRT_setSelectedMesh(VKRT* vkrt, uint32_t meshIndex) {
-    VKRT_Result stateReady = requireSceneStateReady(vkrt);
+    VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
     if (stateReady != VKRT_SUCCESS) return stateReady;
 
     uint32_t nextSelectedMesh = sanitizeMeshSelection(vkrt, meshIndex);

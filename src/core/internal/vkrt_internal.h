@@ -25,15 +25,17 @@ typedef struct VKRT_Core {
     QueueFamily indices;
     VkDescriptorSetLayout descriptorSetLayout;
     VkDescriptorPool descriptorPool;
-    VkDescriptorSet descriptorSet;
+    VkDescriptorSet descriptorSets[VKRT_MAX_FRAMES_IN_FLIGHT];
     VkPipelineLayout pipelineLayout;
     VkPipeline rayTracingPipeline;
     VkBuffer shaderBindingTableBuffer;
     VkDeviceMemory shaderBindingTableMemory;
     VkStridedDeviceAddressRegionKHR shaderBindingTables[4];
-    VkBuffer sceneDataBuffer;
-    VkDeviceMemory sceneDataMemory;
+    SceneData sceneDataHost;
     SceneData* sceneData;
+    VkBuffer sceneDataBuffers[VKRT_MAX_FRAMES_IN_FLIGHT];
+    VkDeviceMemory sceneDataMemories[VKRT_MAX_FRAMES_IN_FLIGHT];
+    SceneData* sceneFrameData[VKRT_MAX_FRAMES_IN_FLIGHT];
     PickBuffer* pickData;
     VkImage storageImage;
     VkImageView storageImageView;
@@ -45,16 +47,21 @@ typedef struct VKRT_Core {
     uint32_t accumulationWriteIndex;
     VkBool32 accumulationNeedsReset;
     Mesh* meshes;
-    AccelerationStructure topLevelAccelerationStructure;
     Buffer pickBuffer;
     Buffer vertexData;
     Buffer indexData;
-    Buffer meshData;
-    Buffer materialData;
-    Buffer emissiveMeshData;
-    Buffer emissiveTriangleData;
-    VkBool32 materialDataDirty;
-    VkBool32 descriptorSetReady;
+    uint32_t meshCount;
+    Buffer sceneMeshData;
+    Buffer sceneMaterialData;
+    Buffer sceneEmissiveMeshData;
+    Buffer sceneEmissiveTriangleData;
+    AccelerationStructure sceneTopLevelAccelerationStructure;
+    VkBool32 descriptorSetReady[VKRT_MAX_FRAMES_IN_FLIGHT];
+    uint32_t sceneRevision;
+    uint32_t materialRevision;
+    uint32_t sceneResourceRevision;
+    uint32_t materialResourceRevision;
+    GeometryLayout geometryLayout;
     uint32_t emissiveMeshCount;
     uint32_t emissiveTriangleCount;
     char deviceName[256];
@@ -63,6 +70,43 @@ typedef struct VKRT_Core {
     VKRT_ShaderConfig shaders;
     VKRT_DeviceProcedures procs;
 } VKRT_Core;
+
+typedef struct FrameTransfer {
+    VkBuffer buffer;
+    VkDeviceMemory memory;
+} FrameTransfer;
+
+typedef struct PendingGeometryUpload {
+    uint32_t meshIndex;
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingMemory;
+    VkDeviceSize indexOffset;
+} PendingGeometryUpload;
+
+typedef struct PendingBufferCopy {
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingMemory;
+    VkBuffer dstBuffer;
+    VkDeviceSize size;
+} PendingBufferCopy;
+
+typedef struct PendingBLASBuild {
+    uint32_t meshIndex;
+    VkBuffer scratchBuffer;
+    VkDeviceMemory scratchMemory;
+} PendingBLASBuild;
+
+typedef struct FrameSceneUpdate {
+    PendingBufferCopy* sceneTransfers;
+    uint32_t sceneTransferCount;
+    PendingGeometryUpload* geometryUploads;
+    uint32_t geometryUploadCount;
+    PendingBLASBuild* blasBuilds;
+    uint32_t blasBuildCount;
+    FrameTransfer instanceBuffer;
+    FrameTransfer tlasScratch;
+    VkBool32 tlasBuildPending;
+} FrameSceneUpdate;
 
 typedef struct VKRT_Runtime {
     GLFWwindow* window;
@@ -79,6 +123,7 @@ typedef struct VKRT_Runtime {
     VkFramebuffer* framebuffers;
     VkCommandPool commandPool;
     VkCommandBuffer commandBuffers[VKRT_MAX_FRAMES_IN_FLIGHT];
+    FrameSceneUpdate frameSceneUpdates[VKRT_MAX_FRAMES_IN_FLIGHT];
     VkSemaphore imageAvailableSemaphores[VKRT_MAX_FRAMES_IN_FLIGHT];
     VkSemaphore* renderFinishedSemaphores;
     VkFence inFlightFences[VKRT_MAX_FRAMES_IN_FLIGHT];
@@ -86,6 +131,7 @@ typedef struct VKRT_Runtime {
     VkBool32 framebufferResized;
     VkQueryPool timestampPool;
     float timestampPeriod;
+    VkBool32 frameTimingPending[VKRT_MAX_FRAMES_IN_FLIGHT];
     uint8_t vsync;
     uint8_t savedVsync;
     uint32_t frameImageIndex;

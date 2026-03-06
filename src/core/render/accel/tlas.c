@@ -1,7 +1,6 @@
 #include "accel.h"
 
 #include "buffer.h"
-#include "command/pool.h"
 #include "device.h"
 #include "scene.h"
 #include "debug.h"
@@ -9,55 +8,94 @@
 #include <stdlib.h>
 #include <string.h>
 
+static AccelerationStructure* getSceneTLAS(VKRT* vkrt) {
+    return &vkrt->core.sceneTopLevelAccelerationStructure;
+}
+
+static Buffer* getSceneMeshData(VKRT* vkrt) {
+    return &vkrt->core.sceneMeshData;
+}
+
+static FrameSceneUpdate* getCurrentFrameSceneUpdate(VKRT* vkrt) {
+    return &vkrt->runtime.frameSceneUpdates[vkrt->runtime.currentFrame];
+}
+
+static void destroyBufferResources(VKRT* vkrt, Buffer* buffer) {
+    if (!vkrt || !buffer) return;
+
+    if (buffer->buffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(vkrt->core.device, buffer->buffer, NULL);
+        buffer->buffer = VK_NULL_HANDLE;
+    }
+    if (buffer->memory != VK_NULL_HANDLE) {
+        vkFreeMemory(vkrt->core.device, buffer->memory, NULL);
+        buffer->memory = VK_NULL_HANDLE;
+    }
+    buffer->deviceAddress = 0;
+    buffer->count = 0;
+}
+
+static void destroySceneBuffers(VKRT* vkrt) {
+    if (!vkrt) return;
+
+    Buffer* meshData = getSceneMeshData(vkrt);
+    destroyBufferResources(vkrt, meshData);
+
+    AccelerationStructure* tlas = getSceneTLAS(vkrt);
+    if (tlas->structure != VK_NULL_HANDLE) {
+        vkrt->core.procs.vkDestroyAccelerationStructureKHR(vkrt->core.device, tlas->structure, NULL);
+        tlas->structure = VK_NULL_HANDLE;
+    }
+    if (tlas->buffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(vkrt->core.device, tlas->buffer, NULL);
+        tlas->buffer = VK_NULL_HANDLE;
+    }
+    if (tlas->memory != VK_NULL_HANDLE) {
+        vkFreeMemory(vkrt->core.device, tlas->memory, NULL);
+        tlas->memory = VK_NULL_HANDLE;
+    }
+    tlas->deviceAddress = 0;
+}
+
 VKRT_Result createTopLevelAccelerationStructure(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
-
-    VKRT_Result result = VKRT_SUCCESS;
     uint64_t startTime = getMicroseconds();
+    destroySceneBuffers(vkrt);
 
-    if (vkrt->core.topLevelAccelerationStructure.structure != VK_NULL_HANDLE) {
-        vkrt->core.procs.vkDestroyAccelerationStructureKHR(
-            vkrt->core.device,
-            vkrt->core.topLevelAccelerationStructure.structure,
-            NULL);
-        vkDestroyBuffer(vkrt->core.device, vkrt->core.topLevelAccelerationStructure.buffer, NULL);
-        vkFreeMemory(vkrt->core.device, vkrt->core.topLevelAccelerationStructure.memory, NULL);
-
-        vkrt->core.topLevelAccelerationStructure.structure = VK_NULL_HANDLE;
-        vkrt->core.topLevelAccelerationStructure.buffer = VK_NULL_HANDLE;
-        vkrt->core.topLevelAccelerationStructure.memory = VK_NULL_HANDLE;
-        vkrt->core.topLevelAccelerationStructure.deviceAddress = 0;
+    FrameSceneUpdate* update = getCurrentFrameSceneUpdate(vkrt);
+    if (update->instanceBuffer.buffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(vkrt->core.device, update->instanceBuffer.buffer, NULL);
+        update->instanceBuffer.buffer = VK_NULL_HANDLE;
     }
-
-    if (vkrt->core.meshData.buffer != VK_NULL_HANDLE) {
-        vkDestroyBuffer(vkrt->core.device, vkrt->core.meshData.buffer, NULL);
-        vkrt->core.meshData.buffer = VK_NULL_HANDLE;
+    if (update->instanceBuffer.memory != VK_NULL_HANDLE) {
+        vkFreeMemory(vkrt->core.device, update->instanceBuffer.memory, NULL);
+        update->instanceBuffer.memory = VK_NULL_HANDLE;
     }
-
-    if (vkrt->core.meshData.memory != VK_NULL_HANDLE) {
-        vkFreeMemory(vkrt->core.device, vkrt->core.meshData.memory, NULL);
-        vkrt->core.meshData.memory = VK_NULL_HANDLE;
+    if (update->tlasScratch.buffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(vkrt->core.device, update->tlasScratch.buffer, NULL);
+        update->tlasScratch.buffer = VK_NULL_HANDLE;
     }
-    vkrt->core.meshData.deviceAddress = 0;
+    if (update->tlasScratch.memory != VK_NULL_HANDLE) {
+        vkFreeMemory(vkrt->core.device, update->tlasScratch.memory, NULL);
+        update->tlasScratch.memory = VK_NULL_HANDLE;
+    }
+    update->tlasBuildPending = VK_FALSE;
 
-    uint32_t instanceCount = vkrt->core.meshData.count;
+    uint32_t instanceCount = vkrt->core.meshCount;
     if (instanceCount == 0) {
-        LOG_TRACE("TLAS created. Instances: 0, in %.3f ms", (double)(getMicroseconds() - startTime) / 1e3);
+        LOG_TRACE("TLAS prepared. Instances: 0, in %.3f ms", (double)(getMicroseconds() - startTime) / 1e3);
         return VKRT_SUCCESS;
     }
 
+    VKRT_Result result = VKRT_SUCCESS;
     uint32_t graphicsFamily = vkrt->core.indices.graphics;
     VkAccelerationStructureInstanceKHR* instances = NULL;
     MeshInfo* meshInfos = NULL;
-    VkBuffer instanceBuffer = VK_NULL_HANDLE;
-    VkDeviceMemory instanceMemory = VK_NULL_HANDLE;
-    VkBuffer stagingMeshInfo = VK_NULL_HANDLE;
-    VkDeviceMemory stagingMeshInfoMem = VK_NULL_HANDLE;
-    VkBuffer scratchBuffer = VK_NULL_HANDLE;
-    VkDeviceMemory scratchDeviceMemory = VK_NULL_HANDLE;
+    Buffer* meshData = getSceneMeshData(vkrt);
+    AccelerationStructure* tlas = getSceneTLAS(vkrt);
 
-    instances = (VkAccelerationStructureInstanceKHR*)malloc(sizeof(VkAccelerationStructureInstanceKHR) * instanceCount);
-    meshInfos = (MeshInfo*)malloc(sizeof(MeshInfo) * instanceCount);
+    instances = (VkAccelerationStructureInstanceKHR*)malloc(sizeof(*instances) * instanceCount);
+    meshInfos = (MeshInfo*)malloc(sizeof(*meshInfos) * instanceCount);
     if (!instances || !meshInfos) {
         result = VKRT_ERROR_OPERATION_FAILED;
         goto cleanup;
@@ -65,12 +103,10 @@ VKRT_Result createTopLevelAccelerationStructure(VKRT* vkrt) {
 
     for (uint32_t i = 0; i < instanceCount; i++) {
         MeshInfo meshInfo = vkrt->core.meshes[i].info;
-
         VkAccelerationStructureInstanceKHR instance = {0};
         instance.transform = getMeshTransform(&meshInfo);
         instance.instanceCustomIndex = i;
         instance.mask = 0xFF;
-        instance.instanceShaderBindingTableRecordOffset = 0;
         if (meshInfo.renderBackfaces) {
             instance.flags |= VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
         }
@@ -80,96 +116,37 @@ VKRT_Result createTopLevelAccelerationStructure(VKRT* vkrt) {
         meshInfos[i] = meshInfo;
     }
 
-    VkBufferCreateInfo instanceBufferCreateInfo = {0};
-    instanceBufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    instanceBufferCreateInfo.size = sizeof(VkAccelerationStructureInstanceKHR) * instanceCount;
-    instanceBufferCreateInfo.usage =
-        VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
-    instanceBufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    instanceBufferCreateInfo.queueFamilyIndexCount = 1;
-    instanceBufferCreateInfo.pQueueFamilyIndices = &graphicsFamily;
-
-    if (vkCreateBuffer(vkrt->core.device, &instanceBufferCreateInfo, NULL, &instanceBuffer) != VK_SUCCESS) {
-        result = VKRT_ERROR_OPERATION_FAILED;
-        goto cleanup;
-    }
-
-    VkMemoryRequirements instanceMemoryRequirements = {0};
-    vkGetBufferMemoryRequirements(vkrt->core.device, instanceBuffer, &instanceMemoryRequirements);
-
-    VkMemoryAllocateFlagsInfo memoryAllocateFlagsInfo = {0};
-    memoryAllocateFlagsInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
-    memoryAllocateFlagsInfo.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
-
-    VkMemoryAllocateInfo instanceMemoryAllocateInfo = {0};
-    instanceMemoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    instanceMemoryAllocateInfo.pNext = &memoryAllocateFlagsInfo;
-    instanceMemoryAllocateInfo.allocationSize = instanceMemoryRequirements.size;
-    if (findMemoryType(
-            vkrt,
-            instanceMemoryRequirements.memoryTypeBits,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            &instanceMemoryAllocateInfo.memoryTypeIndex) != VKRT_SUCCESS) {
-        result = VKRT_ERROR_OPERATION_FAILED;
-        goto cleanup;
-    }
-
-    if (vkAllocateMemory(vkrt->core.device, &instanceMemoryAllocateInfo, NULL, &instanceMemory) != VK_SUCCESS) {
-        result = VKRT_ERROR_OPERATION_FAILED;
-        goto cleanup;
-    }
-
-    if (vkBindBufferMemory(vkrt->core.device, instanceBuffer, instanceMemory, 0) != VK_SUCCESS) {
-        result = VKRT_ERROR_OPERATION_FAILED;
-        goto cleanup;
-    }
-
-    void* mapped = NULL;
-    if (vkMapMemory(vkrt->core.device, instanceMemory, 0, instanceMemoryRequirements.size, 0, &mapped) != VK_SUCCESS ||
-        !mapped) {
-        result = VKRT_ERROR_OPERATION_FAILED;
-        goto cleanup;
-    }
-    memcpy(mapped, instances, sizeof(VkAccelerationStructureInstanceKHR) * instanceCount);
-    vkUnmapMemory(vkrt->core.device, instanceMemory);
-
-    VkDeviceSize meshInfoSize = sizeof(MeshInfo) * instanceCount;
-    if ((result = createBuffer(
+    result = createHostBufferFromData(
         vkrt,
-        meshInfoSize,
-        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        &stagingMeshInfo,
-        &stagingMeshInfoMem)) != VKRT_SUCCESS) goto cleanup;
-
-    mapped = NULL;
-    if (vkMapMemory(vkrt->core.device, stagingMeshInfoMem, 0, meshInfoSize, 0, &mapped) != VK_SUCCESS || !mapped) {
-        result = VKRT_ERROR_OPERATION_FAILED;
+        instances,
+        sizeof(*instances) * instanceCount,
+        VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+        &update->instanceBuffer.buffer,
+        &update->instanceBuffer.memory,
+        NULL);
+    if (result != VKRT_SUCCESS) {
         goto cleanup;
     }
-    memcpy(mapped, meshInfos, (size_t)meshInfoSize);
-    vkUnmapMemory(vkrt->core.device, stagingMeshInfoMem);
 
-    if ((result = createBuffer(
+    VkDeviceSize meshInfoSize = sizeof(*meshInfos) * instanceCount;
+    result = createDeviceBufferFromData(
         vkrt,
+        meshInfos,
         meshInfoSize,
-        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        &vkrt->core.meshData.buffer,
-        &vkrt->core.meshData.memory)) != VKRT_SUCCESS) goto cleanup;
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+        &meshData->buffer,
+        &meshData->memory,
+        &meshData->deviceAddress);
+    if (result != VKRT_SUCCESS) {
+        goto cleanup;
+    }
+    meshData->count = instanceCount;
 
-    if ((result = copyBuffer(vkrt, stagingMeshInfo, vkrt->core.meshData.buffer, meshInfoSize)) != VKRT_SUCCESS) goto cleanup;
-
-    vkDestroyBuffer(vkrt->core.device, stagingMeshInfo, NULL);
-    vkFreeMemory(vkrt->core.device, stagingMeshInfoMem, NULL);
-    stagingMeshInfo = VK_NULL_HANDLE;
-    stagingMeshInfoMem = VK_NULL_HANDLE;
-
-    VkBufferDeviceAddressInfo instanceBufferDeviceAddressInfo = {0};
-    instanceBufferDeviceAddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
-    instanceBufferDeviceAddressInfo.buffer = instanceBuffer;
+    VkBufferDeviceAddressInfo instanceAddressInfo = {0};
+    instanceAddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+    instanceAddressInfo.buffer = update->instanceBuffer.buffer;
     VkDeviceAddress instanceDeviceAddress =
-        vkrt->core.procs.vkGetBufferDeviceAddressKHR(vkrt->core.device, &instanceBufferDeviceAddressInfo);
+        vkrt->core.procs.vkGetBufferDeviceAddressKHR(vkrt->core.device, &instanceAddressInfo);
 
     VkAccelerationStructureGeometryInstancesDataKHR geometryInstancesData = {0};
     geometryInstancesData.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
@@ -208,187 +185,154 @@ VKRT_Result createTopLevelAccelerationStructure(VKRT* vkrt) {
     tlasBufferCreateInfo.queueFamilyIndexCount = 1;
     tlasBufferCreateInfo.pQueueFamilyIndices = &graphicsFamily;
 
-    if (vkCreateBuffer(
-            vkrt->core.device,
-            &tlasBufferCreateInfo,
-            NULL,
-            &vkrt->core.topLevelAccelerationStructure.buffer) != VK_SUCCESS) {
+    if (vkCreateBuffer(vkrt->core.device, &tlasBufferCreateInfo, NULL, &tlas->buffer) != VK_SUCCESS) {
         result = VKRT_ERROR_OPERATION_FAILED;
         goto cleanup;
     }
 
-    VkMemoryRequirements tlasBufferMemoryRequirements = {0};
-    vkGetBufferMemoryRequirements(
-        vkrt->core.device,
-        vkrt->core.topLevelAccelerationStructure.buffer,
-        &tlasBufferMemoryRequirements);
+    VkMemoryRequirements tlasMemoryRequirements = {0};
+    vkGetBufferMemoryRequirements(vkrt->core.device, tlas->buffer, &tlasMemoryRequirements);
 
-    VkMemoryAllocateInfo tlasMemoryAllocateInfo = {0};
-    tlasMemoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    tlasMemoryAllocateInfo.pNext = &memoryAllocateFlagsInfo;
-    tlasMemoryAllocateInfo.allocationSize = tlasBufferMemoryRequirements.size;
-    if (findMemoryType(
-            vkrt,
-            tlasBufferMemoryRequirements.memoryTypeBits,
+    VkMemoryAllocateFlagsInfo allocateFlags = {0};
+    allocateFlags.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
+    allocateFlags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+
+    VkMemoryAllocateInfo tlasAllocateInfo = {0};
+    tlasAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    tlasAllocateInfo.pNext = &allocateFlags;
+    tlasAllocateInfo.allocationSize = tlasMemoryRequirements.size;
+    if (findMemoryType(vkrt,
+            tlasMemoryRequirements.memoryTypeBits,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            &tlasMemoryAllocateInfo.memoryTypeIndex) != VKRT_SUCCESS) {
+            &tlasAllocateInfo.memoryTypeIndex) != VKRT_SUCCESS) {
         result = VKRT_ERROR_OPERATION_FAILED;
         goto cleanup;
     }
 
-    if (vkAllocateMemory(
-            vkrt->core.device,
-            &tlasMemoryAllocateInfo,
-            NULL,
-            &vkrt->core.topLevelAccelerationStructure.memory) != VK_SUCCESS) {
+    if (vkAllocateMemory(vkrt->core.device, &tlasAllocateInfo, NULL, &tlas->memory) != VK_SUCCESS) {
         result = VKRT_ERROR_OPERATION_FAILED;
         goto cleanup;
     }
 
-    if (vkBindBufferMemory(vkrt->core.device,
-            vkrt->core.topLevelAccelerationStructure.buffer,
-            vkrt->core.topLevelAccelerationStructure.memory,
-            0) != VK_SUCCESS) {
+    if (vkBindBufferMemory(vkrt->core.device, tlas->buffer, tlas->memory, 0) != VK_SUCCESS) {
         result = VKRT_ERROR_OPERATION_FAILED;
         goto cleanup;
     }
 
-    VkAccelerationStructureCreateInfoKHR accelerationStructureCreateInfo = {0};
-    accelerationStructureCreateInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
-    accelerationStructureCreateInfo.buffer = vkrt->core.topLevelAccelerationStructure.buffer;
-    accelerationStructureCreateInfo.offset = 0;
-    accelerationStructureCreateInfo.size = buildSizesInfo.accelerationStructureSize;
-    accelerationStructureCreateInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+    VkAccelerationStructureCreateInfoKHR createInfo = {0};
+    createInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
+    createInfo.buffer = tlas->buffer;
+    createInfo.size = buildSizesInfo.accelerationStructureSize;
+    createInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
 
     if (vkrt->core.procs.vkCreateAccelerationStructureKHR(
             vkrt->core.device,
-            &accelerationStructureCreateInfo,
+            &createInfo,
             NULL,
-            &vkrt->core.topLevelAccelerationStructure.structure) != VK_SUCCESS) {
+            &tlas->structure) != VK_SUCCESS) {
         result = VKRT_ERROR_OPERATION_FAILED;
         goto cleanup;
     }
 
-    VkBufferCreateInfo scratchBufferCreateInfo = {0};
-    scratchBufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    scratchBufferCreateInfo.size = buildSizesInfo.buildScratchSize;
-    scratchBufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
-    scratchBufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    scratchBufferCreateInfo.queueFamilyIndexCount = 1;
-    scratchBufferCreateInfo.pQueueFamilyIndices = &graphicsFamily;
+    VkAccelerationStructureDeviceAddressInfoKHR addressInfo = {0};
+    addressInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR;
+    addressInfo.accelerationStructure = tlas->structure;
+    tlas->deviceAddress =
+        vkrt->core.procs.vkGetAccelerationStructureDeviceAddressKHR(vkrt->core.device, &addressInfo);
 
-    if (vkCreateBuffer(vkrt->core.device, &scratchBufferCreateInfo, NULL, &scratchBuffer) != VK_SUCCESS) {
-        result = VKRT_ERROR_OPERATION_FAILED;
+    result = createBuffer(
+        vkrt,
+        buildSizesInfo.buildScratchSize,
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        &update->tlasScratch.buffer,
+        &update->tlasScratch.memory);
+    if (result != VKRT_SUCCESS) {
         goto cleanup;
     }
 
-    VkMemoryRequirements scratchMemoryRequirements = {0};
-    vkGetBufferMemoryRequirements(vkrt->core.device, scratchBuffer, &scratchMemoryRequirements);
-
-    VkMemoryAllocateInfo scratchMemoryAllocateInfo = {0};
-    scratchMemoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    scratchMemoryAllocateInfo.pNext = &memoryAllocateFlagsInfo;
-    scratchMemoryAllocateInfo.allocationSize = scratchMemoryRequirements.size;
-    if (findMemoryType(
-            vkrt,
-            scratchMemoryRequirements.memoryTypeBits,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            &scratchMemoryAllocateInfo.memoryTypeIndex) != VKRT_SUCCESS) {
-        result = VKRT_ERROR_OPERATION_FAILED;
-        goto cleanup;
-    }
-
-    if (vkAllocateMemory(vkrt->core.device, &scratchMemoryAllocateInfo, NULL, &scratchDeviceMemory) != VK_SUCCESS) {
-        result = VKRT_ERROR_OPERATION_FAILED;
-        goto cleanup;
-    }
-
-    if (vkBindBufferMemory(vkrt->core.device, scratchBuffer, scratchDeviceMemory, 0) != VK_SUCCESS) {
-        result = VKRT_ERROR_OPERATION_FAILED;
-        goto cleanup;
-    }
-
-    VkBufferDeviceAddressInfo scratchBufferDeviceAddressInfo = {0};
-    scratchBufferDeviceAddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
-    scratchBufferDeviceAddressInfo.buffer = scratchBuffer;
-
-    VkDeviceAddress scratchBufferDeviceAddress =
-        vkrt->core.procs.vkGetBufferDeviceAddressKHR(vkrt->core.device, &scratchBufferDeviceAddressInfo);
-    buildInfo.dstAccelerationStructure = vkrt->core.topLevelAccelerationStructure.structure;
-    buildInfo.scratchData.deviceAddress = scratchBufferDeviceAddress;
-
-    VkAccelerationStructureBuildRangeInfoKHR buildRangeInfo = {0};
-    buildRangeInfo.primitiveCount = instanceCount;
-    const VkAccelerationStructureBuildRangeInfoKHR* pBuildRangeInfo = &buildRangeInfo;
-
-    VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
-    if ((result = beginSingleTimeCommands(vkrt, &commandBuffer)) != VKRT_SUCCESS) goto cleanup;
-
-    vkrt->core.procs.vkCmdBuildAccelerationStructuresKHR(commandBuffer, 1, &buildInfo, &pBuildRangeInfo);
-
-    VkMemoryBarrier memoryBarrier = {0};
-    memoryBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-    memoryBarrier.srcAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
-    memoryBarrier.dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR;
-    vkCmdPipelineBarrier(commandBuffer,
-        VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
-        VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
-        0,
-        1,
-        &memoryBarrier,
-        0,
-        NULL,
-        0,
-        NULL);
-
-    if ((result = endSingleTimeCommands(vkrt, commandBuffer)) != VKRT_SUCCESS) goto cleanup;
-
-    VkAccelerationStructureDeviceAddressInfoKHR deviceAddressInfo = {0};
-    deviceAddressInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR;
-    deviceAddressInfo.accelerationStructure = vkrt->core.topLevelAccelerationStructure.structure;
-    vkrt->core.topLevelAccelerationStructure.deviceAddress =
-        vkrt->core.procs.vkGetAccelerationStructureDeviceAddressKHR(vkrt->core.device, &deviceAddressInfo);
+    update->tlasBuildPending = VK_TRUE;
 
 cleanup:
-    if (scratchBuffer != VK_NULL_HANDLE) vkDestroyBuffer(vkrt->core.device, scratchBuffer, NULL);
-    if (scratchDeviceMemory != VK_NULL_HANDLE) vkFreeMemory(vkrt->core.device, scratchDeviceMemory, NULL);
-    if (instanceBuffer != VK_NULL_HANDLE) vkDestroyBuffer(vkrt->core.device, instanceBuffer, NULL);
-    if (instanceMemory != VK_NULL_HANDLE) vkFreeMemory(vkrt->core.device, instanceMemory, NULL);
-    if (stagingMeshInfo != VK_NULL_HANDLE) vkDestroyBuffer(vkrt->core.device, stagingMeshInfo, NULL);
-    if (stagingMeshInfoMem != VK_NULL_HANDLE) vkFreeMemory(vkrt->core.device, stagingMeshInfoMem, NULL);
     free(instances);
     free(meshInfos);
 
     if (result != VKRT_SUCCESS) {
-        if (vkrt->core.topLevelAccelerationStructure.structure != VK_NULL_HANDLE) {
-            vkrt->core.procs.vkDestroyAccelerationStructureKHR(
-                vkrt->core.device,
-                vkrt->core.topLevelAccelerationStructure.structure,
-                NULL);
-            vkrt->core.topLevelAccelerationStructure.structure = VK_NULL_HANDLE;
+        destroySceneBuffers(vkrt);
+        if (update->instanceBuffer.buffer != VK_NULL_HANDLE) {
+            vkDestroyBuffer(vkrt->core.device, update->instanceBuffer.buffer, NULL);
+            update->instanceBuffer.buffer = VK_NULL_HANDLE;
         }
-        if (vkrt->core.topLevelAccelerationStructure.buffer != VK_NULL_HANDLE) {
-            vkDestroyBuffer(vkrt->core.device, vkrt->core.topLevelAccelerationStructure.buffer, NULL);
-            vkrt->core.topLevelAccelerationStructure.buffer = VK_NULL_HANDLE;
+        if (update->instanceBuffer.memory != VK_NULL_HANDLE) {
+            vkFreeMemory(vkrt->core.device, update->instanceBuffer.memory, NULL);
+            update->instanceBuffer.memory = VK_NULL_HANDLE;
         }
-        if (vkrt->core.topLevelAccelerationStructure.memory != VK_NULL_HANDLE) {
-            vkFreeMemory(vkrt->core.device, vkrt->core.topLevelAccelerationStructure.memory, NULL);
-            vkrt->core.topLevelAccelerationStructure.memory = VK_NULL_HANDLE;
+        if (update->tlasScratch.buffer != VK_NULL_HANDLE) {
+            vkDestroyBuffer(vkrt->core.device, update->tlasScratch.buffer, NULL);
+            update->tlasScratch.buffer = VK_NULL_HANDLE;
         }
-        vkrt->core.topLevelAccelerationStructure.deviceAddress = 0;
-
-        if (vkrt->core.meshData.buffer != VK_NULL_HANDLE) {
-            vkDestroyBuffer(vkrt->core.device, vkrt->core.meshData.buffer, NULL);
-            vkrt->core.meshData.buffer = VK_NULL_HANDLE;
+        if (update->tlasScratch.memory != VK_NULL_HANDLE) {
+            vkFreeMemory(vkrt->core.device, update->tlasScratch.memory, NULL);
+            update->tlasScratch.memory = VK_NULL_HANDLE;
         }
-        if (vkrt->core.meshData.memory != VK_NULL_HANDLE) {
-            vkFreeMemory(vkrt->core.device, vkrt->core.meshData.memory, NULL);
-            vkrt->core.meshData.memory = VK_NULL_HANDLE;
-        }
-        vkrt->core.meshData.deviceAddress = 0;
+        update->tlasBuildPending = VK_FALSE;
         return result;
     }
 
-    LOG_TRACE("TLAS created. Instances: %u, in %.3f ms", instanceCount, (double)(getMicroseconds() - startTime) / 1e3);
+    LOG_TRACE("TLAS prepared. Instances: %u, in %.3f ms",
+        instanceCount,
+        (double)(getMicroseconds() - startTime) / 1e3);
+    return VKRT_SUCCESS;
+}
+
+VKRT_Result recordTopLevelAccelerationStructureBuild(VKRT* vkrt, VkCommandBuffer commandBuffer) {
+    if (!vkrt || commandBuffer == VK_NULL_HANDLE) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    FrameSceneUpdate* update = getCurrentFrameSceneUpdate(vkrt);
+    if (!update->tlasBuildPending) return VKRT_SUCCESS;
+
+    AccelerationStructure* tlas = getSceneTLAS(vkrt);
+    uint32_t instanceCount = getSceneMeshData(vkrt)->count;
+    if (tlas->structure == VK_NULL_HANDLE || update->instanceBuffer.buffer == VK_NULL_HANDLE || instanceCount == 0) {
+        return VKRT_SUCCESS;
+    }
+
+    VkBufferDeviceAddressInfo instanceAddressInfo = {0};
+    instanceAddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+    instanceAddressInfo.buffer = update->instanceBuffer.buffer;
+    VkDeviceAddress instanceDeviceAddress =
+        vkrt->core.procs.vkGetBufferDeviceAddressKHR(vkrt->core.device, &instanceAddressInfo);
+
+    VkBufferDeviceAddressInfo scratchAddressInfo = {0};
+    scratchAddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+    scratchAddressInfo.buffer = update->tlasScratch.buffer;
+
+    VkAccelerationStructureGeometryInstancesDataKHR geometryInstancesData = {0};
+    geometryInstancesData.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
+    geometryInstancesData.arrayOfPointers = VK_FALSE;
+    geometryInstancesData.data.deviceAddress = instanceDeviceAddress;
+
+    VkAccelerationStructureGeometryKHR accelerationGeometry = {0};
+    accelerationGeometry.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+    accelerationGeometry.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR;
+    accelerationGeometry.geometry.instances = geometryInstancesData;
+    accelerationGeometry.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
+
+    VkAccelerationStructureBuildGeometryInfoKHR buildInfo = {0};
+    buildInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+    buildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+    buildInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+    buildInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+    buildInfo.geometryCount = 1;
+    buildInfo.pGeometries = &accelerationGeometry;
+    buildInfo.dstAccelerationStructure = tlas->structure;
+    buildInfo.scratchData.deviceAddress =
+        vkrt->core.procs.vkGetBufferDeviceAddressKHR(vkrt->core.device, &scratchAddressInfo);
+
+    VkAccelerationStructureBuildRangeInfoKHR buildRangeInfo = {0};
+    buildRangeInfo.primitiveCount = instanceCount;
+    const VkAccelerationStructureBuildRangeInfoKHR* buildRangeInfos[] = {&buildRangeInfo};
+
+    vkrt->core.procs.vkCmdBuildAccelerationStructuresKHR(commandBuffer, 1, &buildInfo, buildRangeInfos);
     return VKRT_SUCCESS;
 }

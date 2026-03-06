@@ -56,7 +56,7 @@ VKRT_Result VKRT_getOverlayInfo(const VKRT* vkrt, VKRT_OverlayInfo* outOverlayIn
 
 VKRT_Result VKRT_getMeshSnapshot(const VKRT* vkrt, uint32_t meshIndex, VKRT_MeshSnapshot* outMesh) {
     if (!vkrt || !outMesh) return VKRT_ERROR_INVALID_ARGUMENT;
-    if (meshIndex >= vkrt->core.meshData.count) return VKRT_ERROR_INVALID_ARGUMENT;
+    if (meshIndex >= vkrt->core.meshCount) return VKRT_ERROR_INVALID_ARGUMENT;
 
     const Mesh* mesh = &vkrt->core.meshes[meshIndex];
     outMesh->info = mesh->info;
