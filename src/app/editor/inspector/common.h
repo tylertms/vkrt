@@ -32,7 +32,7 @@ void drawVerticalIconTabs(const VerticalIconTab* tabs, int tabCount, int* curren
 void drawPaddedTooltip(const char* text);
 void tooltipOnHover(const char* text);
 void drawInspectorVerticalDivider(void);
-void syncInspectorDockWidthForTabState(int currentTab);
+void syncInspectorDockWidthForTabState(int* currentTab);
 uint32_t clampRenderDimension(int value);
 void formatTime(float seconds, char* out, size_t outSize);
 

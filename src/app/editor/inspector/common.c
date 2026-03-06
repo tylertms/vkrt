@@ -12,9 +12,48 @@ const ImVec4 kProgressBgColor = {0.16f, 0.16f, 0.16f, 1.00f};
 const ImVec4 kProgressFillColor = {0.34f, 0.34f, 0.34f, 1.00f};
 const ImVec4 kProgressTextColor = {0.97f, 0.97f, 0.97f, 1.00f};
 
-static const float kInspectorCollapsedWidth = 46.0f;
+static const float kInspectorCollapsedWidth = 44.0f;
 static const float kInspectorMinExpandedWidth = 140.0f;
 static const ImVec2 kTooltipPadding = {8.0f, 4.0f};
+static const float kInspectorTabBarWidth = 44.0f;
+
+static bool drawCenteredIconButton(const char* icon, ImVec2 size, bool selected) {
+    if (!icon) return false;
+
+    ImVec2 position = ImGui_GetCursorScreenPos();
+    bool pressed = ImGui_InvisibleButton(icon, size, ImGuiButtonFlags_None);
+    bool hovered = ImGui_IsItemHovered(ImGuiHoveredFlags_None);
+    bool held = ImGui_IsItemActive();
+
+    ImU32 backgroundColor = 0;
+    if (held) {
+        backgroundColor = ImGui_GetColorU32(ImGuiCol_ButtonActive);
+    } else if (hovered) {
+        backgroundColor = ImGui_GetColorU32(ImGuiCol_ButtonHovered);
+    } else if (selected) {
+        backgroundColor = ImGui_GetColorU32(ImGuiCol_Button);
+    }
+
+    if (backgroundColor != 0) {
+        ImGui_RenderFrameEx(position,
+            (ImVec2){position.x + size.x, position.y + size.y},
+            backgroundColor,
+            false,
+            ImGui_GetStyle()->FrameRounding);
+    }
+
+    ImVec2 textSize = ImGui_CalcTextSize(icon);
+    ImVec2 textPosition = {
+        floorf(position.x + (size.x - textSize.x) * 0.5f),
+        floorf(position.y + (size.y - textSize.y) * 0.5f),
+    };
+    ImDrawList_AddTextEx(ImGui_GetWindowDrawList(),
+        textPosition,
+        ImGui_GetColorU32Ex(ImGuiCol_Text, 1.0f),
+        icon,
+        NULL);
+    return pressed;
+}
 
 float queryInspectorInputWidth(float preferredWidth, float labelReserve) {
     float available = ImGui_GetContentRegionAvail().x;
@@ -67,17 +106,15 @@ void tooltipOnHover(const char* text) {
 }
 
 void drawVerticalIconTabs(const VerticalIconTab* tabs, int tabCount, int* currentTab) {
-    const float barWidth = 44.f;
+    const float barWidth = kInspectorTabBarWidth;
     const float btnSize = 30.f;
     const ImVec2 iconSize = {btnSize, btnSize};
-    const ImVec4* colors = ImGui_GetStyle()->Colors;
 
     if (!tabs || tabCount <= 0 || !currentTab) return;
     if (*currentTab < -1 || *currentTab >= tabCount) *currentTab = 0;
 
     ImGui_PushStyleVarImVec2(ImGuiStyleVar_WindowPadding, (ImVec2){0.0f, 2.0f});
     ImGui_PushStyleVarImVec2(ImGuiStyleVar_ItemSpacing, (ImVec2){0.0f, 6.0f});
-    ImGui_PushStyleVarImVec2(ImGuiStyleVar_ButtonTextAlign, (ImVec2){0.5f, 0.36f});
     ImGui_BeginChild("##icon_bar", (ImVec2){barWidth, 0},
         ImGuiChildFlags_None,
         ImGuiWindowFlags_NoBackground |
@@ -88,32 +125,19 @@ void drawVerticalIconTabs(const VerticalIconTab* tabs, int tabCount, int* curren
         ImGui_PushIDInt(i);
         bool selected = (*currentTab == i);
 
-        if (selected) {
-            ImGui_PushStyleColorImVec4(ImGuiCol_Button, colors[ImGuiCol_Button]);
-            ImGui_PushStyleColorImVec4(ImGuiCol_ButtonHovered, colors[ImGuiCol_ButtonHovered]);
-            ImGui_PushStyleColorImVec4(ImGuiCol_ButtonActive, colors[ImGuiCol_ButtonActive]);
-        } else {
-            ImGui_PushStyleColorImVec4(ImGuiCol_Button, (ImVec4){0.0f, 0.0f, 0.0f, 0.0f});
-            ImGui_PushStyleColorImVec4(ImGuiCol_ButtonHovered, colors[ImGuiCol_ButtonHovered]);
-            ImGui_PushStyleColorImVec4(ImGuiCol_ButtonActive, colors[ImGuiCol_ButtonActive]);
-        }
-
         ImGui_SetCursorPosX((barWidth - btnSize) * 0.5f);
-        ImGui_PushStyleVarImVec2(ImGuiStyleVar_FramePadding, (ImVec2){0.0f, 1.0f});
-        bool pressed = ImGui_ButtonEx(tabs[i].icon, iconSize);
-        ImGui_PopStyleVar();
+        bool pressed = drawCenteredIconButton(tabs[i].icon, iconSize, selected);
         if (pressed) *currentTab = selected ? -1 : i;
 
         if (ImGui_IsItemHovered(ImGuiHoveredFlags_None) && tabs[i].tooltip) {
             drawPaddedTooltip(tabs[i].tooltip);
         }
 
-        ImGui_PopStyleColorEx(3);
         ImGui_PopID();
     }
 
     ImGui_EndChild();
-    ImGui_PopStyleVarEx(3);
+    ImGui_PopStyleVarEx(2);
 }
 
 void drawInspectorVerticalDivider(void) {
@@ -127,9 +151,11 @@ void drawInspectorVerticalDivider(void) {
     ImGui_Dummy((ImVec2){1.0f, height});
 }
 
-void syncInspectorDockWidthForTabState(int currentTab) {
+void syncInspectorDockWidthForTabState(int* currentTab) {
     static bool wasCollapsed = false;
     static float expandedWidth = 0.0f;
+
+    if (!currentTab) return;
 
     ImGuiDockNode* inspectorNode = ImGui_GetWindowDockNode();
     if (!inspectorNode) return;
@@ -145,7 +171,15 @@ void syncInspectorDockWidthForTabState(int currentTab) {
     float totalWidth = parentNode->Size.x;
     if (totalWidth <= 2.0f) return;
 
-    bool collapsed = currentTab < 0;
+    bool collapsed = *currentTab < 0;
+    if (!collapsed &&
+        !wasCollapsed &&
+        expandedWidth <= 0.0f &&
+        inspectorNode->Size.x <= (kInspectorCollapsedWidth + 2.0f)) {
+        *currentTab = -1;
+        collapsed = true;
+    }
+
     if (!collapsed && expandedWidth <= 0.0f) {
         expandedWidth = inspectorNode->Size.x;
     }

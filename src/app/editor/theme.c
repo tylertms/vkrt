@@ -24,7 +24,7 @@ void editorThemeApplyDefault(void) {
     colors[ImGuiCol_WindowBg] = (ImVec4){0.05f, 0.05f, 0.05f, 0.60f};
     colors[ImGuiCol_ChildBg] = darkGray;
     colors[ImGuiCol_PopupBg] = almostBlack;
-    colors[ImGuiCol_Border] = (ImVec4){0.32f, 0.32f, 0.32f, 1.00f};
+    colors[ImGuiCol_Border] = (ImVec4){0.14f, 0.14f, 0.14f, 1.00f};
     colors[ImGuiCol_FrameBg] = (ImVec4){0.18f, 0.18f, 0.18f, 1.00f};
     colors[ImGuiCol_FrameBgHovered] = (ImVec4){0.28f, 0.28f, 0.28f, 1.00f};
     colors[ImGuiCol_FrameBgActive] = (ImVec4){0.34f, 0.34f, 0.34f, 1.00f};
@@ -48,9 +48,9 @@ void editorThemeApplyDefault(void) {
     colors[ImGuiCol_Separator] = midGray;
     colors[ImGuiCol_SeparatorHovered] = lightGray;
     colors[ImGuiCol_SeparatorActive] = lightGray;
-    colors[ImGuiCol_ResizeGrip] = midGray;
-    colors[ImGuiCol_ResizeGripHovered] = lightGray;
-    colors[ImGuiCol_ResizeGripActive] = lightGray;
+    colors[ImGuiCol_ResizeGrip] = (ImVec4){0.10f, 0.10f, 0.10f, 0.30f};
+    colors[ImGuiCol_ResizeGripHovered] = (ImVec4){0.14f, 0.14f, 0.14f, 0.80f};
+    colors[ImGuiCol_ResizeGripActive] = (ImVec4){0.18f, 0.18f, 0.18f, 1.00f};
     colors[ImGuiCol_Tab] = midGray;
     colors[ImGuiCol_TabHovered] = lightGray;
     colors[ImGuiCol_TabActive] = lightGray;

@@ -32,7 +32,7 @@ void editorUIDrawSceneInspector(VKRT* vkrt, Session* session) {
     ImVec2 defaultSpacing = ImGui_GetStyle()->ItemSpacing;
     ImGui_PushStyleVarImVec2(ImGuiStyleVar_ItemSpacing, (ImVec2){0.0f, defaultSpacing.y});
     drawVerticalIconTabs(tabs, IM_ARRAYSIZE(tabs), &currentTab);
-    syncInspectorDockWidthForTabState(currentTab);
+    syncInspectorDockWidthForTabState(&currentTab);
     if (currentTab >= 0) {
         ImGui_SameLine();
         drawInspectorVerticalDivider();
