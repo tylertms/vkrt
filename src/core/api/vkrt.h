@@ -57,7 +57,8 @@ VKRT_Result VKRT_setRenderViewState(VKRT* vkrt, float zoom, float panX, float pa
 VKRT_Result VKRT_getMeshCount(const VKRT* vkrt, uint32_t* outMeshCount);
 VKRT_Result VKRT_getMeshSnapshot(const VKRT* vkrt, uint32_t meshIndex, VKRT_MeshSnapshot* outMesh);
 VKRT_Result VKRT_setMeshTransform(VKRT* vkrt, uint32_t meshIndex, vec3 position, vec3 rotation, vec3 scale);
-VKRT_Result VKRT_setMeshMaterial(VKRT* vkrt, uint32_t meshIndex, const MaterialData* material);
+VKRT_Result VKRT_setMeshMaterial(VKRT* vkrt, uint32_t meshIndex, const Material* material);
+VKRT_Result VKRT_setMeshRenderBackfaces(VKRT* vkrt, uint32_t meshIndex, uint32_t enabled);
 VKRT_Result VKRT_pickMeshAtPixel(const VKRT* vkrt, uint32_t x, uint32_t y, uint32_t* outMeshIndex);
 VKRT_Result VKRT_setSelectedMesh(VKRT* vkrt, uint32_t meshIndex);
 VKRT_Result VKRT_getSelectedMesh(const VKRT* vkrt, uint32_t* outMeshIndex);

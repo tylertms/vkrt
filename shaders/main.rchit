@@ -15,9 +15,9 @@ void main() {
     uint index1 = indexBuffer.indices[primitiveID + 1] + vertexBase;
     uint index2 = indexBuffer.indices[primitiveID + 2] + vertexBase;
 
-    vec3 normal0 = vertexBuffer.vertices[index0].normal;
-    vec3 normal1 = vertexBuffer.vertices[index1].normal;
-    vec3 normal2 = vertexBuffer.vertices[index2].normal;
+    vec3 normal0 = vertexBuffer.vertices[index0].normal.xyz;
+    vec3 normal1 = vertexBuffer.vertices[index1].normal.xyz;
+    vec3 normal2 = vertexBuffer.vertices[index2].normal.xyz;
 
     float u = barycentrics.x;
     float v = barycentrics.y;

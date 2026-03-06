@@ -1,29 +1,9 @@
 #ifndef SHADER_TYPES_GLSL
 #define SHADER_TYPES_GLSL
 
-struct Ray {
-    vec3 origin;
-    vec3 dir;
-};
-
-struct Material {
-    vec3 baseColor;
-    float metallic;
-    float roughness;
-    float specular;
-    float specularTint;
-    float anisotropic;
-    float sheen;
-    float sheenTint;
-    float clearcoat;
-    float clearcoatGloss;
-    float subsurface;
-    float transmission;
-    float ior;
-    float padding0[5];
-    vec3 emissionColor;
-    float emissionLuminance;
-};
+#define VKRT_GLSL 1
+#include "types.h"
+#undef VKRT_GLSL
 
 struct Payload {
     vec3 point;
@@ -34,6 +14,11 @@ struct Payload {
     uint primitiveIndex;
     float time;
     float hitDistance;
+};
+
+struct Ray {
+    vec3 origin;
+    vec3 dir;
 };
 
 #endif

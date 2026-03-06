@@ -6,16 +6,8 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-#include "cglm.h"
-#include "constants.h"
-
-#define VKRT_DEFAULT_WIDTH 1600u
-#define VKRT_DEFAULT_HEIGHT 900u
-
-#define VKRT_MAX_FRAMES_IN_FLIGHT 2u
-
-#define VKRT_RENDER_VIEW_ZOOM_MIN 1.0f
-#define VKRT_RENDER_VIEW_ZOOM_MAX 64.0f
+#include "config.h"
+#include "types.h"
 
 /*
  * Result contract for all VKRT_* functions that return VKRT_Result:
@@ -42,8 +34,8 @@ typedef struct VKRT_SceneTimelineSettings {
 } VKRT_SceneTimelineSettings;
 
 typedef enum VKRT_ToneMappingMode {
-    VKRT_TONE_MAPPING_NONE = 0,
-    VKRT_TONE_MAPPING_ACES = 1,
+    VKRT_TONE_MAPPING_NONE = VKRT_TONE_MAPPING_MODE_NONE,
+    VKRT_TONE_MAPPING_ACES = VKRT_TONE_MAPPING_MODE_ACES,
 } VKRT_ToneMappingMode;
 
 typedef struct Camera {
@@ -77,45 +69,8 @@ typedef struct VKRT_CreateInfo {
     VKRT_ShaderConfig shaders;
 } VKRT_CreateInfo;
 
-typedef struct Vertex {
-    vec4 position;
-    vec4 normal;
-} Vertex;
-
-typedef struct MeshInfo {
-    vec3 position;
-    uint32_t vertexBase;
-    vec3 rotation;
-    uint32_t vertexCount;
-    vec3 scale;
-    uint32_t indexBase;
-    uint32_t indexCount;
-    uint32_t materialIndex;
-    uint32_t renderBackfaces;
-    uint32_t padding;
-} MeshInfo;
-
-typedef struct MaterialData {
-    vec3 baseColor;
-    float metallic;
-    float roughness;
-    float specular;
-    float specularTint;
-    float anisotropic;
-    float sheen;
-    float sheenTint;
-    float clearcoat;
-    float clearcoatGloss;
-    float subsurface;
-    float transmission;
-    float ior;
-    float padding0[5];
-    vec3 emissionColor;
-    float emissionLuminance;
-} MaterialData;
-
-static inline MaterialData VKRT_materialDataDisneyDefault(void) {
-    return (MaterialData){
+static inline Material VKRT_materialDefault(void) {
+    return (Material){
         .baseColor = {0.8f, 0.8f, 0.8f},
         .metallic = 0.0f,
         .roughness = 0.3f,
@@ -214,7 +169,7 @@ typedef struct VKRT_OverlayInfo {
 
 typedef struct VKRT_MeshSnapshot {
     MeshInfo info;
-    MaterialData material;
+    Material material;
     uint32_t geometrySource;
     uint8_t ownsGeometry;
 } VKRT_MeshSnapshot;

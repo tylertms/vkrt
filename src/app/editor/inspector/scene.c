@@ -3,6 +3,7 @@
 
 #include "IconsFontAwesome6.h"
 
+#include <dcimgui.h>
 #include <math.h>
 #include <stdio.h>
 
@@ -10,11 +11,7 @@ static void drawMeshInspector(VKRT* vkrt, Session* session) {
     if (!vkrt || !session) return;
 
     uint32_t meshCount = 0;
-    if (VKRT_getMeshCount(vkrt, &meshCount) != VKRT_SUCCESS) {
-        ImGui_TextDisabled("No meshes loaded.");
-        return;
-    }
-    if (meshCount == 0) {
+    if (VKRT_getMeshCount(vkrt, &meshCount) != VKRT_SUCCESS || meshCount == 0) {
         ImGui_TextDisabled("No meshes loaded.");
         return;
     }
@@ -47,7 +44,7 @@ static void drawMeshInspector(VKRT* vkrt, Session* session) {
         }
 
         ImGui_Indent();
-        if (ImGui_CollapsingHeader("Transform", ImGuiTreeNodeFlags_None)) {
+        if (ImGui_CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen)) {
             ImGui_Indent();
             float position[3] = {mesh.info.position[0], mesh.info.position[1], mesh.info.position[2]};
             float rotation[3] = {mesh.info.rotation[0], mesh.info.rotation[1], mesh.info.rotation[2]};
@@ -73,10 +70,10 @@ static void drawMeshInspector(VKRT* vkrt, Session* session) {
             ImGui_Unindent();
         }
 
-        MaterialData material = mesh.material;
+        Material material = mesh.material;
         bool materialChanged = false;
 
-        if (ImGui_CollapsingHeader("Base", ImGuiTreeNodeFlags_None)) {
+        if (ImGui_CollapsingHeader("Base", ImGuiTreeNodeFlags_DefaultOpen)) {
             ImGui_Indent();
             materialChanged |= ImGui_ColorEdit3("Color##baseColor", material.baseColor, ImGuiColorEditFlags_Float);
             materialChanged |= ImGui_SliderFloatEx("Metallic##metallic", &material.metallic, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);

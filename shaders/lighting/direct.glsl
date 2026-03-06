@@ -25,7 +25,7 @@ uint findEmissiveMeshRecord(uint meshIndex) {
     if (lo < scene.emissiveMeshCount && emissiveMeshBuffer.meshes[lo].indices.x == meshIndex) {
         return lo;
     }
-    return 0xFFFFFFFFu;
+    return VKRT_INVALID_INDEX;
 }
 
 uint sampleEmissiveMesh(inout uint state) {
@@ -132,7 +132,7 @@ float lightPdfForEmitterHit(uint meshIndex, uint primitiveIndex, vec3 previousPo
     if (scene.emissiveMeshCount == 0u || scene.emissiveTriangleCount == 0u) return 0.0;
 
     uint lightIndex = findEmissiveMeshRecord(meshIndex);
-    if (lightIndex == 0xFFFFFFFFu) return 0.0;
+    if (lightIndex == VKRT_INVALID_INDEX) return 0.0;
 
     EmissiveMesh light = emissiveMeshBuffer.meshes[lightIndex];
     if (primitiveIndex >= light.indices.z || light.indices.z == 0u) return 0.0;

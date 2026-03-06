@@ -30,17 +30,17 @@ vec3 trace(ivec2 pixel, inout uint state) {
     uint debugMode = scene.debugMode;
     bool misNeeEnabled = scene.misNeeEnabled != 0u;
 
-    if (debugMode == 1u || debugMode == 2u) {
+    if (debugMode == VKRT_DEBUG_MODE_NORMALS || debugMode == VKRT_DEBUG_MODE_DEPTH) {
         payload.didHit = false;
         payload.hitDistance = rayMaxDistance;
         traceRayEXT(topLevelAS, rayFlags, 0xFF, 0, 0, 0, ray.origin, rayMinDistance, ray.dir, rayMaxDistance, 0);
         if (!payload.didHit) return vec3(0.0);
-        if (debugMode == 1u) return payload.normal * 0.5 + 0.5;
+        if (debugMode == VKRT_DEBUG_MODE_NORMALS) return payload.normal * 0.5 + 0.5;
         return vec3(debugDepthValue(payload.hitDistance));
     }
 
-    bool neeOnly = debugMode == 4u;
-    bool bsdfOnly = debugMode == 5u;
+    bool neeOnly = debugMode == VKRT_DEBUG_MODE_NEE_ONLY;
+    bool bsdfOnly = debugMode == VKRT_DEBUG_MODE_BSDF_ONLY;
 
     vec3 throughput = vec3(1.0);
     vec3 radiance = vec3(0.0);
@@ -172,7 +172,7 @@ vec3 trace(ivec2 pixel, inout uint state) {
         ray.origin = payload.point;
     }
 
-    if (debugMode == 3u) return debugBounceHeatmap(bounceCount, max(scene.rrMaxDepth, 1u));
+    if (debugMode == VKRT_DEBUG_MODE_BOUNCE_COUNT) return debugBounceHeatmap(bounceCount, max(scene.rrMaxDepth, 1u));
 
     return radiance;
 }
