@@ -1,7 +1,9 @@
 #pragma once
 
 #include <stdint.h>
+
 #include "constants.h"
+#include "vkrt_types.h"
 
 typedef enum SessionRenderCommand {
     SESSION_RENDER_COMMAND_NONE = 0,
@@ -19,17 +21,8 @@ enum { SESSION_SCENE_TIMELINE_KEYFRAME_CAPACITY = VKRT_SCENE_TIMELINE_MAX_KEYFRA
 #define SESSION_SCENE_TIMELINE_EMISSION_TINT_MAX 16.0f
 #define SESSION_SCENE_TIMELINE_DEFAULT_INCREMENT 0.5f
 
-typedef struct SessionSceneTimelineKeyframe {
-    float time;
-    float emissionScale;
-    float emissionTint[3];
-} SessionSceneTimelineKeyframe;
-
-typedef struct SessionSceneTimelineSettings {
-    uint8_t enabled;
-    uint32_t keyframeCount;
-    SessionSceneTimelineKeyframe keyframes[SESSION_SCENE_TIMELINE_KEYFRAME_CAPACITY];
-} SessionSceneTimelineSettings;
+typedef VKRT_SceneTimelineKeyframe SessionSceneTimelineKeyframe;
+typedef VKRT_SceneTimelineSettings SessionSceneTimelineSettings;
 
 typedef struct SessionRenderAnimationSettings {
     uint8_t enabled;
@@ -55,20 +48,39 @@ typedef struct SessionSequenceProgress {
     float estimatedRemainingSeconds;
 } SessionSequenceProgress;
 
-typedef struct Session {
+typedef struct SessionRenderTimer {
+    uint8_t wasActive;
+    uint64_t startTimeUs;
+    float completedSeconds;
+} SessionRenderTimer;
+
+typedef struct SessionEditorState {
     char** meshNames;
     uint32_t meshCount;
-    uint32_t meshToRemove;
-    char* meshImportPath;
-    char* saveImagePath;
     char* renderSequenceFolderPath;
     uint8_t requestMeshImportDialog;
     uint8_t requestRenderSaveDialog;
     uint8_t requestRenderSequenceFolderDialog;
-    SessionSequenceProgress sequenceProgress;
+    SessionRenderSettings renderConfig;
+} SessionEditorState;
+
+typedef struct SessionCommandQueue {
+    uint32_t meshToRemove;
+    char* meshImportPath;
+    char* saveImagePath;
     SessionRenderCommand renderCommand;
     SessionRenderSettings pendingRenderJob;
-    SessionRenderSettings renderConfig;
+} SessionCommandQueue;
+
+typedef struct SessionRuntimeState {
+    SessionSequenceProgress sequenceProgress;
+    SessionRenderTimer renderTimer;
+} SessionRuntimeState;
+
+typedef struct Session {
+    SessionEditorState editor;
+    SessionCommandQueue commands;
+    SessionRuntimeState runtime;
 } Session;
 
 void sessionInit(Session* session);

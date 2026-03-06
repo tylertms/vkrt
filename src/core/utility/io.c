@@ -7,9 +7,11 @@
 
 #if defined(_WIN32)
 #include <windows.h>
+#include <direct.h>
 #elif defined(__APPLE__)
 #include <limits.h>
 #include <mach-o/dyld.h>
+#include <unistd.h>
 #else
 #include <limits.h>
 #include <unistd.h>
@@ -46,6 +48,47 @@ static int get_exe_dir(char* out, size_t sz) {
 #endif
 }
 
+char* stringDuplicate(const char* value) {
+    if (!value) return NULL;
+
+    size_t length = strlen(value);
+    char* copy = (char*)malloc(length + 1);
+    if (!copy) return NULL;
+
+    memcpy(copy, value, length + 1);
+    return copy;
+}
+
+char* pathTrimTrailingSeparators(char* path) {
+    if (!path) return NULL;
+
+    size_t length = strlen(path);
+    while (length > 1 && (path[length - 1] == '/' || path[length - 1] == '\\')) {
+        path[--length] = '\0';
+    }
+    return path;
+}
+
+static char* pathFindLastSeparator(char* path) {
+    if (!path) return NULL;
+
+    char* slash = strrchr(path, '/');
+    char* backslash = strrchr(path, '\\');
+    if (!slash) return backslash;
+    if (!backslash) return slash;
+    return slash > backslash ? slash : backslash;
+}
+
+const char* pathBasename(const char* path) {
+    if (!path || !path[0]) return "";
+
+    const char* slash = strrchr(path, '/');
+    const char* backslash = strrchr(path, '\\');
+    if (!slash) return backslash ? backslash + 1 : path;
+    if (!backslash) return slash + 1;
+    return slash > backslash ? slash + 1 : backslash + 1;
+}
+
 static FILE* fopen_exe_relative(const char* relpath, const char* mode) {
     char buf[4096];
     if (get_exe_dir(buf, sizeof buf) < 0) {
@@ -57,6 +100,118 @@ static FILE* fopen_exe_relative(const char* relpath, const char* mode) {
     snprintf(buf + dirlen, sizeof buf - dirlen, "/%s", relpath);
 
     return fopen(buf, mode);
+}
+
+static int pathExists(const char* path) {
+    if (!path || !path[0]) return 0;
+#if defined(_WIN32)
+    DWORD attributes = GetFileAttributesA(path);
+    return attributes != INVALID_FILE_ATTRIBUTES;
+#else
+    return access(path, F_OK) == 0;
+#endif
+}
+
+static int copyPathString(char* out, size_t outSize, const char* value) {
+    if (!out || outSize == 0 || !value || !value[0]) return -1;
+    int written = snprintf(out, outSize, "%s", value);
+    return (written > 0 && (size_t)written < outSize) ? 0 : -1;
+}
+
+static int canonicalizePath(const char* path, char* outPath, size_t outPathSize) {
+    if (!path || !path[0] || !outPath || outPathSize == 0) return -1;
+
+#if defined(_WIN32)
+    return _fullpath(outPath, path, outPathSize) ? 0 : -1;
+#else
+    return realpath(path, outPath) ? 0 : -1;
+#endif
+}
+
+static int joinPath(char* out, size_t outSize, const char* base, const char* value) {
+    if (!out || outSize == 0 || !base || !base[0] || !value || !value[0]) return -1;
+
+    size_t baseLength = strlen(base);
+    const char* separator = (baseLength > 0 && (base[baseLength - 1] == '/' || base[baseLength - 1] == '\\'))
+        ? ""
+        : "/";
+    int written = snprintf(out, outSize, "%s%s%s", base, separator, value);
+    return (written > 0 && (size_t)written < outSize) ? 0 : -1;
+}
+
+static int resolveExistingCandidate(const char* candidate, char* outPath, size_t outPathSize) {
+    if (!candidate || !candidate[0] || !pathExists(candidate)) return -1;
+    if (canonicalizePath(candidate, outPath, outPathSize) == 0) return 0;
+    return copyPathString(outPath, outPathSize, candidate);
+}
+
+int resolveExistingPath(const char* path, char* outPath, size_t outPathSize) {
+    if (!path || !path[0] || !outPath || outPathSize == 0) return -1;
+
+    if (resolveExistingCandidate(path, outPath, outPathSize) == 0) {
+        return 0;
+    }
+
+    char executableDir[PATH_MAX] = {0};
+    if (get_exe_dir(executableDir, sizeof(executableDir)) != 0) {
+        return -1;
+    }
+
+    char candidate[PATH_MAX] = {0};
+    if (joinPath(candidate, sizeof(candidate), executableDir, path) == 0 &&
+        resolveExistingCandidate(candidate, outPath, outPathSize) == 0) {
+        return 0;
+    }
+
+    char* lastSeparator = strrchr(executableDir, '/');
+#if defined(_WIN32)
+    char* lastBackslash = strrchr(executableDir, '\\');
+    if (!lastSeparator || (lastBackslash && lastBackslash > lastSeparator)) {
+        lastSeparator = lastBackslash;
+    }
+#endif
+    if (!lastSeparator || lastSeparator == executableDir) {
+        return -1;
+    }
+
+    *lastSeparator = '\0';
+    if (joinPath(candidate, sizeof(candidate), executableDir, path) == 0 &&
+        resolveExistingCandidate(candidate, outPath, outPathSize) == 0) {
+        return 0;
+    }
+
+    return -1;
+}
+
+int resolveExistingParentPath(const char* preferredPath, const char* fallbackPath, char* outPath, size_t outPathSize) {
+    if (!outPath || outPathSize == 0) return -1;
+
+    if (preferredPath && preferredPath[0]) {
+        char candidate[PATH_MAX] = {0};
+        if (copyPathString(candidate, sizeof(candidate), preferredPath) == 0) {
+            while (candidate[0]) {
+                pathTrimTrailingSeparators(candidate);
+                if (resolveExistingPath(candidate, outPath, outPathSize) == 0) {
+                    return 0;
+                }
+
+                char* separator = pathFindLastSeparator(candidate);
+                if (!separator) break;
+                if (separator == candidate) {
+                    candidate[1] = '\0';
+                } else {
+                    *separator = '\0';
+                }
+            }
+        }
+    }
+
+    if (fallbackPath && fallbackPath[0] &&
+        resolveExistingPath(fallbackPath, outPath, outPathSize) == 0) {
+        return 0;
+    }
+
+    return resolveExistingPath(".", outPath, outPathSize);
 }
 
 const char* readFile(const char* filename, size_t* fileSize) {

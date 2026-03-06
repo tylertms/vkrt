@@ -88,8 +88,13 @@ static void drawCameraSection(VKRT* vkrt, bool renderModeActive) {
     ImGui_Unindent();
 }
 
-void inspectorDrawCameraTab(VKRT* vkrt, const VKRT_PublicState* state, bool renderModeActive) {
-    if (!vkrt || !state) return;
+void inspectorDrawCameraTab(VKRT* vkrt) {
+    if (!vkrt) return;
+
+    const VKRT_PublicState* state = VKRT_getPublicState(vkrt);
+    if (!state) return;
+
+    bool renderModeActive = state->renderModeActive != 0;
     drawCameraSection(vkrt, renderModeActive);
     drawCameraEffectsSection(vkrt, state, renderModeActive);
 }

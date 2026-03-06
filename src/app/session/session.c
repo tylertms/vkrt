@@ -1,6 +1,8 @@
 #include "session.h"
 #include "debug.h"
+#include "io.h"
 
+#include <limits.h>
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -43,33 +45,6 @@ static void sessionResetTimelineDefaults(SessionSceneTimelineSettings* timeline)
     };
 }
 
-static const char* fileBasename(const char* path) {
-    if (!path || !path[0]) return "(unknown)";
-
-    const char* slash = strrchr(path, '/');
-    const char* backslash = strrchr(path, '\\');
-    const char* base = path;
-
-    if (slash && backslash) {
-        base = slash > backslash ? slash + 1 : backslash + 1;
-    } else if (slash) {
-        base = slash + 1;
-    } else if (backslash) {
-        base = backslash + 1;
-    }
-
-    return base;
-}
-
-static char* stringDuplicate(const char* value) {
-    size_t length = strlen(value);
-    char* copy = (char*)malloc(length + 1);
-    if (!copy) return NULL;
-
-    memcpy(copy, value, length + 1);
-    return copy;
-}
-
 static void clearOwnedString(char** value) {
     if (!value || !*value) return;
     free(*value);
@@ -77,20 +52,20 @@ static void clearOwnedString(char** value) {
 }
 
 static int ensureMeshSlotCount(Session* session, uint32_t requiredCount) {
-    if (!session || requiredCount <= session->meshCount) return 1;
+    if (!session || requiredCount <= session->editor.meshCount) return 1;
 
-    char** resized = (char**)realloc(session->meshNames, (size_t)requiredCount * sizeof(char*));
+    char** resized = (char**)realloc(session->editor.meshNames, (size_t)requiredCount * sizeof(char*));
     if (!resized) {
         LOG_ERROR("Failed to resize mesh label list");
         return 0;
     }
 
-    for (uint32_t index = session->meshCount; index < requiredCount; index++) {
+    for (uint32_t index = session->editor.meshCount; index < requiredCount; index++) {
         resized[index] = NULL;
     }
 
-    session->meshNames = resized;
-    session->meshCount = requiredCount;
+    session->editor.meshNames = resized;
+    session->editor.meshCount = requiredCount;
     return 1;
 }
 
@@ -98,117 +73,129 @@ void sessionInit(Session* session) {
     if (!session) return;
 
     memset(session, 0, sizeof(*session));
-    session->meshToRemove = UINT32_MAX;
-    session->renderCommand = SESSION_RENDER_COMMAND_NONE;
-    session->renderConfig.targetSamples = 1024;
-    session->renderConfig.animation.minTime = kDefaultTimelineStartTime;
-    session->renderConfig.animation.maxTime = kDefaultTimelineEndTime;
-    session->renderConfig.animation.timeStep = 0.05f;
-    sessionResetTimelineDefaults(&session->renderConfig.animation.sceneTimeline);
+    session->commands.meshToRemove = UINT32_MAX;
+    session->commands.renderCommand = SESSION_RENDER_COMMAND_NONE;
+    session->editor.renderConfig.targetSamples = 1024;
+    session->editor.renderConfig.animation.minTime = kDefaultTimelineStartTime;
+    session->editor.renderConfig.animation.maxTime = kDefaultTimelineEndTime;
+    session->editor.renderConfig.animation.timeStep = 0.05f;
+    sessionResetTimelineDefaults(&session->editor.renderConfig.animation.sceneTimeline);
+
+    char capturesPath[PATH_MAX] = {0};
+    if (resolveExistingPath("captures", capturesPath, sizeof(capturesPath)) == 0) {
+        char sequencePath[PATH_MAX] = {0};
+        if (snprintf(sequencePath, sizeof(sequencePath), "%s/sequence", capturesPath) < (int)sizeof(sequencePath)) {
+            sessionSetRenderSequenceFolder(session, sequencePath);
+            return;
+        }
+    }
+
     sessionSetRenderSequenceFolder(session, kDefaultRenderSequenceFolder);
 }
 
 void sessionDeinit(Session* session) {
     if (!session) return;
 
-    for (uint32_t index = 0; index < session->meshCount; index++) {
-        free(session->meshNames[index]);
+    for (uint32_t index = 0; index < session->editor.meshCount; index++) {
+        free(session->editor.meshNames[index]);
     }
-    free(session->meshNames);
-    session->meshNames = NULL;
-    session->meshCount = 0;
+    free(session->editor.meshNames);
+    session->editor.meshNames = NULL;
+    session->editor.meshCount = 0;
 
-    clearOwnedString(&session->meshImportPath);
-    clearOwnedString(&session->saveImagePath);
-    clearOwnedString(&session->renderSequenceFolderPath);
+    clearOwnedString(&session->commands.meshImportPath);
+    clearOwnedString(&session->commands.saveImagePath);
+    clearOwnedString(&session->editor.renderSequenceFolderPath);
 }
 
 int sessionSetMeshName(Session* session, const char* filePath, uint32_t meshIndex) {
     if (!session) return 0;
 
     if (!ensureMeshSlotCount(session, meshIndex + 1)) return 0;
-    free(session->meshNames[meshIndex]);
-    session->meshNames[meshIndex] = stringDuplicate(fileBasename(filePath));
-    return session->meshNames[meshIndex] != NULL;
+    free(session->editor.meshNames[meshIndex]);
+    const char* meshName = pathBasename(filePath);
+    if (!meshName[0]) meshName = "(unknown)";
+    session->editor.meshNames[meshIndex] = stringDuplicate(meshName);
+    return session->editor.meshNames[meshIndex] != NULL;
 }
 
 void sessionRemoveMeshName(Session* session, uint32_t meshIndex) {
-    if (!session || meshIndex >= session->meshCount) return;
+    if (!session || meshIndex >= session->editor.meshCount) return;
 
-    free(session->meshNames[meshIndex]);
-    for (uint32_t index = meshIndex; index + 1 < session->meshCount; index++) {
-        session->meshNames[index] = session->meshNames[index + 1];
+    free(session->editor.meshNames[meshIndex]);
+    for (uint32_t index = meshIndex; index + 1 < session->editor.meshCount; index++) {
+        session->editor.meshNames[index] = session->editor.meshNames[index + 1];
     }
 
-    session->meshCount--;
-    if (session->meshCount == 0) {
-        free(session->meshNames);
-        session->meshNames = NULL;
+    session->editor.meshCount--;
+    if (session->editor.meshCount == 0) {
+        free(session->editor.meshNames);
+        session->editor.meshNames = NULL;
         return;
     }
 
-    char** shrunk = (char**)realloc(session->meshNames, (size_t)session->meshCount * sizeof(char*));
-    if (shrunk) session->meshNames = shrunk;
+    char** shrunk = (char**)realloc(session->editor.meshNames, (size_t)session->editor.meshCount * sizeof(char*));
+    if (shrunk) session->editor.meshNames = shrunk;
 }
 
 const char* sessionGetMeshName(const Session* session, uint32_t meshIndex) {
-    if (!session || meshIndex >= session->meshCount || !session->meshNames[meshIndex]) {
+    if (!session || meshIndex >= session->editor.meshCount || !session->editor.meshNames[meshIndex]) {
         return "(unknown)";
     }
-    return session->meshNames[meshIndex];
+    return session->editor.meshNames[meshIndex];
 }
 
 void sessionRequestMeshImportDialog(Session* session) {
     if (!session) return;
-    session->requestMeshImportDialog = 1;
+    session->editor.requestMeshImportDialog = 1;
 }
 
 void sessionRequestRenderSaveDialog(Session* session) {
     if (!session) return;
-    session->requestRenderSaveDialog = 1;
+    session->editor.requestRenderSaveDialog = 1;
 }
 
 void sessionRequestRenderSequenceFolderDialog(Session* session) {
     if (!session) return;
-    session->requestRenderSequenceFolderDialog = 1;
+    session->editor.requestRenderSequenceFolderDialog = 1;
 }
 
 int sessionTakeMeshImportDialogRequest(Session* session) {
-    if (!session || !session->requestMeshImportDialog) return 0;
-    session->requestMeshImportDialog = 0;
+    if (!session || !session->editor.requestMeshImportDialog) return 0;
+    session->editor.requestMeshImportDialog = 0;
     return 1;
 }
 
 int sessionTakeRenderSaveDialogRequest(Session* session) {
-    if (!session || !session->requestRenderSaveDialog) return 0;
-    session->requestRenderSaveDialog = 0;
+    if (!session || !session->editor.requestRenderSaveDialog) return 0;
+    session->editor.requestRenderSaveDialog = 0;
     return 1;
 }
 
 int sessionTakeRenderSequenceFolderDialogRequest(Session* session) {
-    if (!session || !session->requestRenderSequenceFolderDialog) return 0;
-    session->requestRenderSequenceFolderDialog = 0;
+    if (!session || !session->editor.requestRenderSequenceFolderDialog) return 0;
+    session->editor.requestRenderSequenceFolderDialog = 0;
     return 1;
 }
 
 void sessionQueueMeshImport(Session* session, const char* path) {
     if (!session) return;
 
-    clearOwnedString(&session->meshImportPath);
+    clearOwnedString(&session->commands.meshImportPath);
     if (!path || !path[0]) return;
-    session->meshImportPath = stringDuplicate(path);
+    session->commands.meshImportPath = stringDuplicate(path);
 }
 
 void sessionQueueMeshRemoval(Session* session, uint32_t meshIndex) {
     if (!session) return;
-    session->meshToRemove = meshIndex;
+    session->commands.meshToRemove = meshIndex;
 }
 
 int sessionTakeMeshImport(Session* session, char** outPath) {
-    if (!session || !session->meshImportPath) return 0;
+    if (!session || !session->commands.meshImportPath) return 0;
 
-    char* path = session->meshImportPath;
-    session->meshImportPath = NULL;
+    char* path = session->commands.meshImportPath;
+    session->commands.meshImportPath = NULL;
     if (outPath) {
         *outPath = path;
     } else {
@@ -218,42 +205,42 @@ int sessionTakeMeshImport(Session* session, char** outPath) {
 }
 
 int sessionTakeMeshRemoval(Session* session, uint32_t* outMeshIndex) {
-    if (!session || session->meshToRemove == UINT32_MAX) return 0;
+    if (!session || session->commands.meshToRemove == UINT32_MAX) return 0;
 
-    if (outMeshIndex) *outMeshIndex = session->meshToRemove;
-    session->meshToRemove = UINT32_MAX;
+    if (outMeshIndex) *outMeshIndex = session->commands.meshToRemove;
+    session->commands.meshToRemove = UINT32_MAX;
     return 1;
 }
 
 void sessionQueueRenderSave(Session* session, const char* path) {
     if (!session) return;
 
-    clearOwnedString(&session->saveImagePath);
+    clearOwnedString(&session->commands.saveImagePath);
     if (!path || !path[0]) return;
 
-    session->saveImagePath = stringDuplicate(path);
+    session->commands.saveImagePath = stringDuplicate(path);
 }
 
 void sessionSetRenderSequenceFolder(Session* session, const char* path) {
     if (!session) return;
 
-    clearOwnedString(&session->renderSequenceFolderPath);
+    clearOwnedString(&session->editor.renderSequenceFolderPath);
     if (!path || !path[0]) return;
-    session->renderSequenceFolderPath = stringDuplicate(path);
+    session->editor.renderSequenceFolderPath = stringDuplicate(path);
 }
 
 const char* sessionGetRenderSequenceFolder(const Session* session) {
-    if (!session || !session->renderSequenceFolderPath || !session->renderSequenceFolderPath[0]) {
+    if (!session || !session->editor.renderSequenceFolderPath || !session->editor.renderSequenceFolderPath[0]) {
         return "";
     }
-    return session->renderSequenceFolderPath;
+    return session->editor.renderSequenceFolderPath;
 }
 
 int sessionTakeRenderSave(Session* session, char** outPath) {
-    if (!session || !session->saveImagePath) return 0;
+    if (!session || !session->commands.saveImagePath) return 0;
 
-    char* path = session->saveImagePath;
-    session->saveImagePath = NULL;
+    char* path = session->commands.saveImagePath;
+    session->commands.saveImagePath = NULL;
     if (outPath) {
         *outPath = path;
     } else {
@@ -274,24 +261,24 @@ void sessionQueueRenderStart(Session* session, uint32_t width, uint32_t height, 
     }
     sessionSanitizeAnimationSettings(&animationSettings);
 
-    session->renderCommand = SESSION_RENDER_COMMAND_START;
-    session->pendingRenderJob.width = width;
-    session->pendingRenderJob.height = height;
-    session->pendingRenderJob.targetSamples = targetSamples;
-    session->pendingRenderJob.animation = animationSettings;
+    session->commands.renderCommand = SESSION_RENDER_COMMAND_START;
+    session->commands.pendingRenderJob.width = width;
+    session->commands.pendingRenderJob.height = height;
+    session->commands.pendingRenderJob.targetSamples = targetSamples;
+    session->commands.pendingRenderJob.animation = animationSettings;
 }
 
 void sessionQueueRenderStop(Session* session) {
     if (!session) return;
-    session->renderCommand = SESSION_RENDER_COMMAND_STOP;
+    session->commands.renderCommand = SESSION_RENDER_COMMAND_STOP;
 }
 
 int sessionTakeRenderCommand(Session* session, SessionRenderCommand* outCommand, SessionRenderSettings* outSettings) {
-    if (!session || session->renderCommand == SESSION_RENDER_COMMAND_NONE) return 0;
+    if (!session || session->commands.renderCommand == SESSION_RENDER_COMMAND_NONE) return 0;
 
-    SessionRenderCommand command = session->renderCommand;
-    SessionRenderSettings settings = session->pendingRenderJob;
-    session->renderCommand = SESSION_RENDER_COMMAND_NONE;
+    SessionRenderCommand command = session->commands.renderCommand;
+    SessionRenderSettings settings = session->commands.pendingRenderJob;
+    session->commands.renderCommand = SESSION_RENDER_COMMAND_NONE;
 
     if (outCommand) *outCommand = command;
     if (outSettings) *outSettings = settings;

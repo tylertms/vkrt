@@ -3,10 +3,9 @@
 #include <stdio.h>
 #include <string.h>
 
-VKRT_Result VKRT_getPublicState(const VKRT* vkrt, VKRT_PublicState* outState) {
-    if (!vkrt || !outState) return VKRT_ERROR_INVALID_ARGUMENT;
-    *outState = vkrt->state;
-    return VKRT_SUCCESS;
+const VKRT_PublicState* VKRT_getPublicState(const VKRT* vkrt) {
+    if (!vkrt) return NULL;
+    return &vkrt->state;
 }
 
 VKRT_Result VKRT_getRuntimeSnapshot(const VKRT* vkrt, VKRT_RuntimeSnapshot* outRuntime) {

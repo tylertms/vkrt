@@ -7,13 +7,6 @@
 
 void editorUIDrawSceneInspector(VKRT* vkrt, Session* session) {
     if (!vkrt || !session) return;
-
-    EditorFrameData frame = {0};
-    if (VKRT_getPublicState(vkrt, &frame.state) != VKRT_SUCCESS) return;
-    if (VKRT_getRuntimeSnapshot(vkrt, &frame.runtime) != VKRT_SUCCESS) return;
-    if (VKRT_getSystemInfo(vkrt, &frame.system) != VKRT_SUCCESS) return;
-
-    bool renderModeActive = frame.state.renderModeActive != 0;
     const char* currentTabLabel = "Config";
 
     ImGuiWindowClass inspectorWindowClass = {0};
@@ -84,19 +77,19 @@ void editorUIDrawSceneInspector(VKRT* vkrt, Session* session) {
         ImGui_PushStyleVar(ImGuiStyleVar_IndentSpacing, kInspectorSectionIndent);
         switch ((InspectorTab)currentTab) {
         case INSPECTOR_TAB_MAIN:
-            inspectorDrawConfigTab(vkrt, &frame, renderModeActive);
+            inspectorDrawConfigTab(vkrt);
             break;
         case INSPECTOR_TAB_CAMERA:
-            inspectorDrawCameraTab(vkrt, &frame.state, renderModeActive);
+            inspectorDrawCameraTab(vkrt);
             break;
         case INSPECTOR_TAB_RENDER:
-            inspectorDrawRenderTab(vkrt, session, &frame.state, &frame.runtime);
+            inspectorDrawRenderTab(vkrt, session);
             break;
         case INSPECTOR_TAB_SCENE:
-            inspectorDrawSceneTab(vkrt, session, renderModeActive);
+            inspectorDrawSceneTab(vkrt, session);
             break;
         default:
-            inspectorDrawConfigTab(vkrt, &frame, renderModeActive);
+            inspectorDrawConfigTab(vkrt);
             break;
         }
         ImGui_PopStyleVar();

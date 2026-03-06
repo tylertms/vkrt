@@ -61,7 +61,7 @@ static void drawDebugSection(VKRT* vkrt, const VKRT_PublicState* state, bool con
 
     const char* debugModeLabels[] = {"None", "Normals", "Depth", "Bounce Count", "NEE Only", "BSDF Only"};
     int debugMode = (int)state->debugMode;
-    if (ImGui_ComboCharEx("Debug Mode", &debugMode, debugModeLabels, 6, 6)) {
+    if (ImGui_ComboCharEx("Debug Mode", &debugMode, debugModeLabels, (int)VKRT_DEBUG_MODE_COUNT, (int)VKRT_DEBUG_MODE_COUNT)) {
         VKRT_Result result = VKRT_setDebugMode(vkrt, (uint32_t)debugMode);
         if (result != VKRT_SUCCESS) {
             LOG_ERROR("Updating debug mode failed (%d)", (int)result);
@@ -95,29 +95,29 @@ static void drawDebugSection(VKRT* vkrt, const VKRT_PublicState* state, bool con
     ImGui_Unindent();
 }
 
-static void drawSystemSection(const EditorFrameData* frame) {
-    if (!frame) return;
+static void drawSystemSection(const VKRT_RuntimeSnapshot* runtime, const VKRT_SystemInfo* system) {
+    if (!runtime || !system) return;
 
     if (ImGui_CollapsingHeader("System", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui_Indent();
-        ImGui_TextWrapped("Device: %s", frame->system.deviceName);
+        ImGui_TextWrapped("Device: %s", system->deviceName);
         char driverText[64] = {0};
-        formatDriverVersionText(frame->system.vendorID, frame->system.driverVersion, driverText, sizeof(driverText));
+        formatDriverVersionText(system->vendorID, system->driverVersion, driverText, sizeof(driverText));
         ImGui_Text("Driver: %s", driverText);
-        ImGui_Text("Viewport: %ux%u", frame->runtime.displayViewportRect[2], frame->runtime.displayViewportRect[3]);
+        ImGui_Text("Viewport: %ux%u", runtime->displayViewportRect[2], runtime->displayViewportRect[3]);
         ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing});
         ImGui_Unindent();
     }
 }
 
-static void drawDisplaySection(VKRT* vkrt, const EditorFrameData* frame, bool renderModeActive) {
-    if (!vkrt || !frame) return;
+static void drawDisplaySection(VKRT* vkrt, const VKRT_RuntimeSnapshot* runtime, bool renderModeActive) {
+    if (!vkrt || !runtime) return;
 
     if (!ImGui_CollapsingHeader("Display", ImGuiTreeNodeFlags_DefaultOpen)) return;
 
     ImGui_Indent();
     ImGui_BeginDisabled(renderModeActive);
-    bool vsync = (renderModeActive ? frame->runtime.savedVsync : frame->runtime.vsync) != 0;
+    bool vsync = (renderModeActive ? runtime->savedVsync : runtime->vsync) != 0;
     if (ImGui_Checkbox("V-Sync", &vsync)) {
         VKRT_Result result = VKRT_setVSyncEnabled(vkrt, vsync ? 1u : 0u);
         if (result != VKRT_SUCCESS) {
@@ -129,11 +129,21 @@ static void drawDisplaySection(VKRT* vkrt, const EditorFrameData* frame, bool re
     ImGui_Unindent();
 }
 
-void inspectorDrawConfigTab(VKRT* vkrt, const EditorFrameData* frame, bool renderModeActive) {
-    if (!vkrt || !frame) return;
+void inspectorDrawConfigTab(VKRT* vkrt) {
+    if (!vkrt) return;
 
-    drawSystemSection(frame);
-    drawDisplaySection(vkrt, frame, renderModeActive);
-    drawDebugSection(vkrt, &frame->state, renderModeActive);
-    drawPerformanceSection(vkrt, &frame->state, renderModeActive);
+    const VKRT_PublicState* state = VKRT_getPublicState(vkrt);
+    VKRT_RuntimeSnapshot runtime = {0};
+    VKRT_SystemInfo system = {0};
+    if (!state ||
+        VKRT_getRuntimeSnapshot(vkrt, &runtime) != VKRT_SUCCESS ||
+        VKRT_getSystemInfo(vkrt, &system) != VKRT_SUCCESS) {
+        return;
+    }
+
+    bool renderModeActive = state->renderModeActive != 0;
+    drawSystemSection(&runtime, &system);
+    drawDisplaySection(vkrt, &runtime, renderModeActive);
+    drawDebugSection(vkrt, state, renderModeActive);
+    drawPerformanceSection(vkrt, state, renderModeActive);
 }

@@ -1,6 +1,7 @@
 #include "sequencer.h"
 
 #include "debug.h"
+#include "io.h"
 
 #include <errno.h>
 #include <math.h>
@@ -25,8 +26,8 @@ static void clearSequencerState(RenderSequencer* sequencer) {
 
 static void disableTimeRange(VKRT* vkrt) {
     if (!vkrt) return;
-    VKRT_PublicState state = {0};
-    if (VKRT_getPublicState(vkrt, &state) == VKRT_SUCCESS && state.timeBase >= 0.0f) {
+    const VKRT_PublicState* state = VKRT_getPublicState(vkrt);
+    if (state && state->timeBase >= 0.0f) {
         VKRT_Result result = VKRT_setTimeRange(vkrt, -1.0f, -1.0f);
         if (result != VKRT_SUCCESS) {
             LOG_ERROR("Disabling time range failed (%d)", (int)result);
@@ -45,9 +46,9 @@ static void disableTimeline(VKRT* vkrt) {
 static void stopSequence(RenderSequencer* sequencer, VKRT* vkrt, Session* session) {
     if (!sequencer || !vkrt || !session) return;
 
-    memset(&session->sequenceProgress, 0, sizeof(session->sequenceProgress));
-    VKRT_PublicState state = {0};
-    if (VKRT_getPublicState(vkrt, &state) == VKRT_SUCCESS && state.renderModeActive) {
+    memset(&session->runtime.sequenceProgress, 0, sizeof(session->runtime.sequenceProgress));
+    const VKRT_PublicState* state = VKRT_getPublicState(vkrt);
+    if (state && state->renderModeActive) {
         VKRT_Result result = VKRT_stopRender(vkrt);
         if (result != VKRT_SUCCESS) {
             LOG_ERROR("Stopping render mode failed (%d)", (int)result);
@@ -60,7 +61,7 @@ static void stopSequence(RenderSequencer* sequencer, VKRT* vkrt, Session* sessio
 
 static void completeSequenceWithPause(RenderSequencer* sequencer, Session* session) {
     if (!sequencer || !session) return;
-    memset(&session->sequenceProgress, 0, sizeof(session->sequenceProgress));
+    memset(&session->runtime.sequenceProgress, 0, sizeof(session->runtime.sequenceProgress));
     clearSequencerState(sequencer);
 }
 
@@ -79,9 +80,8 @@ static int ensureDirectoryPath(const char* path) {
     if (length >= sizeof(buffer)) return -1;
 
     memcpy(buffer, path, length + 1);
-    while (length > 0 && (buffer[length - 1] == '/' || buffer[length - 1] == '\\')) {
-        buffer[--length] = '\0';
-    }
+    pathTrimTrailingSeparators(buffer);
+    length = strlen(buffer);
 
     if (length == 0) return -1;
     if (length == 2 && buffer[1] == ':') return 0;
@@ -142,12 +142,12 @@ static void updateSessionProgress(
     float estimatedRemainingSeconds,
     uint8_t hasEstimatedRemaining
 ) {
-    session->sequenceProgress.active = sequencer->active;
-    session->sequenceProgress.frameIndex = sequencer->frameIndex + 1;
-    session->sequenceProgress.frameCount = sequencer->frameCount;
-    session->sequenceProgress.currentTime = currentTime;
-    session->sequenceProgress.hasEstimatedRemaining = hasEstimatedRemaining ? 1u : 0u;
-    session->sequenceProgress.estimatedRemainingSeconds = estimatedRemainingSeconds;
+    session->runtime.sequenceProgress.active = sequencer->active;
+    session->runtime.sequenceProgress.frameIndex = sequencer->frameIndex + 1;
+    session->runtime.sequenceProgress.frameCount = sequencer->frameCount;
+    session->runtime.sequenceProgress.currentTime = currentTime;
+    session->runtime.sequenceProgress.hasEstimatedRemaining = hasEstimatedRemaining ? 1u : 0u;
+    session->runtime.sequenceProgress.estimatedRemainingSeconds = estimatedRemainingSeconds;
 }
 
 static void noteCompletedFrameTime(RenderSequencer* sequencer, uint64_t frameEndTimeUs) {
@@ -196,17 +196,12 @@ static int applyTimelineTrack(VKRT* vkrt, const SessionSceneTimelineSettings* ti
         return 1;
     }
 
-    uint32_t count = timeline->keyframeCount;
-    if (count > VKRT_SCENE_TIMELINE_MAX_KEYFRAMES) {
-        count = VKRT_SCENE_TIMELINE_MAX_KEYFRAMES;
+    VKRT_SceneTimelineSettings sanitizedTimeline = *timeline;
+    if (sanitizedTimeline.keyframeCount > VKRT_SCENE_TIMELINE_MAX_KEYFRAMES) {
+        sanitizedTimeline.keyframeCount = VKRT_SCENE_TIMELINE_MAX_KEYFRAMES;
     }
 
-    VKRT_SceneTimelineSettings converted = {0};
-    converted.enabled = 1;
-    converted.keyframeCount = count;
-    memcpy(converted.keyframes, timeline->keyframes, count * sizeof(converted.keyframes[0]));
-
-    VKRT_Result result = VKRT_setSceneTimeline(vkrt, &converted);
+    VKRT_Result result = VKRT_setSceneTimeline(vkrt, &sanitizedTimeline);
     if (result != VKRT_SUCCESS) {
         LOG_ERROR("Applying timeline track failed (%d)", (int)result);
         return 0;
@@ -218,7 +213,7 @@ static int beginSequence(VKRT* vkrt, Session* session, const SessionRenderSettin
     if (!vkrt || !session || !settings || !sequencer) return -1;
 
     clearSequencerState(sequencer);
-    memset(&session->sequenceProgress, 0, sizeof(session->sequenceProgress));
+    memset(&session->runtime.sequenceProgress, 0, sizeof(session->runtime.sequenceProgress));
     disableTimeRange(vkrt);
     disableTimeline(vkrt);
 
@@ -270,7 +265,7 @@ static int beginSequence(VKRT* vkrt, Session* session, const SessionRenderSettin
 
     if (!applyTimelineTrack(vkrt, &sanitizedSettings.animation.sceneTimeline)) {
         clearSequencerState(sequencer);
-        memset(&session->sequenceProgress, 0, sizeof(session->sequenceProgress));
+        memset(&session->runtime.sequenceProgress, 0, sizeof(session->runtime.sequenceProgress));
         disableTimeRange(vkrt);
         disableTimeline(vkrt);
         return -1;
@@ -280,7 +275,7 @@ static int beginSequence(VKRT* vkrt, Session* session, const SessionRenderSettin
     updateSessionProgress(session, sequencer, currentBaseTime, 0.0f, 0);
     if (!applyFrameTimeWindow(vkrt, sequencer, currentBaseTime)) {
         clearSequencerState(sequencer);
-        memset(&session->sequenceProgress, 0, sizeof(session->sequenceProgress));
+        memset(&session->runtime.sequenceProgress, 0, sizeof(session->runtime.sequenceProgress));
         disableTimeRange(vkrt);
         disableTimeline(vkrt);
         return -1;
@@ -289,7 +284,7 @@ static int beginSequence(VKRT* vkrt, Session* session, const SessionRenderSettin
     if (startSequenceRender(vkrt, sequencer) != 0) {
         LOG_ERROR("Failed to start render sequence");
         clearSequencerState(sequencer);
-        memset(&session->sequenceProgress, 0, sizeof(session->sequenceProgress));
+        memset(&session->runtime.sequenceProgress, 0, sizeof(session->runtime.sequenceProgress));
         disableTimeRange(vkrt);
         disableTimeline(vkrt);
         return -1;
@@ -319,7 +314,7 @@ void renderSequencerHandleCommands(RenderSequencer* sequencer, VKRT* vkrt, Sessi
             }
         } else {
             clearSequencerState(sequencer);
-            memset(&session->sequenceProgress, 0, sizeof(session->sequenceProgress));
+            memset(&session->runtime.sequenceProgress, 0, sizeof(session->runtime.sequenceProgress));
             disableTimeRange(vkrt);
             disableTimeline(vkrt);
             VKRT_Result result = VKRT_startRender(vkrt, settings.width, settings.height, settings.targetSamples);
@@ -336,18 +331,18 @@ void renderSequencerHandleCommands(RenderSequencer* sequencer, VKRT* vkrt, Sessi
 void renderSequencerUpdate(RenderSequencer* sequencer, VKRT* vkrt, Session* session) {
     if (!sequencer || !vkrt || !session || !sequencer->active) return;
 
-    VKRT_PublicState state = {0};
-    if (VKRT_getPublicState(vkrt, &state) != VKRT_SUCCESS) {
+    const VKRT_PublicState* state = VKRT_getPublicState(vkrt);
+    if (!state) {
         stopSequence(sequencer, vkrt, session);
         return;
     }
 
-    if (!state.renderModeActive) {
+    if (!state->renderModeActive) {
         stopSequence(sequencer, vkrt, session);
         return;
     }
 
-    if (!state.renderModeFinished) return;
+    if (!state->renderModeFinished) return;
 
     char framePath[RENDER_SEQUENCE_PATH_CAPACITY + 96] = {0};
     if (buildFramePath(framePath, sizeof(framePath), sequencer) != 0 ||

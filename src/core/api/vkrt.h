@@ -43,7 +43,7 @@ VKRT_Result VKRT_saveRenderPNG(VKRT* vkrt, const char* path);
 VKRT_Result VKRT_startRender(VKRT* vkrt, uint32_t width, uint32_t height, uint32_t targetSamples);
 VKRT_Result VKRT_stopRenderSampling(VKRT* vkrt);
 VKRT_Result VKRT_stopRender(VKRT* vkrt);
-VKRT_Result VKRT_getPublicState(const VKRT* vkrt, VKRT_PublicState* outState);
+const VKRT_PublicState* VKRT_getPublicState(const VKRT* vkrt);
 VKRT_Result VKRT_getRuntimeSnapshot(const VKRT* vkrt, VKRT_RuntimeSnapshot* outRuntime);
 VKRT_Result VKRT_getSystemInfo(const VKRT* vkrt, VKRT_SystemInfo* outSystemInfo);
 VKRT_Result VKRT_getOverlayInfo(const VKRT* vkrt, VKRT_OverlayInfo* outOverlayInfo);

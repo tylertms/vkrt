@@ -7,7 +7,6 @@
 #include "dcimgui_internal.h"
 #include "theme.h"
 #include "debug.h"
-#include "nfd.h"
 #include "IBMPlexMono_Regular.h"
 #include "fa_solid_900.h"
 #include "IconsFontAwesome6.h"
@@ -23,6 +22,7 @@ static const float kRenderViewWheelStep = 1.12f;
 
 static float gEditorUIScale = 0.0f;
 static GLFWwindow* gEditorWindow = NULL;
+static bool gEditorFrameReady = false;
 
 static uint32_t absDiffU32(uint32_t a, uint32_t b) {
     return (a > b) ? (a - b) : (b - a);
@@ -157,13 +157,19 @@ static bool drawWorkspaceDockspace(void) {
     return true;
 }
 
-static bool drawViewportWindow(VKRT* vkrt) {
-    VKRT_PublicState state = {0};
-    VKRT_RuntimeSnapshot runtime = {0};
-    if (VKRT_getPublicState(vkrt, &state) != VKRT_SUCCESS ||
-        VKRT_getRuntimeSnapshot(vkrt, &runtime) != VKRT_SUCCESS) {
-        return false;
-    }
+static const VKRT_PublicState* queryEditorFrameState(
+    VKRT* vkrt,
+    VKRT_RuntimeSnapshot* outRuntime
+) {
+    if (!vkrt || !outRuntime) return NULL;
+    const VKRT_PublicState* state = VKRT_getPublicState(vkrt);
+    if (!state) return NULL;
+    if (VKRT_getRuntimeSnapshot(vkrt, outRuntime) != VKRT_SUCCESS) return NULL;
+    return state;
+}
+
+static bool drawViewportWindow(VKRT* vkrt, const VKRT_PublicState* state, VKRT_RuntimeSnapshot* runtime) {
+    if (!vkrt || !state || !runtime) return false;
 
     ImGuiWindowClass viewportWindowClass = {0};
     viewportWindowClass.DockNodeFlagsOverrideSet = ImGuiDockNodeFlags_NoTabBar |
@@ -173,7 +179,7 @@ static bool drawViewportWindow(VKRT* vkrt) {
     ImGui_SetNextWindowClass(&viewportWindowClass);
 
     ImGui_PushStyleVarImVec2(ImGuiStyleVar_WindowPadding, (ImVec2){0.0f, 0.0f});
-    const char* viewportWindowLabel = state.renderModeActive
+    const char* viewportWindowLabel = state->renderModeActive
         ? "Render###ViewWindow"
         : "Viewport###ViewWindow";
     ImGui_Begin(viewportWindowLabel, NULL, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar |
@@ -195,7 +201,7 @@ static bool drawViewportWindow(VKRT* vkrt) {
     uint32_t viewportWidth = width > 1.0f ? (uint32_t)lroundf(width) : 1;
     uint32_t viewportHeight = height > 1.0f ? (uint32_t)lroundf(height) : 1;
 
-    const uint32_t* prevViewport = runtime.displayViewportRect;
+    const uint32_t* prevViewport = runtime->displayViewportRect;
     if (absDiffU32(viewportX, prevViewport[0]) <= 1 &&
         absDiffU32(viewportY, prevViewport[1]) <= 1 &&
         absDiffU32(viewportWidth, prevViewport[2]) <= 1 &&
@@ -214,6 +220,11 @@ static bool drawViewportWindow(VKRT* vkrt) {
         return false;
     }
 
+    runtime->displayViewportRect[0] = viewportX;
+    runtime->displayViewportRect[1] = viewportY;
+    runtime->displayViewportRect[2] = viewportWidth;
+    runtime->displayViewportRect[3] = viewportHeight;
+
     ImGui_End();
     ImGui_PopStyleVar();
 
@@ -226,17 +237,21 @@ static float clampFloatValue(float value, float minValue, float maxValue) {
     return value;
 }
 
-static void applyEditorCameraInput(VKRT* vkrt, bool viewportHovered) {
-    VKRT_PublicState state = {0};
-    if (VKRT_getPublicState(vkrt, &state) != VKRT_SUCCESS) return;
+static void applyEditorCameraInput(
+    VKRT* vkrt,
+    const VKRT_PublicState* state,
+    const VKRT_RuntimeSnapshot* runtime,
+    bool viewportHovered
+) {
+    if (!vkrt || !state || !runtime) return;
 
     ImGuiIO* io = ImGui_GetIO();
-    if (state.renderModeActive) {
+    if (state->renderModeActive) {
         if (!viewportHovered) return;
 
-        float zoom = state.renderViewZoom;
-        float panX = state.renderViewPanX;
-        float panY = state.renderViewPanY;
+        float zoom = state->renderViewZoom;
+        float panX = state->renderViewPanX;
+        float panY = state->renderViewPanY;
 
         if (io->MouseWheel != 0.0f) {
             zoom = zoom * powf(kRenderViewWheelStep, io->MouseWheel);
@@ -257,13 +272,10 @@ static void applyEditorCameraInput(VKRT* vkrt, bool viewportHovered) {
                        ImGui_IsMouseDragging(ImGuiMouseButton_Middle, -1.0f) ||
                        ImGui_IsMouseDragging(ImGuiMouseButton_Right, -1.0f);
         if (panning) {
-            VKRT_RuntimeSnapshot runtime = {0};
-            if (VKRT_getRuntimeSnapshot(vkrt, &runtime) != VKRT_SUCCESS) return;
-
             float scaleX = io->DisplayFramebufferScale.x > 0.0f ? io->DisplayFramebufferScale.x : 1.0f;
             float scaleY = io->DisplayFramebufferScale.y > 0.0f ? io->DisplayFramebufferScale.y : 1.0f;
-            float viewWidth = (float)(runtime.displayViewportRect[2] > 0 ? runtime.displayViewportRect[2] : 1u) / scaleX;
-            float viewHeight = (float)(runtime.displayViewportRect[3] > 0 ? runtime.displayViewportRect[3] : 1u) / scaleY;
+            float viewWidth = (float)(runtime->displayViewportRect[2] > 0 ? runtime->displayViewportRect[2] : 1u) / scaleX;
+            float viewHeight = (float)(runtime->displayViewportRect[3] > 0 ? runtime->displayViewportRect[3] : 1u) / scaleY;
             float cropWidth = 1.0f;
             float cropHeight = 1.0f;
 
@@ -299,7 +311,6 @@ static void applyEditorCameraInput(VKRT* vkrt, bool viewportHovered) {
 void editorUIInitialize(VKRT* vkrt, void* userData) {
     (void)userData;
 
-    NFD_Init();
     ImGui_CreateContext(NULL);
 
     ImGuiIO* io = ImGui_GetIO();
@@ -311,6 +322,7 @@ void editorUIInitialize(VKRT* vkrt, void* userData) {
     }
 
     gEditorWindow = overlay.window;
+    editorUIInitializeDialogs(gEditorWindow);
     float uiScale = queryEditorContentScale(gEditorWindow);
     applyEditorUIScale(uiScale, false);
 
@@ -353,7 +365,7 @@ void editorUIShutdown(VKRT* vkrt, void* userData) {
     LOG_TRACE("Destroying UI context");
 
     ImGui_DestroyContext(NULL);
-    NFD_Quit();
+    editorUIShutdownDialogs();
     gEditorUIScale = 0.0f;
     gEditorWindow = NULL;
 
@@ -361,7 +373,15 @@ void editorUIShutdown(VKRT* vkrt, void* userData) {
 }
 
 void editorUIDraw(VKRT* vkrt, VkCommandBuffer commandBuffer, void* userData) {
-    Session* session = (Session*)userData;
+    (void)vkrt;
+    (void)userData;
+
+    if (!gEditorFrameReady) return;
+    cImGui_ImplVulkan_RenderDrawData(ImGui_GetDrawData(), commandBuffer);
+}
+
+void editorUIUpdate(VKRT* vkrt, Session* session) {
+    if (!vkrt || !session) return;
 
     if (!gEditorWindow) {
         VKRT_OverlayInfo overlay = {0};
@@ -369,6 +389,7 @@ void editorUIDraw(VKRT* vkrt, VkCommandBuffer commandBuffer, void* userData) {
             gEditorWindow = overlay.window;
         }
     }
+    if (!gEditorWindow) return;
 
     applyEditorUIScale(queryEditorContentScale(gEditorWindow), true);
 
@@ -376,11 +397,18 @@ void editorUIDraw(VKRT* vkrt, VkCommandBuffer commandBuffer, void* userData) {
     cImGui_ImplVulkan_NewFrame();
     ImGui_NewFrame();
 
+    VKRT_RuntimeSnapshot runtime = {0};
+    const VKRT_PublicState* state = queryEditorFrameState(vkrt, &runtime);
+
     drawWorkspaceDockspace();
-    bool viewportHovered = drawViewportWindow(vkrt);
-    editorUIDrawSceneInspector(vkrt, session);
-    applyEditorCameraInput(vkrt, viewportHovered);
+
+    bool viewportHovered = false;
+    if (state) {
+        viewportHovered = drawViewportWindow(vkrt, state, &runtime);
+        editorUIDrawSceneInspector(vkrt, session);
+        applyEditorCameraInput(vkrt, state, &runtime, viewportHovered);
+    }
 
     ImGui_Render();
-    cImGui_ImplVulkan_RenderDrawData(ImGui_GetDrawData(), commandBuffer);
+    gEditorFrameReady = true;
 }

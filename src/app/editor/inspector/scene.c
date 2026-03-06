@@ -120,8 +120,13 @@ static void drawMeshInspector(VKRT* vkrt, Session* session) {
     }
 }
 
-void inspectorDrawSceneTab(VKRT* vkrt, Session* session, bool renderModeActive) {
+void inspectorDrawSceneTab(VKRT* vkrt, Session* session) {
     if (!vkrt || !session) return;
+
+    const VKRT_PublicState* state = VKRT_getPublicState(vkrt);
+    if (!state) return;
+
+    bool renderModeActive = state->renderModeActive != 0;
 
     if (ImGui_CollapsingHeader("Import", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui_Indent();

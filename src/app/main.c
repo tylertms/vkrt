@@ -50,6 +50,7 @@ int main(void) {
         editorUIProcessDialogs(&session);
         meshControllerApplySessionActions(vkrt, &session);
         renderSequencerHandleCommands(&renderSequencer, vkrt, &session);
+        editorUIUpdate(vkrt, &session);
 
         if (VKRT_draw(vkrt) != VKRT_SUCCESS) {
             LOG_ERROR("Frame render failed");

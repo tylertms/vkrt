@@ -19,12 +19,6 @@ typedef enum InspectorTab {
     INSPECTOR_TAB_COUNT
 } InspectorTab;
 
-typedef struct EditorFrameData {
-    VKRT_PublicState state;
-    VKRT_RuntimeSnapshot runtime;
-    VKRT_SystemInfo system;
-} EditorFrameData;
-
 extern const float kInspectorControlSpacing;
 extern const float kInspectorSectionIndent;
 extern const ImVec4 kMenuBgColor;
@@ -42,7 +36,7 @@ void syncInspectorDockWidthForTabState(int currentTab);
 uint32_t clampRenderDimension(int value);
 void formatTime(float seconds, char* out, size_t outSize);
 
-void inspectorDrawConfigTab(VKRT* vkrt, const EditorFrameData* frame, bool renderModeActive);
-void inspectorDrawCameraTab(VKRT* vkrt, const VKRT_PublicState* state, bool renderModeActive);
-void inspectorDrawRenderTab(VKRT* vkrt, Session* session, const VKRT_PublicState* state, const VKRT_RuntimeSnapshot* runtime);
-void inspectorDrawSceneTab(VKRT* vkrt, Session* session, bool renderModeActive);
+void inspectorDrawConfigTab(VKRT* vkrt);
+void inspectorDrawCameraTab(VKRT* vkrt);
+void inspectorDrawRenderTab(VKRT* vkrt, Session* session);
+void inspectorDrawSceneTab(VKRT* vkrt, Session* session);
