@@ -7,12 +7,8 @@
 
 static const VkClearColorValue kViewportClearColor = {.float32 = {0.02f, 0.02f, 0.025f, 1.0f}};
 
-static FrameSceneUpdate* getCurrentFrameSceneUpdate(VKRT* vkrt) {
-    return &vkrt->runtime.frameSceneUpdates[vkrt->runtime.currentFrame];
-}
-
 static void recordSceneUpdateCommands(VKRT* vkrt, VkCommandBuffer commandBuffer) {
-    FrameSceneUpdate* update = getCurrentFrameSceneUpdate(vkrt);
+    FrameSceneUpdate* update = vkrtCurrentFrameSceneUpdate(vkrt);
     VkBool32 hasTransferWrites = VK_FALSE;
     VkBool32 hasBLASBuilds = update->blasBuildCount > 0 ? VK_TRUE : VK_FALSE;
     VkBool32 hasTLASBuild = update->tlasBuildPending;

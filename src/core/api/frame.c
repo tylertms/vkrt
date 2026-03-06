@@ -57,6 +57,7 @@ VKRT_Result VKRT_updateScene(VKRT* vkrt) {
 
     VkBool32 materialDirty = vkrt->core.materialResourceRevision != vkrt->core.materialRevision;
     VkBool32 sceneDirty = vkrt->core.sceneResourceRevision != vkrt->core.sceneRevision;
+    VkBool32 lightDirty = vkrt->core.lightResourceRevision != vkrt->core.lightRevision;
     if ((materialDirty || sceneDirty) && vkrtWaitForAllInFlightFrames(vkrt) != VKRT_SUCCESS) {
         return VKRT_ERROR_OPERATION_FAILED;
     }
@@ -79,7 +80,7 @@ VKRT_Result VKRT_updateScene(VKRT* vkrt) {
     }
 
     if (sceneDirty) {
-        if (!materialDirty && rebuildLightBuffers(vkrt) != VKRT_SUCCESS) {
+        if (!materialDirty && lightDirty && rebuildLightBuffers(vkrt) != VKRT_SUCCESS) {
             return VKRT_ERROR_OPERATION_FAILED;
         }
         if (rebuildTopLevelScene(vkrt) != VKRT_SUCCESS) {
@@ -123,6 +124,7 @@ VKRT_Result VKRT_trace(VKRT* vkrt) {
 
     vkrt->core.materialResourceRevision = vkrt->core.materialRevision;
     vkrt->core.sceneResourceRevision = vkrt->core.sceneRevision;
+    vkrt->core.lightResourceRevision = vkrt->core.lightRevision;
     for (uint32_t i = 0; i < vkrt->core.meshCount; i++) {
         vkrt->core.meshes[i].geometryUploadPending = 0;
         vkrt->core.meshes[i].blasBuildPending = 0;

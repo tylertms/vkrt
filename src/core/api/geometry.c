@@ -23,19 +23,6 @@ static VkBufferUsageFlags indexBufferUsage(void) {
            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 }
 
-static void destroyBufferResources(VKRT* vkrt, Buffer* buffer) {
-    if (!vkrt || !buffer) return;
-    if (buffer->buffer != VK_NULL_HANDLE) {
-        vkDestroyBuffer(vkrt->core.device, buffer->buffer, NULL);
-        buffer->buffer = VK_NULL_HANDLE;
-    }
-    if (buffer->memory != VK_NULL_HANDLE) {
-        vkFreeMemory(vkrt->core.device, buffer->memory, NULL);
-        buffer->memory = VK_NULL_HANDLE;
-    }
-    buffer->deviceAddress = 0;
-    buffer->count = 0;
-}
 
 static void destroyAccelerationStructureResources(VKRT* vkrt, AccelerationStructure* accelerationStructure) {
     if (!vkrt || !accelerationStructure) return;
@@ -102,6 +89,7 @@ static void markSceneMutation(VKRT* vkrt) {
     if (!vkrt) return;
     vkrtMarkMaterialResourcesDirty(vkrt);
     vkrtMarkSceneResourcesDirty(vkrt);
+    vkrtMarkLightResourcesDirty(vkrt);
     resetSceneData(vkrt);
 }
 
@@ -278,18 +266,8 @@ static VKRT_Result rebuildGeometryLayout(VKRT* vkrt) {
 VKRT_Result preparePendingGeometryUploads(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
 
-    FrameSceneUpdate* update = &vkrt->runtime.frameSceneUpdates[vkrt->runtime.currentFrame];
-    for (uint32_t i = 0; i < update->geometryUploadCount; i++) {
-        if (update->geometryUploads[i].stagingBuffer != VK_NULL_HANDLE) {
-            vkDestroyBuffer(vkrt->core.device, update->geometryUploads[i].stagingBuffer, NULL);
-        }
-        if (update->geometryUploads[i].stagingMemory != VK_NULL_HANDLE) {
-            vkFreeMemory(vkrt->core.device, update->geometryUploads[i].stagingMemory, NULL);
-        }
-    }
-    free(update->geometryUploads);
-    update->geometryUploads = NULL;
-    update->geometryUploadCount = 0;
+    FrameSceneUpdate* update = vkrtCurrentFrameSceneUpdate(vkrt);
+    cleanupPendingGeometryUploads(vkrt, update);
 
     uint32_t pendingCount = 0;
     for (uint32_t i = 0; i < vkrt->core.meshCount; i++) {
@@ -444,15 +422,8 @@ VKRT_Result VKRT_removeMesh(VKRT* vkrt, uint32_t meshIndex) {
     uint64_t startTime = getMicroseconds();
     uint32_t meshCount = vkrt->core.meshCount;
     uint32_t lastIndex = meshCount - 1u;
-    uint32_t previousSelectedMeshIndex = vkrt->state.selectedMeshIndex;
     Mesh removed = vkrt->core.meshes[meshIndex];
     int32_t promotedIndex = -1;
-    Mesh* previousMeshes = (Mesh*)malloc((size_t)meshCount * sizeof(Mesh));
-    if (!previousMeshes) {
-        LOG_ERROR("Failed to snapshot mesh list before removal");
-        return VKRT_ERROR_OPERATION_FAILED;
-    }
-    memcpy(previousMeshes, vkrt->core.meshes, (size_t)meshCount * sizeof(Mesh));
 
     if (removed.ownsGeometry) {
         for (uint32_t i = 0; i < meshCount; i++) {
@@ -506,14 +477,9 @@ VKRT_Result VKRT_removeMesh(VKRT* vkrt, uint32_t meshIndex) {
     }
 
     if (rebuildGeometryLayout(vkrt) != VKRT_SUCCESS) {
-        memcpy(vkrt->core.meshes, previousMeshes, (size_t)meshCount * sizeof(Mesh));
-        vkrt->core.meshCount = meshCount;
-        vkrt->state.selectedMeshIndex = previousSelectedMeshIndex;
-        free(previousMeshes);
+        LOG_ERROR("Geometry layout rebuild failed after mesh removal");
         return VKRT_ERROR_OPERATION_FAILED;
     }
-
-    free(previousMeshes);
 
     if (removed.ownsGeometry && promotedIndex < 0) {
         destroyAccelerationStructureResources(vkrt, &removed.bottomLevelAccelerationStructure);

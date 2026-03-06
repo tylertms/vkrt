@@ -36,30 +36,8 @@ static Buffer* getEmissiveTriangleData(VKRT* vkrt) {
 static void destroyLightBuffers(VKRT* vkrt) {
     if (!vkrt) return;
 
-    Buffer* emissiveMeshData = getEmissiveMeshData(vkrt);
-    Buffer* emissiveTriangleData = getEmissiveTriangleData(vkrt);
-
-    if (emissiveMeshData->buffer != VK_NULL_HANDLE) {
-        vkDestroyBuffer(vkrt->core.device, emissiveMeshData->buffer, NULL);
-        emissiveMeshData->buffer = VK_NULL_HANDLE;
-    }
-    if (emissiveMeshData->memory != VK_NULL_HANDLE) {
-        vkFreeMemory(vkrt->core.device, emissiveMeshData->memory, NULL);
-        emissiveMeshData->memory = VK_NULL_HANDLE;
-    }
-    emissiveMeshData->deviceAddress = 0;
-    emissiveMeshData->count = 0;
-
-    if (emissiveTriangleData->buffer != VK_NULL_HANDLE) {
-        vkDestroyBuffer(vkrt->core.device, emissiveTriangleData->buffer, NULL);
-        emissiveTriangleData->buffer = VK_NULL_HANDLE;
-    }
-    if (emissiveTriangleData->memory != VK_NULL_HANDLE) {
-        vkFreeMemory(vkrt->core.device, emissiveTriangleData->memory, NULL);
-        emissiveTriangleData->memory = VK_NULL_HANDLE;
-    }
-    emissiveTriangleData->deviceAddress = 0;
-    emissiveTriangleData->count = 0;
+    destroyBufferResources(vkrt, getEmissiveMeshData(vkrt));
+    destroyBufferResources(vkrt, getEmissiveTriangleData(vkrt));
 
     vkrt->core.emissiveMeshCount = 0;
     vkrt->core.emissiveTriangleCount = 0;

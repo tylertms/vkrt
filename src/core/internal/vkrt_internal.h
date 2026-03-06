@@ -59,8 +59,10 @@ typedef struct VKRT_Core {
     VkBool32 descriptorSetReady[VKRT_MAX_FRAMES_IN_FLIGHT];
     uint32_t sceneRevision;
     uint32_t materialRevision;
+    uint32_t lightRevision;
     uint32_t sceneResourceRevision;
     uint32_t materialResourceRevision;
+    uint32_t lightResourceRevision;
     GeometryLayout geometryLayout;
     uint32_t emissiveMeshCount;
     uint32_t emissiveTriangleCount;
@@ -154,3 +156,7 @@ typedef struct VKRT {
     VKRT_PublicState state;
     VKRT_AppHooks appHooks;
 } VKRT;
+
+static inline FrameSceneUpdate* vkrtCurrentFrameSceneUpdate(VKRT* vkrt) {
+    return &vkrt->runtime.frameSceneUpdates[vkrt->runtime.currentFrame];
+}

@@ -39,3 +39,8 @@ void vkrtMarkMaterialResourcesDirty(VKRT* vkrt) {
     if (!vkrt) return;
     vkrt->core.materialRevision++;
 }
+
+void vkrtMarkLightResourcesDirty(VKRT* vkrt) {
+    if (!vkrt) return;
+    vkrt->core.lightRevision++;
+}

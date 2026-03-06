@@ -62,6 +62,9 @@ VKRT_Result VKRT_setMeshTransform(VKRT* vkrt, uint32_t meshIndex, vec3 position,
     if (!changed) return VKRT_SUCCESS;
 
     vkrtMarkSceneResourcesDirty(vkrt);
+    if (vkrt->core.meshes[meshIndex].material.emissionLuminance > 0.0f) {
+        vkrtMarkLightResourcesDirty(vkrt);
+    }
     resetSceneData(vkrt);
     return VKRT_SUCCESS;
 }

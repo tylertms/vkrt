@@ -16,24 +16,7 @@ static Buffer* getSceneMeshData(VKRT* vkrt) {
     return &vkrt->core.sceneMeshData;
 }
 
-static FrameSceneUpdate* getCurrentFrameSceneUpdate(VKRT* vkrt) {
-    return &vkrt->runtime.frameSceneUpdates[vkrt->runtime.currentFrame];
-}
 
-static void destroyBufferResources(VKRT* vkrt, Buffer* buffer) {
-    if (!vkrt || !buffer) return;
-
-    if (buffer->buffer != VK_NULL_HANDLE) {
-        vkDestroyBuffer(vkrt->core.device, buffer->buffer, NULL);
-        buffer->buffer = VK_NULL_HANDLE;
-    }
-    if (buffer->memory != VK_NULL_HANDLE) {
-        vkFreeMemory(vkrt->core.device, buffer->memory, NULL);
-        buffer->memory = VK_NULL_HANDLE;
-    }
-    buffer->deviceAddress = 0;
-    buffer->count = 0;
-}
 
 static void destroySceneBuffers(VKRT* vkrt) {
     if (!vkrt) return;
@@ -62,23 +45,9 @@ VKRT_Result createTopLevelAccelerationStructure(VKRT* vkrt) {
     uint64_t startTime = getMicroseconds();
     destroySceneBuffers(vkrt);
 
-    FrameSceneUpdate* update = getCurrentFrameSceneUpdate(vkrt);
-    if (update->instanceBuffer.buffer != VK_NULL_HANDLE) {
-        vkDestroyBuffer(vkrt->core.device, update->instanceBuffer.buffer, NULL);
-        update->instanceBuffer.buffer = VK_NULL_HANDLE;
-    }
-    if (update->instanceBuffer.memory != VK_NULL_HANDLE) {
-        vkFreeMemory(vkrt->core.device, update->instanceBuffer.memory, NULL);
-        update->instanceBuffer.memory = VK_NULL_HANDLE;
-    }
-    if (update->tlasScratch.buffer != VK_NULL_HANDLE) {
-        vkDestroyBuffer(vkrt->core.device, update->tlasScratch.buffer, NULL);
-        update->tlasScratch.buffer = VK_NULL_HANDLE;
-    }
-    if (update->tlasScratch.memory != VK_NULL_HANDLE) {
-        vkFreeMemory(vkrt->core.device, update->tlasScratch.memory, NULL);
-        update->tlasScratch.memory = VK_NULL_HANDLE;
-    }
+    FrameSceneUpdate* update = vkrtCurrentFrameSceneUpdate(vkrt);
+    destroyTransfer(vkrt, &update->instanceBuffer);
+    destroyTransfer(vkrt, &update->tlasScratch);
     update->tlasBuildPending = VK_FALSE;
 
     uint32_t instanceCount = vkrt->core.meshCount;
@@ -259,22 +228,8 @@ cleanup:
 
     if (result != VKRT_SUCCESS) {
         destroySceneBuffers(vkrt);
-        if (update->instanceBuffer.buffer != VK_NULL_HANDLE) {
-            vkDestroyBuffer(vkrt->core.device, update->instanceBuffer.buffer, NULL);
-            update->instanceBuffer.buffer = VK_NULL_HANDLE;
-        }
-        if (update->instanceBuffer.memory != VK_NULL_HANDLE) {
-            vkFreeMemory(vkrt->core.device, update->instanceBuffer.memory, NULL);
-            update->instanceBuffer.memory = VK_NULL_HANDLE;
-        }
-        if (update->tlasScratch.buffer != VK_NULL_HANDLE) {
-            vkDestroyBuffer(vkrt->core.device, update->tlasScratch.buffer, NULL);
-            update->tlasScratch.buffer = VK_NULL_HANDLE;
-        }
-        if (update->tlasScratch.memory != VK_NULL_HANDLE) {
-            vkFreeMemory(vkrt->core.device, update->tlasScratch.memory, NULL);
-            update->tlasScratch.memory = VK_NULL_HANDLE;
-        }
+        destroyTransfer(vkrt, &update->instanceBuffer);
+        destroyTransfer(vkrt, &update->tlasScratch);
         update->tlasBuildPending = VK_FALSE;
         return result;
     }
@@ -288,7 +243,7 @@ cleanup:
 VKRT_Result recordTopLevelAccelerationStructureBuild(VKRT* vkrt, VkCommandBuffer commandBuffer) {
     if (!vkrt || commandBuffer == VK_NULL_HANDLE) return VKRT_ERROR_INVALID_ARGUMENT;
 
-    FrameSceneUpdate* update = getCurrentFrameSceneUpdate(vkrt);
+    FrameSceneUpdate* update = vkrtCurrentFrameSceneUpdate(vkrt);
     if (!update->tlasBuildPending) return VKRT_SUCCESS;
 
     AccelerationStructure* tlas = getSceneTLAS(vkrt);

@@ -1,4 +1,5 @@
 #include "buffer.h"
+#include "command/pool.h"
 #include "device.h"
 #include "debug.h"
 
@@ -17,7 +18,7 @@ static VKRT_Result appendPendingSceneTransfer(
         return VKRT_ERROR_INVALID_ARGUMENT;
     }
 
-    FrameSceneUpdate* update = &vkrt->runtime.frameSceneUpdates[vkrt->runtime.currentFrame];
+    FrameSceneUpdate* update = vkrtCurrentFrameSceneUpdate(vkrt);
     uint32_t nextCount = update->sceneTransferCount + 1u;
     PendingBufferCopy* resized = (PendingBufferCopy*)realloc(
         update->sceneTransfers,
@@ -110,49 +111,15 @@ VKRT_Result createBuffer(
 VKRT_Result copyBuffer(VKRT* vkrt, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
 
-    VkCommandBufferAllocateInfo commandBufferAllocateInfo = {0};
-    commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    commandBufferAllocateInfo.commandPool = vkrt->runtime.commandPool;
-    commandBufferAllocateInfo.commandBufferCount = 1;
-
-    VkCommandBuffer commandBuffer;
-    if (vkAllocateCommandBuffers(vkrt->core.device, &commandBufferAllocateInfo, &commandBuffer) != VK_SUCCESS) {
-        return VKRT_ERROR_OPERATION_FAILED;
-    }
-
-    VkCommandBufferBeginInfo commandBufferBeginInfo = {0};
-    commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    commandBufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    if (vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo) != VK_SUCCESS) {
-        vkFreeCommandBuffers(vkrt->core.device, vkrt->runtime.commandPool, 1, &commandBuffer);
-        return VKRT_ERROR_OPERATION_FAILED;
-    }
+    VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+    VKRT_Result result = beginSingleTimeCommands(vkrt, &commandBuffer);
+    if (result != VKRT_SUCCESS) return result;
 
     VkBufferCopy copyRegion = {0};
     copyRegion.size = size;
     vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
 
-    if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
-        vkFreeCommandBuffers(vkrt->core.device, vkrt->runtime.commandPool, 1, &commandBuffer);
-        return VKRT_ERROR_OPERATION_FAILED;
-    }
-
-    VkSubmitInfo submitInfo = {0};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &commandBuffer;
-
-    if (vkQueueSubmit(vkrt->core.graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE) != VK_SUCCESS) {
-        vkFreeCommandBuffers(vkrt->core.device, vkrt->runtime.commandPool, 1, &commandBuffer);
-        return VKRT_ERROR_OPERATION_FAILED;
-    }
-    if (vkQueueWaitIdle(vkrt->core.graphicsQueue) != VK_SUCCESS) {
-        vkFreeCommandBuffers(vkrt->core.device, vkrt->runtime.commandPool, 1, &commandBuffer);
-        return VKRT_ERROR_OPERATION_FAILED;
-    }
-    vkFreeCommandBuffers(vkrt->core.device, vkrt->runtime.commandPool, 1, &commandBuffer);
-    return VKRT_SUCCESS;
+    return endSingleTimeCommands(vkrt, commandBuffer);
 }
 
 VKRT_Result createHostBufferFromData(
@@ -253,4 +220,30 @@ VKRT_Result createDeviceBufferFromData(
         *outDeviceAddress = queryBufferDeviceAddress(vkrt, *outBuffer);
     }
     return VKRT_SUCCESS;
+}
+
+void destroyBufferResources(VKRT* vkrt, Buffer* buffer) {
+    if (!vkrt || !buffer) return;
+    if (buffer->buffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(vkrt->core.device, buffer->buffer, NULL);
+        buffer->buffer = VK_NULL_HANDLE;
+    }
+    if (buffer->memory != VK_NULL_HANDLE) {
+        vkFreeMemory(vkrt->core.device, buffer->memory, NULL);
+        buffer->memory = VK_NULL_HANDLE;
+    }
+    buffer->deviceAddress = 0;
+    buffer->count = 0;
+}
+
+void destroyTransfer(VKRT* vkrt, FrameTransfer* transfer) {
+    if (!vkrt || !transfer) return;
+    if (transfer->buffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(vkrt->core.device, transfer->buffer, NULL);
+        transfer->buffer = VK_NULL_HANDLE;
+    }
+    if (transfer->memory != VK_NULL_HANDLE) {
+        vkFreeMemory(vkrt->core.device, transfer->memory, NULL);
+        transfer->memory = VK_NULL_HANDLE;
+    }
 }

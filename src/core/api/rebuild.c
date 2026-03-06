@@ -11,32 +11,35 @@ static Buffer* getMaterialData(VKRT* vkrt) {
     return &vkrt->core.sceneMaterialData;
 }
 
-static void destroyBufferResources(VKRT* vkrt, Buffer* buffer) {
-    if (!vkrt || !buffer) return;
 
-    if (buffer->buffer != VK_NULL_HANDLE) {
-        vkDestroyBuffer(vkrt->core.device, buffer->buffer, NULL);
-        buffer->buffer = VK_NULL_HANDLE;
+void cleanupPendingGeometryUploads(VKRT* vkrt, FrameSceneUpdate* update) {
+    if (!vkrt || !update) return;
+    for (uint32_t i = 0; i < update->geometryUploadCount; i++) {
+        if (update->geometryUploads[i].stagingBuffer != VK_NULL_HANDLE) {
+            vkDestroyBuffer(vkrt->core.device, update->geometryUploads[i].stagingBuffer, NULL);
+        }
+        if (update->geometryUploads[i].stagingMemory != VK_NULL_HANDLE) {
+            vkFreeMemory(vkrt->core.device, update->geometryUploads[i].stagingMemory, NULL);
+        }
     }
-    if (buffer->memory != VK_NULL_HANDLE) {
-        vkFreeMemory(vkrt->core.device, buffer->memory, NULL);
-        buffer->memory = VK_NULL_HANDLE;
-    }
-    buffer->deviceAddress = 0;
-    buffer->count = 0;
+    free(update->geometryUploads);
+    update->geometryUploads = NULL;
+    update->geometryUploadCount = 0;
 }
 
-static void destroyTransfer(VKRT* vkrt, FrameTransfer* transfer) {
-    if (!vkrt || !transfer) return;
-
-    if (transfer->buffer != VK_NULL_HANDLE) {
-        vkDestroyBuffer(vkrt->core.device, transfer->buffer, NULL);
-        transfer->buffer = VK_NULL_HANDLE;
+void cleanupPendingBLASBuilds(VKRT* vkrt, FrameSceneUpdate* update) {
+    if (!vkrt || !update) return;
+    for (uint32_t i = 0; i < update->blasBuildCount; i++) {
+        if (update->blasBuilds[i].scratchBuffer != VK_NULL_HANDLE) {
+            vkDestroyBuffer(vkrt->core.device, update->blasBuilds[i].scratchBuffer, NULL);
+        }
+        if (update->blasBuilds[i].scratchMemory != VK_NULL_HANDLE) {
+            vkFreeMemory(vkrt->core.device, update->blasBuilds[i].scratchMemory, NULL);
+        }
     }
-    if (transfer->memory != VK_NULL_HANDLE) {
-        vkFreeMemory(vkrt->core.device, transfer->memory, NULL);
-        transfer->memory = VK_NULL_HANDLE;
-    }
+    free(update->blasBuilds);
+    update->blasBuilds = NULL;
+    update->blasBuildCount = 0;
 }
 
 void cleanupFrameSceneUpdate(VKRT* vkrt, uint32_t frameIndex) {
@@ -56,29 +59,8 @@ void cleanupFrameSceneUpdate(VKRT* vkrt, uint32_t frameIndex) {
     update->sceneTransfers = NULL;
     update->sceneTransferCount = 0;
 
-    for (uint32_t i = 0; i < update->geometryUploadCount; i++) {
-        if (update->geometryUploads[i].stagingBuffer != VK_NULL_HANDLE) {
-            vkDestroyBuffer(vkrt->core.device, update->geometryUploads[i].stagingBuffer, NULL);
-        }
-        if (update->geometryUploads[i].stagingMemory != VK_NULL_HANDLE) {
-            vkFreeMemory(vkrt->core.device, update->geometryUploads[i].stagingMemory, NULL);
-        }
-    }
-    free(update->geometryUploads);
-    update->geometryUploads = NULL;
-    update->geometryUploadCount = 0;
-
-    for (uint32_t i = 0; i < update->blasBuildCount; i++) {
-        if (update->blasBuilds[i].scratchBuffer != VK_NULL_HANDLE) {
-            vkDestroyBuffer(vkrt->core.device, update->blasBuilds[i].scratchBuffer, NULL);
-        }
-        if (update->blasBuilds[i].scratchMemory != VK_NULL_HANDLE) {
-            vkFreeMemory(vkrt->core.device, update->blasBuilds[i].scratchMemory, NULL);
-        }
-    }
-    free(update->blasBuilds);
-    update->blasBuilds = NULL;
-    update->blasBuildCount = 0;
+    cleanupPendingGeometryUploads(vkrt, update);
+    cleanupPendingBLASBuilds(vkrt, update);
 
     destroyTransfer(vkrt, &update->instanceBuffer);
     destroyTransfer(vkrt, &update->tlasScratch);

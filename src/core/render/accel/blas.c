@@ -6,8 +6,35 @@
 
 #include <stdlib.h>
 
-static FrameSceneUpdate* getCurrentFrameSceneUpdate(VKRT* vkrt) {
-    return &vkrt->runtime.frameSceneUpdates[vkrt->runtime.currentFrame];
+static void buildBLASGeometryInfo(
+    const MeshInfo* meshInfo,
+    VkDeviceAddress vertexDataAddress,
+    VkDeviceAddress indexDataAddress,
+    VkAccelerationStructureGeometryKHR* outGeometry,
+    VkAccelerationStructureBuildGeometryInfoKHR* outBuildInfo
+) {
+    VkAccelerationStructureGeometryTrianglesDataKHR trianglesData = {0};
+    trianglesData.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
+    trianglesData.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
+    trianglesData.vertexData.deviceAddress = vertexDataAddress;
+    trianglesData.vertexStride = sizeof(Vertex);
+    trianglesData.maxVertex = meshInfo->vertexBase + meshInfo->vertexCount - 1;
+    trianglesData.indexType = VK_INDEX_TYPE_UINT32;
+    trianglesData.indexData.deviceAddress = indexDataAddress;
+
+    *outGeometry = (VkAccelerationStructureGeometryKHR){0};
+    outGeometry->sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+    outGeometry->geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+    outGeometry->geometry.triangles = trianglesData;
+    outGeometry->flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
+
+    *outBuildInfo = (VkAccelerationStructureBuildGeometryInfoKHR){0};
+    outBuildInfo->sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+    outBuildInfo->type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+    outBuildInfo->flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+    outBuildInfo->mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+    outBuildInfo->geometryCount = 1;
+    outBuildInfo->pGeometries = outGeometry;
 }
 
 static VKRT_Result prepareBLAS(
@@ -19,28 +46,9 @@ static VKRT_Result prepareBLAS(
 ) {
     if (!vkrt || !meshInfo || !outAccelerationStructure) return VKRT_ERROR_INVALID_ARGUMENT;
 
-    VkAccelerationStructureGeometryTrianglesDataKHR trianglesData = {0};
-    trianglesData.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
-    trianglesData.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
-    trianglesData.vertexData.deviceAddress = vertexDataAddress;
-    trianglesData.vertexStride = sizeof(Vertex);
-    trianglesData.maxVertex = meshInfo->vertexBase + meshInfo->vertexCount - 1;
-    trianglesData.indexType = VK_INDEX_TYPE_UINT32;
-    trianglesData.indexData.deviceAddress = indexDataAddress;
-
-    VkAccelerationStructureGeometryKHR geometry = {0};
-    geometry.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
-    geometry.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
-    geometry.geometry.triangles = trianglesData;
-    geometry.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
-
-    VkAccelerationStructureBuildGeometryInfoKHR buildInfo = {0};
-    buildInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
-    buildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
-    buildInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
-    buildInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
-    buildInfo.geometryCount = 1;
-    buildInfo.pGeometries = &geometry;
+    VkAccelerationStructureGeometryKHR geometry;
+    VkAccelerationStructureBuildGeometryInfoKHR buildInfo;
+    buildBLASGeometryInfo(meshInfo, vertexDataAddress, indexDataAddress, &geometry, &buildInfo);
 
     uint32_t primitiveCount = meshInfo->indexCount / 3;
     VkAccelerationStructureBuildSizesInfoKHR sizesInfo = {0};
@@ -144,18 +152,8 @@ VKRT_Result createBottomLevelAccelerationStructureForGeometry(
 VKRT_Result prepareBottomLevelAccelerationStructureBuilds(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
 
-    FrameSceneUpdate* update = getCurrentFrameSceneUpdate(vkrt);
-    for (uint32_t i = 0; i < update->blasBuildCount; i++) {
-        if (update->blasBuilds[i].scratchBuffer != VK_NULL_HANDLE) {
-            vkDestroyBuffer(vkrt->core.device, update->blasBuilds[i].scratchBuffer, NULL);
-        }
-        if (update->blasBuilds[i].scratchMemory != VK_NULL_HANDLE) {
-            vkFreeMemory(vkrt->core.device, update->blasBuilds[i].scratchMemory, NULL);
-        }
-    }
-    free(update->blasBuilds);
-    update->blasBuilds = NULL;
-    update->blasBuildCount = 0;
+    FrameSceneUpdate* update = vkrtCurrentFrameSceneUpdate(vkrt);
+    cleanupPendingBLASBuilds(vkrt, update);
 
     uint32_t pendingCount = 0;
     for (uint32_t i = 0; i < vkrt->core.meshCount; i++) {
@@ -176,28 +174,10 @@ VKRT_Result prepareBottomLevelAccelerationStructureBuilds(VKRT* vkrt) {
         if (!mesh->ownsGeometry || !mesh->blasBuildPending) continue;
 
         uint32_t primitiveCount = mesh->info.indexCount / 3u;
-        VkAccelerationStructureGeometryTrianglesDataKHR trianglesData = {0};
-        trianglesData.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
-        trianglesData.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
-        trianglesData.vertexData.deviceAddress = vkrt->core.vertexData.deviceAddress;
-        trianglesData.vertexStride = sizeof(Vertex);
-        trianglesData.maxVertex = mesh->info.vertexBase + mesh->info.vertexCount - 1;
-        trianglesData.indexType = VK_INDEX_TYPE_UINT32;
-        trianglesData.indexData.deviceAddress = vkrt->core.indexData.deviceAddress;
-
-        VkAccelerationStructureGeometryKHR geometry = {0};
-        geometry.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
-        geometry.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
-        geometry.geometry.triangles = trianglesData;
-        geometry.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
-
-        VkAccelerationStructureBuildGeometryInfoKHR buildInfo = {0};
-        buildInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
-        buildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
-        buildInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
-        buildInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
-        buildInfo.geometryCount = 1;
-        buildInfo.pGeometries = &geometry;
+        VkAccelerationStructureGeometryKHR geometry;
+        VkAccelerationStructureBuildGeometryInfoKHR buildInfo;
+        buildBLASGeometryInfo(&mesh->info, vkrt->core.vertexData.deviceAddress,
+            vkrt->core.indexData.deviceAddress, &geometry, &buildInfo);
 
         VkAccelerationStructureBuildSizesInfoKHR sizesInfo = {0};
         sizesInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
@@ -230,7 +210,7 @@ VKRT_Result prepareBottomLevelAccelerationStructureBuilds(VKRT* vkrt) {
 VKRT_Result recordBottomLevelAccelerationStructureBuilds(VKRT* vkrt, VkCommandBuffer commandBuffer) {
     if (!vkrt || commandBuffer == VK_NULL_HANDLE) return VKRT_ERROR_INVALID_ARGUMENT;
 
-    FrameSceneUpdate* update = getCurrentFrameSceneUpdate(vkrt);
+    FrameSceneUpdate* update = vkrtCurrentFrameSceneUpdate(vkrt);
     for (uint32_t i = 0; i < update->blasBuildCount; i++) {
         PendingBLASBuild* pending = &update->blasBuilds[i];
         Mesh* mesh = &vkrt->core.meshes[pending->meshIndex];
@@ -238,28 +218,10 @@ VKRT_Result recordBottomLevelAccelerationStructureBuilds(VKRT* vkrt, VkCommandBu
             continue;
         }
 
-        VkAccelerationStructureGeometryTrianglesDataKHR trianglesData = {0};
-        trianglesData.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
-        trianglesData.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
-        trianglesData.vertexData.deviceAddress = vkrt->core.vertexData.deviceAddress;
-        trianglesData.vertexStride = sizeof(Vertex);
-        trianglesData.maxVertex = mesh->info.vertexBase + mesh->info.vertexCount - 1;
-        trianglesData.indexType = VK_INDEX_TYPE_UINT32;
-        trianglesData.indexData.deviceAddress = vkrt->core.indexData.deviceAddress;
-
-        VkAccelerationStructureGeometryKHR geometry = {0};
-        geometry.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
-        geometry.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
-        geometry.geometry.triangles = trianglesData;
-        geometry.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
-
-        VkAccelerationStructureBuildGeometryInfoKHR buildInfo = {0};
-        buildInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
-        buildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
-        buildInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
-        buildInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
-        buildInfo.geometryCount = 1;
-        buildInfo.pGeometries = &geometry;
+        VkAccelerationStructureGeometryKHR geometry;
+        VkAccelerationStructureBuildGeometryInfoKHR buildInfo;
+        buildBLASGeometryInfo(&mesh->info, vkrt->core.vertexData.deviceAddress,
+            vkrt->core.indexData.deviceAddress, &geometry, &buildInfo);
         buildInfo.dstAccelerationStructure = mesh->bottomLevelAccelerationStructure.structure;
 
         VkBufferDeviceAddressInfo scratchAddressInfo = {0};

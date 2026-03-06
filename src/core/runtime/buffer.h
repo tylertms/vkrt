@@ -21,3 +21,5 @@ VKRT_Result createDeviceBufferFromData(
     VkDeviceMemory* outMemory,
     VkDeviceAddress* outDeviceAddress);
 VkDeviceAddress queryBufferDeviceAddress(VKRT* vkrt, VkBuffer buffer);
+void destroyBufferResources(VKRT* vkrt, Buffer* buffer);
+void destroyTransfer(VKRT* vkrt, FrameTransfer* transfer);
