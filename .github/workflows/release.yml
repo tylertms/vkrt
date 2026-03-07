@@ -130,7 +130,7 @@ jobs:
           cp build/vkrt vkrt-linux-x64/
           cp -r assets vkrt-linux-x64/
           cp README.md vkrt-linux-x64/
-          tar -czf vkrt-linux-x64.tar.gz vkrt-linux-x64
+          tar -czf vkrt-linux-x64.tar.gz -C vkrt-linux-x64 .
 
       - name: Upload Release Assets
         if: github.ref_type == 'tag'
