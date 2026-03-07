@@ -11,6 +11,9 @@ struct BSDFSample {
     float pdf;
 };
 
+// https://media.disneyanimation.com/uploads/production/publication_asset/48/asset/s2012_pbs_disney_brdf_notes_v3.pdf
+// https://learnopengl.com/PBR/Theory
+
 vec3 sampleCosineHemisphere(vec3 normal, inout uint state) {
     float r1 = rand(state);
     float r2 = rand(state);
@@ -23,6 +26,18 @@ vec3 sampleCosineHemisphere(vec3 normal, inout uint state) {
 
 float cosineHemispherePdf(vec3 normal, vec3 incoming) {
     return max(dot(normal, incoming), 0.0) * INV_PI;
+}
+
+float iorF0(float ior) {
+    float r = (ior - 1.0) / (ior + 1.0);
+    return r * r;
+}
+
+vec3 fresnelSchlick(float cosTheta, Material material) {
+    vec3 f0 = mix(vec3(iorF0(material.ior)), material.baseColor, material.metallic);
+    float f = 1.0 - cosTheta;
+    float f2 = f * f;
+    return f0 + (1.0 - f0) * f2 * f2 * f;
 }
 
 vec3 evalBSDF(vec3 normal, vec3 incoming, vec3 outgoing, Material material) {

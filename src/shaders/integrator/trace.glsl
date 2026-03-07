@@ -33,7 +33,7 @@ vec3 trace(ivec2 pixel, inout uint state, out uint primaryInstanceIndex) {
     uint debugMode = scene.debugMode;
     bool misNeeEnabled = scene.misNeeEnabled != 0u;
 
-    if (debugMode == VKRT_DEBUG_MODE_NORMALS || debugMode == VKRT_DEBUG_MODE_DEPTH) {
+    if (debugMode == VKRT_DEBUG_MODE_NORMALS || debugMode == VKRT_DEBUG_MODE_DEPTH || debugMode == VKRT_DEBUG_MODE_FRESNEL) {
         payload.didHit = false;
         payload.hitDistance = rayMaxDistance;
 
@@ -43,7 +43,12 @@ vec3 trace(ivec2 pixel, inout uint state, out uint primaryInstanceIndex) {
 
         if (!payload.didHit) return vec3(0.0);
         if (debugMode == VKRT_DEBUG_MODE_NORMALS) return payload.normal * 0.5 + 0.5;
-        return vec3(debugDepthValue(payload.hitDistance));
+        if (debugMode == VKRT_DEBUG_MODE_DEPTH) return vec3(debugDepthValue(payload.hitDistance));
+
+        Material material = materialBuffer.materials[payload.materialIndex];
+        vec3 outgoing = -ray.dir;
+        float cosNV = max(dot(payload.normal, outgoing), 0.0);
+        return fresnelSchlick(cosNV, material);
     }
 
     bool neeOnly = debugMode == VKRT_DEBUG_MODE_NEE_ONLY;

@@ -67,7 +67,7 @@ static void drawDebugSection(VKRT* vkrt, const VKRT_PublicState* state, bool con
     inspectorIndentSection();
     if (controlsDisabled) ImGui_BeginDisabled(true);
 
-    const char* debugModeLabels[] = {"None", "Normals", "Depth", "Bounce Count", "NEE Only", "BSDF Only", "Selection Mask"};
+    const char* debugModeLabels[] = {"None", "Normals", "Depth", "Bounce Count", "NEE Only", "BSDF Only", "Selection Mask", "Fresnel"};
     int debugMode = (int)state->debugMode;
     if (ImGui_ComboCharEx("Debug Mode", &debugMode, debugModeLabels, (int)VKRT_DEBUG_MODE_COUNT, (int)VKRT_DEBUG_MODE_COUNT)) {
         VKRT_Result result = VKRT_setDebugMode(vkrt, (uint32_t)debugMode);
