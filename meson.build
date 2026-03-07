@@ -269,8 +269,6 @@ endif
 
 app_c_args = c_args + [define_prefix + 'VKRT_FILE_DIALOGS_ENABLED=' + (file_dialogs_enabled ? '1' : '0')]
 
-subdir('shaders')
-
 executable('vkrt',
   c_args: app_c_args,
   sources: [app_sources, app_dialog_source, embedded_shader_sources],

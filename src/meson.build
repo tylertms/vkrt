@@ -1,2 +1,3 @@
-subdir('core')
 subdir('app')
+subdir('core')
+subdir('shaders')
