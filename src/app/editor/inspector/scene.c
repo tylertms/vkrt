@@ -23,7 +23,6 @@ static bool drawSceneBrowserEntry(Session* session, uint32_t meshIndex, const VK
 
     char id[32] = {0};
     char nameText[192] = {0};
-    char sourceText[32] = {0};
     const float rowHeight = ImGui_GetTextLineHeight() + 2.0f;
     snprintf(id, sizeof(id), "##mesh_%u", meshIndex);
 
@@ -31,10 +30,6 @@ static bool drawSceneBrowserEntry(Session* session, uint32_t meshIndex, const VK
     snprintf(nameText, sizeof(nameText), "%s %s",
         mesh->ownsGeometry ? ICON_FA_CUBE : ICON_FA_CLONE,
         meshName);
-
-    if (!mesh->ownsGeometry) {
-        snprintf(sourceText, sizeof(sourceText), ICON_FA_ARROW_RIGHT " %u", mesh->geometrySource);
-    }
 
     const ImVec4 transparent = {0.0f, 0.0f, 0.0f, 0.0f};
     ImGui_PushStyleColorImVec4(ImGuiCol_Header, transparent);
@@ -59,27 +54,6 @@ static bool drawSceneBrowserEntry(Session* session, uint32_t meshIndex, const VK
 
     if (bgColor != 0) {
         ImDrawList_AddRectFilledEx(ImGui_GetWindowDrawList(), min, max, bgColor, 4.0f, 0);
-    }
-
-    if (!mesh->ownsGeometry) {
-        ImVec2 sourceSize = ImGui_CalcTextSize(sourceText);
-        float sourceX = max.x - style->FramePadding.x - sourceSize.x;
-        float sourceY = floorf(min.y + (max.y - min.y - sourceSize.y) * 0.5f);
-
-        ImGui_PushClipRect((ImVec2){min.x, min.y}, (ImVec2){sourceX - 8.0f, max.y}, true);
-        ImDrawList_AddTextEx(ImGui_GetWindowDrawList(),
-            (ImVec2){textX, textY},
-            ImGui_GetColorU32(ImGuiCol_Text),
-            nameText,
-            NULL);
-        ImGui_PopClipRect();
-
-        ImDrawList_AddTextEx(ImGui_GetWindowDrawList(),
-            (ImVec2){sourceX, sourceY},
-            ImGui_GetColorU32(ImGuiCol_TextDisabled),
-            sourceText,
-            NULL);
-        return clicked;
     }
 
     ImDrawList_AddTextEx(ImGui_GetWindowDrawList(),
@@ -116,15 +90,24 @@ static void drawMeshInfoHeader(Session* session, uint32_t meshIndex, const VKRT_
     char countText[48] = {0};
     char sizeText[32] = {0};
     char geometryText[48] = {0};
+    char sourceText[192] = {0};
     snprintf(countText, sizeof(countText), "%u verts / %u tris", mesh->info.vertexCount, triangleCount);
     formatByteSize(vertexBytes + indexBytes, sizeText, sizeof(sizeText));
     formatMeshGeometryText(mesh, geometryText, sizeof(geometryText));
+    if (!mesh->ownsGeometry) {
+        snprintf(sourceText, sizeof(sourceText), "%s (#%u)",
+            sessionGetMeshName(session, mesh->geometrySource),
+            mesh->geometrySource);
+    }
 
     inspectorTightSeparatorText(ICON_FA_CIRCLE_INFO " Stats");
     inspectorIndentSection();
     if (inspectorBeginKeyValueTable("##mesh_stats")) {
         inspectorKeyValueRow("Name", sessionGetMeshName(session, meshIndex));
         inspectorKeyValueRow("Geometry", geometryText);
+        if (!mesh->ownsGeometry) {
+            inspectorKeyValueRow("Source", sourceText);
+        }
         inspectorKeyValueRow("Counts", countText);
         inspectorKeyValueRow("Size", sizeText);
         inspectorEndKeyValueTable();
@@ -139,9 +122,11 @@ static void drawMeshTransformEditor(VKRT* vkrt, uint32_t meshIndex, const VKRT_M
     float scale[3] = {mesh->info.scale[0], mesh->info.scale[1], mesh->info.scale[2]};
 
     bool transformChanged = false;
+    inspectorPushWidgetSpacing();
     transformChanged |= ImGui_DragFloat3Ex("Translate", position, 0.001f, 0.0f, 0.0f, "%.3f", ImGuiSliderFlags_None);
     transformChanged |= ImGui_DragFloat3Ex("Rotate", rotation, 0.05f, 0.0f, 0.0f, "%.2f", ImGuiSliderFlags_None);
     transformChanged |= ImGui_DragFloat3Ex("Scale", scale, 0.001f, 0.001f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    inspectorPopWidgetSpacing();
 
     if (transformChanged) {
         for (int axis = 0; axis < 3; axis++) {
@@ -162,6 +147,7 @@ static void drawMeshMaterialEditor(VKRT* vkrt, uint32_t meshIndex, const VKRT_Me
     Material material = mesh->material;
     bool materialChanged = false;
 
+    inspectorPushWidgetSpacing();
     materialChanged |= ImGui_ColorEdit3("Base Color", material.baseColor, ImGuiColorEditFlags_Float);
     materialChanged |= ImGui_SliderFloatEx("Metallic", &material.metallic, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     materialChanged |= ImGui_SliderFloatEx("Roughness", &material.roughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
@@ -192,6 +178,7 @@ static void drawMeshMaterialEditor(VKRT* vkrt, uint32_t meshIndex, const VKRT_Me
         materialChanged |= ImGui_ColorEdit3("Emission Color", material.emissionColor, ImGuiColorEditFlags_Float);
         inspectorUnindentSection();
     }
+    inspectorPopWidgetSpacing();
 
     if (!materialChanged) return;
 
@@ -284,7 +271,7 @@ void inspectorDrawSelectionPanel(VKRT* vkrt, Session* session) {
 
     uint32_t selectedMeshIndex = querySelectedMeshIndex(vkrt);
     if (selectedMeshIndex == VKRT_INVALID_INDEX) {
-        ImGui_TextDisabled("Select a mesh from the Scene panel.");
+        ImGui_TextWrapped("Click a mesh in the Scene list or left-click it in the viewport.");
         return;
     }
 

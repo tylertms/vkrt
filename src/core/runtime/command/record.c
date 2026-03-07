@@ -7,6 +7,38 @@
 
 static const VkClearColorValue kViewportClearColor = {.float32 = {0.02f, 0.02f, 0.025f, 1.0f}};
 
+static void recordImageAccessBarrier(
+    VkCommandBuffer commandBuffer,
+    VkImage image,
+    VkAccessFlags srcAccessMask,
+    VkAccessFlags dstAccessMask,
+    VkPipelineStageFlags srcStageMask,
+    VkPipelineStageFlags dstStageMask
+) {
+    VkImageMemoryBarrier barrier = {0};
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+    barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = image;
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrier.subresourceRange.baseMipLevel = 0;
+    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.baseArrayLayer = 0;
+    barrier.subresourceRange.layerCount = 1;
+    barrier.srcAccessMask = srcAccessMask;
+    barrier.dstAccessMask = dstAccessMask;
+
+    vkCmdPipelineBarrier(commandBuffer,
+        srcStageMask,
+        dstStageMask,
+        0,
+        0, NULL,
+        0, NULL,
+        1, &barrier);
+}
+
 static void recordSceneUpdateCommands(VKRT* vkrt, VkCommandBuffer commandBuffer) {
     FrameSceneUpdate* update = vkrtCurrentFrameSceneUpdate(vkrt);
     VkBool32 hasTransferWrites = VK_FALSE;
@@ -112,7 +144,8 @@ VKRT_Result recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
     }
     VkImage accumulationReadImage = vkrt->core.accumulationImages[vkrt->core.accumulationReadIndex];
     VkImage accumulationWriteImage = vkrt->core.accumulationImages[vkrt->core.accumulationWriteIndex];
-    VkImage outputImage = vkrt->core.storageImage;
+    VkImage outputImage = vkrt->core.outputImage;
+    VkImage selectionMaskImage = vkrt->core.selectionMaskImage;
     VkImage destImage = vkrt->runtime.swapChainImages[imageIndex];
 
     VkCommandBufferBeginInfo commandBufferBeginInfo = {0};
@@ -142,7 +175,18 @@ VKRT_Result recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
     VkBool32 renderFinished = renderModeActive && vkrt->state.renderModeFinished;
     VkBool32 descriptorReady = vkrt->core.descriptorSetReady[vkrt->runtime.currentFrame];
     VkBool32 shouldTrace = descriptorReady && !renderFinished;
+    VkBool32 selectionOverlayEnabled = !renderModeActive &&
+                                       (vkrt->state.selectionEnabled != 0u ||
+                                        vkrt->state.debugMode == VKRT_DEBUG_MODE_SELECTION_MASK);
+    VkBool32 shouldSelectionTrace = shouldTrace &&
+                                    selectionOverlayEnabled &&
+                                    vkrt->core.selectionMaskDirty &&
+                                    vkrt->core.selectionRayTracingPipeline != VK_NULL_HANDLE;
+    VkBool32 shouldSelectionPost = shouldTrace &&
+                                   selectionOverlayEnabled &&
+                                   vkrt->core.computePipeline != VK_NULL_HANDLE;
     vkrt->runtime.frameTraced = VK_FALSE;
+    vkrt->runtime.frameSelectionTraced = VK_FALSE;
 
     if (shouldTrace) {
         vkrt->runtime.frameTraced = VK_TRUE;
@@ -197,6 +241,53 @@ VKRT_Result recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
                 NULL,
                 1,
                 &accumulationBarrier);
+
+            if (shouldSelectionTrace) {
+                vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, vkrt->core.selectionRayTracingPipeline);
+                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, vkrt->core.pipelineLayout, 0, 1,
+                                       &vkrt->core.descriptorSets[vkrt->runtime.currentFrame], 0, NULL);
+                vkrt->core.procs.vkCmdTraceRaysKHR(commandBuffer, &vkrt->core.selectionShaderBindingTables[0], &vkrt->core.selectionShaderBindingTables[1],
+                                                   &vkrt->core.selectionShaderBindingTables[2], &vkrt->core.selectionShaderBindingTables[3],
+                                                   renderExtent.width, renderExtent.height, 1);
+                vkrt->runtime.frameSelectionTraced = VK_TRUE;
+            }
+
+            if (shouldSelectionPost) {
+                if (shouldSelectionTrace) {
+                    recordImageAccessBarrier(
+                        commandBuffer,
+                        selectionMaskImage,
+                        VK_ACCESS_SHADER_WRITE_BIT,
+                        VK_ACCESS_SHADER_READ_BIT,
+                        VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
+                        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+                }
+                recordImageAccessBarrier(
+                    commandBuffer,
+                    outputImage,
+                    VK_ACCESS_SHADER_WRITE_BIT,
+                    VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
+                    VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
+                    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+
+                vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, vkrt->core.computePipeline);
+                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, vkrt->core.pipelineLayout, 0, 1,
+                    &vkrt->core.descriptorSets[vkrt->runtime.currentFrame], 0, NULL);
+
+                const uint32_t localSizeX = 16u;
+                const uint32_t localSizeY = 16u;
+                uint32_t groupCountX = (renderExtent.width + localSizeX - 1u) / localSizeX;
+                uint32_t groupCountY = (renderExtent.height + localSizeY - 1u) / localSizeY;
+                vkCmdDispatch(commandBuffer, groupCountX, groupCountY, 1);
+
+                recordImageAccessBarrier(
+                    commandBuffer,
+                    outputImage,
+                    VK_ACCESS_SHADER_WRITE_BIT,
+                    VK_ACCESS_TRANSFER_READ_BIT,
+                    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT);
+            }
         }
 
         transitionImageLayout(commandBuffer, outputImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);

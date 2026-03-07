@@ -26,8 +26,10 @@ void inspectorDrawCameraTab(VKRT* vkrt) {
             LOG_ERROR("Querying camera pose failed (%d)", (int)poseResult);
         } else {
             bool changed = false;
+            inspectorPushWidgetSpacing();
             changed |= ImGui_DragFloat3Ex("Position", position, 0.01f, 0.0f, 0.0f, "%.3f", ImGuiSliderFlags_None);
             changed |= ImGui_DragFloat3Ex("Target", target, 0.01f, 0.0f, 0.0f, "%.3f", ImGuiSliderFlags_None);
+            inspectorPopWidgetSpacing();
             bool fovChanged = ImGui_SliderFloatEx("FOV", &fov, 10.0f, 140.0f, "%.1f deg", ImGuiSliderFlags_AlwaysClamp);
 
             if (changed || fovChanged) {

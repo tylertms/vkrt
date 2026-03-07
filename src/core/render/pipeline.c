@@ -6,10 +6,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-VKRT_Result createRayTracingPipeline(VKRT* vkrt) {
+static VKRT_Result createRayTracingPipelineLayout(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
-
-    uint64_t startTime = getMicroseconds();
+    if (vkrt->core.pipelineLayout != VK_NULL_HANDLE) return VKRT_SUCCESS;
 
     VkPipelineLayoutCreateInfo pipelineLayoutInfo = {0};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -21,6 +20,15 @@ VKRT_Result createRayTracingPipeline(VKRT* vkrt) {
         LOG_ERROR("Failed to create pipeline layout");
         return VKRT_ERROR_OPERATION_FAILED;
     }
+    return VKRT_SUCCESS;
+}
+
+VKRT_Result createRayTracingPipeline(VKRT* vkrt) {
+    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    uint64_t startTime = getMicroseconds();
+
+    if (createRayTracingPipelineLayout(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
 
     size_t rayGenLen, closestHitLen, missLen;
 
@@ -136,6 +144,123 @@ VKRT_Result createRayTracingPipeline(VKRT* vkrt) {
     LOG_INFO("Ray tracing pipeline created. Shader Stages: %u, Shader Groups: %u, in %.3f ms",
         (uint32_t)VKRT_ARRAY_COUNT(shaderStages),
         (uint32_t)VKRT_ARRAY_COUNT(shaderGroups),
+        (double)(getMicroseconds() - startTime) / 1e3);
+    return VKRT_SUCCESS;
+}
+
+VKRT_Result createSelectionRayTracingPipeline(VKRT* vkrt) {
+    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+    if (createRayTracingPipelineLayout(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+
+    uint64_t startTime = getMicroseconds();
+    VKRT_Result result = VKRT_ERROR_OPERATION_FAILED;
+
+    size_t rayGenLen = 0, missLen = 0, closestHitLen = 0, anyHitLen = 0;
+    const char* rayGenCode = readFile(vkrt->core.shaders.selectRgenPath, &rayGenLen);
+    const char* missCode = readFile(vkrt->core.shaders.selectRmissPath, &missLen);
+    const char* closestHitCode = readFile(vkrt->core.shaders.selectRchitPath, &closestHitLen);
+    const char* anyHitCode = readFile(vkrt->core.shaders.selectRahitPath, &anyHitLen);
+    if (!rayGenCode || !missCode || !closestHitCode || !anyHitCode) goto cleanup;
+
+    VkShaderModule rayGenModule = VK_NULL_HANDLE;
+    VkShaderModule missModule = VK_NULL_HANDLE;
+    VkShaderModule closestHitModule = VK_NULL_HANDLE;
+    VkShaderModule anyHitModule = VK_NULL_HANDLE;
+    if (createShaderModule(vkrt, rayGenCode, rayGenLen, &rayGenModule) != VKRT_SUCCESS ||
+        createShaderModule(vkrt, missCode, missLen, &missModule) != VKRT_SUCCESS ||
+        createShaderModule(vkrt, closestHitCode, closestHitLen, &closestHitModule) != VKRT_SUCCESS ||
+        createShaderModule(vkrt, anyHitCode, anyHitLen, &anyHitModule) != VKRT_SUCCESS) {
+        goto cleanup;
+    }
+
+    VkPipelineShaderStageCreateInfo shaderStages[] = {
+        {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .stage = VK_SHADER_STAGE_RAYGEN_BIT_KHR, .module = rayGenModule, .pName = "main"},
+        {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .stage = VK_SHADER_STAGE_MISS_BIT_KHR, .module = missModule, .pName = "main"},
+        {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .stage = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, .module = closestHitModule, .pName = "main"},
+        {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .stage = VK_SHADER_STAGE_ANY_HIT_BIT_KHR, .module = anyHitModule, .pName = "main"},
+    };
+
+    VkRayTracingShaderGroupCreateInfoKHR shaderGroups[3] = {
+        {.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR, .type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
+         .generalShader = 0, .closestHitShader = VK_SHADER_UNUSED_KHR, .anyHitShader = VK_SHADER_UNUSED_KHR, .intersectionShader = VK_SHADER_UNUSED_KHR},
+        {.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR, .type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
+         .generalShader = 1, .closestHitShader = VK_SHADER_UNUSED_KHR, .anyHitShader = VK_SHADER_UNUSED_KHR, .intersectionShader = VK_SHADER_UNUSED_KHR},
+        {.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR, .type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR,
+         .generalShader = VK_SHADER_UNUSED_KHR, .closestHitShader = 2, .anyHitShader = 3, .intersectionShader = VK_SHADER_UNUSED_KHR},
+    };
+
+    VkRayTracingPipelineCreateInfoKHR pipelineCreateInfo = {0};
+    pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR;
+    pipelineCreateInfo.stageCount = VKRT_ARRAY_COUNT(shaderStages);
+    pipelineCreateInfo.pStages = shaderStages;
+    pipelineCreateInfo.groupCount = VKRT_ARRAY_COUNT(shaderGroups);
+    pipelineCreateInfo.pGroups = shaderGroups;
+    pipelineCreateInfo.maxPipelineRayRecursionDepth = 1;
+    pipelineCreateInfo.layout = vkrt->core.pipelineLayout;
+
+    if (vkrt->core.procs.vkCreateRayTracingPipelinesKHR(
+            vkrt->core.device, VK_NULL_HANDLE, VK_NULL_HANDLE, 1,
+            &pipelineCreateInfo, NULL, &vkrt->core.selectionRayTracingPipeline) != VK_SUCCESS) {
+        LOG_ERROR("Failed to create selection ray tracing pipeline");
+        goto cleanup;
+    }
+
+    result = VKRT_SUCCESS;
+    LOG_INFO("Selection ray tracing pipeline created in %.3f ms",
+        (double)(getMicroseconds() - startTime) / 1e3);
+
+cleanup:
+    if (rayGenModule != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, rayGenModule, NULL);
+    if (missModule != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, missModule, NULL);
+    if (closestHitModule != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, closestHitModule, NULL);
+    if (anyHitModule != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, anyHitModule, NULL);
+    free((void*)rayGenCode);
+    free((void*)missCode);
+    free((void*)closestHitCode);
+    free((void*)anyHitCode);
+    return result;
+}
+
+VKRT_Result createComputePipeline(VKRT* vkrt) {
+    if (!vkrt || !vkrt->core.shaders.compPath) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    uint64_t startTime = getMicroseconds();
+
+    size_t compLen = 0;
+    const char* compCode = readFile(vkrt->core.shaders.compPath, &compLen);
+    if (!compCode) {
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+
+    VkShaderModule compModule = VK_NULL_HANDLE;
+    if (createShaderModule(vkrt, compCode, compLen, &compModule) != VKRT_SUCCESS) {
+        free((void*)compCode);
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+
+    VkPipelineShaderStageCreateInfo stageInfo = {0};
+    stageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stageInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+    stageInfo.module = compModule;
+    stageInfo.pName = "main";
+
+    VkComputePipelineCreateInfo createInfo = {0};
+    createInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+    createInfo.stage = stageInfo;
+    createInfo.layout = vkrt->core.pipelineLayout;
+
+    if (vkCreateComputePipelines(vkrt->core.device, VK_NULL_HANDLE, 1, &createInfo, NULL, &vkrt->core.computePipeline) != VK_SUCCESS) {
+        LOG_ERROR("Failed to create compute pipeline");
+        vkDestroyShaderModule(vkrt->core.device, compModule, NULL);
+        free((void*)compCode);
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+
+    vkDestroyShaderModule(vkrt->core.device, compModule, NULL);
+    free((void*)compCode);
+
+    LOG_INFO("Compute pipeline created from \"%s\" in %.3f ms",
+        vkrt->core.shaders.compPath,
         (double)(getMicroseconds() - startTime) / 1e3);
     return VKRT_SUCCESS;
 }

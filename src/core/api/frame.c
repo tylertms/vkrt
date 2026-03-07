@@ -17,6 +17,17 @@ static void invalidateDescriptorSets(VKRT* vkrt) {
     }
 }
 
+static void resolveCompletedPick(VKRT* vkrt) {
+    if (!vkrt || !vkrt->core.pickPending || !vkrt->core.pickData) return;
+    if (!vkrt->core.pickSubmitted) return;
+    if (vkrt->core.pickPendingFrame != vkrt->runtime.currentFrame) return;
+
+    vkrt->core.pickResultMeshIndex = vkrt->core.pickData->hitMeshIndex;
+    vkrt->core.pickResultReady = 1;
+    vkrt->core.pickPending = 0;
+    vkrt->core.pickSubmitted = 0;
+}
+
 VKRT_Result VKRT_beginFrame(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
 
@@ -24,8 +35,10 @@ VKRT_Result VKRT_beginFrame(VKRT* vkrt) {
     vkrt->runtime.frameSubmitted = VK_FALSE;
     vkrt->runtime.framePresented = VK_FALSE;
     vkrt->runtime.frameTraced = VK_FALSE;
+    vkrt->runtime.frameSelectionTraced = VK_FALSE;
 
     vkWaitForFences(vkrt->core.device, 1, &vkrt->runtime.inFlightFences[vkrt->runtime.currentFrame], VK_TRUE, UINT64_MAX);
+    resolveCompletedPick(vkrt);
     cleanupFrameSceneUpdate(vkrt, vkrt->runtime.currentFrame);
     recordFrameTime(vkrt, vkrt->runtime.currentFrame);
 
@@ -130,6 +143,12 @@ VKRT_Result VKRT_trace(VKRT* vkrt) {
         vkrt->core.meshes[i].blasBuildPending = 0;
     }
     vkrt->runtime.frameTimingPending[vkrt->runtime.currentFrame] = VK_TRUE;
+    if (vkrt->core.pickPending && vkrt->core.pickPendingFrame == vkrt->runtime.currentFrame) {
+        vkrt->core.pickSubmitted = 1;
+    }
+    if (vkrt->runtime.frameSelectionTraced) {
+        vkrt->core.selectionMaskDirty = VK_FALSE;
+    }
     vkrt->runtime.frameSubmitted = VK_TRUE;
     return VKRT_SUCCESS;
 }

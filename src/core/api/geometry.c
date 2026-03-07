@@ -90,6 +90,7 @@ static void markSceneMutation(VKRT* vkrt) {
     vkrtMarkMaterialResourcesDirty(vkrt);
     vkrtMarkSceneResourcesDirty(vkrt);
     vkrtMarkLightResourcesDirty(vkrt);
+    markSelectionMaskDirty(vkrt);
     resetSceneData(vkrt);
 }
 
@@ -170,7 +171,7 @@ static VKRT_Result rebuildGeometryLayout(VKRT* vkrt) {
         ownerCount++;
     }
 
-    if (requiredVertexCapacity > UINT32_MAX || requiredIndexCapacity > UINT32_MAX) {
+    if (requiredVertexCapacity > VKRT_INVALID_INDEX || requiredIndexCapacity > VKRT_INVALID_INDEX) {
         LOG_ERROR("Geometry layout rebuild exceeds 32-bit buffer limits");
         return VKRT_ERROR_OPERATION_FAILED;
     }
@@ -328,7 +329,7 @@ VKRT_Result VKRT_uploadMeshData(
     size_t indexCount
 ) {
     if (!vkrt || !vertices || !indices || vertexCount == 0 || indexCount == 0) return VKRT_ERROR_INVALID_ARGUMENT;
-    if (vertexCount > UINT32_MAX || indexCount > UINT32_MAX) return VKRT_ERROR_INVALID_ARGUMENT;
+    if (vertexCount > VKRT_INVALID_INDEX || indexCount > VKRT_INVALID_INDEX) return VKRT_ERROR_INVALID_ARGUMENT;
 
     uint64_t startTime = getMicroseconds();
     uint32_t previousCount = vkrt->core.meshCount;
@@ -345,7 +346,7 @@ VKRT_Result VKRT_uploadMeshData(
     memset(mesh, 0, sizeof(*mesh));
     mesh->renderBackfacesOverride = -1;
 
-    uint32_t duplicateIndex = UINT32_MAX;
+    uint32_t duplicateIndex = VKRT_INVALID_INDEX;
     for (uint32_t i = 0; i < previousCount; i++) {
         Mesh* existing = &vkrt->core.meshes[i];
         if (existing->info.vertexCount != (uint32_t)vertexCount || existing->info.indexCount != (uint32_t)indexCount) {
@@ -371,7 +372,7 @@ VKRT_Result VKRT_uploadMeshData(
     memset(&mesh->info.rotation, 0, sizeof(vec3));
     memset(&mesh->info.position, 0, sizeof(vec3));
 
-    if (duplicateIndex == UINT32_MAX) {
+    if (duplicateIndex == VKRT_INVALID_INDEX) {
         mesh->vertices = (Vertex*)malloc(vertexCount * sizeof(Vertex));
         mesh->indices = (uint32_t*)malloc(indexCount * sizeof(uint32_t));
         if (!mesh->vertices || !mesh->indices) {
@@ -411,7 +412,7 @@ VKRT_Result VKRT_uploadMeshData(
         vkrt->core.meshCount,
         vertexCount,
         indexCount,
-        duplicateIndex == UINT32_MAX ? "No" : "Yes",
+        duplicateIndex == VKRT_INVALID_INDEX ? "No" : "Yes",
         (double)(getMicroseconds() - startTime) / 1e3);
     return VKRT_SUCCESS;
 }
@@ -475,6 +476,7 @@ VKRT_Result VKRT_removeMesh(VKRT* vkrt, uint32_t meshIndex) {
     } else if (vkrt->state.selectedMeshIndex != VKRT_INVALID_INDEX && vkrt->state.selectedMeshIndex > meshIndex) {
         vkrt->state.selectedMeshIndex--;
     }
+    vkrt->state.selectionEnabled = vkrt->state.selectedMeshIndex != VKRT_INVALID_INDEX;
 
     if (rebuildGeometryLayout(vkrt) != VKRT_SUCCESS) {
         LOG_ERROR("Geometry layout rebuild failed after mesh removal");

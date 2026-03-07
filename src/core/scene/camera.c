@@ -77,5 +77,6 @@ void updateMatricesFromCamera(VKRT* vkrt) {
     glm_mat4_inv(view, vkrt->core.sceneData->viewInverse);
     glm_mat4_inv(proj, vkrt->core.sceneData->projInverse);
 
+    markSelectionMaskDirty(vkrt);
     resetSceneData(vkrt);
 }

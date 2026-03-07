@@ -29,17 +29,33 @@ void main() {
     vec4 previous = imageLoad(accumulationReadImage, pixel);
     uint previousSamples = uint(previous.a + 0.5);
     uint rngBase = initRngBase(uvec2(pixel), scene.frameNumber);
+    ivec2 requestPixel = ivec2(
+            int(pickBuffer.pixel & 0xFFFFu),
+            int((pickBuffer.pixel >> 16) & 0xFFFFu)
+        );
+    bool capturePick = pixel == requestPixel;
 
     vec3 frameRadiance = vec3(0.0);
+    uint firstSamplePrimaryInstanceIndex = VKRT_INVALID_INDEX;
+
     for (uint sampleIndex = 0; sampleIndex < spp; sampleIndex++) {
         uint sampleNumber = previousSamples + sampleIndex;
         uint state = initRngState(rngBase, sampleNumber);
-        vec3 sampleRadiance = trace(pixel, state);
-        if (!any(isnan(sampleRadiance)) && !any(isinf(sampleRadiance))) {
-            frameRadiance += sampleRadiance;
+
+        uint primaryInstanceIndex = VKRT_INVALID_INDEX;
+        vec3 sampleRadiance = trace(pixel, state, primaryInstanceIndex);
+
+        if (sampleIndex == 0u) {
+            firstSamplePrimaryInstanceIndex = primaryInstanceIndex;
         }
+
+        frameRadiance += sampleRadiance;
     }
     frameRadiance /= float(spp);
+
+    if (capturePick) {
+        pickBuffer.hitMeshIndex = firstSamplePrimaryInstanceIndex;
+    }
 
     float previousWeight = float(previousSamples);
     float newWeight = float(spp);

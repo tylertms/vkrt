@@ -31,6 +31,8 @@ void formatDriverVersionText(uint32_t vendorID, uint32_t driverVersion, char* ou
 void formatByteSize(uint64_t bytes, char* out, size_t outSize);
 void inspectorIndentSection(void);
 void inspectorUnindentSection(void);
+void inspectorPushWidgetSpacing(void);
+void inspectorPopWidgetSpacing(void);
 void inspectorTightSeparatorText(const char* label);
 bool inspectorBeginKeyValueTable(const char* id);
 void inspectorKeyValueRow(const char* label, const char* value);

@@ -4,7 +4,7 @@
 #include "descriptor.h"
 #include "device.h"
 #include "procs.h"
-#include "storage.h"
+#include "images.h"
 #include "instance.h"
 #include "pipeline.h"
 #include "scene.h"
@@ -87,7 +87,7 @@ static void cleanupSwapChainAndStorageResources(VKRT* vkrt) {
     if (vkrt->runtime.swapChain != VK_NULL_HANDLE) {
         cleanupSwapChain(vkrt);
     }
-    destroyStorageImage(vkrt);
+    destroyGPUImages(vkrt);
 }
 
 static void cleanupRayTracingAndRenderPassResources(VKRT* vkrt) {
@@ -99,6 +99,7 @@ static void cleanupRayTracingAndRenderPassResources(VKRT* vkrt) {
     }
 
     destroyBufferAndMemory(vkrt, &vkrt->core.shaderBindingTableBuffer, &vkrt->core.shaderBindingTableMemory);
+    destroyBufferAndMemory(vkrt, &vkrt->core.selectionShaderBindingTableBuffer, &vkrt->core.selectionShaderBindingTableMemory);
 }
 
 static void cleanupSceneAndAccelerationResources(VKRT* vkrt) {
@@ -153,6 +154,14 @@ static void cleanupDescriptorAndPipelineResources(VKRT* vkrt) {
     if (vkrt->core.rayTracingPipeline != VK_NULL_HANDLE) {
         vkDestroyPipeline(vkrt->core.device, vkrt->core.rayTracingPipeline, NULL);
         vkrt->core.rayTracingPipeline = VK_NULL_HANDLE;
+    }
+    if (vkrt->core.selectionRayTracingPipeline != VK_NULL_HANDLE) {
+        vkDestroyPipeline(vkrt->core.device, vkrt->core.selectionRayTracingPipeline, NULL);
+        vkrt->core.selectionRayTracingPipeline = VK_NULL_HANDLE;
+    }
+    if (vkrt->core.computePipeline != VK_NULL_HANDLE) {
+        vkDestroyPipeline(vkrt->core.device, vkrt->core.computePipeline, NULL);
+        vkrt->core.computePipeline = VK_NULL_HANDLE;
     }
     if (vkrt->core.pipelineLayout != VK_NULL_HANDLE) {
         vkDestroyPipelineLayout(vkrt->core.device, vkrt->core.pipelineLayout, NULL);
@@ -216,6 +225,11 @@ void VKRT_defaultCreateInfo(VKRT_CreateInfo* createInfo) {
             .rgenPath = "./shaders/rgen.spv",
             .rmissPath = "./shaders/rmiss.spv",
             .rchitPath = "./shaders/rchit.spv",
+            .compPath = "./shaders/select.spv",
+            .selectRgenPath = "./shaders/select_rgen.spv",
+            .selectRmissPath = "./shaders/select_rmiss.spv",
+            .selectRchitPath = "./shaders/select_rchit.spv",
+            .selectRahitPath = "./shaders/select_rahit.spv",
         },
     };
 }
@@ -277,6 +291,11 @@ VKRT_Result VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInf
     if (!vkrt->core.shaders.rgenPath) vkrt->core.shaders.rgenPath = "./shaders/rgen.spv";
     if (!vkrt->core.shaders.rmissPath) vkrt->core.shaders.rmissPath = "./shaders/rmiss.spv";
     if (!vkrt->core.shaders.rchitPath) vkrt->core.shaders.rchitPath = "./shaders/rchit.spv";
+    if (!vkrt->core.shaders.compPath) vkrt->core.shaders.compPath = "./shaders/select.spv";
+    if (!vkrt->core.shaders.selectRgenPath) vkrt->core.shaders.selectRgenPath = "./shaders/select_rgen.spv";
+    if (!vkrt->core.shaders.selectRmissPath) vkrt->core.shaders.selectRmissPath = "./shaders/select_rmiss.spv";
+    if (!vkrt->core.shaders.selectRchitPath) vkrt->core.shaders.selectRchitPath = "./shaders/select_rchit.spv";
+    if (!vkrt->core.shaders.selectRahitPath) vkrt->core.shaders.selectRahitPath = "./shaders/select_rahit.spv";
 
     stepStartTime = getMicroseconds();
     vkrt->runtime.window = glfwCreateWindow((int)width, (int)height, title, 0, 0);
@@ -331,10 +350,12 @@ VKRT_Result VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInf
 
     stepStartTime = getMicroseconds();
     if (createRayTracingPipeline(vkrt) != VKRT_SUCCESS) goto init_failed;
-    logStepTime("Ray tracing pipeline ready", stepStartTime);
+    if (createSelectionRayTracingPipeline(vkrt) != VKRT_SUCCESS) goto init_failed;
+    if (createComputePipeline(vkrt) != VKRT_SUCCESS) goto init_failed;
+    logStepTime("Ray tracing pipelines and compute pipeline ready", stepStartTime);
 
     stepStartTime = getMicroseconds();
-    if (createStorageImage(vkrt) != VKRT_SUCCESS) goto init_failed;
+    if (createGPUImages(vkrt) != VKRT_SUCCESS) goto init_failed;
     logStepTime("Storage image ready", stepStartTime);
 
     stepStartTime = getMicroseconds();
@@ -351,7 +372,8 @@ VKRT_Result VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInf
 
     stepStartTime = getMicroseconds();
     if (createShaderBindingTable(vkrt) != VKRT_SUCCESS) goto init_failed;
-    logStepTime("Shader binding table ready", stepStartTime);
+    if (createSelectionShaderBindingTable(vkrt) != VKRT_SUCCESS) goto init_failed;
+    logStepTime("Shader binding tables ready", stepStartTime);
 
     stepStartTime = getMicroseconds();
     if (createCommandBuffers(vkrt) != VKRT_SUCCESS) goto init_failed;

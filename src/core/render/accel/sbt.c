@@ -7,10 +7,16 @@
 #include <stdlib.h>
 #include <string.h>
 
-VKRT_Result createShaderBindingTable(VKRT* vkrt) {
-    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
-
-    uint64_t startTime = getMicroseconds();
+static VKRT_Result createShaderBindingTableForPipeline(
+    VKRT* vkrt,
+    VkPipeline pipeline,
+    VkBuffer* outBuffer,
+    VkDeviceMemory* outMemory,
+    VkStridedDeviceAddressRegionKHR outTables[4]
+) {
+    if (!vkrt || pipeline == VK_NULL_HANDLE || !outBuffer || !outMemory || !outTables) {
+        return VKRT_ERROR_INVALID_ARGUMENT;
+    }
 
     VkPhysicalDeviceRayTracingPipelinePropertiesKHR rayTracingPipelineProperties = {0};
     rayTracingPipelineProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
@@ -44,7 +50,7 @@ VKRT_Result createShaderBindingTable(VKRT* vkrt) {
 
     VkResult handlesResult = vkrt->core.procs.vkGetRayTracingShaderGroupHandlesKHR(
         vkrt->core.device,
-        vkrt->core.rayTracingPipeline,
+        pipeline,
         0,
         groupCount,
         groupCount * handleSize,
@@ -78,14 +84,14 @@ VKRT_Result createShaderBindingTable(VKRT* vkrt) {
                              VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
     bufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-    if (vkCreateBuffer(vkrt->core.device, &bufferCreateInfo, NULL, &vkrt->core.shaderBindingTableBuffer) != VK_SUCCESS) {
+    if (vkCreateBuffer(vkrt->core.device, &bufferCreateInfo, NULL, outBuffer) != VK_SUCCESS) {
         vkDestroyBuffer(vkrt->core.device, stageBuffer, NULL);
         vkFreeMemory(vkrt->core.device, stageMemory, NULL);
         return VKRT_ERROR_OPERATION_FAILED;
     }
 
     VkMemoryRequirements memoryRequirements = {0};
-    vkGetBufferMemoryRequirements(vkrt->core.device, vkrt->core.shaderBindingTableBuffer, &memoryRequirements);
+    vkGetBufferMemoryRequirements(vkrt->core.device, *outBuffer, &memoryRequirements);
 
     VkMemoryAllocateFlagsInfo memoryAllocateFlagsInfo = {0};
     memoryAllocateFlagsInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
@@ -100,32 +106,36 @@ VKRT_Result createShaderBindingTable(VKRT* vkrt) {
             memoryRequirements.memoryTypeBits,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
             &memoryAllocateInfo.memoryTypeIndex) != VKRT_SUCCESS) {
-        vkDestroyBuffer(vkrt->core.device, vkrt->core.shaderBindingTableBuffer, NULL);
-        vkrt->core.shaderBindingTableBuffer = VK_NULL_HANDLE;
+        vkDestroyBuffer(vkrt->core.device, *outBuffer, NULL);
+        *outBuffer = VK_NULL_HANDLE;
         vkDestroyBuffer(vkrt->core.device, stageBuffer, NULL);
         vkFreeMemory(vkrt->core.device, stageMemory, NULL);
         return VKRT_ERROR_OPERATION_FAILED;
     }
 
-    if (vkAllocateMemory(vkrt->core.device, &memoryAllocateInfo, NULL, &vkrt->core.shaderBindingTableMemory) != VK_SUCCESS) {
-        vkDestroyBuffer(vkrt->core.device, vkrt->core.shaderBindingTableBuffer, NULL);
-        vkrt->core.shaderBindingTableBuffer = VK_NULL_HANDLE;
+    if (vkAllocateMemory(vkrt->core.device, &memoryAllocateInfo, NULL, outMemory) != VK_SUCCESS) {
+        vkDestroyBuffer(vkrt->core.device, *outBuffer, NULL);
+        *outBuffer = VK_NULL_HANDLE;
         vkDestroyBuffer(vkrt->core.device, stageBuffer, NULL);
         vkFreeMemory(vkrt->core.device, stageMemory, NULL);
         return VKRT_ERROR_OPERATION_FAILED;
     }
 
-    if (vkBindBufferMemory(vkrt->core.device, vkrt->core.shaderBindingTableBuffer, vkrt->core.shaderBindingTableMemory, 0) != VK_SUCCESS) {
-        vkDestroyBuffer(vkrt->core.device, vkrt->core.shaderBindingTableBuffer, NULL);
-        vkFreeMemory(vkrt->core.device, vkrt->core.shaderBindingTableMemory, NULL);
-        vkrt->core.shaderBindingTableBuffer = VK_NULL_HANDLE;
-        vkrt->core.shaderBindingTableMemory = VK_NULL_HANDLE;
+    if (vkBindBufferMemory(vkrt->core.device, *outBuffer, *outMemory, 0) != VK_SUCCESS) {
+        vkDestroyBuffer(vkrt->core.device, *outBuffer, NULL);
+        vkFreeMemory(vkrt->core.device, *outMemory, NULL);
+        *outBuffer = VK_NULL_HANDLE;
+        *outMemory = VK_NULL_HANDLE;
         vkDestroyBuffer(vkrt->core.device, stageBuffer, NULL);
         vkFreeMemory(vkrt->core.device, stageMemory, NULL);
         return VKRT_ERROR_OPERATION_FAILED;
     }
 
-    if (copyBuffer(vkrt, stageBuffer, vkrt->core.shaderBindingTableBuffer, sbtSize) != VKRT_SUCCESS) {
+    if (copyBuffer(vkrt, stageBuffer, *outBuffer, sbtSize) != VKRT_SUCCESS) {
+        vkDestroyBuffer(vkrt->core.device, *outBuffer, NULL);
+        vkFreeMemory(vkrt->core.device, *outMemory, NULL);
+        *outBuffer = VK_NULL_HANDLE;
+        *outMemory = VK_NULL_HANDLE;
         vkDestroyBuffer(vkrt->core.device, stageBuffer, NULL);
         vkFreeMemory(vkrt->core.device, stageMemory, NULL);
         return VKRT_ERROR_OPERATION_FAILED;
@@ -135,19 +145,50 @@ VKRT_Result createShaderBindingTable(VKRT* vkrt) {
 
     VkBufferDeviceAddressInfo bufferDeviceAddressInfo = {0};
     bufferDeviceAddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
-    bufferDeviceAddressInfo.buffer = vkrt->core.shaderBindingTableBuffer;
+    bufferDeviceAddressInfo.buffer = *outBuffer;
     VkDeviceAddress base = vkrt->core.procs.vkGetBufferDeviceAddressKHR(vkrt->core.device, &bufferDeviceAddressInfo);
 
     for (int i = 0; i < 3; i++) {
-        vkrt->core.shaderBindingTables[i].deviceAddress = base + i * stride;
-        vkrt->core.shaderBindingTables[i].stride = stride;
-        vkrt->core.shaderBindingTables[i].size = stride;
+        outTables[i].deviceAddress = base + i * stride;
+        outTables[i].stride = stride;
+        outTables[i].size = stride;
     }
 
-    vkrt->core.shaderBindingTables[3].deviceAddress = 0;
-    vkrt->core.shaderBindingTables[3].stride = 0;
-    vkrt->core.shaderBindingTables[3].size = 0;
+    outTables[3].deviceAddress = 0;
+    outTables[3].stride = 0;
+    outTables[3].size = 0;
+
+    return VKRT_SUCCESS;
+}
+
+VKRT_Result createShaderBindingTable(VKRT* vkrt) {
+    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    uint64_t startTime = getMicroseconds();
+    VKRT_Result result = createShaderBindingTableForPipeline(
+        vkrt,
+        vkrt->core.rayTracingPipeline,
+        &vkrt->core.shaderBindingTableBuffer,
+        &vkrt->core.shaderBindingTableMemory,
+        vkrt->core.shaderBindingTables);
+    if (result != VKRT_SUCCESS) return result;
 
     LOG_TRACE("Shader binding table created in %.3f ms", (double)(getMicroseconds() - startTime) / 1e3);
+    return VKRT_SUCCESS;
+}
+
+VKRT_Result createSelectionShaderBindingTable(VKRT* vkrt) {
+    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    uint64_t startTime = getMicroseconds();
+    VKRT_Result result = createShaderBindingTableForPipeline(
+        vkrt,
+        vkrt->core.selectionRayTracingPipeline,
+        &vkrt->core.selectionShaderBindingTableBuffer,
+        &vkrt->core.selectionShaderBindingTableMemory,
+        vkrt->core.selectionShaderBindingTables);
+    if (result != VKRT_SUCCESS) return result;
+
+    LOG_TRACE("Selection shader binding table created in %.3f ms", (double)(getMicroseconds() - startTime) / 1e3);
     return VKRT_SUCCESS;
 }

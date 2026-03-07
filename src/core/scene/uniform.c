@@ -75,6 +75,11 @@ void syncCurrentFrameSceneData(VKRT* vkrt) {
     syncSceneDataToFrame(vkrt, vkrt->runtime.currentFrame);
 }
 
+void markSelectionMaskDirty(VKRT* vkrt) {
+    if (!vkrt) return;
+    vkrt->core.selectionMaskDirty = VK_TRUE;
+}
+
 VKRT_Result createSceneUniform(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
 
@@ -117,6 +122,12 @@ VKRT_Result createSceneUniform(VKRT* vkrt) {
         VK_SUCCESS || !vkrt->core.pickData) return VKRT_ERROR_OPERATION_FAILED;
     memset(vkrt->core.pickData, 0, sizeof(*vkrt->core.pickData));
     vkrt->core.pickData->hitMeshIndex = VKRT_INVALID_INDEX;
+    vkrt->core.pickPendingFrame = 0;
+    vkrt->core.pickResultMeshIndex = VKRT_INVALID_INDEX;
+    vkrt->core.pickPending = 0;
+    vkrt->core.pickSubmitted = 0;
+    vkrt->core.pickResultReady = 0;
+    markSelectionMaskDirty(vkrt);
     vkrt->core.pickBuffer.deviceAddress = 0;
     vkrt->core.pickBuffer.count = 1;
 
@@ -172,7 +183,7 @@ VKRT_Result createSceneUniform(VKRT* vkrt) {
     vkrt->state.fogDensity = 0.0f;
     vkrt->state.debugMode = VKRT_DEBUG_MODE_NONE;
     vkrt->state.misNeeEnabled = 1u;
-    vkrt->state.selectionEnabled = 1;
+    vkrt->state.selectionEnabled = 0;
     vkrt->state.selectedMeshIndex = VKRT_INVALID_INDEX;
     resetTimelineDefaults(&vkrt->state);
     vkrt->core.sceneData->timeBase = vkrt->state.timeBase;
@@ -221,5 +232,6 @@ void syncSelectionSceneData(VKRT* vkrt) {
 
     vkrt->core.sceneData->selectionEnabled = vkrt->state.selectionEnabled ? 1u : 0u;
     vkrt->core.sceneData->selectedMeshIndex = vkrt->state.selectedMeshIndex;
+    markSelectionMaskDirty(vkrt);
     syncAllSceneDataFrames(vkrt);
 }

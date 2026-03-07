@@ -239,7 +239,7 @@ void shutdownRenderPNGExporter(void) {
 
 int saveCurrentRenderPNG(VKRT* vkrt, const char* path) {
     if (!vkrt || !path || !path[0]) return -1;
-    if (vkrt->core.storageImage == VK_NULL_HANDLE) {
+    if (vkrt->core.outputImage == VK_NULL_HANDLE) {
         LOG_ERROR("Cannot save PNG before storage image is initialized");
         return -1;
     }
@@ -282,7 +282,7 @@ int saveCurrentRenderPNG(VKRT* vkrt, const char* path) {
         vkFreeMemory(vkrt->core.device, stagingMemory, NULL);
         return -1;
     }
-    transitionImageLayout(commandBuffer, vkrt->core.storageImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+    transitionImageLayout(commandBuffer, vkrt->core.outputImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 
     VkBufferImageCopy copyRegion = {0};
     copyRegion.bufferOffset = 0;
@@ -296,13 +296,13 @@ int saveCurrentRenderPNG(VKRT* vkrt, const char* path) {
     copyRegion.imageExtent = (VkExtent3D){width, height, 1};
 
     vkCmdCopyImageToBuffer(commandBuffer,
-        vkrt->core.storageImage,
+        vkrt->core.outputImage,
         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
         stagingBuffer,
         1,
         &copyRegion);
 
-    transitionImageLayout(commandBuffer, vkrt->core.storageImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+    transitionImageLayout(commandBuffer, vkrt->core.outputImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
     if (endSingleTimeCommands(vkrt, commandBuffer) != VKRT_SUCCESS) {
         vkDestroyBuffer(vkrt->core.device, stagingBuffer, NULL);
         vkFreeMemory(vkrt->core.device, stagingMemory, NULL);

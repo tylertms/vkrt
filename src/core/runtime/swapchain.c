@@ -1,5 +1,5 @@
 #include "swapchain.h"
-#include "storage.h"
+#include "images.h"
 #include "descriptor.h"
 #include "sync.h"
 #include "scene.h"
@@ -179,8 +179,8 @@ VKRT_Result recreateSwapChain(VKRT* vkrt) {
     if (createImageViews(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
 
     if (!vkrt->state.renderModeActive) {
-        destroyStorageImage(vkrt);
-        if (createStorageImage(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+        destroyGPUImages(vkrt);
+        if (createGPUImages(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
     }
 
     if (resetRenderFinishedSemaphores(

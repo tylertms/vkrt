@@ -308,6 +308,91 @@ static float clampFloatValue(float value, float minValue, float maxValue) {
     return value;
 }
 
+static void applyCompletedViewportSelection(VKRT* vkrt) {
+    if (!vkrt) return;
+
+    uint32_t meshIndex = VKRT_INVALID_INDEX;
+    uint8_t ready = 0;
+    VKRT_Result result = VKRT_consumePickedMesh(vkrt, &meshIndex, &ready);
+    if (result != VKRT_SUCCESS) {
+        LOG_ERROR("Consuming viewport pick failed (%d)", (int)result);
+        return;
+    }
+    if (!ready) return;
+
+    result = VKRT_setSelectedMesh(vkrt, meshIndex);
+    if (result != VKRT_SUCCESS) {
+        LOG_ERROR("Applying viewport selection failed (%d)", (int)result);
+    }
+}
+
+static bool queryViewportMousePixel(uint32_t* outX, uint32_t* outY) {
+    if (!outX || !outY) return false;
+
+    ImGuiIO* io = ImGui_GetIO();
+    float scaleX = io->DisplayFramebufferScale.x > 0.0f ? io->DisplayFramebufferScale.x : 1.0f;
+    float scaleY = io->DisplayFramebufferScale.y > 0.0f ? io->DisplayFramebufferScale.y : 1.0f;
+    float mouseX = io->MousePos.x * scaleX;
+    float mouseY = io->MousePos.y * scaleY;
+    if (!isfinite(mouseX) || !isfinite(mouseY) || mouseX < 0.0f || mouseY < 0.0f) return false;
+
+    *outX = (uint32_t)mouseX;
+    *outY = (uint32_t)mouseY;
+    return true;
+}
+
+static bool queryViewportClickPixel(const VKRT_RuntimeSnapshot* runtime, uint32_t* outX, uint32_t* outY) {
+    if (!runtime || !outX || !outY) return false;
+    uint32_t mouseX = 0;
+    uint32_t mouseY = 0;
+    if (!queryViewportMousePixel(&mouseX, &mouseY)) return false;
+
+    uint32_t viewportX = runtime->displayViewportRect[0];
+    uint32_t viewportY = runtime->displayViewportRect[1];
+    uint32_t viewportWidth = runtime->displayViewportRect[2];
+    uint32_t viewportHeight = runtime->displayViewportRect[3];
+    if (viewportWidth == 0 || viewportHeight == 0) return false;
+    if (mouseX < viewportX || mouseY < viewportY ||
+        mouseX >= viewportX + viewportWidth || mouseY >= viewportY + viewportHeight) {
+        return false;
+    }
+
+    *outX = mouseX;
+    *outY = mouseY;
+    return true;
+}
+
+static void requestViewportSelection(
+    VKRT* vkrt,
+    const VKRT_PublicState* state,
+    const VKRT_RuntimeSnapshot* runtime,
+    bool viewportHovered
+) {
+    if (!vkrt || !state || !runtime || !viewportHovered) return;
+    if (state->renderModeActive) return;
+
+    if (!ImGui_IsMouseClicked(ImGuiMouseButton_Left)) return;
+
+    uint32_t pickX = 0;
+    uint32_t pickY = 0;
+    if (!queryViewportClickPixel(runtime, &pickX, &pickY)) return;
+
+    VKRT_Result result = VKRT_requestPickAtPixel(vkrt, pickX, pickY);
+    if (result != VKRT_SUCCESS) {
+        LOG_ERROR("Requesting viewport pick failed (%d)", (int)result);
+    }
+}
+
+static void clearViewportSelectionOnEscape(VKRT* vkrt) {
+    if (!vkrt) return;
+    if (!ImGui_IsKeyPressed(ImGuiKey_Escape)) return;
+
+    VKRT_Result result = VKRT_setSelectedMesh(vkrt, VKRT_INVALID_INDEX);
+    if (result != VKRT_SUCCESS) {
+        LOG_ERROR("Clearing viewport selection failed (%d)", (int)result);
+    }
+}
+
 static void applyEditorCameraInput(
     VKRT* vkrt,
     const VKRT_PublicState* state,
@@ -339,8 +424,7 @@ static void applyEditorCameraInput(
             }
         }
 
-        bool panning = ImGui_IsMouseDragging(ImGuiMouseButton_Left, -1.0f) ||
-                       ImGui_IsMouseDragging(ImGuiMouseButton_Middle, -1.0f) ||
+        bool panning = ImGui_IsMouseDragging(ImGuiMouseButton_Middle, -1.0f) ||
                        ImGui_IsMouseDragging(ImGuiMouseButton_Right, -1.0f);
         if (panning) {
             float scaleX = io->DisplayFramebufferScale.x > 0.0f ? io->DisplayFramebufferScale.x : 1.0f;
@@ -369,8 +453,10 @@ static void applyEditorCameraInput(
         .panDx = io->MouseDelta.x,
         .panDy = io->MouseDelta.y,
         .scroll = io->MouseWheel,
-        .orbiting = viewportHovered && ImGui_IsMouseDragging(ImGuiMouseButton_Left, -1.0f),
-        .panning = viewportHovered && ImGui_IsMouseDragging(ImGuiMouseButton_Right, -1.0f),
+        .orbiting = viewportHovered && !io->KeyShift && ImGui_IsMouseDragging(ImGuiMouseButton_Middle, -1.0f),
+        .panning = viewportHovered &&
+            ((io->KeyShift && ImGui_IsMouseDragging(ImGuiMouseButton_Middle, -1.0f)) ||
+             ImGui_IsMouseDragging(ImGuiMouseButton_Right, -1.0f)),
         .captureMouse = !viewportHovered,
     };
     VKRT_Result result = VKRT_applyCameraInput(vkrt, &cameraInput);
@@ -467,6 +553,8 @@ void editorUIUpdate(VKRT* vkrt, Session* session) {
     cImGui_ImplGlfw_NewFrame();
     cImGui_ImplVulkan_NewFrame();
     ImGui_NewFrame();
+    applyCompletedViewportSelection(vkrt);
+    clearViewportSelectionOnEscape(vkrt);
 
     VKRT_RuntimeSnapshot runtime = {0};
     const VKRT_PublicState* state = queryEditorFrameState(vkrt, &runtime);
@@ -478,6 +566,7 @@ void editorUIUpdate(VKRT* vkrt, Session* session) {
     if (state) {
         viewportHovered = drawViewportWindow(vkrt, state, &runtime);
         editorUIDrawWorkspacePanels(vkrt, session);
+        requestViewportSelection(vkrt, state, &runtime, viewportHovered);
         applyEditorCameraInput(vkrt, state, &runtime, viewportHovered);
     }
 

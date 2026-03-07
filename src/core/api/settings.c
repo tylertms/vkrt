@@ -1,3 +1,4 @@
+#include "constants.h"
 #include "shared.h"
 #include "scene.h"
 #include "vkrt_internal.h"
@@ -16,8 +17,19 @@ static int compareTimelineKeyframesByTime(const void* lhs, const void* rhs) {
 }
 
 static uint32_t sanitizeMeshSelection(const VKRT* vkrt, uint32_t meshIndex) {
-    if (!vkrt || meshIndex == UINT32_MAX) return UINT32_MAX;
-    return meshIndex < vkrt->core.meshCount ? meshIndex : UINT32_MAX;
+    if (!vkrt || meshIndex == VKRT_INVALID_INDEX) return VKRT_INVALID_INDEX;
+    return meshIndex < vkrt->core.meshCount ? meshIndex : VKRT_INVALID_INDEX;
+}
+
+static void cancelPendingPick(VKRT* vkrt) {
+    if (!vkrt) return;
+    vkrt->core.pickPending = 0;
+    vkrt->core.pickSubmitted = 0;
+    vkrt->core.pickResultReady = 0;
+    vkrt->core.pickResultMeshIndex = VKRT_INVALID_INDEX;
+    if (vkrt->core.pickData) {
+        vkrt->core.pickData->hitMeshIndex = VKRT_INVALID_INDEX;
+    }
 }
 
 VKRT_Result VKRT_applyCameraInput(VKRT* vkrt, const VKRT_CameraInput* input) {
@@ -191,20 +203,31 @@ VKRT_Result VKRT_setSceneTimeline(VKRT* vkrt, const VKRT_SceneTimelineSettings* 
     return VKRT_SUCCESS;
 }
 
-VKRT_Result VKRT_pickMeshAtPixel(const VKRT* vkrt, uint32_t x, uint32_t y, uint32_t* outMeshIndex) {
-    if (!vkrt || !outMeshIndex || !vkrt->core.pickData) return VKRT_ERROR_INVALID_ARGUMENT;
-    *outMeshIndex = UINT32_MAX;
+VKRT_Result VKRT_requestPickAtPixel(VKRT* vkrt, uint32_t x, uint32_t y) {
+    if (!vkrt || !vkrt->core.pickData) return VKRT_ERROR_INVALID_ARGUMENT;
     if (x > 0xFFFFu || y > 0xFFFFu) return VKRT_ERROR_INVALID_ARGUMENT;
+    if (vkrt->core.pickPending) return VKRT_SUCCESS;
 
     PickBuffer* pickData = vkrt->core.pickData;
     pickData->pixel = (x & 0xFFFFu) | ((y & 0xFFFFu) << 16);
+    pickData->hitMeshIndex = VKRT_INVALID_INDEX;
+    vkrt->core.pickPendingFrame = vkrt->runtime.currentFrame;
+    vkrt->core.pickPending = 1;
+    vkrt->core.pickSubmitted = 0;
+    return VKRT_SUCCESS;
+}
 
-    uint32_t requestID = pickData->requestID + 1u;
-    if (requestID == 0u) requestID = 1u;
-    pickData->requestID = requestID;
+VKRT_Result VKRT_consumePickedMesh(VKRT* vkrt, uint32_t* outMeshIndex, uint8_t* outReady) {
+    if (!vkrt || !outMeshIndex || !outReady) return VKRT_ERROR_INVALID_ARGUMENT;
 
-    if (pickData->resultID != requestID) return VKRT_SUCCESS;
-    *outMeshIndex = sanitizeMeshSelection(vkrt, pickData->hitMeshIndex);
+    *outMeshIndex = VKRT_INVALID_INDEX;
+    *outReady = 0;
+    if (!vkrt->core.pickResultReady) return VKRT_SUCCESS;
+
+    *outMeshIndex = vkrt->core.pickResultMeshIndex;
+    *outReady = 1;
+    vkrt->core.pickResultReady = 0;
+    vkrt->core.pickResultMeshIndex = VKRT_INVALID_INDEX;
     return VKRT_SUCCESS;
 }
 
@@ -213,9 +236,12 @@ VKRT_Result VKRT_setSelectedMesh(VKRT* vkrt, uint32_t meshIndex) {
     if (stateReady != VKRT_SUCCESS) return stateReady;
 
     uint32_t nextSelectedMesh = sanitizeMeshSelection(vkrt, meshIndex);
+    cancelPendingPick(vkrt);
     if (vkrt->state.selectedMeshIndex == nextSelectedMesh) return VKRT_SUCCESS;
 
     vkrt->state.selectedMeshIndex = nextSelectedMesh;
+    vkrt->state.selectionEnabled = nextSelectedMesh != VKRT_INVALID_INDEX;
+
     syncSelectionSceneData(vkrt);
     return VKRT_SUCCESS;
 }

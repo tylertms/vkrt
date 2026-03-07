@@ -16,9 +16,9 @@ void editorThemeApplyDefault(void) {
     style->PopupBorderSize = 1.0f;
     style->DockingSeparatorSize = 1.0f;
     style->WindowPadding = (ImVec2){10.0f, 8.0f};
-    style->FramePadding = (ImVec2){4.0f, 4.0f};
+    style->FramePadding = (ImVec2){3.0f, 4.0f};
     style->ItemSpacing = (ImVec2){6.0f, 6.0f};
-    style->ItemInnerSpacing = (ImVec2){4.0f, 4.0f};
+    style->ItemInnerSpacing = (ImVec2){2.0f, 4.0f};
     style->IndentSpacing = 14.0f;
     style->SeparatorTextBorderSize = 1.0f;
     style->SeparatorTextAlign = (ImVec2){0.0f, 0.5f};

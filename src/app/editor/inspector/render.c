@@ -67,7 +67,7 @@ static void drawDebugSection(VKRT* vkrt, const VKRT_PublicState* state, bool con
     inspectorIndentSection();
     if (controlsDisabled) ImGui_BeginDisabled(true);
 
-    const char* debugModeLabels[] = {"None", "Normals", "Depth", "Bounce Count", "NEE Only", "BSDF Only"};
+    const char* debugModeLabels[] = {"None", "Normals", "Depth", "Bounce Count", "NEE Only", "BSDF Only", "Selection Mask"};
     int debugMode = (int)state->debugMode;
     if (ImGui_ComboCharEx("Debug Mode", &debugMode, debugModeLabels, (int)VKRT_DEBUG_MODE_COUNT, (int)VKRT_DEBUG_MODE_COUNT)) {
         VKRT_Result result = VKRT_setDebugMode(vkrt, (uint32_t)debugMode);
@@ -113,10 +113,12 @@ static void drawIdleOutputSection(Session* session, float inputWidth) {
 
     inspectorIndentSection();
     ImGui_SetNextItemWidth(inputWidth);
+    inspectorPushWidgetSpacing();
     if (ImGui_DragInt2Ex("Output Size", outputSize, 1.0f, 1, 16384, "%d", ImGuiSliderFlags_AlwaysClamp)) {
         session->editor.renderConfig.width = clampRenderDimension(outputSize[0]);
         session->editor.renderConfig.height = clampRenderDimension(outputSize[1]);
     }
+    inspectorPopWidgetSpacing();
 
     ImGui_SetNextItemWidth(inputWidth);
     if (ImGui_DragIntEx("Samples", &targetSamples, 1.0f, 0, INT_MAX, "%d", ImGuiSliderFlags_AlwaysClamp)) {
@@ -189,7 +191,9 @@ static void drawTimelineEditor(SessionRenderAnimationSettings* animation, float 
             "%.3f",
             ImGuiSliderFlags_AlwaysClamp);
 
+        inspectorPushWidgetSpacing();
         timelineEdited |= ImGui_ColorEdit3("Emission Tint", key->emissionTint, ImGuiColorEditFlags_Float);
+        inspectorPopWidgetSpacing();
         ImGui_PopID();
     }
 

@@ -57,6 +57,7 @@ typedef struct SessionRenderTimer {
 typedef struct SessionEditorState {
     char** meshNames;
     uint32_t meshCount;
+    uint32_t propertiesPanelIndex;
     char* renderSequenceFolderPath;
     uint8_t requestMeshImportDialog;
     uint8_t requestRenderSaveDialog;

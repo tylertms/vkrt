@@ -34,7 +34,7 @@ static void rollbackImportedMeshes(VKRT* vkrt, Session* session, uint32_t meshCo
 }
 
 static void applyMeshTransform(VKRT* vkrt, uint32_t meshIndex, const DefaultMeshSpec* spec) {
-    if (!vkrt || !spec || meshIndex == UINT32_MAX) return;
+    if (!vkrt || !spec || meshIndex == VKRT_INVALID_INDEX) return;
 
     vec3 position = {spec->position[0], spec->position[1], spec->position[2]};
     vec3 rotation = {spec->rotation[0], spec->rotation[1], spec->rotation[2]};
@@ -47,7 +47,7 @@ static void applyMeshTransform(VKRT* vkrt, uint32_t meshIndex, const DefaultMesh
 }
 
 static void applyMeshMaterial(VKRT* vkrt, uint32_t meshIndex, const DefaultMeshSpec* spec) {
-    if (!vkrt || !spec || meshIndex == UINT32_MAX) return;
+    if (!vkrt || !spec || meshIndex == VKRT_INVALID_INDEX) return;
 
     VKRT_Result result = VKRT_setMeshMaterial(vkrt, meshIndex, &spec->material);
     if (result != VKRT_SUCCESS) {
@@ -58,7 +58,7 @@ static void applyMeshMaterial(VKRT* vkrt, uint32_t meshIndex, const DefaultMeshS
 static void importDefaultMesh(VKRT* vkrt, Session* session, const DefaultMeshSpec* spec) {
     if (!vkrt || !session || !spec) return;
 
-    uint32_t meshIndex = UINT32_MAX;
+    uint32_t meshIndex = VKRT_INVALID_INDEX;
     if (!meshControllerImportMesh(vkrt, session, spec->assetPath, spec->importName, &meshIndex)) {
         return;
     }
@@ -68,7 +68,7 @@ static void importDefaultMesh(VKRT* vkrt, Session* session, const DefaultMeshSpe
 }
 
 int meshControllerImportMesh(VKRT* vkrt, Session* session, const char* path, const char* importName, uint32_t* outMeshIndex) {
-    if (outMeshIndex) *outMeshIndex = UINT32_MAX;
+    if (outMeshIndex) *outMeshIndex = VKRT_INVALID_INDEX;
     if (!vkrt || !session || !path || !path[0]) return 0;
 
     uint64_t startTime = getMicroseconds();
@@ -152,7 +152,7 @@ void meshControllerApplySessionActions(VKRT* vkrt, Session* session) {
         free(importPath);
     }
 
-    uint32_t removeIndex = UINT32_MAX;
+    uint32_t removeIndex = VKRT_INVALID_INDEX;
     if (sessionTakeMeshRemoval(session, &removeIndex)) {
         uint32_t meshCount = 0;
         if (VKRT_getMeshCount(vkrt, &meshCount) != VKRT_SUCCESS) return;

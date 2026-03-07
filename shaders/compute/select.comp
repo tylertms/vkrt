@@ -1,0 +1,90 @@
+#version 460
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+#define VKRT_DISABLE_RT_BINDINGS
+#include "utility/bindings.glsl"
+
+int queryOutlineRadius(ivec2 size) {
+    int minDimension = min(size.x, size.y);
+    int radius = int(floor(float(minDimension) * (3.0 / 1080.0) + 0.5));
+    return clamp(radius, 2, 5);
+}
+
+float querySelectionMask(ivec2 pixel) {
+    return imageLoad(selectionMaskImage, pixel).r != 0u ? 1.0 : 0.0;
+}
+
+float queryNeighborhoodCoverage(ivec2 pixel, ivec2 size) {
+    float total = 0.0;
+    float weight = 0.0;
+    for (int dy = -1; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            ivec2 samplePixel = pixel + ivec2(dx, dy);
+            if (samplePixel.x < 0 || samplePixel.y < 0 || samplePixel.x >= size.x || samplePixel.y >= size.y) {
+                continue;
+            }
+
+            float sampleWeight = (dx == 0 && dy == 0) ? 2.0 : 1.0;
+            total += querySelectionMask(samplePixel) * sampleWeight;
+            weight += sampleWeight;
+        }
+    }
+    if (weight <= 0.0) return 0.0;
+    return total / weight;
+}
+
+void main() {
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(selectionMaskImage);
+    if (pixel.x >= size.x || pixel.y >= size.y) return;
+
+    float centerMask = querySelectionMask(pixel);
+    if (scene.debugMode == VKRT_DEBUG_MODE_SELECTION_MASK) {
+        imageStore(outputImage, pixel, vec4(vec3(centerMask), 1.0));
+        return;
+    }
+    if (centerMask >= 1.0) return;
+
+    int radius = queryOutlineRadius(size);
+    int featherRadius = radius + 1;
+    int featherRadiusSq = featherRadius * featherRadius;
+    int nearestDistSq = featherRadiusSq + 1;
+    float maxNeighborMask = 0.0;
+
+    for (int dy = -featherRadius; dy <= featherRadius; dy++) {
+        for (int dx = -featherRadius; dx <= featherRadius; dx++) {
+            if (dx == 0 && dy == 0) continue;
+            int distSq = dx * dx + dy * dy;
+            if (distSq > featherRadiusSq) continue;
+
+            ivec2 samplePixel = pixel + ivec2(dx, dy);
+            if (samplePixel.x < 0 || samplePixel.y < 0 || samplePixel.x >= size.x || samplePixel.y >= size.y) {
+                continue;
+            }
+
+            float sampleMask = querySelectionMask(samplePixel);
+            if (sampleMask <= 0.0) continue;
+
+            maxNeighborMask = max(maxNeighborMask, sampleMask);
+            nearestDistSq = min(nearestDistSq, distSq);
+        }
+    }
+
+    if (nearestDistSq > featherRadiusSq || maxNeighborMask <= 0.0) return;
+
+    float nearestDistance = sqrt(float(nearestDistSq));
+    float alpha = 1.0;
+    if (nearestDistance > float(radius)) {
+        alpha = 1.0 - clamp(nearestDistance - float(radius), 0.0, 1.0);
+        if (alpha <= 0.0) return;
+    }
+    float coverage = queryNeighborhoodCoverage(pixel, size);
+    alpha *= 0.65 + coverage * 0.35;
+    if (alpha <= 0.0) return;
+
+    vec4 base = imageLoad(outputImage, pixel);
+    vec3 outlineColor = vec3(1.0, 0.55, 0.1);
+    base.rgb = mix(base.rgb, outlineColor, alpha);
+    imageStore(outputImage, pixel, vec4(base.rgb, 1.0));
+}

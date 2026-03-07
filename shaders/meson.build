@@ -1,7 +1,12 @@
 shader_programs = [
-  ['rgen', 'main.rgen', 'rgen.spv'],
-  ['rchit', 'main.rchit', 'rchit.spv'],
-  ['rmiss', 'main.rmiss', 'rmiss.spv'],
+  ['rgen', 'rt/main/main.rgen', 'rgen.spv'],
+  ['rchit', 'rt/main/main.rchit', 'rchit.spv'],
+  ['rmiss', 'rt/main/main.rmiss', 'rmiss.spv'],
+  ['comp', 'compute/select.comp', 'select.spv'],
+  ['select_rgen', 'rt/selection/select.rgen', 'select_rgen.spv'],
+  ['select_rchit', 'rt/selection/select.rchit', 'select_rchit.spv'],
+  ['select_rmiss', 'rt/selection/select.rmiss', 'select_rmiss.spv'],
+  ['select_rahit', 'rt/selection/select.rahit', 'select_rahit.spv'],
 ]
 
 shader_targets = []

@@ -5,6 +5,7 @@
 #include <math.h>
 #include <stdio.h>
 
+static const ImVec2 kWidgetInnerSpacing = {6.0f, 4.0f};
 const float kInspectorControlSpacing = 4.0f;
 const float kInspectorSectionIndent = 8.0f;
 const ImVec4 kMenuBgColor = {0.08f, 0.09f, 0.11f, 1.00f};
@@ -70,6 +71,14 @@ void inspectorIndentSection(void) {
 
 void inspectorUnindentSection(void) {
     ImGui_UnindentEx(kInspectorSectionIndent);
+}
+
+void inspectorPushWidgetSpacing(void) {
+    ImGui_PushStyleVarImVec2(ImGuiStyleVar_ItemInnerSpacing, kWidgetInnerSpacing);
+}
+
+void inspectorPopWidgetSpacing(void) {
+    ImGui_PopStyleVar();
 }
 
 void inspectorTightSeparatorText(const char* label) {

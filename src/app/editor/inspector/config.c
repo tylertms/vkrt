@@ -12,18 +12,19 @@ static void drawStatusSummary(const VKRT_PublicState* state) {
         ? (state->renderModeFinished ? "Complete" : "Rendering")
         : "Preview";
 
-    uint64_t accumulationSamples = (uint64_t)state->accumulationFrame * (uint64_t)state->samplesPerPixel;
-
     char renderTimeText[32] = {0};
     char accumulationText[32] = {0};
+    char sppText[32] = {0};
+
     snprintf(renderTimeText, sizeof(renderTimeText), "%.1f ms", state->displayRenderTimeMs);
-    snprintf(accumulationText, sizeof(accumulationText), "%llu samples",
-        (unsigned long long)accumulationSamples);
+    snprintf(accumulationText, sizeof(accumulationText), "%llu samples", (unsigned long long)state->totalSamples);
+    snprintf(sppText, sizeof(sppText), "%u", state->samplesPerPixel);
 
     if (inspectorBeginKeyValueTable("##monitor_status")) {
         inspectorKeyValueRow("Mode", mode);
         inspectorKeyValueRow("Render Time", renderTimeText);
         inspectorKeyValueRow("Accumulation", accumulationText);
+        inspectorKeyValueRow("SPP", sppText);
         inspectorEndKeyValueTable();
     }
 }

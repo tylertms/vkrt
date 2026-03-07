@@ -2,7 +2,7 @@ vkrt_sources = files(
   'runtime/buffer.c',
   'runtime/command/pool.c',
   'runtime/command/record.c',
-  'runtime/storage.c',
+  'runtime/images.c',
   'render/descriptor.c',
   'render/view.c',
   'runtime/device.c',

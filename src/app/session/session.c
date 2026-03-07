@@ -73,7 +73,7 @@ void sessionInit(Session* session) {
     if (!session) return;
 
     memset(session, 0, sizeof(*session));
-    session->commands.meshToRemove = UINT32_MAX;
+    session->commands.meshToRemove = VKRT_INVALID_INDEX;
     session->commands.renderCommand = SESSION_RENDER_COMMAND_NONE;
     session->editor.renderConfig.width = 1920;
     session->editor.renderConfig.height = 1080;
@@ -207,10 +207,10 @@ int sessionTakeMeshImport(Session* session, char** outPath) {
 }
 
 int sessionTakeMeshRemoval(Session* session, uint32_t* outMeshIndex) {
-    if (!session || session->commands.meshToRemove == UINT32_MAX) return 0;
+    if (!session || session->commands.meshToRemove == VKRT_INVALID_INDEX) return 0;
 
     if (outMeshIndex) *outMeshIndex = session->commands.meshToRemove;
-    session->commands.meshToRemove = UINT32_MAX;
+    session->commands.meshToRemove = VKRT_INVALID_INDEX;
     return 1;
 }
 

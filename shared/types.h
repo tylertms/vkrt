@@ -87,9 +87,7 @@ struct SceneData {
 
 struct PickBuffer {
     uint pixel;
-    uint requestID;
     uint hitMeshIndex;
-    uint resultID;
 };
 
 #ifndef VKRT_GLSL

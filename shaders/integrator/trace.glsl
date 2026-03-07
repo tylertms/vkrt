@@ -9,12 +9,15 @@
 #include "integrator/path.glsl"
 #include "integrator/debug.glsl"
 
-vec3 trace(ivec2 pixel, inout uint state) {
+vec3 trace(ivec2 pixel, inout uint state, out uint primaryInstanceIndex) {
     ivec2 viewportOrigin = ivec2(scene.viewportRect.xy);
     ivec2 viewportSize = ivec2(scene.viewportRect.zw);
+
     const float rayMinDistance = 0.001;
     const float rayMaxDistance = 10000.0;
     const uint rayFlags = gl_RayFlagsOpaqueEXT | gl_RayFlagsCullBackFacingTrianglesEXT;
+
+    primaryInstanceIndex = VKRT_INVALID_INDEX;
 
     vec2 jitter = vec2(rand(state), rand(state));
     vec2 viewportPixel = vec2(pixel - viewportOrigin) + jitter;
@@ -33,7 +36,11 @@ vec3 trace(ivec2 pixel, inout uint state) {
     if (debugMode == VKRT_DEBUG_MODE_NORMALS || debugMode == VKRT_DEBUG_MODE_DEPTH) {
         payload.didHit = false;
         payload.hitDistance = rayMaxDistance;
+
         traceRayEXT(topLevelAS, rayFlags, 0xFF, 0, 0, 0, ray.origin, rayMinDistance, ray.dir, rayMaxDistance, 0);
+
+        primaryInstanceIndex = payload.didHit ? payload.instanceIndex : VKRT_INVALID_INDEX;
+
         if (!payload.didHit) return vec3(0.0);
         if (debugMode == VKRT_DEBUG_MODE_NORMALS) return payload.normal * 0.5 + 0.5;
         return vec3(debugDepthValue(payload.hitDistance));
@@ -45,7 +52,6 @@ vec3 trace(ivec2 pixel, inout uint state) {
     vec3 throughput = vec3(1.0);
     vec3 radiance = vec3(0.0);
     uint bounceCount = 0u;
-
     payload.time = 0;
     bool timeWindowEnabled = scene.timeBase >= 0.0 && scene.timeStep >= scene.timeBase;
     float timeMin = max(scene.timeBase, 0.0);
@@ -70,6 +76,10 @@ vec3 trace(ivec2 pixel, inout uint state) {
         payload.hitDistance = traceDistanceMax;
         traceRayEXT(topLevelAS, rayFlags, 0xFF, 0, 0, 0, ray.origin, rayMinDistance, ray.dir, traceDistanceMax, 0);
 
+        if (i == 0u && payload.didHit) {
+            primaryInstanceIndex = payload.instanceIndex;
+        }
+
         float segmentDistance = payload.didHit ? max(payload.hitDistance, rayMinDistance) : traceDistanceMax;
         float traveledDistance = segmentDistance;
 
@@ -86,7 +96,7 @@ vec3 trace(ivec2 pixel, inout uint state) {
                 if (misNeeEnabled && !bsdfOnly) {
                     DirectLightSample directSample;
                     if (sampleDirectLight(ray.origin, payload.time, observationTime, tlActive, state, directSample)
-                        && directSample.pdf > 1e-8)
+                            && directSample.pdf > 1e-8)
                     {
                         float directEventTime = payload.time + directSample.distance;
                         if (eventTimeInWindow(directEventTime, timeWindowEnabled, timeMin, timeMax)) {
@@ -95,7 +105,7 @@ vec3 trace(ivec2 pixel, inout uint state) {
                             {
                                 float misWeight = misPowerWeight(directSample.pdf, ISOTROPIC_PHASE);
                                 radiance += throughput * directSample.radiance *
-                                    (ISOTROPIC_PHASE * exp(-fogDensity * directSample.distance) * misWeight / directSample.pdf);
+                                        (ISOTROPIC_PHASE * exp(-fogDensity * directSample.distance) * misWeight / directSample.pdf);
                             }
                         }
                     }
@@ -137,21 +147,21 @@ vec3 trace(ivec2 pixel, inout uint state) {
         if (misNeeEnabled && !bsdfOnly && !emissiveSurface) {
             DirectLightSample directSample;
             if (sampleDirectLight(payload.point, payload.time, observationTime, tlActive, state, directSample)
-                && directSample.pdf > 1e-8)
+                    && directSample.pdf > 1e-8)
             {
                 float directEventTime = payload.time + directSample.distance;
                 if (eventTimeInWindow(directEventTime, timeWindowEnabled, timeMin, timeMax)) {
                     float cosSurface = max(dot(payload.normal, directSample.wi), 0.0);
                     float shadowDistance = directSample.distance - rayMinDistance;
                     if (cosSurface > 0.0 && shadowDistance > rayMinDistance
-                        && traceShadowVisibility(payload.point,
-                                                 directSample.wi, shadowDistance, rayMinDistance))
+                            && traceShadowVisibility(payload.point,
+                                directSample.wi, shadowDistance, rayMinDistance))
                     {
                         vec3 f = evalBSDF(payload.normal, directSample.wi, -ray.dir, material);
                         float bsdfPdf = pdfBSDF(payload.normal, directSample.wi, -ray.dir, material);
                         float misWeight = misPowerWeight(directSample.pdf, bsdfPdf);
                         radiance += throughput * f * directSample.radiance *
-                            (cosSurface * exp(-fogDensity * directSample.distance) * misWeight / directSample.pdf);
+                                (cosSurface * exp(-fogDensity * directSample.distance) * misWeight / directSample.pdf);
                     }
                 }
             }

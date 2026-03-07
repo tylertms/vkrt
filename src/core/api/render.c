@@ -1,4 +1,4 @@
-#include "storage.h"
+#include "images.h"
 #include "shared.h"
 #include "descriptor.h"
 #include "scene.h"
@@ -74,8 +74,8 @@ static VKRT_Result recreateRenderTargets(VKRT* vkrt) {
     if (vkrtWaitForAllInFlightFrames(vkrt) != VKRT_SUCCESS) {
         return VKRT_ERROR_OPERATION_FAILED;
     }
-    destroyStorageImage(vkrt);
-    if (createStorageImage(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    destroyGPUImages(vkrt);
+    if (createGPUImages(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
     if (updateAllDescriptorSets(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
     return VKRT_SUCCESS;
 }

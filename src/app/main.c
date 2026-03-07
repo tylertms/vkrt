@@ -31,9 +31,6 @@ int main(void) {
     VKRT_CreateInfo createInfo = {0};
     VKRT_defaultCreateInfo(&createInfo);
     createInfo.title = "vkrt";
-    createInfo.shaders.rgenPath = "./shaders/rgen.spv";
-    createInfo.shaders.rmissPath = "./shaders/rmiss.spv";
-    createInfo.shaders.rchitPath = "./shaders/rchit.spv";
 
     if (VKRT_initWithCreateInfo(vkrt, &createInfo) != VKRT_SUCCESS) {
         LOG_ERROR("Failed to initialize VKRT runtime");
