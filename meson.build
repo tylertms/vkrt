@@ -80,7 +80,7 @@ core_internal_includes = include_directories(
 )
 
 vulkan_dep = dependency('vulkan', required: true)
-glfw_dep = dependency('glfw3', static: true)
+glfw_dep = dependency('glfw3', required: true)
 zlib_dep = dependency('zlib', required: true)
 threads_dep = dependency('threads')
 rt_dep = dependency('rt', required: false)
