@@ -9,12 +9,6 @@
 #include "config.h"
 #include "types.h"
 
-/*
- * Result contract for all VKRT_* functions that return VKRT_Result:
- * - VKRT_SUCCESS: operation completed; output pointers are valid when provided.
- * - VKRT_ERROR_INVALID_ARGUMENT: invalid input; operation has no side effects.
- * - VKRT_ERROR_OPERATION_FAILED: runtime/backend failure; state may be partially updated.
- */
 typedef enum VKRT_Result {
     VKRT_SUCCESS = 0,
     VKRT_ERROR_INVALID_ARGUMENT = -1,

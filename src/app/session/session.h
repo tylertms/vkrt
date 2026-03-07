@@ -89,7 +89,7 @@ void sessionDeinit(Session* session);
 
 int sessionSetMeshName(Session* session, const char* filePath, uint32_t meshIndex);
 void sessionRemoveMeshName(Session* session, uint32_t meshIndex);
-const char* sessionGetMeshName(const Session* session, uint32_t meshIndex);
+char* sessionGetMeshName(const Session* session, uint32_t meshIndex);
 
 void sessionRequestMeshImportDialog(Session* session);
 void sessionRequestRenderSaveDialog(Session* session);

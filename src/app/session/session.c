@@ -117,7 +117,7 @@ int sessionSetMeshName(Session* session, const char* filePath, uint32_t meshInde
     free(session->editor.meshNames[meshIndex]);
     const char* meshName = pathBasename(filePath);
     if (!meshName[0]) meshName = "(unknown)";
-    session->editor.meshNames[meshIndex] = stringDuplicate(meshName);
+    session->editor.meshNames[meshIndex] = realloc(stringDuplicate(meshName), VKRT_NAME_LEN);
     return session->editor.meshNames[meshIndex] != NULL;
 }
 
@@ -140,7 +140,7 @@ void sessionRemoveMeshName(Session* session, uint32_t meshIndex) {
     if (shrunk) session->editor.meshNames = shrunk;
 }
 
-const char* sessionGetMeshName(const Session* session, uint32_t meshIndex) {
+char* sessionGetMeshName(const Session* session, uint32_t meshIndex) {
     if (!session || meshIndex >= session->editor.meshCount || !session->editor.meshNames[meshIndex]) {
         return "(unknown)";
     }

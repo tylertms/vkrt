@@ -1,7 +1,9 @@
 #include "common.h"
+#include "constants.h"
 #include "debug.h"
 
 #include "IconsFontAwesome6.h"
+#include "session.h"
 
 #include <dcimgui.h>
 #include <math.h>
@@ -103,7 +105,13 @@ static void drawMeshInfoHeader(Session* session, uint32_t meshIndex, const VKRT_
     inspectorTightSeparatorText(ICON_FA_CIRCLE_INFO " Stats");
     inspectorIndentSection();
     if (inspectorBeginKeyValueTable("##mesh_stats")) {
-        inspectorKeyValueRow("Name", sessionGetMeshName(session, meshIndex));
+        ImGui_TableNextRow();
+        ImGui_TableSetColumnIndex(0);
+        ImGui_TextDisabled("Name");
+        ImGui_TableSetColumnIndex(1);
+        char* meshName = sessionGetMeshName(session, meshIndex);
+        ImGui_InputText("##mesh_name", meshName, VKRT_NAME_LEN, ImGuiInputTextFlags_None);
+
         inspectorKeyValueRow("Geometry", geometryText);
         if (!mesh->ownsGeometry) {
             inspectorKeyValueRow("Source", sourceText);
