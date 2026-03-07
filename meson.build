@@ -149,7 +149,6 @@ imgui_dependencies = [
   glfw_dep,
 ]
 
-# Build dcimgui and core libraries first (subdir defines vkrt)
 dcimgui = static_library('dcimgui',
   include_directories: [external_includes],
   dependencies: imgui_dependencies,
@@ -171,7 +170,6 @@ dcimgui = static_library('dcimgui',
 
 subdir('src')
 
-# File dialogs: auto-detect platform backend, fallback to stub
 file_dialogs_opt = get_option('file_dialogs')
 file_dialogs_enabled = false
 app_dialog_source = files('src/app/editor/dialogs_stub.c')
