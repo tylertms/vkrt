@@ -102,6 +102,7 @@ if not glfw_dep.found()
     'GLFW_BUILD_EXAMPLES': 'OFF',
     'GLFW_BUILD_TESTS': 'OFF',
     'GLFW_INSTALL': 'OFF',
+    'GLFW_BUILD_WAYLAND': 'ON',
   })
   glfw_project = cmake.subproject('glfw', options: glfw_options)
   glfw_dep = glfw_project.dependency('glfw')
