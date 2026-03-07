@@ -39,8 +39,8 @@ endif
 glslc = find_program('glslc', required: true)
 
 project_includes = include_directories(
-  'shared',
   'assets/fonts',
+  'src/shared',
 )
 
 external_includes = include_directories(

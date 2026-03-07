@@ -30,7 +30,7 @@ foreach shader_program : shader_programs
       '-MF', '@DEPFILE@',
       '-MT', '@OUTPUT@',
       '-I', meson.current_source_dir(),
-      '-I', join_paths(meson.project_source_root(), 'shared'),
+      '-I', join_paths(meson.project_source_root(), 'src', 'shared'),
       '-o', '@OUTPUT@',
     ],
     build_by_default: true,
