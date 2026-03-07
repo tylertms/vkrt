@@ -45,9 +45,23 @@ VKRT_Result pickPhysicalDevice(VKRT* vkrt) {
     int32_t highestScore = -1;
     int32_t bestDevice = -1;
 
+    LOG_INFO("Found %u Vulkan device(s):", deviceCount);
     for (uint32_t i = 0; i < deviceCount; i++) {
+        VkPhysicalDeviceProperties props = {0};
+        vkGetPhysicalDeviceProperties(devices[i], &props);
+
         vkrt->core.physicalDevice = devices[i];
         int32_t score = isDeviceSuitable(vkrt);
+
+        const char* typeName = "Unknown";
+        switch (props.deviceType) {
+            case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:   typeName = "Discrete GPU";   break;
+            case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU: typeName = "Integrated GPU"; break;
+            case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:    typeName = "Virtual GPU";    break;
+            case VK_PHYSICAL_DEVICE_TYPE_CPU:            typeName = "CPU";            break;
+            default: break;
+        }
+        LOG_INFO("  [%u] %s (%s)%s", i, props.deviceName, typeName, score < 0 ? " - not suitable" : "");
 
         if (score > highestScore) {
             highestScore = score;
@@ -66,7 +80,7 @@ VKRT_Result pickPhysicalDevice(VKRT* vkrt) {
     VkPhysicalDeviceProperties deviceProperties = {0};
     vkGetPhysicalDeviceProperties(vkrt->core.physicalDevice, &deviceProperties);
 
-    LOG_INFO("Using device [%s].", deviceProperties.deviceName);
+    LOG_INFO("Selected device [%u]: %s", bestDevice, deviceProperties.deviceName);
     snprintf(vkrt->core.deviceName, VKRT_ARRAY_COUNT(vkrt->core.deviceName), "%s", deviceProperties.deviceName);
     vkrt->core.vendorID = deviceProperties.vendorID;
     vkrt->core.driverVersion = deviceProperties.driverVersion;
