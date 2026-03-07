@@ -65,6 +65,7 @@ static void drawDebugSection(VKRT* vkrt, const VKRT_PublicState* state, bool con
     if (!ImGui_CollapsingHeader("Debug", ImGuiTreeNodeFlags_None)) return;
 
     inspectorIndentSection();
+    inspectorPushWidgetSpacing();
     if (controlsDisabled) ImGui_BeginDisabled(true);
 
     const char* debugModeLabels[] = {"None", "Normals", "Depth", "Bounce Count", "NEE Only", "BSDF Only", "Selection Mask", "Fresnel"};
@@ -99,6 +100,7 @@ static void drawDebugSection(VKRT* vkrt, const VKRT_PublicState* state, bool con
     tooltipOnHover("Multiple Importance Sampling + Next Event Estimation.");
 
     if (controlsDisabled) ImGui_EndDisabled();
+    inspectorPopWidgetSpacing();
     inspectorUnindentSection();
 }
 
@@ -118,7 +120,6 @@ static void drawIdleOutputSection(Session* session, float inputWidth) {
         session->editor.renderConfig.width = clampRenderDimension(outputSize[0]);
         session->editor.renderConfig.height = clampRenderDimension(outputSize[1]);
     }
-    inspectorPopWidgetSpacing();
 
     ImGui_SetNextItemWidth(inputWidth);
     if (ImGui_DragIntEx("Samples", &targetSamples, 1.0f, 0, INT_MAX, "%d", ImGuiSliderFlags_AlwaysClamp)) {
@@ -126,6 +127,7 @@ static void drawIdleOutputSection(Session* session, float inputWidth) {
         session->editor.renderConfig.targetSamples = (uint32_t)targetSamples;
     }
     tooltipOnHover("Total samples to render. Set to 0 for manual stop.");
+    inspectorPopWidgetSpacing();
     inspectorUnindentSection();
 }
 
@@ -214,6 +216,8 @@ static void drawIdleAnimationSection(Session* session, float inputWidth, float f
     if (!ImGui_CollapsingHeader("Sequence", ImGuiTreeNodeFlags_None)) return;
 
     inspectorIndentSection();
+    inspectorPushWidgetSpacing();
+
     if (ImGui_Checkbox("Enabled##render_animation_enabled", &animationEnabled)) {
         animation->enabled = animationEnabled ? 1 : 0;
         if (!animationEnabled) {
@@ -269,6 +273,7 @@ static void drawIdleAnimationSection(Session* session, float inputWidth, float f
     }
 
     ImGui_EndDisabled();
+    inspectorPopWidgetSpacing();
     inspectorUnindentSection();
 }
 

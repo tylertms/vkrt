@@ -50,7 +50,9 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path vkrt-windows-x64 | Out-Null
           Copy-Item build\vkrt.exe vkrt-windows-x64
-          Compress-Archive -Path vkrt-windows-x64 -DestinationPath vkrt-windows-x64.zip -Force
+          Copy-Item -Recurse assets vkrt-windows-x64
+          Copy-Item README.md vkrt-windows-x64
+          Compress-Archive -Path vkrt-windows-x64\* -DestinationPath vkrt-windows-x64.zip -Force
 
       - name: Upload Release Asset
         if: github.ref_type == 'tag'
@@ -105,6 +107,8 @@ jobs:
           mkdir -p AppDir/usr/bin AppDir/usr/lib
 
           cp build/vkrt AppDir/usr/bin/
+          cp -r assets AppDir/usr/bin/
+          cp README.md AppDir/usr/bin/
 
           DBUS_LIB=$(ldconfig -p | grep 'libdbus-1.so.3 ' | head -1 | awk '{print $NF}')
           [ -n "$DBUS_LIB" ] && cp "$DBUS_LIB" AppDir/usr/lib/
@@ -112,7 +116,7 @@ jobs:
           printf '[Desktop Entry]\nType=Application\nName=vkrt\nExec=vkrt\nIcon=vkrt\nCategories=Graphics;\nTerminal=false\n' > AppDir/vkrt.desktop
           printf '\x89PNG\r\n\x1a\n' > AppDir/vkrt.png
 
-          printf '#!/bin/bash\nHERE="$(dirname "$(readlink -f "$0")")"\nexport LD_LIBRARY_PATH="${HERE}/usr/lib:${LD_LIBRARY_PATH}"\nexec "${HERE}/usr/bin/vkrt" "$@"\n' > AppDir/AppRun
+          printf '#!/bin/bash\nHERE="$(dirname "$(readlink -f "$0")")"\nexport LD_LIBRARY_PATH="${HERE}/usr/lib:${LD_LIBRARY_PATH}"\ncd "${HERE}/usr/bin"\nexec "./vkrt" "$@"\n' > AppDir/AppRun
           chmod +x AppDir/AppRun
 
           wget -q "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage" -O appimagetool
@@ -124,7 +128,9 @@ jobs:
         run: |
           mkdir -p vkrt-linux-x64
           cp build/vkrt vkrt-linux-x64/
-          tar -czf vkrt-linux-x64.tar.gz vkrt-linux-x64
+          cp -r assets vkrt-linux-x64/
+          cp README.md vkrt-linux-x64/
+          tar -czf vkrt-linux-x64.tar.gz -C vkrt-linux-x64 .
 
       - name: Upload Release Assets
         if: github.ref_type == 'tag'

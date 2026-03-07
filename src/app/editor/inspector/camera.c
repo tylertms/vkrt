@@ -29,8 +29,8 @@ void inspectorDrawCameraTab(VKRT* vkrt) {
             inspectorPushWidgetSpacing();
             changed |= ImGui_DragFloat3Ex("Position", position, 0.01f, 0.0f, 0.0f, "%.3f", ImGuiSliderFlags_None);
             changed |= ImGui_DragFloat3Ex("Target", target, 0.01f, 0.0f, 0.0f, "%.3f", ImGuiSliderFlags_None);
-            inspectorPopWidgetSpacing();
             bool fovChanged = ImGui_SliderFloatEx("FOV", &fov, 10.0f, 140.0f, "%.1f deg", ImGuiSliderFlags_AlwaysClamp);
+            inspectorPopWidgetSpacing();
 
             if (changed || fovChanged) {
                 vec3 viewDir;
@@ -53,6 +53,7 @@ void inspectorDrawCameraTab(VKRT* vkrt) {
 
     if (ImGui_CollapsingHeader("Shading", ImGuiTreeNodeFlags_DefaultOpen)) {
         inspectorIndentSection();
+        inspectorPushWidgetSpacing();
         ImGui_BeginDisabled(renderModeActive);
 
         const char* toneMappingLabels[] = {"None", "ACES"};
@@ -83,6 +84,7 @@ void inspectorDrawCameraTab(VKRT* vkrt) {
             }
         }
 
+        inspectorPopWidgetSpacing();
         inspectorUnindentSection();
     }
 
