@@ -16,7 +16,7 @@ const VkBool32 enableValidationLayers = 0;
 const VkBool32 enableValidationLayers = 1;
 #endif
 
-int checkValidationLayerSupport() {
+int checkValidationLayerSupport(void) {
     uint32_t layerCount;
     vkEnumerateInstanceLayerProperties(&layerCount, 0);
 

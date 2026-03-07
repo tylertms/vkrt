@@ -6,7 +6,7 @@ extern const char* validationLayers[];
 extern const uint32_t numValidationLayers;
 extern const VkBool32 enableValidationLayers;
 
-int checkValidationLayerSupport();
+int checkValidationLayerSupport(void);
 const char** getRequiredExtensions(uint32_t* extensionCount);
 
 void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT* createInfo);

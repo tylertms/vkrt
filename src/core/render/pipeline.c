@@ -154,6 +154,10 @@ VKRT_Result createSelectionRayTracingPipeline(VKRT* vkrt) {
 
     uint64_t startTime = getMicroseconds();
     VKRT_Result result = VKRT_ERROR_OPERATION_FAILED;
+    VkShaderModule rayGenModule = VK_NULL_HANDLE;
+    VkShaderModule missModule = VK_NULL_HANDLE;
+    VkShaderModule closestHitModule = VK_NULL_HANDLE;
+    VkShaderModule anyHitModule = VK_NULL_HANDLE;
 
     size_t rayGenLen = 0, missLen = 0, closestHitLen = 0, anyHitLen = 0;
     const char* rayGenCode = readFile(vkrt->core.shaders.selectRgenPath, &rayGenLen);
@@ -162,10 +166,6 @@ VKRT_Result createSelectionRayTracingPipeline(VKRT* vkrt) {
     const char* anyHitCode = readFile(vkrt->core.shaders.selectRahitPath, &anyHitLen);
     if (!rayGenCode || !missCode || !closestHitCode || !anyHitCode) goto cleanup;
 
-    VkShaderModule rayGenModule = VK_NULL_HANDLE;
-    VkShaderModule missModule = VK_NULL_HANDLE;
-    VkShaderModule closestHitModule = VK_NULL_HANDLE;
-    VkShaderModule anyHitModule = VK_NULL_HANDLE;
     if (createShaderModule(vkrt, rayGenCode, rayGenLen, &rayGenModule) != VKRT_SUCCESS ||
         createShaderModule(vkrt, missCode, missLen, &missModule) != VKRT_SUCCESS ||
         createShaderModule(vkrt, closestHitCode, closestHitLen, &closestHitModule) != VKRT_SUCCESS ||

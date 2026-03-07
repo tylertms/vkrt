@@ -38,7 +38,7 @@ vkrt_sources = files(
 vkrt = static_library('vkrt_core',
   c_args: c_args,
   sources: vkrt_sources,
-  dependencies: dependencies,
+  dependencies: core_dependencies,
   include_directories: [core_build_includes, core_internal_includes],
   link_with: [dcimgui],
   link_language: 'cpp',

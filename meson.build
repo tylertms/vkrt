@@ -7,6 +7,11 @@ project('vkrt', ['c', 'cpp'],
   ],
 )
 
+sys = host_machine.system()
+if sys == 'darwin'
+  add_languages('objc', native: false, required: true)
+endif
+
 cc = meson.get_compiler('c')
 c_args = ['-D_GNU_SOURCE']
 
@@ -74,20 +79,55 @@ core_internal_includes = include_directories(
   'src/core/internal',
 )
 
-dependencies = [
-  dependency('vulkan', required: true),
-  dependency('glfw3', static: true),
-  dependency('zlib', required: true),
-  dependency('threads'),
-  dependency('rt', required: false),
+vulkan_dep = dependency('vulkan', required: true)
+glfw_dep = dependency('glfw3', static: true)
+zlib_dep = dependency('zlib', required: true)
+threads_dep = dependency('threads')
+rt_dep = dependency('rt', required: false)
+
+core_dependencies = [
+  vulkan_dep,
+  glfw_dep,
+  zlib_dep,
+  threads_dep,
+  rt_dep,
+]
+
+app_dependencies = [
+  vulkan_dep,
+  glfw_dep,
+  threads_dep,
+  rt_dep,
+]
+
+imgui_dependencies = [
+  vulkan_dep,
+  glfw_dep,
 ]
 
 nfd_source = []
 nfd_deps = []
 nfd_cpp_args = ['-w']
-sys = host_machine.system()
+nfd_objc_args = ['-w']
 
-if sys == 'windows'
+if sys == 'darwin'
+  nfd_deps += dependency(
+    'appleframeworks',
+    modules: ['AppKit'],
+  )
+  nfd_uti_dep = dependency(
+    'appleframeworks',
+    modules: ['UniformTypeIdentifiers'],
+    required: false,
+  )
+  if nfd_uti_dep.found()
+    nfd_deps += nfd_uti_dep
+    nfd_objc_args += ['-DNFD_MACOS_ALLOWEDCONTENTTYPES=1']
+  else
+    nfd_objc_args += ['-DNFD_MACOS_ALLOWEDCONTENTTYPES=0']
+  endif
+  nfd_source = files('external/nfd/src/nfd_cocoa.m')
+elif sys == 'windows'
   nfd_source = files('external/nfd/src/nfd_win.cpp')
 elif sys == 'linux'
   nfd_backend = get_option('nfd_backend')
@@ -133,11 +173,12 @@ nfd = static_library('nfd',
   sources: nfd_source,
   dependencies: nfd_deps,
   cpp_args: nfd_cpp_args,
+  objc_args: nfd_objc_args,
 )
 
 dcimgui = static_library('dcimgui',
   include_directories: [external_includes],
-  dependencies: dependencies,
+  dependencies: imgui_dependencies,
   sources: files(
     'external/imgui/src/dcimgui.cpp',
     'external/imgui/src/dcimgui_impl_glfw.cpp',
@@ -159,10 +200,9 @@ subdir('src')
 executable('vkrt',
   c_args: c_args,
   sources: app_sources,
-  dependencies: dependencies,
+  dependencies: app_dependencies,
   include_directories: app_includes,
   link_with: [vkrt, dcimgui, nfd],
-  link_language: 'cpp',
 )
 
 subdir('shaders')

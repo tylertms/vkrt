@@ -15,11 +15,98 @@
 #include "nfd_glfw3.h"
 
 #include <stdio.h>
+#include <stdint.h>
 #include <limits.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+
+#if defined(__APPLE__)
+#include <pthread.h>
+
+typedef pthread_mutex_t mtx_t;
+typedef pthread_cond_t cnd_t;
+typedef pthread_t thrd_t;
+typedef int (*thrd_start_t)(void*);
+
+enum {
+    thrd_success = 0,
+    thrd_error = 1,
+    mtx_plain = 0,
+};
+
+typedef struct ThreadStartContext {
+    thrd_start_t function;
+    void* argument;
+} ThreadStartContext;
+
+static void* threadStartTrampoline(void* rawContext) {
+    ThreadStartContext* context = rawContext;
+    thrd_start_t function = context->function;
+    void* argument = context->argument;
+    free(context);
+    return (void*)(intptr_t)function(argument);
+}
+
+static int mtx_init(mtx_t* mutex, int type) {
+    (void)type;
+    return pthread_mutex_init(mutex, NULL) == 0 ? thrd_success : thrd_error;
+}
+
+static void mtx_destroy(mtx_t* mutex) {
+    pthread_mutex_destroy(mutex);
+}
+
+static int mtx_lock(mtx_t* mutex) {
+    return pthread_mutex_lock(mutex) == 0 ? thrd_success : thrd_error;
+}
+
+static int mtx_unlock(mtx_t* mutex) {
+    return pthread_mutex_unlock(mutex) == 0 ? thrd_success : thrd_error;
+}
+
+static int cnd_init(cnd_t* condition) {
+    return pthread_cond_init(condition, NULL) == 0 ? thrd_success : thrd_error;
+}
+
+static void cnd_destroy(cnd_t* condition) {
+    pthread_cond_destroy(condition);
+}
+
+static int cnd_wait(cnd_t* condition, mtx_t* mutex) {
+    return pthread_cond_wait(condition, mutex) == 0 ? thrd_success : thrd_error;
+}
+
+static int cnd_signal(cnd_t* condition) {
+    return pthread_cond_signal(condition) == 0 ? thrd_success : thrd_error;
+}
+
+static int cnd_broadcast(cnd_t* condition) {
+    return pthread_cond_broadcast(condition) == 0 ? thrd_success : thrd_error;
+}
+
+static int thrd_create(thrd_t* thread, thrd_start_t function, void* argument) {
+    ThreadStartContext* context = malloc(sizeof(*context));
+    if (!context) return thrd_error;
+
+    context->function = function;
+    context->argument = argument;
+    if (pthread_create(thread, NULL, threadStartTrampoline, context) != 0) {
+        free(context);
+        return thrd_error;
+    }
+    return thrd_success;
+}
+
+static int thrd_join(thrd_t thread, int* result) {
+    void* threadResult = NULL;
+    if (pthread_join(thread, &threadResult) != 0) return thrd_error;
+    if (result) *result = (int)(intptr_t)threadResult;
+    return thrd_success;
+}
+#else
 #include <threads.h>
+#endif
 
 typedef enum DialogKind {
     DIALOG_KIND_NONE = 0,
