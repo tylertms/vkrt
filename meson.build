@@ -95,6 +95,9 @@ glfw_dep = dependency('glfw3', required: false, allow_fallback: false)
 if not glfw_dep.found()
   glfw_options = cmake.subproject_options()
   glfw_options.append_compile_args('c', cc.get_argument_syntax() == 'msvc' ? '/w' : '-w')
+  if sys == 'darwin'
+    glfw_options.append_compile_args('objc', '-w')
+  endif
   glfw_options.add_cmake_defines({
     'BUILD_SHARED_LIBS': 'OFF',
     'GLFW_BUILD_DOCS': 'OFF',
@@ -129,10 +132,13 @@ endif
 threads_dep = dependency('threads')
 rt_dep = dependency('rt', required: false)
 
+if sys == 'darwin'
+  iokit_dep = dependency('appleframeworks', modules: ['IOKit'])
+endif
+
 core_dependencies = [
   vulkan_dep,
   glfw_dep,
-  zlib_dep,
   threads_dep,
   rt_dep,
 ]
@@ -143,6 +149,11 @@ app_dependencies = [
   threads_dep,
   rt_dep,
 ]
+
+if sys == 'darwin'
+  core_dependencies += iokit_dep
+  app_dependencies += iokit_dep
+endif
 
 imgui_dependencies = [
   vulkan_dep,
