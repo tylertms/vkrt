@@ -278,6 +278,7 @@ VKRT_Result VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInf
     uint32_t height = createInfo->height ? createInfo->height : VKRT_DEFAULT_HEIGHT;
 
     stepStartTime = getMicroseconds();
+    glfwWindowHint(GLFW_MAXIMIZED, GLFW_TRUE);
     vkrt->runtime.window = glfwCreateWindow((int)width, (int)height, title, 0, 0);
     if (!vkrt->runtime.window) {
         LOG_ERROR("Failed to create GLFW window");
@@ -286,6 +287,7 @@ VKRT_Result VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInf
 
     glfwSetWindowUserPointer(vkrt->runtime.window, vkrt);
     glfwSetFramebufferSizeCallback(vkrt->runtime.window, VKRT_framebufferResizedCallback);
+
     logStepTime("Window setup complete", stepStartTime);
 
     stepStartTime = getMicroseconds();
