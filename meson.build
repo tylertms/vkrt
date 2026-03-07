@@ -17,6 +17,7 @@ cpp = meson.get_compiler('cpp')
 cmake = import('cmake')
 
 c_args = []
+cpp_args = []
 define_prefix = cc.get_argument_syntax() == 'msvc' ? '/D' : '-D'
 
 if sys == 'linux' and cc.get_argument_syntax() == 'gcc'
@@ -24,6 +25,8 @@ if sys == 'linux' and cc.get_argument_syntax() == 'gcc'
 endif
 
 c_args += [define_prefix + 'VKRT_VERSION="' + meson.project_version() + '"']
+c_args += [define_prefix + 'GLFW_INCLUDE_NONE']
+cpp_args += [define_prefix + 'GLFW_INCLUDE_NONE']
 
 buildtype = get_option('buildtype')
 trace_enabled = buildtype == 'debug' or buildtype == 'debugoptimized'
@@ -105,6 +108,7 @@ if not glfw_dep.found()
     'GLFW_BUILD_TESTS': 'OFF',
     'GLFW_INSTALL': 'OFF',
     'GLFW_BUILD_WAYLAND': 'ON',
+    'CMAKE_MSVC_RUNTIME_LIBRARY': 'MultiThreaded',
   })
   glfw_project = cmake.subproject('glfw', options: glfw_options)
   glfw_dep = glfw_project.dependency('glfw')
@@ -163,7 +167,7 @@ imgui_dependencies = [
 dcimgui = static_library('dcimgui',
   include_directories: [external_includes],
   dependencies: imgui_dependencies,
-  cpp_args: [define_prefix + 'GLFW_INCLUDE_NONE'],
+  cpp_args: cpp_args,
   sources: files(
     'external/imgui/src/dcimgui.cpp',
     'external/imgui/src/dcimgui_impl_glfw.cpp',
