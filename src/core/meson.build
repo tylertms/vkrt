@@ -32,7 +32,13 @@ vkrt_sources = files(
   'api/query.c',
   'utility/export.c',
   'utility/io.c',
-  '../../external/spng/spng.c',
+  'utility/platform.c',
+)
+
+spng = static_library('spng',
+  sources: files('../../external/spng/spng.c'),
+  include_directories: include_directories('../../external/spng', is_system: true),
+  c_args: c_warning_suppression_args,
 )
 
 vkrt = static_library('vkrt_core',
@@ -40,6 +46,6 @@ vkrt = static_library('vkrt_core',
   sources: vkrt_sources,
   dependencies: core_dependencies,
   include_directories: [core_build_includes, core_internal_includes],
-  link_with: [dcimgui],
+  link_with: [dcimgui, spng],
   link_language: 'cpp',
 )

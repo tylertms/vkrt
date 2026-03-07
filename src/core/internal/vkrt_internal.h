@@ -83,7 +83,6 @@ typedef struct VKRT_Core {
     char deviceName[256];
     uint32_t vendorID;
     uint32_t driverVersion;
-    VKRT_ShaderConfig shaders;
     VKRT_DeviceProcedures procs;
 } VKRT_Core;
 

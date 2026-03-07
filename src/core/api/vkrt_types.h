@@ -49,23 +49,11 @@ typedef struct VKRT_CameraInput {
     uint8_t captureMouse;
 } VKRT_CameraInput;
 
-typedef struct VKRT_ShaderConfig {
-    const char* rgenPath;
-    const char* rmissPath;
-    const char* rchitPath;
-    const char* compPath;
-    const char* selectRgenPath;
-    const char* selectRmissPath;
-    const char* selectRchitPath;
-    const char* selectRahitPath;
-} VKRT_ShaderConfig;
-
 typedef struct VKRT_CreateInfo {
     uint32_t width;
     uint32_t height;
     const char* title;
     uint8_t vsync;
-    VKRT_ShaderConfig shaders;
 } VKRT_CreateInfo;
 
 static inline Material VKRT_materialDefault(void) {

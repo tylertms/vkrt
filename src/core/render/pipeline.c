@@ -1,5 +1,5 @@
 #include "pipeline.h"
-#include "io.h"
+#include "shaders_embedded.h"
 #include "sync.h"
 #include "debug.h"
 
@@ -30,35 +30,20 @@ VKRT_Result createRayTracingPipeline(VKRT* vkrt) {
 
     if (createRayTracingPipelineLayout(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
 
-    size_t rayGenLen, closestHitLen, missLen;
-
-    const char* rayGenCode = readFile(vkrt->core.shaders.rgenPath, &rayGenLen);
-    const char* closestHitCode = readFile(vkrt->core.shaders.rchitPath, &closestHitLen);
-    const char* missCode = readFile(vkrt->core.shaders.rmissPath, &missLen);
-    if (!rayGenCode || !closestHitCode || !missCode) {
-        free((void*)rayGenCode);
-        free((void*)closestHitCode);
-        free((void*)missCode);
-        return VKRT_ERROR_OPERATION_FAILED;
-    }
-
-    LOG_INFO("Using shaders \"%s\", \"%s\", \"%s\"",
-        vkrt->core.shaders.rgenPath, vkrt->core.shaders.rchitPath, vkrt->core.shaders.rmissPath);
-
     VkShaderModule rayGenModule = VK_NULL_HANDLE;
     VkShaderModule closestHitModule = VK_NULL_HANDLE;
     VkShaderModule missModule = VK_NULL_HANDLE;
-    if (createShaderModule(vkrt, rayGenCode, rayGenLen, &rayGenModule) != VKRT_SUCCESS ||
-        createShaderModule(vkrt, closestHitCode, closestHitLen, &closestHitModule) != VKRT_SUCCESS ||
-        createShaderModule(vkrt, missCode, missLen, &missModule) != VKRT_SUCCESS) {
+    if (createShaderModule(vkrt, (const char*)shader_rgen_data, shader_rgen_size, &rayGenModule) != VKRT_SUCCESS ||
+        createShaderModule(vkrt, (const char*)shader_rchit_data, shader_rchit_size, &closestHitModule) != VKRT_SUCCESS ||
+        createShaderModule(vkrt, (const char*)shader_rmiss_data, shader_rmiss_size, &missModule) != VKRT_SUCCESS) {
         if (rayGenModule != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, rayGenModule, NULL);
         if (closestHitModule != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, closestHitModule, NULL);
         if (missModule != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, missModule, NULL);
-        free((void*)rayGenCode);
-        free((void*)closestHitCode);
-        free((void*)missCode);
         return VKRT_ERROR_OPERATION_FAILED;
     }
+
+    LOG_INFO("Using embedded shaders (rgen: %zu bytes, rchit: %zu bytes, rmiss: %zu bytes)",
+        shader_rgen_size, shader_rchit_size, shader_rmiss_size);
 
     VkPipelineShaderStageCreateInfo rayGenStageInfo = {0};
     rayGenStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -128,18 +113,12 @@ VKRT_Result createRayTracingPipeline(VKRT* vkrt) {
         vkDestroyShaderModule(vkrt->core.device, rayGenModule, NULL);
         vkDestroyShaderModule(vkrt->core.device, closestHitModule, NULL);
         vkDestroyShaderModule(vkrt->core.device, missModule, NULL);
-        free((void*)rayGenCode);
-        free((void*)closestHitCode);
-        free((void*)missCode);
         return VKRT_ERROR_OPERATION_FAILED;
     }
 
     vkDestroyShaderModule(vkrt->core.device, rayGenModule, NULL);
     vkDestroyShaderModule(vkrt->core.device, closestHitModule, NULL);
     vkDestroyShaderModule(vkrt->core.device, missModule, NULL);
-    free((void*)rayGenCode);
-    free((void*)closestHitCode);
-    free((void*)missCode);
 
     LOG_INFO("Ray tracing pipeline created. Shader Stages: %u, Shader Groups: %u, in %.3f ms",
         (uint32_t)VKRT_ARRAY_COUNT(shaderStages),
@@ -159,17 +138,10 @@ VKRT_Result createSelectionRayTracingPipeline(VKRT* vkrt) {
     VkShaderModule closestHitModule = VK_NULL_HANDLE;
     VkShaderModule anyHitModule = VK_NULL_HANDLE;
 
-    size_t rayGenLen = 0, missLen = 0, closestHitLen = 0, anyHitLen = 0;
-    const char* rayGenCode = readFile(vkrt->core.shaders.selectRgenPath, &rayGenLen);
-    const char* missCode = readFile(vkrt->core.shaders.selectRmissPath, &missLen);
-    const char* closestHitCode = readFile(vkrt->core.shaders.selectRchitPath, &closestHitLen);
-    const char* anyHitCode = readFile(vkrt->core.shaders.selectRahitPath, &anyHitLen);
-    if (!rayGenCode || !missCode || !closestHitCode || !anyHitCode) goto cleanup;
-
-    if (createShaderModule(vkrt, rayGenCode, rayGenLen, &rayGenModule) != VKRT_SUCCESS ||
-        createShaderModule(vkrt, missCode, missLen, &missModule) != VKRT_SUCCESS ||
-        createShaderModule(vkrt, closestHitCode, closestHitLen, &closestHitModule) != VKRT_SUCCESS ||
-        createShaderModule(vkrt, anyHitCode, anyHitLen, &anyHitModule) != VKRT_SUCCESS) {
+    if (createShaderModule(vkrt, (const char*)shader_select_rgen_data, shader_select_rgen_size, &rayGenModule) != VKRT_SUCCESS ||
+        createShaderModule(vkrt, (const char*)shader_select_rmiss_data, shader_select_rmiss_size, &missModule) != VKRT_SUCCESS ||
+        createShaderModule(vkrt, (const char*)shader_select_rchit_data, shader_select_rchit_size, &closestHitModule) != VKRT_SUCCESS ||
+        createShaderModule(vkrt, (const char*)shader_select_rahit_data, shader_select_rahit_size, &anyHitModule) != VKRT_SUCCESS) {
         goto cleanup;
     }
 
@@ -214,27 +186,16 @@ cleanup:
     if (missModule != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, missModule, NULL);
     if (closestHitModule != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, closestHitModule, NULL);
     if (anyHitModule != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, anyHitModule, NULL);
-    free((void*)rayGenCode);
-    free((void*)missCode);
-    free((void*)closestHitCode);
-    free((void*)anyHitCode);
     return result;
 }
 
 VKRT_Result createComputePipeline(VKRT* vkrt) {
-    if (!vkrt || !vkrt->core.shaders.compPath) return VKRT_ERROR_INVALID_ARGUMENT;
+    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
 
     uint64_t startTime = getMicroseconds();
 
-    size_t compLen = 0;
-    const char* compCode = readFile(vkrt->core.shaders.compPath, &compLen);
-    if (!compCode) {
-        return VKRT_ERROR_OPERATION_FAILED;
-    }
-
     VkShaderModule compModule = VK_NULL_HANDLE;
-    if (createShaderModule(vkrt, compCode, compLen, &compModule) != VKRT_SUCCESS) {
-        free((void*)compCode);
+    if (createShaderModule(vkrt, (const char*)shader_comp_data, shader_comp_size, &compModule) != VKRT_SUCCESS) {
         return VKRT_ERROR_OPERATION_FAILED;
     }
 
@@ -252,15 +213,13 @@ VKRT_Result createComputePipeline(VKRT* vkrt) {
     if (vkCreateComputePipelines(vkrt->core.device, VK_NULL_HANDLE, 1, &createInfo, NULL, &vkrt->core.computePipeline) != VK_SUCCESS) {
         LOG_ERROR("Failed to create compute pipeline");
         vkDestroyShaderModule(vkrt->core.device, compModule, NULL);
-        free((void*)compCode);
         return VKRT_ERROR_OPERATION_FAILED;
     }
 
     vkDestroyShaderModule(vkrt->core.device, compModule, NULL);
-    free((void*)compCode);
 
-    LOG_INFO("Compute pipeline created from \"%s\" in %.3f ms",
-        vkrt->core.shaders.compPath,
+    LOG_INFO("Compute pipeline created (%zu bytes) in %.3f ms",
+        shader_comp_size,
         (double)(getMicroseconds() - startTime) / 1e3);
     return VKRT_SUCCESS;
 }

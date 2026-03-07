@@ -1,3 +1,5 @@
+embed_spv = find_program(meson.project_source_root() / 'scripts' / 'embed_spv.py')
+
 shader_programs = [
   ['rgen', 'rt/main/main.rgen', 'rgen.spv'],
   ['rchit', 'rt/main/main.rchit', 'rchit.spv'],
@@ -9,7 +11,7 @@ shader_programs = [
   ['select_rahit', 'rt/selection/select.rahit', 'select_rahit.spv'],
 ]
 
-shader_targets = []
+embedded_shader_sources = []
 foreach shader_program : shader_programs
   stage_name = shader_program[0]
   shader_file = shader_program[1]
@@ -33,5 +35,12 @@ foreach shader_program : shader_programs
     ],
     build_by_default: true,
   )
-  shader_targets += shader_target
+
+  embed_target = custom_target(
+    'embed_shader_' + stage_name,
+    input: shader_target,
+    output: 'shader_' + stage_name + '.c',
+    command: [embed_spv, '@INPUT@', '@OUTPUT@', 'shader_' + stage_name],
+  )
+  embedded_shader_sources += embed_target
 endforeach

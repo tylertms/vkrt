@@ -2,7 +2,6 @@
 #include "debug.h"
 #include "io.h"
 
-#include <limits.h>
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -83,9 +82,9 @@ void sessionInit(Session* session) {
     session->editor.renderConfig.animation.timeStep = 0.05f;
     sessionResetTimelineDefaults(&session->editor.renderConfig.animation.sceneTimeline);
 
-    char capturesPath[PATH_MAX] = {0};
+    char capturesPath[VKRT_PATH_MAX] = {0};
     if (resolveExistingPath("captures", capturesPath, sizeof(capturesPath)) == 0) {
-        char sequencePath[PATH_MAX] = {0};
+        char sequencePath[VKRT_PATH_MAX] = {0};
         if (snprintf(sequencePath, sizeof(sequencePath), "%s/sequence", capturesPath) < (int)sizeof(sequencePath)) {
             sessionSetRenderSequenceFolder(session, sequencePath);
             return;

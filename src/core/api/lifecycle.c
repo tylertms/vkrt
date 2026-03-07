@@ -221,16 +221,6 @@ void VKRT_defaultCreateInfo(VKRT_CreateInfo* createInfo) {
         .height = VKRT_DEFAULT_HEIGHT,
         .title = "VKRT",
         .vsync = 1,
-        .shaders = {
-            .rgenPath = "./shaders/rgen.spv",
-            .rmissPath = "./shaders/rmiss.spv",
-            .rchitPath = "./shaders/rchit.spv",
-            .compPath = "./shaders/select.spv",
-            .selectRgenPath = "./shaders/select_rgen.spv",
-            .selectRmissPath = "./shaders/select_rmiss.spv",
-            .selectRchitPath = "./shaders/select_rchit.spv",
-            .selectRahitPath = "./shaders/select_rahit.spv",
-        },
     };
 }
 
@@ -273,7 +263,6 @@ VKRT_Result VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInf
     vkrt->runtime.lastLoggedSwapChainFormat = VK_FORMAT_UNDEFINED;
     vkrt->runtime.lastLoggedSwapChainColorSpace = VK_COLOR_SPACE_MAX_ENUM_KHR;
     vkrt->runtime.appInitialized = 0;
-    vkrt->core.shaders = createInfo->shaders;
     for (uint32_t i = 0; i < VKRT_MAX_FRAMES_IN_FLIGHT; i++) {
         vkrt->core.descriptorSetReady[i] = VK_FALSE;
     }
@@ -287,15 +276,6 @@ VKRT_Result VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInf
     const char* title = createInfo->title ? createInfo->title : "VKRT";
     uint32_t width = createInfo->width ? createInfo->width : VKRT_DEFAULT_WIDTH;
     uint32_t height = createInfo->height ? createInfo->height : VKRT_DEFAULT_HEIGHT;
-
-    if (!vkrt->core.shaders.rgenPath) vkrt->core.shaders.rgenPath = "./shaders/rgen.spv";
-    if (!vkrt->core.shaders.rmissPath) vkrt->core.shaders.rmissPath = "./shaders/rmiss.spv";
-    if (!vkrt->core.shaders.rchitPath) vkrt->core.shaders.rchitPath = "./shaders/rchit.spv";
-    if (!vkrt->core.shaders.compPath) vkrt->core.shaders.compPath = "./shaders/select.spv";
-    if (!vkrt->core.shaders.selectRgenPath) vkrt->core.shaders.selectRgenPath = "./shaders/select_rgen.spv";
-    if (!vkrt->core.shaders.selectRmissPath) vkrt->core.shaders.selectRmissPath = "./shaders/select_rmiss.spv";
-    if (!vkrt->core.shaders.selectRchitPath) vkrt->core.shaders.selectRchitPath = "./shaders/select_rchit.spv";
-    if (!vkrt->core.shaders.selectRahitPath) vkrt->core.shaders.selectRahitPath = "./shaders/select_rahit.spv";
 
     stepStartTime = getMicroseconds();
     vkrt->runtime.window = glfwCreateWindow((int)width, (int)height, title, 0, 0);

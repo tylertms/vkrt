@@ -9,11 +9,9 @@
 #include <windows.h>
 #include <direct.h>
 #elif defined(__APPLE__)
-#include <limits.h>
 #include <mach-o/dyld.h>
 #include <unistd.h>
 #else
-#include <limits.h>
 #include <unistd.h>
 #endif
 
@@ -152,12 +150,12 @@ int resolveExistingPath(const char* path, char* outPath, size_t outPathSize) {
         return 0;
     }
 
-    char executableDir[PATH_MAX] = {0};
+    char executableDir[VKRT_PATH_MAX] = {0};
     if (get_exe_dir(executableDir, sizeof(executableDir)) != 0) {
         return -1;
     }
 
-    char candidate[PATH_MAX] = {0};
+    char candidate[VKRT_PATH_MAX] = {0};
     if (joinPath(candidate, sizeof(candidate), executableDir, path) == 0 &&
         resolveExistingCandidate(candidate, outPath, outPathSize) == 0) {
         return 0;
@@ -187,7 +185,7 @@ int resolveExistingParentPath(const char* preferredPath, const char* fallbackPat
     if (!outPath || outPathSize == 0) return -1;
 
     if (preferredPath && preferredPath[0]) {
-        char candidate[PATH_MAX] = {0};
+        char candidate[VKRT_PATH_MAX] = {0};
         if (copyPathString(candidate, sizeof(candidate), preferredPath) == 0) {
             while (candidate[0]) {
                 pathTrimTrailingSeparators(candidate);

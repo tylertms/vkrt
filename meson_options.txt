@@ -5,3 +5,10 @@ option(
   value: 'auto',
   description: 'Linux NFD backend. Prefers portal and falls back to gtk.',
 )
+
+option(
+  'file_dialogs',
+  type: 'feature',
+  value: 'auto',
+  description: 'Build native file dialog support when a platform backend is available.',
+)

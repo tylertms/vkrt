@@ -6,7 +6,6 @@
 #define CGLTF_IMPLEMENTATION
 #include "cgltf.h"
 
-#include <limits.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -362,7 +361,7 @@ static int collectNodeEntries(const cgltf_node* node, MeshImportData* importData
 int meshLoadFromFile(const char* filePath, MeshImportData* outImportData) {
     if (!filePath || !filePath[0] || !outImportData) return -1;
 
-    char resolvedPath[PATH_MAX] = {0};
+    char resolvedPath[VKRT_PATH_MAX] = {0};
     if (resolveExistingPath(filePath, resolvedPath, sizeof(resolvedPath)) != 0) {
         LOG_ERROR("Mesh file not found: %s", filePath);
         return -1;

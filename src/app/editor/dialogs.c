@@ -16,97 +16,9 @@
 
 #include <stdio.h>
 #include <stdint.h>
-#include <limits.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
-
-#if defined(__APPLE__)
-#include <pthread.h>
-
-typedef pthread_mutex_t mtx_t;
-typedef pthread_cond_t cnd_t;
-typedef pthread_t thrd_t;
-typedef int (*thrd_start_t)(void*);
-
-enum {
-    thrd_success = 0,
-    thrd_error = 1,
-    mtx_plain = 0,
-};
-
-typedef struct ThreadStartContext {
-    thrd_start_t function;
-    void* argument;
-} ThreadStartContext;
-
-static void* threadStartTrampoline(void* rawContext) {
-    ThreadStartContext* context = rawContext;
-    thrd_start_t function = context->function;
-    void* argument = context->argument;
-    free(context);
-    return (void*)(intptr_t)function(argument);
-}
-
-static int mtx_init(mtx_t* mutex, int type) {
-    (void)type;
-    return pthread_mutex_init(mutex, NULL) == 0 ? thrd_success : thrd_error;
-}
-
-static void mtx_destroy(mtx_t* mutex) {
-    pthread_mutex_destroy(mutex);
-}
-
-static int mtx_lock(mtx_t* mutex) {
-    return pthread_mutex_lock(mutex) == 0 ? thrd_success : thrd_error;
-}
-
-static int mtx_unlock(mtx_t* mutex) {
-    return pthread_mutex_unlock(mutex) == 0 ? thrd_success : thrd_error;
-}
-
-static int cnd_init(cnd_t* condition) {
-    return pthread_cond_init(condition, NULL) == 0 ? thrd_success : thrd_error;
-}
-
-static void cnd_destroy(cnd_t* condition) {
-    pthread_cond_destroy(condition);
-}
-
-static int cnd_wait(cnd_t* condition, mtx_t* mutex) {
-    return pthread_cond_wait(condition, mutex) == 0 ? thrd_success : thrd_error;
-}
-
-static int cnd_signal(cnd_t* condition) {
-    return pthread_cond_signal(condition) == 0 ? thrd_success : thrd_error;
-}
-
-static int cnd_broadcast(cnd_t* condition) {
-    return pthread_cond_broadcast(condition) == 0 ? thrd_success : thrd_error;
-}
-
-static int thrd_create(thrd_t* thread, thrd_start_t function, void* argument) {
-    ThreadStartContext* context = malloc(sizeof(*context));
-    if (!context) return thrd_error;
-
-    context->function = function;
-    context->argument = argument;
-    if (pthread_create(thread, NULL, threadStartTrampoline, context) != 0) {
-        free(context);
-        return thrd_error;
-    }
-    return thrd_success;
-}
-
-static int thrd_join(thrd_t thread, int* result) {
-    void* threadResult = NULL;
-    if (pthread_join(thread, &threadResult) != 0) return thrd_error;
-    if (result) *result = (int)(intptr_t)threadResult;
-    return thrd_success;
-}
-#else
-#include <threads.h>
-#endif
 
 typedef enum DialogKind {
     DIALOG_KIND_NONE = 0,
@@ -117,17 +29,17 @@ typedef enum DialogKind {
 
 typedef struct DialogRequest {
     DialogKind kind;
-    char defaultPath[PATH_MAX];
+    char defaultPath[VKRT_PATH_MAX];
     char defaultName[256];
     nfdwindowhandle_t parentWindow;
 } DialogRequest;
 
 typedef struct DialogState {
     GLFWwindow* window;
-    mtx_t mutex;
-    cnd_t condition;
+    VKRT_Mutex mutex;
+    VKRT_Cond condition;
     uint8_t syncPrimitivesInitialized;
-    thrd_t worker;
+    VKRT_Thread worker;
     uint8_t workerStarted;
     uint8_t workerAvailable;
     uint8_t workerStartupComplete;
@@ -236,11 +148,11 @@ static int dialogWorkerMain(void* userData) {
         }
     }
 
-    mtx_lock(&gDialogState.mutex);
+    vkrtMutexLock(&gDialogState.mutex);
     gDialogState.workerAvailable = initResult == NFD_OKAY ? 1u : 0u;
     gDialogState.workerStartupComplete = 1u;
-    cnd_broadcast(&gDialogState.condition);
-    mtx_unlock(&gDialogState.mutex);
+    vkrtCondBroadcast(&gDialogState.condition);
+    vkrtMutexUnlock(&gDialogState.mutex);
 
     if (initResult != NFD_OKAY) {
         const char* errorMessage = NFD_GetError();
@@ -252,30 +164,30 @@ static int dialogWorkerMain(void* userData) {
     for (;;) {
         DialogRequest request = {0};
 
-        mtx_lock(&gDialogState.mutex);
+        vkrtMutexLock(&gDialogState.mutex);
         while (gDialogState.running && !gDialogState.requestPending) {
-            cnd_wait(&gDialogState.condition, &gDialogState.mutex);
+            vkrtCondWait(&gDialogState.condition, &gDialogState.mutex);
         }
 
         if (!gDialogState.running) {
-            mtx_unlock(&gDialogState.mutex);
+            vkrtMutexUnlock(&gDialogState.mutex);
             break;
         }
 
         request = gDialogState.request;
         gDialogState.requestPending = 0u;
         gDialogState.requestActive = 1u;
-        mtx_unlock(&gDialogState.mutex);
+        vkrtMutexUnlock(&gDialogState.mutex);
 
         char* selectedPath = runDialogRequest(&request);
 
-        mtx_lock(&gDialogState.mutex);
+        vkrtMutexLock(&gDialogState.mutex);
         gDialogState.responseKind = request.kind;
         gDialogState.responsePath = selectedPath;
         gDialogState.responsePending = 1u;
         gDialogState.requestActive = 0u;
-        cnd_broadcast(&gDialogState.condition);
-        mtx_unlock(&gDialogState.mutex);
+        vkrtCondBroadcast(&gDialogState.condition);
+        vkrtMutexUnlock(&gDialogState.mutex);
     }
 
     NFD_Quit();
@@ -285,12 +197,12 @@ static int dialogWorkerMain(void* userData) {
 static void shutdownDialogWorker(void) {
     if (!gDialogState.workerStarted) return;
 
-    mtx_lock(&gDialogState.mutex);
+    vkrtMutexLock(&gDialogState.mutex);
     gDialogState.running = 0u;
-    cnd_broadcast(&gDialogState.condition);
-    mtx_unlock(&gDialogState.mutex);
+    vkrtCondBroadcast(&gDialogState.condition);
+    vkrtMutexUnlock(&gDialogState.mutex);
 
-    thrd_join(gDialogState.worker, NULL);
+    vkrtThreadJoin(gDialogState.worker, NULL);
     gDialogState.workerStarted = 0u;
     gDialogState.workerAvailable = 0u;
 }
@@ -298,11 +210,13 @@ static void shutdownDialogWorker(void) {
 void editorUIInitializeDialogs(GLFWwindow* window) {
     gDialogState.window = window;
 
-    int mutexResult = mtx_init(&gDialogState.mutex, mtx_plain);
-    int conditionResult = mutexResult == thrd_success ? cnd_init(&gDialogState.condition) : thrd_error;
-    if (mutexResult != thrd_success || conditionResult != thrd_success) {
-        if (mutexResult == thrd_success) {
-            mtx_destroy(&gDialogState.mutex);
+    int mutexResult = vkrtMutexInit(&gDialogState.mutex, VKRT_MUTEX_PLAIN);
+    int conditionResult = mutexResult == VKRT_THREAD_SUCCESS
+        ? vkrtCondInit(&gDialogState.condition)
+        : VKRT_THREAD_ERROR;
+    if (mutexResult != VKRT_THREAD_SUCCESS || conditionResult != VKRT_THREAD_SUCCESS) {
+        if (mutexResult == VKRT_THREAD_SUCCESS) {
+            vkrtMutexDestroy(&gDialogState.mutex);
         }
         gDialogState.mainThreadAvailable = NFD_Init() == NFD_OKAY ? 1u : 0u;
         if (gDialogState.mainThreadAvailable) {
@@ -313,14 +227,14 @@ void editorUIInitializeDialogs(GLFWwindow* window) {
 
     gDialogState.syncPrimitivesInitialized = 1u;
     gDialogState.running = 1u;
-    if (thrd_create(&gDialogState.worker, dialogWorkerMain, NULL) == thrd_success) {
+    if (vkrtThreadCreate(&gDialogState.worker, dialogWorkerMain, NULL) == VKRT_THREAD_SUCCESS) {
         gDialogState.workerStarted = 1u;
-        mtx_lock(&gDialogState.mutex);
+        vkrtMutexLock(&gDialogState.mutex);
         while (!gDialogState.workerStartupComplete) {
-            cnd_wait(&gDialogState.condition, &gDialogState.mutex);
+            vkrtCondWait(&gDialogState.condition, &gDialogState.mutex);
         }
         uint8_t workerAvailable = gDialogState.workerAvailable;
-        mtx_unlock(&gDialogState.mutex);
+        vkrtMutexUnlock(&gDialogState.mutex);
 
         if (workerAvailable) {
             return;
@@ -351,8 +265,8 @@ void editorUIShutdownDialogs(void) {
     }
 
     if (gDialogState.syncPrimitivesInitialized) {
-        cnd_destroy(&gDialogState.condition);
-        mtx_destroy(&gDialogState.mutex);
+        vkrtCondDestroy(&gDialogState.condition);
+        vkrtMutexDestroy(&gDialogState.mutex);
     }
 
     memset(&gDialogState, 0, sizeof(gDialogState));
@@ -386,9 +300,9 @@ static void applyDialogResponse(Session* session, DialogKind kind, char* selecte
 static void drainDialogResponse(Session* session) {
     if (!gDialogState.workerStarted) return;
 
-    mtx_lock(&gDialogState.mutex);
+    vkrtMutexLock(&gDialogState.mutex);
     if (!gDialogState.responsePending) {
-        mtx_unlock(&gDialogState.mutex);
+        vkrtMutexUnlock(&gDialogState.mutex);
         return;
     }
 
@@ -397,7 +311,7 @@ static void drainDialogResponse(Session* session) {
     gDialogState.responseKind = DIALOG_KIND_NONE;
     gDialogState.responsePath = NULL;
     gDialogState.responsePending = 0u;
-    mtx_unlock(&gDialogState.mutex);
+    vkrtMutexUnlock(&gDialogState.mutex);
 
     applyDialogResponse(session, kind, selectedPath);
 }
@@ -405,19 +319,19 @@ static void drainDialogResponse(Session* session) {
 static int queueDialogRequest(const DialogRequest* request) {
     if (!request || !gDialogState.workerStarted) return 0;
 
-    mtx_lock(&gDialogState.mutex);
+    vkrtMutexLock(&gDialogState.mutex);
     if (!gDialogState.workerAvailable ||
         gDialogState.requestPending ||
         gDialogState.requestActive ||
         gDialogState.responsePending) {
-        mtx_unlock(&gDialogState.mutex);
+        vkrtMutexUnlock(&gDialogState.mutex);
         return 0;
     }
 
     gDialogState.request = *request;
     gDialogState.requestPending = 1u;
-    cnd_signal(&gDialogState.condition);
-    mtx_unlock(&gDialogState.mutex);
+    vkrtCondSignal(&gDialogState.condition);
+    vkrtMutexUnlock(&gDialogState.mutex);
     return 1;
 }
 
@@ -430,7 +344,7 @@ static void executeDialogSynchronously(Session* session, const DialogRequest* re
 static int tryScheduleImportMeshDialog(Session* session) {
     if (!sessionTakeMeshImportDialogRequest(session)) return 0;
 
-    char defaultPath[PATH_MAX] = {0};
+    char defaultPath[VKRT_PATH_MAX] = {0};
     resolveExistingParentPath("assets/models", NULL, defaultPath, sizeof(defaultPath));
 
     DialogRequest request = {0};
@@ -446,7 +360,7 @@ static int tryScheduleImportMeshDialog(Session* session) {
 static int tryScheduleRenderSaveDialog(Session* session) {
     if (!sessionTakeRenderSaveDialogRequest(session)) return 0;
 
-    char defaultPath[PATH_MAX] = {0};
+    char defaultPath[VKRT_PATH_MAX] = {0};
     resolveExistingParentPath("captures", NULL, defaultPath, sizeof(defaultPath));
 
     DialogRequest request = {0};
@@ -462,7 +376,7 @@ static int tryScheduleRenderSaveDialog(Session* session) {
 static int tryScheduleSequenceFolderDialog(Session* session) {
     if (!sessionTakeRenderSequenceFolderDialogRequest(session)) return 0;
 
-    char defaultPath[PATH_MAX] = {0};
+    char defaultPath[VKRT_PATH_MAX] = {0};
     resolveExistingParentPath(sessionGetRenderSequenceFolder(session), "captures", defaultPath, sizeof(defaultPath));
 
     DialogRequest request = {0};
@@ -481,9 +395,9 @@ void editorUIProcessDialogs(Session* session) {
     drainDialogResponse(session);
 
     if (gDialogState.workerStarted) {
-        mtx_lock(&gDialogState.mutex);
+        vkrtMutexLock(&gDialogState.mutex);
         uint8_t workerBusy = gDialogState.requestPending || gDialogState.requestActive || gDialogState.responsePending;
-        mtx_unlock(&gDialogState.mutex);
+        vkrtMutexUnlock(&gDialogState.mutex);
         if (workerBusy) return;
     }
 

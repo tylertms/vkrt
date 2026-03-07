@@ -1,5 +1,6 @@
 app_sources = files(
   'main.c',
+  'cli/cli.c',
   'session/session.c',
   'mesh/loader.c',
   'mesh/controller.c',
@@ -12,5 +13,4 @@ app_sources = files(
   'editor/inspector/camera.c',
   'editor/inspector/render.c',
   'editor/inspector/scene.c',
-  'editor/dialogs.c',
 )

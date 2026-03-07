@@ -2,6 +2,8 @@
 
 #include <stddef.h>
 
+#include "platform.h"
+
 char* stringDuplicate(const char* value);
 const char* pathBasename(const char* path);
 char* pathTrimTrailingSeparators(char* path);

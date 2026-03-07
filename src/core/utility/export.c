@@ -4,6 +4,8 @@
 #include "command/pool.h"
 #include "command/record.h"
 #include "debug.h"
+#include "io.h"
+#include "platform.h"
 
 #define SPNG_STATIC
 #include "spng.h"
@@ -13,7 +15,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <pthread.h>
 
 typedef struct PNGEncodeJob {
     struct PNGEncodeJob* next;
@@ -65,15 +66,16 @@ static int writePNGFile(const char* path, const uint16_t* rgba16, uint32_t width
     return 0;
 }
 
-static pthread_mutex_t gPNGWorkerStateLock = PTHREAD_MUTEX_INITIALIZER;
-static pthread_mutex_t gPNGWorkerLock;
-static pthread_cond_t gPNGWorkerCondition;
-static pthread_t gPNGWorkerThread;
+static VKRT_Mutex gPNGWorkerStateLock;
+static VKRT_Mutex gPNGWorkerLock;
+static VKRT_Cond gPNGWorkerCondition;
+static VKRT_Thread gPNGWorkerThread;
 static PNGEncodeJob* gPNGWorkerHead = NULL;
 static PNGEncodeJob* gPNGWorkerTail = NULL;
 static int gPNGWorkerStop = 0;
 static int gPNGWorkerPrimitivesInitialized = 0;
 static int gPNGWorkerThreadRunning = 0;
+static int gPNGWorkerStateLockInitialized = 0;
 
 static void freePNGEncodeJob(PNGEncodeJob* job) {
     if (!job) return;
@@ -82,17 +84,17 @@ static void freePNGEncodeJob(PNGEncodeJob* job) {
     free(job);
 }
 
-static void* pngWorkerMain(void* userData) {
+static int pngWorkerMain(void* userData) {
     (void)userData;
 
     for (;;) {
-        pthread_mutex_lock(&gPNGWorkerLock);
+        vkrtMutexLock(&gPNGWorkerLock);
         while (!gPNGWorkerStop && gPNGWorkerHead == NULL) {
-            pthread_cond_wait(&gPNGWorkerCondition, &gPNGWorkerLock);
+            vkrtCondWait(&gPNGWorkerCondition, &gPNGWorkerLock);
         }
 
         if (gPNGWorkerStop && gPNGWorkerHead == NULL) {
-            pthread_mutex_unlock(&gPNGWorkerLock);
+            vkrtMutexUnlock(&gPNGWorkerLock);
             break;
         }
 
@@ -101,7 +103,7 @@ static void* pngWorkerMain(void* userData) {
         if (gPNGWorkerHead == NULL) {
             gPNGWorkerTail = NULL;
         }
-        pthread_mutex_unlock(&gPNGWorkerLock);
+        vkrtMutexUnlock(&gPNGWorkerLock);
 
         int result = writePNGFile(job->path, job->rgba16, job->width, job->height);
         if (result == 0) {
@@ -110,17 +112,17 @@ static void* pngWorkerMain(void* userData) {
         freePNGEncodeJob(job);
     }
 
-    return NULL;
+    return 0;
 }
 
 static int initializePNGWorkerPrimitivesLocked(void) {
     if (gPNGWorkerPrimitivesInitialized) return 0;
 
-    if (pthread_mutex_init(&gPNGWorkerLock, NULL) != 0) {
+    if (vkrtMutexInit(&gPNGWorkerLock, VKRT_MUTEX_PLAIN) != VKRT_THREAD_SUCCESS) {
         return -1;
     }
-    if (pthread_cond_init(&gPNGWorkerCondition, NULL) != 0) {
-        pthread_mutex_destroy(&gPNGWorkerLock);
+    if (vkrtCondInit(&gPNGWorkerCondition) != VKRT_THREAD_SUCCESS) {
+        vkrtMutexDestroy(&gPNGWorkerLock);
         return -1;
     }
     gPNGWorkerPrimitivesInitialized = 1;
@@ -135,7 +137,7 @@ static int startPNGWorkerLocked(void) {
     gPNGWorkerHead = NULL;
     gPNGWorkerTail = NULL;
 
-    if (pthread_create(&gPNGWorkerThread, NULL, pngWorkerMain, NULL) != 0) {
+    if (vkrtThreadCreate(&gPNGWorkerThread, pngWorkerMain, NULL) != VKRT_THREAD_SUCCESS) {
         return -1;
     }
     gPNGWorkerThreadRunning = 1;
@@ -143,9 +145,17 @@ static int startPNGWorkerLocked(void) {
 }
 
 static int ensurePNGWorkerStarted(void) {
-    pthread_mutex_lock(&gPNGWorkerStateLock);
+    if (!gPNGWorkerStateLockInitialized) {
+        if (vkrtMutexInit(&gPNGWorkerStateLock, VKRT_MUTEX_PLAIN) != VKRT_THREAD_SUCCESS) {
+            LOG_ERROR("Failed to initialize PNG exporter state lock");
+            return -1;
+        }
+        gPNGWorkerStateLockInitialized = 1;
+    }
+
+    vkrtMutexLock(&gPNGWorkerStateLock);
     int result = startPNGWorkerLocked();
-    pthread_mutex_unlock(&gPNGWorkerStateLock);
+    vkrtMutexUnlock(&gPNGWorkerStateLock);
 
     if (result != 0) {
         LOG_ERROR("Failed to initialize PNG exporter worker");
@@ -172,7 +182,7 @@ static int queuePNGWrite(const char* path, uint16_t* rgba16, uint32_t width, uin
         return -1;
     }
 
-    job->path = strdup(path);
+    job->path = stringDuplicate(path);
     if (!job->path) {
         free(rgba16);
         free(job);
@@ -185,9 +195,9 @@ static int queuePNGWrite(const char* path, uint16_t* rgba16, uint32_t width, uin
     job->height = height;
     job->next = NULL;
 
-    pthread_mutex_lock(&gPNGWorkerLock);
+    vkrtMutexLock(&gPNGWorkerLock);
     if (gPNGWorkerStop) {
-        pthread_mutex_unlock(&gPNGWorkerLock);
+        vkrtMutexUnlock(&gPNGWorkerLock);
         freePNGEncodeJob(job);
         LOG_ERROR("PNG exporter is shutting down");
         return -1;
@@ -199,41 +209,52 @@ static int queuePNGWrite(const char* path, uint16_t* rgba16, uint32_t width, uin
         gPNGWorkerHead = job;
     }
     gPNGWorkerTail = job;
-    pthread_cond_signal(&gPNGWorkerCondition);
-    pthread_mutex_unlock(&gPNGWorkerLock);
+    vkrtCondSignal(&gPNGWorkerCondition);
+    vkrtMutexUnlock(&gPNGWorkerLock);
 
     return 0;
 }
 
 void shutdownRenderPNGExporter(void) {
-    pthread_mutex_lock(&gPNGWorkerStateLock);
+    if (!gPNGWorkerStateLockInitialized) return;
+
+    vkrtMutexLock(&gPNGWorkerStateLock);
     if (!gPNGWorkerThreadRunning) {
-        pthread_mutex_unlock(&gPNGWorkerStateLock);
+        vkrtMutexUnlock(&gPNGWorkerStateLock);
         return;
     }
 
-    pthread_mutex_lock(&gPNGWorkerLock);
+    vkrtMutexLock(&gPNGWorkerLock);
     gPNGWorkerStop = 1;
-    pthread_cond_broadcast(&gPNGWorkerCondition);
-    pthread_mutex_unlock(&gPNGWorkerLock);
+    vkrtCondBroadcast(&gPNGWorkerCondition);
+    vkrtMutexUnlock(&gPNGWorkerLock);
 
-    pthread_t workerThread = gPNGWorkerThread;
+    VKRT_Thread workerThread = gPNGWorkerThread;
     gPNGWorkerThreadRunning = 0;
-    pthread_join(workerThread, NULL);
+    vkrtThreadJoin(workerThread, NULL);
 
-    pthread_mutex_lock(&gPNGWorkerLock);
+    vkrtMutexLock(&gPNGWorkerLock);
     PNGEncodeJob* job = gPNGWorkerHead;
     gPNGWorkerHead = NULL;
     gPNGWorkerTail = NULL;
     gPNGWorkerStop = 0;
-    pthread_mutex_unlock(&gPNGWorkerLock);
-    pthread_mutex_unlock(&gPNGWorkerStateLock);
+    vkrtMutexUnlock(&gPNGWorkerLock);
+    vkrtMutexUnlock(&gPNGWorkerStateLock);
 
     while (job) {
         PNGEncodeJob* next = job->next;
         freePNGEncodeJob(job);
         job = next;
     }
+
+    if (gPNGWorkerPrimitivesInitialized) {
+        vkrtCondDestroy(&gPNGWorkerCondition);
+        vkrtMutexDestroy(&gPNGWorkerLock);
+        gPNGWorkerPrimitivesInitialized = 0;
+    }
+
+    vkrtMutexDestroy(&gPNGWorkerStateLock);
+    gPNGWorkerStateLockInitialized = 0;
 
 }
 

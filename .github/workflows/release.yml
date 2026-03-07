@@ -1,0 +1,143 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Windows Release
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install Vulkan SDK
+        uses: humbletim/install-vulkan-sdk@v1.2
+        with:
+          version: 1.4.309.0
+          cache: true
+
+      - name: Install Meson and Ninja
+        run: python -m pip install meson ninja
+
+      - name: Configure
+        run: meson setup build --buildtype=release -Db_vscrt=static_from_buildtype
+
+      - name: Build
+        run: meson compile -C build
+
+      - name: Test
+        run: ./build/vkrt --help && ./build/vkrt --version
+        shell: bash
+
+      - name: Stage Release
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path vkrt-windows-x64 | Out-Null
+          Copy-Item build\vkrt.exe vkrt-windows-x64
+          Compress-Archive -Path vkrt-windows-x64 -DestinationPath vkrt-windows-x64.zip -Force
+
+      - name: Upload Release Asset
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: vkrt-windows-x64.zip
+
+      - name: Upload Workflow Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vkrt-windows-x64
+          path: vkrt-windows-x64.zip
+
+  build-linux:
+    name: Linux Release
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Vulkan SDK
+        uses: humbletim/install-vulkan-sdk@v1.2
+        with:
+          version: 1.4.309.0
+          cache: true
+
+      - name: Install Linux Packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libdbus-1-dev pkg-config libfuse2
+
+      - name: Install Meson and Ninja
+        run: python -m pip install meson ninja
+
+      - name: Configure
+        run: meson setup build --buildtype=release -Dnfd_backend=portal
+
+      - name: Build
+        run: meson compile -C build
+
+      - name: Test
+        run: ./build/vkrt --help && ./build/vkrt --version
+
+      - name: Build AppImage
+        run: |
+          mkdir -p AppDir/usr/bin AppDir/usr/lib
+
+          cp build/vkrt AppDir/usr/bin/
+
+          DBUS_LIB=$(ldconfig -p | grep 'libdbus-1.so.3 ' | head -1 | awk '{print $NF}')
+          [ -n "$DBUS_LIB" ] && cp "$DBUS_LIB" AppDir/usr/lib/
+
+          printf '[Desktop Entry]\nType=Application\nName=vkrt\nExec=vkrt\nIcon=vkrt\nCategories=Graphics;\nTerminal=false\n' > AppDir/vkrt.desktop
+          printf '\x89PNG\r\n\x1a\n' > AppDir/vkrt.png
+
+          printf '#!/bin/bash\nHERE="$(dirname "$(readlink -f "$0")")"\nexport LD_LIBRARY_PATH="${HERE}/usr/lib:${LD_LIBRARY_PATH}"\nexec "${HERE}/usr/bin/vkrt" "$@"\n' > AppDir/AppRun
+          chmod +x AppDir/AppRun
+
+          wget -q "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage" -O appimagetool
+          chmod +x appimagetool
+
+          ARCH=x86_64 ./appimagetool AppDir vkrt-linux-x86_64.AppImage
+
+      - name: Stage Tarball
+        run: |
+          mkdir -p vkrt-linux-x64
+          cp build/vkrt vkrt-linux-x64/
+          tar -czf vkrt-linux-x64.tar.gz vkrt-linux-x64
+
+      - name: Upload Release Assets
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            vkrt-linux-x64.tar.gz
+            vkrt-linux-x86_64.AppImage
+
+      - name: Upload Workflow Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: vkrt-linux-x64
+          path: |
+            vkrt-linux-x64.tar.gz
+            vkrt-linux-x86_64.AppImage
