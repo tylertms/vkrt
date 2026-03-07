@@ -52,7 +52,7 @@ jobs:
           Copy-Item build\vkrt.exe vkrt-windows-x64
           Copy-Item -Recurse assets vkrt-windows-x64
           Copy-Item README.md vkrt-windows-x64
-          Compress-Archive -Path vkrt-windows-x64 -DestinationPath vkrt-windows-x64.zip -Force
+          Compress-Archive -Path vkrt-windows-x64\* -DestinationPath vkrt-windows-x64.zip -Force
 
       - name: Upload Release Asset
         if: github.ref_type == 'tag'
