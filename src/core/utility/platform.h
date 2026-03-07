@@ -18,7 +18,7 @@ typedef HANDLE VKRT_Thread;
 typedef int (*VKRT_ThreadFunc)(void* userData);
 
 #if defined(MAX_PATH)
-#define VKRT_PATH_MAX 4096
+#define VKRT_PATH_MAX MAX_PATH
 #else
 #define VKRT_PATH_MAX 4096
 #endif

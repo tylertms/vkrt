@@ -74,9 +74,9 @@ app_core_includes = include_directories(
 
 app_includes = [
   project_includes,
-  external_includes,
   app_local_includes,
   app_core_includes,
+  external_includes,
 ]
 
 core_build_includes = [
@@ -152,6 +152,7 @@ imgui_dependencies = [
 dcimgui = static_library('dcimgui',
   include_directories: [external_includes],
   dependencies: imgui_dependencies,
+  cpp_args: [define_prefix + 'GLFW_INCLUDE_NONE'],
   sources: files(
     'external/imgui/src/dcimgui.cpp',
     'external/imgui/src/dcimgui_impl_glfw.cpp',
