@@ -39,7 +39,7 @@ spng = static_library('spng',
   sources: files('../../external/spng/spng.c'),
   include_directories: include_directories('../../external/spng', is_system: true),
   dependencies: [zlib_dep],
-  c_args: c_warning_suppression_args,
+  override_options: ['warning_level=0'],
 )
 
 vkrt = static_library('vkrt_core',

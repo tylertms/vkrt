@@ -86,7 +86,7 @@ jobs:
       - name: Install Linux Packages
         run: |
           sudo apt-get update
-          sudo apt-get install -y libdbus-1-dev pkg-config libfuse2 libwayland-dev libxkbcommon-dev wayland-protocols
+          sudo apt-get install -y libdbus-1-dev pkg-config libfuse2 libwayland-dev libxkbcommon-dev wayland-protocols libxrandr-dev libxinerama-dev libxi-dev libxcursor-dev
 
       - name: Install Meson and Ninja
         run: python -m pip install meson ninja

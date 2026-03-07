@@ -17,8 +17,6 @@ cpp = meson.get_compiler('cpp')
 cmake = import('cmake')
 
 c_args = []
-c_warning_suppression_args = cc.get_argument_syntax() == 'msvc' ? ['/w'] : ['-w']
-cpp_warning_suppression_args = cpp.get_argument_syntax() == 'msvc' ? ['/w'] : ['-w']
 define_prefix = cc.get_argument_syntax() == 'msvc' ? '/D' : '-D'
 
 if sys == 'linux' and cc.get_argument_syntax() == 'gcc'
@@ -96,6 +94,7 @@ vulkan_dep = dependency('vulkan', required: true)
 glfw_dep = dependency('glfw3', required: false, allow_fallback: false)
 if not glfw_dep.found()
   glfw_options = cmake.subproject_options()
+  glfw_options.append_compile_args('c', cc.get_argument_syntax() == 'msvc' ? '/w' : '-w')
   glfw_options.add_cmake_defines({
     'BUILD_SHARED_LIBS': 'OFF',
     'GLFW_BUILD_DOCS': 'OFF',
@@ -113,7 +112,7 @@ if sys == 'windows'
     'zlib',
     required: true,
     fallback: ['zlib', 'zlib_dep'],
-    default_options: ['default_library=static'],
+    default_options: ['default_library=static', 'warning_level=0'],
   )
 else
   zlib_dep = dependency('zlib', required: false, allow_fallback: false)
@@ -122,7 +121,7 @@ else
       'zlib',
       required: true,
       fallback: ['zlib', 'zlib_dep'],
-      default_options: ['default_library=static'],
+      default_options: ['default_library=static', 'warning_level=0'],
     )
   endif
 endif
@@ -166,7 +165,7 @@ dcimgui = static_library('dcimgui',
     'external/imgui/src/imgui_tables.cpp',
     'external/imgui/src/imgui_widgets.cpp',
   ),
-  cpp_args: cpp_warning_suppression_args,
+  override_options: ['warning_level=0'],
 )
 
 subdir('src')
@@ -179,7 +178,7 @@ app_link_with = [vkrt, dcimgui]
 if not file_dialogs_opt.disabled()
   nfd_source = []
   nfd_deps = []
-  nfd_cpp_args = cpp_warning_suppression_args
+  nfd_cpp_args = []
   nfd_objc_args = ['-w']
 
   if sys == 'darwin'
@@ -257,6 +256,7 @@ if not file_dialogs_opt.disabled()
       dependencies: nfd_deps,
       cpp_args: nfd_cpp_args,
       objc_args: nfd_objc_args,
+      override_options: ['warning_level=0'],
     )
     app_dialog_source = files('src/app/editor/dialogs.c')
     app_link_with += [nfd]

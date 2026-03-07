@@ -3,7 +3,14 @@
 #include <stdint.h>
 
 #if defined(_WIN32)
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable: 4005)
+#endif
 #include <windows.h>
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 
 typedef CRITICAL_SECTION VKRT_Mutex;
 typedef CONDITION_VARIABLE VKRT_Cond;
