@@ -63,7 +63,6 @@ static inline Material VKRT_materialDefault(void) {
         .emissionColor = {1.0f, 1.0f, 1.0f},
         .emissionLuminance = 0.0f,
         .metallic = 0.0f,
-        .subsurface = 0.0f,
         .specular = 0.5f,
         .specularTint = 0.0f,
         .anisotropic = 0.0f,

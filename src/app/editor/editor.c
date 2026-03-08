@@ -393,6 +393,23 @@ static void clearViewportSelectionOnEscape(VKRT* vkrt) {
     }
 }
 
+static void queueSelectedMeshRemovalOnDelete(VKRT* vkrt, Session* session, const VKRT_PublicState* state) {
+    if (!vkrt || !session || !state) return;
+    if (state->renderModeActive) return;
+
+    ImGuiIO* io = ImGui_GetIO();
+    if (io->WantTextInput || ImGui_IsAnyItemActive() || ImGui_IsPopupOpen(NULL, ImGuiPopupFlags_AnyPopupId)) {
+        return;
+    }
+    if (!ImGui_IsKeyPressed(ImGuiKey_Delete) && !ImGui_IsKeyPressed(ImGuiKey_Backspace)) return;
+
+    uint32_t selectedMeshIndex = VKRT_INVALID_INDEX;
+    if (VKRT_getSelectedMesh(vkrt, &selectedMeshIndex) != VKRT_SUCCESS) return;
+    if (selectedMeshIndex == VKRT_INVALID_INDEX) return;
+
+    sessionQueueMeshRemoval(session, selectedMeshIndex);
+}
+
 static void applyEditorCameraInput(
     VKRT* vkrt,
     const VKRT_PublicState* state,
@@ -558,6 +575,7 @@ void editorUIUpdate(VKRT* vkrt, Session* session) {
 
     VKRT_RuntimeSnapshot runtime = {0};
     const VKRT_PublicState* state = queryEditorFrameState(vkrt, &runtime);
+    queueSelectedMeshRemovalOnDelete(vkrt, session, state);
 
     drawMainMenuBar(vkrt, session, state);
     drawWorkspaceDockspace();

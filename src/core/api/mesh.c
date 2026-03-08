@@ -26,9 +26,7 @@ static Material sanitizeMaterial(Material material) {
     material.sheenTint = clampFloatValue(material.sheenTint, 0.0f, 1.0f);
     material.clearcoat = clampFloatValue(material.clearcoat, 0.0f, 1.0f);
     material.clearcoatGloss = clampFloatValue(material.clearcoatGloss, 0.0f, 1.0f);
-    material.subsurface = clampFloatValue(material.subsurface, 0.0f, 1.0f);
     material.emissionLuminance = fmaxf(material.emissionLuminance, 0.0f);
-    memset(material.padding0, 0, sizeof(material.padding0));
 
     return material;
 }
