@@ -15,10 +15,8 @@
 // https://blog.selfshadow.com/publications/turquin/ms_comp_final.pdf
 // Enterprise PBR Shading Model:
 // https://dassaultsystemes-technology.github.io/EnterprisePBRShadingModel/spec-2025x.md.html
-// Generalization of Lambert's Reflectance Model:
-// https://cave.cs.columbia.edu/Statics/publications/pdfs/Oren_SIGGRAPH94.pdf
-// A tiny improvement of Oren-Nayar reflectance model:
-// https://mimosa-pudica.net/improved-oren-nayar.html
+// EON: A Practical Energy-Preserving Rough Diffuse BRDF:
+// https://jcgt.org/published/0014/01/06/paper.pdf
 // Production Friendly Microfacet Sheen BRDF:
 // https://blog.selfshadow.com/publications/s2017-shading-course/imageworks/s2017_pbs_imageworks_sheen.pdf
 
@@ -64,7 +62,7 @@ BSDFEval evalBSDFAll(vec3 normal, vec3 incoming, vec3 outgoing, Material materia
             + surface.specularWeight * specularPdf
             + surface.clearcoatWeight * clearcoatPdf;
 
-    vec3 diffuse = evalImprovedOrenNayar(
+    vec3 diffuse = evalEONDiffuse(
             material.baseColor, surface.diffuseRoughness, NdotL, NdotV, dot(incoming, outgoing))
             * (1.0 - material.metallic);
 
