@@ -28,16 +28,41 @@ uint findEmissiveMeshRecord(uint meshIndex) {
     return VKRT_INVALID_INDEX;
 }
 
-uint sampleEmissiveMesh(inout uint state) {
-    float choose = rand(state);
-    uint lo = 0u;
-    uint hi = scene.emissiveMeshCount;
-    while (lo < hi) {
-        uint mid = lo + (hi - lo) / 2u;
-        if (choose <= emissiveMeshBuffer.meshes[mid].stats.x) hi = mid;
-        else lo = mid + 1u;
+float emissiveMeshSelectionWeight(EmissiveMesh light, vec3 shadingPoint) {
+    vec3 toCenter = light.bounds.xyz - shadingPoint;
+    float dist2 = dot(toCenter, toCenter);
+    float radius2 = light.bounds.w * light.bounds.w;
+    return light.stats.w / max(dist2 - radius2, 1e-4);
+}
+
+uint sampleEmissiveMesh(vec3 shadingPoint, inout uint state, out float outPdf) {
+    outPdf = 0.0;
+
+    float totalWeight = 0.0;
+    for (uint i = 0u; i < scene.emissiveMeshCount; i++) {
+        totalWeight += emissiveMeshSelectionWeight(emissiveMeshBuffer.meshes[i], shadingPoint);
     }
-    return min(lo, scene.emissiveMeshCount - 1u);
+    if (totalWeight <= 1e-8) {
+        return VKRT_INVALID_INDEX;
+    }
+
+    float choose = rand(state) * totalWeight;
+    float cumulative = 0.0;
+    uint chosen = scene.emissiveMeshCount - 1u;
+    float chosenWeight = 0.0;
+
+    for (uint i = 0u; i < scene.emissiveMeshCount; i++) {
+        float weight = emissiveMeshSelectionWeight(emissiveMeshBuffer.meshes[i], shadingPoint);
+        cumulative += weight;
+        if (choose <= cumulative) {
+            chosen = i;
+            chosenWeight = weight;
+            break;
+        }
+    }
+
+    outPdf = chosenWeight / totalWeight;
+    return chosen;
 }
 
 vec3 emissiveRadiance(EmissiveMesh light, bool timelineActive, float observationTime, float eventTime) {
@@ -68,7 +93,9 @@ bool sampleDirectLight(
         return false;
     }
 
-    uint lightIndex = sampleEmissiveMesh(state);
+    float meshSelectionPdf = 0.0;
+    uint lightIndex = sampleEmissiveMesh(shadingPoint, state, meshSelectionPdf);
+    if (lightIndex == VKRT_INVALID_INDEX || meshSelectionPdf <= 0.0) return false;
 
     EmissiveMesh light = emissiveMeshBuffer.meshes[lightIndex];
     uint triangleCount = light.indices.z;
@@ -116,8 +143,7 @@ bool sampleDirectLight(
     float cosLight = abs(dot(lightNormal, -wi));
     if (cosLight <= 1e-7) return false;
 
-    float pSelectMesh = light.stats.z;
-    float pArea = pSelectMesh / totalArea;
+    float pArea = meshSelectionPdf / totalArea;
     float pOmega = pArea * dist2 / max(cosLight, 1e-6);
     if (pOmega <= 1e-8) return false;
 
@@ -137,8 +163,18 @@ float lightPdfForEmitterHit(uint meshIndex, uint primitiveIndex, vec3 previousPo
     EmissiveMesh light = emissiveMeshBuffer.meshes[lightIndex];
     if (primitiveIndex >= light.indices.z || light.indices.z == 0u) return 0.0;
     float totalArea = light.stats.y;
-    float meshSelectionPdf = light.stats.z;
-    if (totalArea <= 0.0 || meshSelectionPdf <= 0.0) return 0.0;
+    if (totalArea <= 0.0) return 0.0;
+
+    float totalWeight = 0.0;
+    float chosenWeight = 0.0;
+    for (uint i = 0u; i < scene.emissiveMeshCount; i++) {
+        float weight = emissiveMeshSelectionWeight(emissiveMeshBuffer.meshes[i], previousPoint);
+        totalWeight += weight;
+        if (i == lightIndex) chosenWeight = weight;
+    }
+    if (totalWeight <= 1e-8 || chosenWeight <= 0.0) return 0.0;
+
+    float meshSelectionPdf = chosenWeight / totalWeight;
 
     uint triIndex = light.indices.y + primitiveIndex;
     if (triIndex >= scene.emissiveTriangleCount) return 0.0;

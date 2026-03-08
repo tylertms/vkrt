@@ -25,8 +25,8 @@ bool traceShadowVisibility(vec3 origin, vec3 direction, float maxDistance, float
     if (maxDistance <= rayMinDistance) return false;
 
     const uint shadowRayFlags = gl_RayFlagsOpaqueEXT
-        | gl_RayFlagsTerminateOnFirstHitEXT
-        | gl_RayFlagsSkipClosestHitShaderEXT;
+            | gl_RayFlagsTerminateOnFirstHitEXT
+            | gl_RayFlagsSkipClosestHitShaderEXT;
 
     payload.didHit = true;
     traceRayEXT(topLevelAS, shadowRayFlags, 0xFF, 0, 0, 0, origin, rayMinDistance, direction, maxDistance, 0);

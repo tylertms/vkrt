@@ -88,6 +88,8 @@ VKRT_Result rebuildLightBuffers(VKRT* vkrt) {
         VkTransformMatrixKHR transform = getMeshTransform(&mesh->info);
         float totalArea = 0.0f;
         uint32_t triangleOffset = triangleWriteIndex;
+        vec3 boundsMin = {INFINITY, INFINITY, INFINITY};
+        vec3 boundsMax = {-INFINITY, -INFINITY, -INFINITY};
 
         for (uint32_t tri = 0; tri < triangleCount; tri++) {
             uint32_t i0 = mesh->indices[tri * 3u + 0u];
@@ -113,6 +115,15 @@ VKRT_Result rebuildLightBuffers(VKRT* vkrt) {
                 area = 0.5f * glm_vec3_norm(crossE);
                 if (!isfinite(area) || area < 0.0f) area = 0.0f;
                 totalArea += area;
+
+                for (int c = 0; c < 3; c++) {
+                    if (p0[c] < boundsMin[c]) boundsMin[c] = p0[c];
+                    if (p1[c] < boundsMin[c]) boundsMin[c] = p1[c];
+                    if (p2[c] < boundsMin[c]) boundsMin[c] = p2[c];
+                    if (p0[c] > boundsMax[c]) boundsMax[c] = p0[c];
+                    if (p1[c] > boundsMax[c]) boundsMax[c] = p1[c];
+                    if (p2[c] > boundsMax[c]) boundsMax[c] = p2[c];
+                }
 
                 float* v0p = mesh->vertices[i0].position;
                 float* v1p = mesh->vertices[i1].position;
@@ -160,6 +171,38 @@ VKRT_Result rebuildLightBuffers(VKRT* vkrt) {
             continue;
         }
 
+        vec3 boundsCenter = {
+            0.5f * (boundsMin[0] + boundsMax[0]),
+            0.5f * (boundsMin[1] + boundsMax[1]),
+            0.5f * (boundsMin[2] + boundsMax[2]),
+        };
+        float boundsRadius = 0.0f;
+        for (uint32_t tri = triangleOffset; tri < triangleWriteIndex; tri++) {
+            vec3 p0 = {
+                emissiveTriangles[tri].v0Area[0],
+                emissiveTriangles[tri].v0Area[1],
+                emissiveTriangles[tri].v0Area[2],
+            };
+            vec3 p1 = {
+                p0[0] + emissiveTriangles[tri].e1Pad[0],
+                p0[1] + emissiveTriangles[tri].e1Pad[1],
+                p0[2] + emissiveTriangles[tri].e1Pad[2],
+            };
+            vec3 p2 = {
+                p0[0] + emissiveTriangles[tri].e2Pad[0],
+                p0[1] + emissiveTriangles[tri].e2Pad[1],
+                p0[2] + emissiveTriangles[tri].e2Pad[2],
+            };
+            vec3 offset = {0.0f, 0.0f, 0.0f};
+
+            glm_vec3_sub(p0, boundsCenter, offset);
+            boundsRadius = fmaxf(boundsRadius, glm_vec3_norm(offset));
+            glm_vec3_sub(p1, boundsCenter, offset);
+            boundsRadius = fmaxf(boundsRadius, glm_vec3_norm(offset));
+            glm_vec3_sub(p2, boundsCenter, offset);
+            boundsRadius = fmaxf(boundsRadius, glm_vec3_norm(offset));
+        }
+
         float areaCdf = 0.0f;
         for (uint32_t tri = triangleOffset; tri < triangleWriteIndex; tri++) {
             areaCdf += emissiveTriangles[tri].v0Area[3];
@@ -184,6 +227,10 @@ VKRT_Result rebuildLightBuffers(VKRT* vkrt) {
         meshGPU.stats[1] = totalArea;
         meshGPU.stats[2] = 0.0f;
         meshGPU.stats[3] = selectionWeight;
+        meshGPU.bounds[0] = boundsCenter[0];
+        meshGPU.bounds[1] = boundsCenter[1];
+        meshGPU.bounds[2] = boundsCenter[2];
+        meshGPU.bounds[3] = boundsRadius;
 
         emissiveMeshes[meshWriteIndex++] = meshGPU;
         totalSelectionWeight += selectionWeight;
@@ -191,26 +238,6 @@ VKRT_Result rebuildLightBuffers(VKRT* vkrt) {
 
     emissiveMeshCount = meshWriteIndex;
     emissiveTriangleCount = triangleWriteIndex;
-
-    if (emissiveMeshCount > 0) {
-        float cumulative = 0.0f;
-        if (totalSelectionWeight <= 0.0f || !isfinite(totalSelectionWeight)) {
-            float uniform = 1.0f / (float)emissiveMeshCount;
-            for (uint32_t i = 0; i < emissiveMeshCount; i++) {
-                emissiveMeshes[i].stats[2] = uniform;
-                cumulative += uniform;
-                emissiveMeshes[i].stats[0] = cumulative;
-            }
-        } else {
-            for (uint32_t i = 0; i < emissiveMeshCount; i++) {
-                float p = emissiveMeshes[i].stats[3] / totalSelectionWeight;
-                emissiveMeshes[i].stats[2] = p;
-                cumulative += p;
-                emissiveMeshes[i].stats[0] = cumulative;
-            }
-        }
-        emissiveMeshes[emissiveMeshCount - 1u].stats[0] = 1.0f;
-    }
 
     uint32_t uploadMeshCount = emissiveMeshCount > 0 ? emissiveMeshCount : 1u;
     uint32_t uploadTriangleCount = emissiveTriangleCount > 0 ? emissiveTriangleCount : 1u;

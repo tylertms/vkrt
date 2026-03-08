@@ -51,6 +51,7 @@ struct EmissiveMesh {
     uvec4 indices;
     vec4 emission;
     vec4 stats;
+    vec4 bounds;
 };
 
 struct EmissiveTriangle {

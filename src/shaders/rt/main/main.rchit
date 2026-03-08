@@ -24,6 +24,7 @@ void main() {
 
     vec3 localNormal = normal0 * (1.0 - u - v) + normal1 * u + normal2 * v;
     vec3 worldNormal = normalize(localNormal * mat3(gl_WorldToObjectEXT));
+    worldNormal = faceforward(worldNormal, gl_WorldRayDirectionEXT, worldNormal);
     vec3 worldPos = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
 
     uint materialIndex = meshInfo.infos[instance].materialIndex;

@@ -9,7 +9,7 @@
 #include "integrator/path.glsl"
 #include "integrator/debug.glsl"
 
-vec3 trace(ivec2 pixel, inout uint state, out uint primaryInstanceIndex) {
+vec3 trace(ivec2 pixel, vec2 jitter, inout uint state, out uint primaryInstanceIndex) {
     ivec2 viewportOrigin = ivec2(scene.viewportRect.xy);
     ivec2 viewportSize = ivec2(scene.viewportRect.zw);
 
@@ -19,7 +19,6 @@ vec3 trace(ivec2 pixel, inout uint state, out uint primaryInstanceIndex) {
 
     primaryInstanceIndex = VKRT_INVALID_INDEX;
 
-    vec2 jitter = vec2(rand(state), rand(state));
     vec2 viewportPixel = vec2(pixel - viewportOrigin) + jitter;
     vec2 inUV = viewportPixel / vec2(viewportSize);
     vec2 d = inUV * 2.0 - 1.0;

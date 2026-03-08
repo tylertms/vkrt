@@ -38,4 +38,20 @@ vec3 randDir(inout uint state) {
     return vec3(r * cos(a), r * sin(a), z);
 }
 
+vec2 stratifiedPixelJitter(uint sampleIndex, uint sampleCount, inout uint state) {
+    if (sampleCount <= 1u) {
+        return vec2(rand(state), rand(state));
+    }
+
+    float strataXf = ceil(sqrt(float(sampleCount)));
+    uint strataX = max(uint(strataXf), 1u);
+    uint strataY = max((sampleCount + strataX - 1u) / strataX, 1u);
+    uint clampedIndex = min(sampleIndex, sampleCount - 1u);
+    uint sx = clampedIndex % strataX;
+    uint sy = clampedIndex / strataX;
+
+    vec2 jitter = vec2(rand(state), rand(state));
+    return (vec2(float(sx), float(sy)) + jitter) / vec2(float(strataX), float(strataY));
+}
+
 #endif

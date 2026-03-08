@@ -41,9 +41,10 @@ void main() {
     for (uint sampleIndex = 0; sampleIndex < spp; sampleIndex++) {
         uint sampleNumber = previousSamples + sampleIndex;
         uint state = initRngState(rngBase, sampleNumber);
+        vec2 jitter = stratifiedPixelJitter(sampleIndex, spp, state);
 
         uint primaryInstanceIndex = VKRT_INVALID_INDEX;
-        vec3 sampleRadiance = trace(pixel, state, primaryInstanceIndex);
+        vec3 sampleRadiance = trace(pixel, jitter, state, primaryInstanceIndex);
 
         if (sampleIndex == 0u) {
             firstSamplePrimaryInstanceIndex = primaryInstanceIndex;
