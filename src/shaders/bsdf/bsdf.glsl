@@ -77,7 +77,9 @@ DisneyState disneyState(Material material) {
     state.sheenColor = mix(vec3(1.0), tint, material.sheenTint);
 
     state.diffuseWeight = (1.0 - material.metallic) * (baseLum + 0.5 * material.sheen);
-    state.specularWeight = luminance(state.spec0) + 0.25 * material.clearcoat;
+
+    float glossyBoost = mix(8.0, 1.0, material.roughness);
+    state.specularWeight = (luminance(state.spec0) + 0.25 * material.clearcoat) * glossyBoost;
 
     float sum = state.diffuseWeight + state.specularWeight;
     if (sum <= 1e-6) {
@@ -128,8 +130,8 @@ vec3 sampleAnisotropicGGXHalfVector(vec3 normal, float ax, float ay, inout uint 
     mat3 basis = disneyBasis(normal);
     return normalize(
         basis[0] * (sinTheta * cosPhi) +
-        basis[1] * (sinTheta * sinPhi) +
-        basis[2] * cosTheta
+            basis[1] * (sinTheta * sinPhi) +
+            basis[2] * cosTheta
     );
 }
 
@@ -158,7 +160,7 @@ BSDFEval evalBSDFAll(vec3 normal, vec3 incoming, vec3 outgoing, Material materia
 
     float Ds = GTR2Aniso(NdotH, HdotX, HdotY, state.ax, state.ay);
     result.pdf = state.diffuseWeight * (NdotL * INV_PI)
-        + state.specularWeight * (Ds * NdotH / (4.0 * LdotH));
+            + state.specularWeight * (Ds * NdotH / (4.0 * LdotH));
 
     float FL = schlickFresnel(NdotL);
     float FV = schlickFresnel(NdotV);
@@ -172,11 +174,11 @@ BSDFEval evalBSDFAll(vec3 normal, vec3 incoming, vec3 outgoing, Material materia
     float ss = 1.25 * (Fss * (1.0 / (NdotL + NdotV) - 0.5) + 0.5);
 
     vec3 diffuse = (INV_PI * mix(Fd, ss, material.subsurface) * material.baseColor
-        + FH * material.sheen * state.sheenColor) * (1.0 - material.metallic);
+            + FH * material.sheen * state.sheenColor) * (1.0 - material.metallic);
 
     vec3 Fs = mix(state.spec0, vec3(1.0), FH);
     float Gs = smithGGXAniso(NdotL, LdotX, LdotY, state.ax, state.ay)
-        * smithGGXAniso(NdotV, VdotX, VdotY, state.ax, state.ay);
+            * smithGGXAniso(NdotV, VdotX, VdotY, state.ax, state.ay);
     vec3 specular = Gs * Fs * Ds;
 
     float Dr = GTR1(NdotH, state.clearcoatAlpha);
