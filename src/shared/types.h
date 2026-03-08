@@ -32,8 +32,11 @@ struct MeshInfo {
 
 struct Material {
     vec3 baseColor;
-    float metallic;
     float roughness;
+    vec3 emissionColor;
+    float emissionLuminance;
+    float metallic;
+    float subsurface;
     float specular;
     float specularTint;
     float anisotropic;
@@ -41,12 +44,7 @@ struct Material {
     float sheenTint;
     float clearcoat;
     float clearcoatGloss;
-    float subsurface;
-    float transmission;
-    float ior;
-    float padding0[5];
-    vec3 emissionColor;
-    float emissionLuminance;
+    float padding0[3];
 };
 
 struct EmissiveMesh {

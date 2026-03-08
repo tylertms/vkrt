@@ -18,16 +18,12 @@ VKRT_Result vkrtWaitForAllInFlightFrames(const VKRT* vkrt) {
     return VKRT_SUCCESS;
 }
 
-static uint32_t vkrtMaterialRequiresBackfaces(const Material* material) {
-    return (material && material->transmission > 0.0f) ? 1u : 0u;
-}
-
 uint32_t vkrtResolveMeshRenderBackfaces(const Mesh* mesh) {
     if (!mesh) return 0u;
     if (mesh->renderBackfacesOverride >= 0) {
         return mesh->renderBackfacesOverride ? 1u : 0u;
     }
-    return vkrtMaterialRequiresBackfaces(&mesh->material);
+    return mesh->info.renderBackfaces ? 1u : 0u;
 }
 
 void vkrtMarkSceneResourcesDirty(VKRT* vkrt) {

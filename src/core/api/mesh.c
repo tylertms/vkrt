@@ -27,8 +27,6 @@ static Material sanitizeMaterial(Material material) {
     material.clearcoat = clampFloatValue(material.clearcoat, 0.0f, 1.0f);
     material.clearcoatGloss = clampFloatValue(material.clearcoatGloss, 0.0f, 1.0f);
     material.subsurface = clampFloatValue(material.subsurface, 0.0f, 1.0f);
-    material.transmission = clampFloatValue(material.transmission, 0.0f, 1.0f);
-    material.ior = fmaxf(material.ior, 1.0f);
     material.emissionLuminance = fmaxf(material.emissionLuminance, 0.0f);
     memset(material.padding0, 0, sizeof(material.padding0));
 
@@ -79,13 +77,6 @@ VKRT_Result VKRT_setMeshMaterial(VKRT* vkrt, uint32_t meshIndex, const Material*
     Material sanitized = sanitizeMaterial(*material);
     if (memcmp(&mesh->material, &sanitized, sizeof(sanitized)) == 0) return VKRT_SUCCESS;
     mesh->material = sanitized;
-
-    uint32_t nextBackfaces = vkrtResolveMeshRenderBackfaces(mesh);
-    if (mesh->info.renderBackfaces != nextBackfaces) {
-        mesh->info.renderBackfaces = nextBackfaces;
-        vkrtMarkSceneResourcesDirty(vkrt);
-    }
-
     vkrtMarkMaterialResourcesDirty(vkrt);
     resetSceneData(vkrt);
     return VKRT_SUCCESS;

@@ -119,14 +119,6 @@ static Material buildMaterial(const cgltf_material* sourceMaterial) {
         material.sheenTint = material.sheen > 0.0f ? 1.0f : 0.0f;
     }
 
-    if (sourceMaterial->has_transmission) {
-        material.transmission = sourceMaterial->transmission.transmission_factor;
-    }
-
-    if (sourceMaterial->has_ior) {
-        material.ior = sourceMaterial->ior.ior;
-    }
-
     float emissiveScale = sourceMaterial->has_emissive_strength
         ? sourceMaterial->emissive_strength.emissive_strength
         : 1.0f;

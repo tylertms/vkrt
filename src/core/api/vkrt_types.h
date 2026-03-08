@@ -59,8 +59,11 @@ typedef struct VKRT_CreateInfo {
 static inline Material VKRT_materialDefault(void) {
     return (Material){
         .baseColor = {0.8f, 0.8f, 0.8f},
+        .roughness = 0.5f,
+        .emissionColor = {1.0f, 1.0f, 1.0f},
+        .emissionLuminance = 0.0f,
         .metallic = 0.0f,
-        .roughness = 0.3f,
+        .subsurface = 0.0f,
         .specular = 0.5f,
         .specularTint = 0.0f,
         .anisotropic = 0.0f,
@@ -68,11 +71,6 @@ static inline Material VKRT_materialDefault(void) {
         .sheenTint = 0.5f,
         .clearcoat = 0.0f,
         .clearcoatGloss = 1.0f,
-        .subsurface = 0.0f,
-        .transmission = 0.0f,
-        .ior = 1.5f,
-        .emissionColor = {1.0f, 1.0f, 1.0f},
-        .emissionLuminance = 0.0f,
     };
 }
 

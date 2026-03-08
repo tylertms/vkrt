@@ -173,7 +173,6 @@ void meshControllerLoadDefaultAssets(VKRT* vkrt, Session* session) {
     const char* dragonPath = "assets/models/dragon.glb";
 
     Material neutralWhite = VKRT_materialDefault();
-    neutralWhite.specular = 0.0f;
     neutralWhite.roughness = 1.0f;
 
     Material leftWallMaterial = neutralWhite;

@@ -137,8 +137,6 @@ vec3 trace(ivec2 pixel, inout uint state, out uint primaryInstanceIndex) {
             TimelineSample emissionSample = sampleTimeline(observationTime - payload.time);
             applyTimelineEmission(material, emissionSample);
         }
-        bool emissiveSurface = material.emissionLuminance > 0.0;
-
         if (hitTimeInWindow && !neeOnly && material.emissionLuminance > 0.0) {
             vec3 emitted = material.emissionColor * material.emissionLuminance;
             float emissionWeight = 1.0;
@@ -149,7 +147,7 @@ vec3 trace(ivec2 pixel, inout uint state, out uint primaryInstanceIndex) {
             radiance += throughput * emitted * emissionWeight;
         }
 
-        if (misNeeEnabled && !bsdfOnly && !emissiveSurface) {
+        if (misNeeEnabled && !bsdfOnly) {
             DirectLightSample directSample;
             if (sampleDirectLight(payload.point, payload.time, observationTime, tlActive, state, directSample)
                     && directSample.pdf > 1e-8)
@@ -162,10 +160,9 @@ vec3 trace(ivec2 pixel, inout uint state, out uint primaryInstanceIndex) {
                             && traceShadowVisibility(payload.point,
                                 directSample.wi, shadowDistance, rayMinDistance))
                     {
-                        vec3 f = evalBSDF(payload.normal, directSample.wi, -ray.dir, material);
-                        float bsdfPdf = pdfBSDF(payload.normal, directSample.wi, -ray.dir, material);
-                        float misWeight = misPowerWeight(directSample.pdf, bsdfPdf);
-                        radiance += throughput * f * directSample.radiance *
+                        BSDFEval bsdfEval = evalBSDFAll(payload.normal, directSample.wi, -ray.dir, material);
+                        float misWeight = misPowerWeight(directSample.pdf, bsdfEval.pdf);
+                        radiance += throughput * bsdfEval.f * directSample.radiance *
                                 (cosSurface * exp(-fogDensity * directSample.distance) * misWeight / directSample.pdf);
                     }
                 }

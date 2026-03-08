@@ -159,33 +159,16 @@ static void drawMeshMaterialEditor(VKRT* vkrt, uint32_t meshIndex, const VKRT_Me
     materialChanged |= ImGui_ColorEdit3("Base Color", material.baseColor, ImGuiColorEditFlags_Float);
     materialChanged |= ImGui_SliderFloatEx("Metallic", &material.metallic, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     materialChanged |= ImGui_SliderFloatEx("Roughness", &material.roughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-    materialChanged |= ImGui_SliderFloatEx("Transmission", &material.transmission, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-    materialChanged |= ImGui_SliderFloatEx("IOR", &material.ior, 1.0f, 3.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-
-    if (ImGui_CollapsingHeader("Specular##material_specular_section", ImGuiTreeNodeFlags_None)) {
-        inspectorIndentSection();
-        materialChanged |= ImGui_SliderFloatEx("Specular", &material.specular, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-        materialChanged |= ImGui_SliderFloatEx("Specular Tint", &material.specularTint, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-        materialChanged |= ImGui_SliderFloatEx("Anisotropic", &material.anisotropic, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-        inspectorUnindentSection();
-    }
-
-    if (ImGui_CollapsingHeader("Coating", ImGuiTreeNodeFlags_None)) {
-        inspectorIndentSection();
-        materialChanged |= ImGui_SliderFloatEx("Clearcoat", &material.clearcoat, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-        materialChanged |= ImGui_SliderFloatEx("Clearcoat Gloss", &material.clearcoatGloss, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-        materialChanged |= ImGui_SliderFloatEx("Sheen", &material.sheen, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-        materialChanged |= ImGui_SliderFloatEx("Sheen Tint", &material.sheenTint, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-        materialChanged |= ImGui_SliderFloatEx("Subsurface", &material.subsurface, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-        inspectorUnindentSection();
-    }
-
-    if (ImGui_CollapsingHeader("Emission", ImGuiTreeNodeFlags_None)) {
-        inspectorIndentSection();
-        materialChanged |= ImGui_DragFloatEx("Luminance", &material.emissionLuminance, 0.1f, 0.0f, 1000000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-        materialChanged |= ImGui_ColorEdit3("Emission Color", material.emissionColor, ImGuiColorEditFlags_Float);
-        inspectorUnindentSection();
-    }
+    materialChanged |= ImGui_SliderFloatEx("Specular", &material.specular, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    materialChanged |= ImGui_SliderFloatEx("Specular Tint", &material.specularTint, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    materialChanged |= ImGui_SliderFloatEx("Subsurface", &material.subsurface, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    materialChanged |= ImGui_SliderFloatEx("Anisotropic", &material.anisotropic, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    materialChanged |= ImGui_SliderFloatEx("Sheen", &material.sheen, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    materialChanged |= ImGui_SliderFloatEx("Sheen Tint", &material.sheenTint, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    materialChanged |= ImGui_SliderFloatEx("Clearcoat", &material.clearcoat, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    materialChanged |= ImGui_SliderFloatEx("Clearcoat Gloss", &material.clearcoatGloss, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    materialChanged |= ImGui_DragFloatEx("Emission", &material.emissionLuminance, 0.1f, 0.0f, 1000000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    materialChanged |= ImGui_ColorEdit3("Emission Color", material.emissionColor, ImGuiColorEditFlags_Float);
     inspectorPopWidgetSpacing();
 
     if (!materialChanged) return;
