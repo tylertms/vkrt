@@ -26,7 +26,7 @@
 #include "bsdf/diffuse.glsl"
 #include "bsdf/sheen.glsl"
 
-BSDFEval evalBSDFAll(vec3 normal, vec3 incoming, vec3 outgoing, Material material) {
+BSDFEval evalBSDFAll(vec3 normal, mat3 basis, vec3 incoming, vec3 outgoing, Material material, SurfaceState surface) {
     BSDFEval result;
     result.f = vec3(0.0);
     result.pdf = 0.0;
@@ -40,8 +40,6 @@ BSDFEval evalBSDFAll(vec3 normal, vec3 incoming, vec3 outgoing, Material materia
     float LdotH = max(dot(incoming, H), 0.0);
     if (NdotH <= 0.0 || LdotH <= 0.0) return result;
 
-    SurfaceState surface = makeSurfaceState(material);
-    mat3 basis = shadingBasis(normal);
     vec3 wiLocal = vec3(dot(incoming, basis[0]), dot(incoming, basis[1]), NdotL);
     vec3 woLocal = vec3(dot(outgoing, basis[0]), dot(outgoing, basis[1]), NdotV);
     float HdotX = dot(H, basis[0]);
@@ -54,7 +52,7 @@ BSDFEval evalBSDFAll(vec3 normal, vec3 incoming, vec3 outgoing, Material materia
     float diffusePdf = NdotL * INV_PI;
     float sheenPdf = 0.5 * INV_PI;
     float Ds = GTR2Aniso(NdotH, HdotX, HdotY, surface.ax, surface.ay);
-    float specularPdf = pdfGGXBoundedVNDF(normal, incoming, outgoing, surface.ax, surface.ay);
+    float specularPdf = pdfGGXBoundedVNDF(basis, incoming, outgoing, surface.ax, surface.ay);
     float Dr = GTR1(NdotH, surface.clearcoatAlpha);
     float clearcoatPdf = Dr * NdotH / max(4.0 * LdotH, 1e-6);
     result.pdf = surface.diffuseWeight * diffusePdf
@@ -81,29 +79,20 @@ BSDFEval evalBSDFAll(vec3 normal, vec3 incoming, vec3 outgoing, Material materia
     return result;
 }
 
-vec3 evalBSDF(vec3 normal, vec3 incoming, vec3 outgoing, Material material) {
-    return evalBSDFAll(normal, incoming, outgoing, material).f;
-}
-
-float pdfBSDF(vec3 normal, vec3 incoming, vec3 outgoing, Material material) {
-    return evalBSDFAll(normal, incoming, outgoing, material).pdf;
-}
-
-BSDFSample sampleBSDF(vec3 normal, vec3 outgoing, Material material, inout uint state) {
+BSDFSample sampleBSDF(vec3 normal, mat3 basis, vec3 outgoing, Material material, SurfaceState surface, inout uint state) {
     BSDFSample result;
     result.incoming = vec3(0.0);
     result.f = vec3(0.0);
     result.pdf = 0.0;
 
-    SurfaceState surface = makeSurfaceState(material);
     float lobe = rand(state);
     if (lobe < surface.diffuseWeight || (surface.specularWeight <= 0.0 && surface.clearcoatWeight <= 0.0 && surface.sheenWeight <= 0.0)) {
-        result.incoming = sampleCosineHemisphere(normal, state);
+        result.incoming = sampleCosineHemisphere(basis, state);
     } else if (lobe < surface.diffuseWeight + surface.sheenWeight || (surface.specularWeight <= 0.0 && surface.clearcoatWeight <= 0.0)) {
-        result.incoming = shadingBasis(normal) * sampleUniformHemisphereLocal(rand(state), rand(state));
+        result.incoming = basis * sampleUniformHemisphereLocal(rand(state), rand(state));
     } else if (lobe < surface.diffuseWeight + surface.sheenWeight + surface.specularWeight || surface.clearcoatWeight <= 0.0) {
         for (int attempt = 0; attempt < 8; attempt++) {
-            vec3 incoming = sampleGGXBoundedVNDF(normal, outgoing, surface.ax, surface.ay, state);
+            vec3 incoming = sampleGGXBoundedVNDF(basis, outgoing, surface.ax, surface.ay, state);
             if (dot(normal, incoming) > 0.0) {
                 result.incoming = incoming;
                 break;
@@ -111,7 +100,7 @@ BSDFSample sampleBSDF(vec3 normal, vec3 outgoing, Material material, inout uint 
         }
     } else {
         for (int attempt = 0; attempt < 8; attempt++) {
-            vec3 H = sampleClearcoatHalfVector(normal, surface.clearcoatAlpha, state);
+            vec3 H = sampleClearcoatHalfVector(basis, surface.clearcoatAlpha, state);
             vec3 incoming = reflect(-outgoing, H);
             if (dot(normal, incoming) > 0.0 && dot(outgoing, H) > 0.0) {
                 result.incoming = incoming;
@@ -120,7 +109,7 @@ BSDFSample sampleBSDF(vec3 normal, vec3 outgoing, Material material, inout uint 
         }
     }
 
-    BSDFEval eval = evalBSDFAll(normal, result.incoming, outgoing, material);
+    BSDFEval eval = evalBSDFAll(normal, basis, result.incoming, outgoing, material, surface);
     result.f = eval.f;
     result.pdf = eval.pdf;
     return result;

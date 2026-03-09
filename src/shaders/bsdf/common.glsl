@@ -59,13 +59,13 @@ vec3 fresnelSchlick(float cosTheta, Material material) {
     return mix(makeSurfaceState(material).spec0, vec3(1.0), schlickFresnel(cosTheta));
 }
 
-vec3 sampleCosineHemisphere(vec3 normal, inout uint state) {
+vec3 sampleCosineHemisphere(mat3 basis, inout uint state) {
     float r1 = rand(state);
     float r2 = rand(state);
     float r = sqrt(r1);
     float phi = TWO_PI * r2;
     vec3 local = vec3(r * cos(phi), r * sin(phi), sqrt(max(1.0 - r1, 0.0)));
-    return shadingBasis(normal) * local;
+    return basis * local;
 }
 
 vec3 sampleUniformHemisphereLocal(float u1, float u2) {

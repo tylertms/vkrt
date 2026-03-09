@@ -3,3 +3,5 @@ SER dev,  3840x2160, 8192 SPP, Win11, 595.76, 57s 434ms // no coherence hints
 SER dev,  3840x2160, 8192 SPP, Win11, 595.76, 1m 3s // initial coherence hints
 SER dev,  3840x2160, 8192 SPP, Win11, 595.76, 1m 83ms // initial coherence hints + filter primary rays, already coherent
 SER dev,  3840x2160, 8192 SPP, Win11, 595.76, 58s 634ms // improved coherence hints
+SER dev,  3840x2160, 8192 SPP, Win11, 595.76, 58s 100ms // new baseline
+SER dev,  3840x2160, 8192 SPP, Win11, 595.76, 53s // reduced per-bounce cost and SER shadow hit-object visibility

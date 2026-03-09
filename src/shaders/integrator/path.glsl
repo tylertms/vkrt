@@ -28,9 +28,15 @@ bool traceShadowVisibility(vec3 origin, vec3 direction, float maxDistance, float
             | gl_RayFlagsTerminateOnFirstHitEXT
             | gl_RayFlagsSkipClosestHitShaderEXT;
 
+    #ifdef VKRT_USE_SER
+    hitObjectEXT hitObject;
+    hitObjectTraceRayEXT(hitObject, topLevelAS, shadowRayFlags, 0xFF, 0, 0, 0, origin, rayMinDistance, direction, maxDistance, 0);
+    return !hitObjectIsHitEXT(hitObject);
+    #else
     payload.didHit = true;
     traceRayEXT(topLevelAS, shadowRayFlags, 0xFF, 0, 0, 0, origin, rayMinDistance, direction, maxDistance, 0);
     return !payload.didHit;
+    #endif
 }
 
 #endif

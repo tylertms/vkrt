@@ -128,10 +128,13 @@ vec3 trace(ivec2 pixel, vec2 jitter, inout uint state, out uint primaryInstanceI
         bounceCount++;
 
         Material material = materialBuffer.materials[payload.materialIndex];
+        SurfaceState surface = makeSurfaceState(material);
+        mat3 shadingFrame = shadingBasis(payload.normal);
         bool hitTimeInWindow = eventTimeInWindow(payload.time, timeWindowEnabled, timeMin, timeMax);
         if (tlActive && material.emissionLuminance > 0.0 && hitTimeInWindow) {
             TimelineSample emissionSample = sampleTimeline(observationTime - payload.time);
             applyTimelineEmission(material, emissionSample);
+            surface = makeSurfaceState(material);
         }
         if (hitTimeInWindow && !neeOnly && material.emissionLuminance > 0.0) {
             vec3 emitted = material.emissionColor * material.emissionLuminance;
@@ -156,7 +159,7 @@ vec3 trace(ivec2 pixel, vec2 jitter, inout uint state, out uint primaryInstanceI
                             && traceShadowVisibility(payload.point,
                                 directSample.wi, shadowDistance, rayMinDistance))
                     {
-                        BSDFEval bsdfEval = evalBSDFAll(payload.normal, directSample.wi, -ray.dir, material);
+                        BSDFEval bsdfEval = evalBSDFAll(payload.normal, shadingFrame, directSample.wi, -ray.dir, material, surface);
                         float misWeight = misPowerWeight(directSample.pdf, bsdfEval.pdf);
                         radiance += throughput * bsdfEval.f * directSample.radiance *
                                 (cosSurface * exp(-fogDensity * directSample.distance) * misWeight / directSample.pdf);
@@ -166,7 +169,7 @@ vec3 trace(ivec2 pixel, vec2 jitter, inout uint state, out uint primaryInstanceI
         }
 
         vec3 outgoing = -ray.dir;
-        BSDFSample bsdfSample = sampleBSDF(payload.normal, outgoing, material, state);
+        BSDFSample bsdfSample = sampleBSDF(payload.normal, shadingFrame, outgoing, material, surface, state);
         if (bsdfSample.pdf < 1e-7 || dot(payload.normal, bsdfSample.incoming) <= 0.0) break;
 
         vec3 bsdfFactor = bsdfSample.f * dot(payload.normal, bsdfSample.incoming) / bsdfSample.pdf;

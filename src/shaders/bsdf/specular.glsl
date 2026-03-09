@@ -44,17 +44,16 @@ float boundedVNDFCapK(vec3 localV, float ax, float ay) {
     return (1.0 - a2) * s2 / max(s2 + a2 * localV.z * localV.z, 1e-6);
 }
 
-float pdfGGXBoundedVNDF(vec3 normal, vec3 incoming, vec3 outgoing, float ax, float ay) {
-    float NdotL = dot(normal, incoming);
-    float NdotV = dot(normal, outgoing);
+float pdfGGXBoundedVNDF(mat3 basis, vec3 incoming, vec3 outgoing, float ax, float ay) {
+    float NdotL = dot(basis[2], incoming);
+    float NdotV = dot(basis[2], outgoing);
     if (NdotL <= 0.0 || NdotV <= 0.0) return 0.0;
 
     vec3 H = normalize(incoming + outgoing);
-    float NdotH = max(dot(normal, H), 0.0);
+    float NdotH = max(dot(basis[2], H), 0.0);
     float LdotH = max(dot(incoming, H), 0.0);
     if (NdotH <= 0.0 || LdotH <= 0.0) return 0.0;
 
-    mat3 basis = shadingBasis(normal);
     vec3 localV = vec3(dot(outgoing, basis[0]), dot(outgoing, basis[1]), NdotV);
     float HdotX = dot(H, basis[0]);
     float HdotY = dot(H, basis[1]);
@@ -70,8 +69,7 @@ float pdfGGXBoundedVNDF(vec3 normal, vec3 incoming, vec3 outgoing, float ax, flo
     return Ds * (t - localV.z) / max(2.0 * len2, 1e-6);
 }
 
-vec3 sampleGGXBoundedVNDF(vec3 normal, vec3 outgoing, float ax, float ay, inout uint state) {
-    mat3 basis = shadingBasis(normal);
+vec3 sampleGGXBoundedVNDF(mat3 basis, vec3 outgoing, float ax, float ay, inout uint state) {
     vec3 localV = vec3(dot(outgoing, basis[0]), dot(outgoing, basis[1]), dot(outgoing, basis[2]));
     vec3 stretchedV = normalize(vec3(localV.x * ax, localV.y * ay, localV.z));
 
@@ -87,14 +85,13 @@ vec3 sampleGGXBoundedVNDF(vec3 normal, vec3 outgoing, float ax, float ay, inout 
     return normalize(basis * localL);
 }
 
-vec3 sampleClearcoatHalfVector(vec3 normal, float alpha, inout uint state) {
+vec3 sampleClearcoatHalfVector(mat3 basis, float alpha, inout uint state) {
     float u1 = rand(state);
     float u2 = rand(state);
     float phi = TWO_PI * u2;
     float a2 = alpha * alpha;
     float cosTheta = sqrt(max((1.0 - pow(a2, 1.0 - u1)) / max(1.0 - a2, 1e-6), 0.0));
     float sinTheta = sqrt(max(1.0 - cosTheta * cosTheta, 0.0));
-    mat3 basis = shadingBasis(normal);
     return normalize(
         basis[0] * (sinTheta * cos(phi)) +
             basis[1] * (sinTheta * sin(phi)) +
