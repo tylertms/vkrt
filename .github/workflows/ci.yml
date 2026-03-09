@@ -41,7 +41,7 @@ jobs:
       - name: Install Vulkan SDK
         uses: humbletim/install-vulkan-sdk@v1.2
         with:
-          version: 1.4.309.0
+          version: 1.4.341.1
           cache: true
 
       - name: Install Linux Packages
