@@ -85,6 +85,12 @@ jobs:
           version: 1.4.341.1
           cache: true
 
+      - name: Vulkan Tool Versions
+        run: |
+          echo "VULKAN_SDK=$VULKAN_SDK"
+          "$VULKAN_SDK/bin/glslc" --version
+          "$VULKAN_SDK/bin/glslangValidator" --version
+
       - name: Install Linux Packages
         run: |
           sudo apt-get update
