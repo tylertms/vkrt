@@ -8,21 +8,7 @@
 #include "lighting/direct.glsl"
 #include "integrator/path.glsl"
 #include "integrator/debug.glsl"
-
-void executeTrace(vec3 origin, vec3 direction, float minDistance, float maxDistance, uint rayFlags) {
-    payload.didHit = false;
-    payload.hitDistance = maxDistance;
-
-    #ifdef VKRT_USE_SER
-    hitObjectEXT hitObject;
-    hitObjectRecordEmptyEXT(hitObject);
-    hitObjectTraceRayEXT(hitObject, topLevelAS, rayFlags, 0xFF, 0, 0, 0, origin, minDistance, direction, maxDistance, 0);
-    reorderThreadEXT(hitObject);
-    hitObjectExecuteShaderEXT(hitObject, 0);
-    #else
-    traceRayEXT(topLevelAS, rayFlags, 0xFF, 0, 0, 0, origin, minDistance, direction, maxDistance, 0);
-    #endif
-}
+#include "integrator/trace_surface.glsl"
 
 vec3 trace(ivec2 pixel, vec2 jitter, inout uint state, out uint primaryInstanceIndex) {
     ivec2 viewportOrigin = ivec2(scene.viewportRect.xy);
@@ -46,9 +32,10 @@ vec3 trace(ivec2 pixel, vec2 jitter, inout uint state, out uint primaryInstanceI
 
     uint debugMode = scene.debugMode;
     bool misNeeEnabled = scene.misNeeEnabled != 0u;
+    uint maxBounces = max(scene.rrMaxDepth, 1u);
 
     if (debugMode == VKRT_DEBUG_MODE_NORMALS || debugMode == VKRT_DEBUG_MODE_DEPTH || debugMode == VKRT_DEBUG_MODE_FRESNEL) {
-        executeTrace(ray.origin, ray.dir, rayMinDistance, rayMaxDistance, rayFlags);
+        executeSurfaceTrace(ray.origin, ray.dir, rayMinDistance, rayMaxDistance, rayFlags, false);
 
         primaryInstanceIndex = payload.didHit ? payload.instanceIndex : VKRT_INVALID_INDEX;
 
@@ -80,7 +67,7 @@ vec3 trace(ivec2 pixel, vec2 jitter, inout uint state, out uint primaryInstanceI
     bool hasPrevSample = false;
     float prevSamplePdf = 0.0;
 
-    for (uint i = 0; i < max(scene.rrMaxDepth, 1u); i++) {
+    for (uint i = 0; i < maxBounces; i++) {
         float traceDistanceMax = rayMaxDistance;
         if (timeWindowEnabled) {
             float remainingTime = timeMax - payload.time;
@@ -88,7 +75,7 @@ vec3 trace(ivec2 pixel, vec2 jitter, inout uint state, out uint primaryInstanceI
             traceDistanceMax = min(traceDistanceMax, remainingTime);
         }
 
-        executeTrace(ray.origin, ray.dir, rayMinDistance, traceDistanceMax, rayFlags);
+        executeSurfaceTrace(ray.origin, ray.dir, rayMinDistance, traceDistanceMax, rayFlags, i > 0u);
 
         if (i == 0u && payload.didHit) {
             primaryInstanceIndex = payload.instanceIndex;
@@ -193,7 +180,7 @@ vec3 trace(ivec2 pixel, vec2 jitter, inout uint state, out uint primaryInstanceI
         ray.origin = payload.point;
     }
 
-    if (debugMode == VKRT_DEBUG_MODE_BOUNCE_COUNT) return debugBounceHeatmap(bounceCount, max(scene.rrMaxDepth, 1u));
+    if (debugMode == VKRT_DEBUG_MODE_BOUNCE_COUNT) return debugBounceHeatmap(bounceCount, maxBounces);
 
     return radiance;
 }
