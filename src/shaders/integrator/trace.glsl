@@ -9,6 +9,21 @@
 #include "integrator/path.glsl"
 #include "integrator/debug.glsl"
 
+void executeTrace(vec3 origin, vec3 direction, float minDistance, float maxDistance, uint rayFlags) {
+    payload.didHit = false;
+    payload.hitDistance = maxDistance;
+
+    #ifdef VKRT_USE_SER
+    hitObjectEXT hitObject;
+    hitObjectRecordEmptyEXT(hitObject);
+    hitObjectTraceRayEXT(hitObject, topLevelAS, rayFlags, 0xFF, 0, 0, 0, origin, minDistance, direction, maxDistance, 0);
+    reorderThreadEXT(hitObject);
+    hitObjectExecuteShaderEXT(hitObject, 0);
+    #else
+    traceRayEXT(topLevelAS, rayFlags, 0xFF, 0, 0, 0, origin, minDistance, direction, maxDistance, 0);
+    #endif
+}
+
 vec3 trace(ivec2 pixel, vec2 jitter, inout uint state, out uint primaryInstanceIndex) {
     ivec2 viewportOrigin = ivec2(scene.viewportRect.xy);
     ivec2 viewportSize = ivec2(scene.viewportRect.zw);
@@ -33,10 +48,7 @@ vec3 trace(ivec2 pixel, vec2 jitter, inout uint state, out uint primaryInstanceI
     bool misNeeEnabled = scene.misNeeEnabled != 0u;
 
     if (debugMode == VKRT_DEBUG_MODE_NORMALS || debugMode == VKRT_DEBUG_MODE_DEPTH || debugMode == VKRT_DEBUG_MODE_FRESNEL) {
-        payload.didHit = false;
-        payload.hitDistance = rayMaxDistance;
-
-        traceRayEXT(topLevelAS, rayFlags, 0xFF, 0, 0, 0, ray.origin, rayMinDistance, ray.dir, rayMaxDistance, 0);
+        executeTrace(ray.origin, ray.dir, rayMinDistance, rayMaxDistance, rayFlags);
 
         primaryInstanceIndex = payload.didHit ? payload.instanceIndex : VKRT_INVALID_INDEX;
 
@@ -76,9 +88,7 @@ vec3 trace(ivec2 pixel, vec2 jitter, inout uint state, out uint primaryInstanceI
             traceDistanceMax = min(traceDistanceMax, remainingTime);
         }
 
-        payload.didHit = false;
-        payload.hitDistance = traceDistanceMax;
-        traceRayEXT(topLevelAS, rayFlags, 0xFF, 0, 0, 0, ray.origin, rayMinDistance, ray.dir, traceDistanceMax, 0);
+        executeTrace(ray.origin, ray.dir, rayMinDistance, traceDistanceMax, rayFlags);
 
         if (i == 0u && payload.didHit) {
             primaryInstanceIndex = payload.instanceIndex;

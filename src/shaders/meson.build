@@ -2,6 +2,7 @@ embed_spv = find_program(meson.project_source_root() / 'scripts' / 'embed_spv.py
 
 shader_programs = [
   ['rgen', 'rt/main/main.rgen', 'rgen.spv'],
+  ['rgen_ser', 'rt/main/main.rgen', 'rgen_ser.spv'],
   ['rchit', 'rt/main/main.rchit', 'rchit.spv'],
   ['rmiss', 'rt/main/main.rmiss', 'rmiss.spv'],
   ['comp', 'compute/select.comp', 'select.spv'],
@@ -16,6 +17,10 @@ foreach shader_program : shader_programs
   stage_name = shader_program[0]
   shader_file = shader_program[1]
   output_file = shader_program[2]
+  shader_defines = []
+  if stage_name == 'rgen_ser'
+    shader_defines += ['-DVKRT_USE_SER=1']
+  endif
   shader_target = custom_target(
     'compile_shader_' + stage_name,
     input: shader_file,
@@ -23,6 +28,7 @@ foreach shader_program : shader_programs
     depfile: output_file + '.d',
     command: [
       glslc,
+      shader_defines,
       '@INPUT@',
       '--target-env=vulkan1.4',
       '-O',

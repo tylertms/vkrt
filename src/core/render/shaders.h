@@ -5,6 +5,9 @@
 extern const unsigned char shader_rgen_data[];
 extern const size_t shader_rgen_size;
 
+extern const unsigned char shader_rgen_ser_data[];
+extern const size_t shader_rgen_ser_size;
+
 extern const unsigned char shader_rchit_data[];
 extern const size_t shader_rchit_size;
 

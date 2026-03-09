@@ -1,1 +1,2 @@
 v1.7-dev, 3840x2160, 8192 SPP, Win11, 595.76, 1m16s
+SER dev,  3840x2160, 8192 SPP, Win11, 595.76, 57.43s // no coherence flags
