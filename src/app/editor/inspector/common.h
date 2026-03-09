@@ -21,12 +21,13 @@ typedef enum InspectorTab {
 
 extern const float kInspectorControlSpacing;
 extern const float kInspectorSectionIndent;
+extern const float kInspectorSpacerHairline;
+extern const float kInspectorSpacerMedium;
 extern const ImVec4 kMenuBgColor;
 extern const ImVec4 kProgressBgColor;
 extern const ImVec4 kProgressFillColor;
 extern const ImVec4 kProgressTextColor;
 
-float queryInspectorInputWidth(float preferredWidth, float labelReserve);
 void formatDriverVersionText(uint32_t vendorID, uint32_t driverVersion, char* out, size_t outSize);
 void formatByteSize(uint64_t bytes, char* out, size_t outSize);
 void inspectorIndentSection(void);

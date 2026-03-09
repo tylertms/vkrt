@@ -74,8 +74,6 @@ void sessionInit(Session* session) {
     memset(session, 0, sizeof(*session));
     session->commands.meshToRemove = VKRT_INVALID_INDEX;
     session->commands.renderCommand = SESSION_RENDER_COMMAND_NONE;
-    session->editor.renderConfig.width = 1920;
-    session->editor.renderConfig.height = 1080;
     session->editor.renderConfig.targetSamples = 1024;
     session->editor.renderConfig.animation.minTime = kDefaultTimelineStartTime;
     session->editor.renderConfig.animation.maxTime = kDefaultTimelineEndTime;

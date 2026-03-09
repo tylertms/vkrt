@@ -101,7 +101,7 @@ void inspectorDrawMonitoringPanel(VKRT* vkrt) {
     ImGui_EndDisabled();
     inspectorUnindentSection();
 
-    ImGui_Dummy((ImVec2){0.0f, 4.0f});
+    ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing});
     inspectorTightSeparatorText(ICON_FA_MICROCHIP " System");
     inspectorIndentSection();
     drawSystemSummary(&runtime, &system);

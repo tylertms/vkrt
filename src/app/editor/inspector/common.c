@@ -8,6 +8,8 @@
 static const ImVec2 kWidgetInnerSpacing = {6.0f, 4.0f};
 const float kInspectorControlSpacing = 4.0f;
 const float kInspectorSectionIndent = 8.0f;
+const float kInspectorSpacerHairline = 1.0f;
+const float kInspectorSpacerMedium = 6.0f;
 const ImVec4 kMenuBgColor = {0.08f, 0.09f, 0.11f, 1.00f};
 const ImVec4 kProgressBgColor = {0.11f, 0.13f, 0.16f, 1.00f};
 const ImVec4 kProgressFillColor = {0.35f, 0.45f, 0.55f, 1.00f};
@@ -56,15 +58,6 @@ static bool drawCenteredIconButton(const char* icon, ImVec2 size, bool selected)
     return pressed;
 }
 
-float queryInspectorInputWidth(float preferredWidth, float labelReserve) {
-    float available = ImGui_GetContentRegionAvail().x;
-    float width = available - labelReserve;
-    if (width < 96.0f) width = available * 0.58f;
-    if (width < 72.0f) width = 72.0f;
-    if (width > preferredWidth) width = preferredWidth;
-    return width;
-}
-
 void inspectorIndentSection(void) {
     ImGui_IndentEx(kInspectorSectionIndent);
 }
@@ -96,7 +89,14 @@ bool inspectorBeginKeyValueTable(const char* id) {
         return false;
     }
 
-    ImGui_TableSetupColumnEx("Label", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoHide, 86.0f, 0);
+    const ImGuiStyle* style = ImGui_GetStyle();
+    float labelWidth = ImGui_CalcTextSize("Accumulation").x;
+    if (style) {
+        labelWidth += style->CellPadding.x * 2.0f;
+    }
+    if (labelWidth < 86.0f) labelWidth = 86.0f;
+
+    ImGui_TableSetupColumnEx("Label", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoHide, labelWidth, 0);
     ImGui_TableSetupColumnEx("Value", ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_NoHide, 0.0f, 0);
     return true;
 }

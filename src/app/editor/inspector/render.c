@@ -1,4 +1,5 @@
 #include "common.h"
+#include "config.h"
 
 #include "IconsFontAwesome6.h"
 #include "debug.h"
@@ -7,11 +8,26 @@
 #include <math.h>
 #include <stdio.h>
 
-static void initializeRenderConfig(Session* session) {
+static void initializeRenderConfig(VKRT* vkrt, Session* session) {
     if (!session) return;
     if (session->editor.renderConfig.width == 0 || session->editor.renderConfig.height == 0) {
-        session->editor.renderConfig.width = 1920;
-        session->editor.renderConfig.height = 1080;
+        VKRT_RuntimeSnapshot runtime = {0};
+        uint32_t width = VKRT_DEFAULT_WIDTH;
+        uint32_t height = VKRT_DEFAULT_HEIGHT;
+        if (vkrt && VKRT_getRuntimeSnapshot(vkrt, &runtime) == VKRT_SUCCESS) {
+            if (runtime.displayViewportRect[2] > 0 && runtime.displayViewportRect[3] > 0) {
+                width = runtime.displayViewportRect[2];
+                height = runtime.displayViewportRect[3];
+            } else if (runtime.swapchainWidth > 0 && runtime.swapchainHeight > 0) {
+                width = runtime.swapchainWidth;
+                height = runtime.swapchainHeight;
+            } else if (runtime.renderWidth > 0 && runtime.renderHeight > 0) {
+                width = runtime.renderWidth;
+                height = runtime.renderHeight;
+            }
+        }
+        session->editor.renderConfig.width = width;
+        session->editor.renderConfig.height = height;
     }
     sessionSanitizeAnimationSettings(&session->editor.renderConfig.animation);
 }
@@ -50,7 +66,7 @@ static float queryActiveRenderSeconds(const SessionRenderTimer* timer, uint64_t 
 void inspectorPrepareRenderState(VKRT* vkrt, Session* session) {
     if (!vkrt || !session) return;
 
-    initializeRenderConfig(session);
+    initializeRenderConfig(vkrt, session);
 
     const VKRT_PublicState* state = VKRT_getPublicState(vkrt);
     if (!state) return;
@@ -104,7 +120,7 @@ static void drawDebugSection(VKRT* vkrt, const VKRT_PublicState* state, bool con
     inspectorUnindentSection();
 }
 
-static void drawIdleOutputSection(Session* session, float inputWidth) {
+static void drawIdleOutputSection(Session* session) {
     int outputSize[2] = {
         (int)session->editor.renderConfig.width,
         (int)session->editor.renderConfig.height
@@ -114,14 +130,12 @@ static void drawIdleOutputSection(Session* session, float inputWidth) {
     if (!ImGui_CollapsingHeader("Output", ImGuiTreeNodeFlags_DefaultOpen)) return;
 
     inspectorIndentSection();
-    ImGui_SetNextItemWidth(inputWidth);
     inspectorPushWidgetSpacing();
     if (ImGui_DragInt2Ex("Output Size", outputSize, 1.0f, 1, 16384, "%d", ImGuiSliderFlags_AlwaysClamp)) {
         session->editor.renderConfig.width = clampRenderDimension(outputSize[0]);
         session->editor.renderConfig.height = clampRenderDimension(outputSize[1]);
     }
 
-    ImGui_SetNextItemWidth(inputWidth);
     if (ImGui_DragIntEx("Samples", &targetSamples, 1.0f, 0, INT_MAX, "%d", ImGuiSliderFlags_AlwaysClamp)) {
         if (targetSamples < 0) targetSamples = 0;
         session->editor.renderConfig.targetSamples = (uint32_t)targetSamples;
@@ -131,7 +145,7 @@ static void drawIdleOutputSection(Session* session, float inputWidth) {
     inspectorUnindentSection();
 }
 
-static void drawTimelineEditor(SessionRenderAnimationSettings* animation, float inputWidth) {
+static void drawTimelineEditor(SessionRenderAnimationSettings* animation) {
     SessionSceneTimelineSettings* sceneTimeline = &animation->sceneTimeline;
     bool timelineEnabled = sceneTimeline->enabled != 0;
 
@@ -177,7 +191,6 @@ static void drawTimelineEditor(SessionRenderAnimationSettings* animation, float 
         ImGui_PushIDInt((int)keyIndex);
         ImGui_SeparatorText("Marker");
 
-        ImGui_SetNextItemWidth(inputWidth);
         ImGui_DragFloatEx("Time", &key->time, 0.01f,
             SESSION_SCENE_TIMELINE_TIME_MIN,
             SESSION_SCENE_TIMELINE_TIME_MAX,
@@ -186,7 +199,6 @@ static void drawTimelineEditor(SessionRenderAnimationSettings* animation, float 
         timelineEdited |= ImGui_IsItemDeactivatedAfterEdit();
         timeActivelyEditing |= ImGui_IsItemActive();
 
-        ImGui_SetNextItemWidth(inputWidth);
         timelineEdited |= ImGui_DragFloatEx("Emission Scale", &key->emissionScale, 0.01f,
             SESSION_SCENE_TIMELINE_EMISSION_SCALE_MIN,
             SESSION_SCENE_TIMELINE_EMISSION_SCALE_MAX,
@@ -206,7 +218,7 @@ static void drawTimelineEditor(SessionRenderAnimationSettings* animation, float 
     ImGui_EndDisabled();
 }
 
-static void drawIdleAnimationSection(Session* session, float inputWidth, float folderWidth) {
+static void drawIdleAnimationSection(Session* session) {
     SessionRenderAnimationSettings* animation = &session->editor.renderConfig.animation;
     bool animationEnabled = animation->enabled != 0;
     uint32_t frameCount = sessionComputeAnimationFrameCount(animation);
@@ -232,21 +244,18 @@ static void drawIdleAnimationSection(Session* session, float inputWidth, float f
 
     ImGui_BeginDisabled(!animationEnabled);
 
-    ImGui_SetNextItemWidth(inputWidth);
     if (ImGui_DragFloatEx("Time Min", &timeMin, 0.01f, 0.0f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
         animation->minTime = timeMin;
         sessionSanitizeAnimationSettings(animation);
         frameCount = sessionComputeAnimationFrameCount(animation);
     }
 
-    ImGui_SetNextItemWidth(inputWidth);
     if (ImGui_DragFloatEx("Time Max", &timeMax, 0.01f, 0.0f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
         animation->maxTime = timeMax;
         sessionSanitizeAnimationSettings(animation);
         frameCount = sessionComputeAnimationFrameCount(animation);
     }
 
-    ImGui_SetNextItemWidth(inputWidth);
     if (ImGui_DragFloatEx("Step", &timeStep, 0.005f, 0.001f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
         animation->timeStep = timeStep;
         sessionSanitizeAnimationSettings(animation);
@@ -261,11 +270,10 @@ static void drawIdleAnimationSection(Session* session, float inputWidth, float f
 
     char folderPathBuffer[256] = {0};
     snprintf(folderPathBuffer, sizeof(folderPathBuffer), "%s", sequenceFolder);
-    ImGui_SetNextItemWidth(folderWidth);
     ImGui_InputTextEx("Folder", folderPathBuffer, sizeof(folderPathBuffer), ImGuiInputTextFlags_ReadOnly, NULL, NULL);
     tooltipOnHover(sequenceFolder);
 
-    drawTimelineEditor(animation, inputWidth);
+    drawTimelineEditor(animation);
 
     if (session->editor.renderConfig.targetSamples == 0) {
         ImGui_Spacing();
@@ -282,13 +290,11 @@ static void drawIdleRenderState(VKRT* vkrt, Session* session, const SessionRende
     if (!state) return;
 
     bool renderModeActive = state->renderModeActive != 0;
-    float inputWidth = queryInspectorInputWidth(220.0f, 132.0f);
-    float folderWidth = queryInspectorInputWidth(260.0f, 100.0f);
     bool animationEnabled = session->editor.renderConfig.animation.enabled != 0;
 
-    drawIdleOutputSection(session, inputWidth);
+    drawIdleOutputSection(session);
     drawDebugSection(vkrt, state, renderModeActive);
-    drawIdleAnimationSection(session, inputWidth, folderWidth);
+    drawIdleAnimationSection(session);
 
     ImGui_Spacing();
 

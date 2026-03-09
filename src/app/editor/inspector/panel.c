@@ -65,7 +65,7 @@ static void drawPropertiesPanelSelector(Session* session) {
         }
     }
 
-    ImGui_Dummy((ImVec2){0.0f, 1.0f});
+    ImGui_Dummy((ImVec2){0.0f, kInspectorSpacerHairline});
 }
 
 static void drawSceneWindow(VKRT* vkrt, Session* session) {
@@ -82,7 +82,7 @@ static void drawSceneWindow(VKRT* vkrt, Session* session) {
     inspectorTightSeparatorText(ICON_FA_CUBES " Scene");
     inspectorDrawSceneBrowser(vkrt, session);
 
-    ImGui_Dummy((ImVec2){0.0f, 6.0f});
+    ImGui_Dummy((ImVec2){0.0f, kInspectorSpacerMedium});
     inspectorDrawMonitoringPanel(vkrt);
 
     ImGui_End();
