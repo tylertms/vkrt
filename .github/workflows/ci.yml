@@ -49,6 +49,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libdbus-1-dev pkg-config libwayland-dev libxkbcommon-dev wayland-protocols libxrandr-dev libxinerama-dev libxi-dev libxcursor-dev
+          echo "VULKAN_SDK=$VULKAN_SDK"
+          "$VULKAN_SDK/bin/glslc" --version
+          "$VULKAN_SDK/bin/glslangValidator" --version
 
       - name: Install Meson and Ninja
         run: python -m pip install meson ninja
