@@ -15,6 +15,23 @@ typedef struct VKRT_DeviceProcedures {
     PFN_vkCmdTraceRaysKHR vkCmdTraceRaysKHR;
 } VKRT_DeviceProcedures;
 
+typedef enum DeviceExtensionBits {
+    DEVICE_EXTENSION_SWAPCHAIN_BIT = 1u << 0,
+    DEVICE_EXTENSION_ACCELERATION_STRUCTURE_BIT = 1u << 1,
+    DEVICE_EXTENSION_RAY_TRACING_PIPELINE_BIT = 1u << 2,
+    DEVICE_EXTENSION_DEFERRED_HOST_OPERATIONS_BIT = 1u << 3,
+    DEVICE_EXTENSION_BUFFER_DEVICE_ADDRESS_BIT = 1u << 4,
+    DEVICE_EXTENSION_RAY_TRACING_INVOCATION_REORDER_BIT = 1u << 5
+} DeviceExtensionBits;
+
+typedef struct DeviceExtensionSupport {
+    uint32_t requiredMask;
+    uint32_t optionalMask;
+    uint32_t availableMask;
+    uint32_t enabledMask;
+    uint32_t missingRequiredMask;
+} DeviceExtensionSupport;
+
 typedef struct VKRT_Core {
     VkInstance instance;
     VkDebugUtilsMessengerEXT debugMessenger;
@@ -80,6 +97,7 @@ typedef struct VKRT_Core {
     GeometryLayout geometryLayout;
     uint32_t emissiveMeshCount;
     uint32_t emissiveTriangleCount;
+    DeviceExtensionSupport deviceExtensionSupport;
     char deviceName[256];
     uint32_t vendorID;
     uint32_t driverVersion;
