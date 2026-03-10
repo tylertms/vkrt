@@ -2,6 +2,7 @@
 
 #include <inttypes.h>
 #include <stdio.h>
+#include <vulkan/vulkan.h>
 
 const float kInspectorControlSpacing = 4.0f;
 const float kInspectorSectionIndent = 8.0f;
