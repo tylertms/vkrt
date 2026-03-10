@@ -6,9 +6,6 @@ on:
       - "v*"
   workflow_dispatch:
 
-env:
-  VULKAN_SDK_VERSION: 1.4.341.1
-
 permissions:
   contents: write
 
@@ -19,24 +16,44 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.13"
 
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
 
-      - name: Install Vulkan SDK
+      - name: Resolve Vulkan SDK Version
+        id: vulkan-windows
         shell: pwsh
         run: |
-          $sdkVersion = '${{ env.VULKAN_SDK_VERSION }}'
+          $version = (Invoke-WebRequest -Uri 'https://vulkan.lunarg.com/sdk/latest/windows.txt').Content.Trim()
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Cache Vulkan SDK
+        id: vulkan-cache-windows
+        uses: actions/cache@v4
+        with:
+          path: VULKAN_SDK
+          key: ${{ runner.os }}-vulkan-${{ steps.vulkan-windows.outputs.version }}
+
+      - name: Install Vulkan SDK
+        if: steps.vulkan-cache-windows.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $version = '${{ steps.vulkan-windows.outputs.version }}'
           $sdkDir = Join-Path $PWD 'VULKAN_SDK'
           $installer = Join-Path $PWD 'vulkan_sdk.exe'
-          Invoke-WebRequest -Uri "https://sdk.lunarg.com/sdk/download/$sdkVersion/windows/vulkan_sdk.exe?Human=true" -OutFile $installer
+          Invoke-WebRequest -Uri "https://sdk.lunarg.com/sdk/download/$version/windows/vulkan_sdk.exe?Human=true" -OutFile $installer
           Start-Process -FilePath $installer -ArgumentList @('--root', $sdkDir, '--accept-licenses', '--default-answer', '--confirm-command', 'install', 'copy_only=1') -Wait -NoNewWindow
+
+      - name: Set Vulkan SDK Environment
+        shell: pwsh
+        run: |
+          $sdkDir = Join-Path $PWD 'VULKAN_SDK'
           "VULKAN_SDK=$sdkDir" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "VK_SDK_PATH=$sdkDir" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           (Join-Path $sdkDir 'Bin') | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
@@ -70,7 +87,7 @@ jobs:
           files: vkrt-windows-x64.zip
 
       - name: Upload Workflow Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: vkrt-windows-x64
           path: vkrt-windows-x64.zip
@@ -81,19 +98,37 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.13"
 
+      - name: Resolve Vulkan SDK Version
+        id: vulkan-linux
+        shell: bash
+        run: echo "version=$(curl -fsSL https://vulkan.lunarg.com/sdk/latest/linux.txt)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Vulkan SDK
+        id: vulkan-cache-linux
+        uses: actions/cache@v4
+        with:
+          path: VULKAN_SDK
+          key: ${{ runner.os }}-vulkan-${{ steps.vulkan-linux.outputs.version }}
+
       - name: Install Vulkan SDK
+        if: steps.vulkan-cache-linux.outputs.cache-hit != 'true'
         shell: bash
         run: |
+          curl -fsSL "https://sdk.lunarg.com/sdk/download/${{ steps.vulkan-linux.outputs.version }}/linux/vulkan_sdk.tar.xz?Human=true" -o vulkan_sdk.tar.xz
+          tar -xJf vulkan_sdk.tar.xz
           mkdir -p VULKAN_SDK
-          curl -L "https://sdk.lunarg.com/sdk/download/${VULKAN_SDK_VERSION}/linux/vulkan_sdk.tar.gz?Human=true" -o vulkan_sdk.tar.gz
-          tar -xzf vulkan_sdk.tar.gz -C VULKAN_SDK --strip-components=2 "${VULKAN_SDK_VERSION}/x86_64"
+          cp -a "${{ steps.vulkan-linux.outputs.version }}/x86_64/." VULKAN_SDK/
+
+      - name: Set Vulkan SDK Environment
+        shell: bash
+        run: |
           echo "VULKAN_SDK=$PWD/VULKAN_SDK" >> "$GITHUB_ENV"
           echo "$PWD/VULKAN_SDK/bin" >> "$GITHUB_PATH"
 
@@ -153,7 +188,7 @@ jobs:
             vkrt-linux-x86_64.AppImage
 
       - name: Upload Workflow Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: vkrt-linux-x64
           path: |
