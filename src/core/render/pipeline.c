@@ -219,8 +219,7 @@ VKRT_Result createComputePipeline(VKRT* vkrt) {
 
     vkDestroyShaderModule(vkrt->core.device, compModule, NULL);
 
-    LOG_INFO("Compute pipeline created (%zu bytes) in %.3f ms",
-        shader_comp_size,
+    LOG_INFO("Compute pipeline created in %.3f ms",
         (double)(getMicroseconds() - startTime) / 1e3);
     return VKRT_SUCCESS;
 }

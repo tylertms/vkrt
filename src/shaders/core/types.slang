@@ -54,8 +54,8 @@ struct SceneData {
     uint emissiveTriangleCount;
     uint selectionEnabled;
     uint selectedMeshIndex;
-    float4 timelineTimeScale[16];
-    float4 timelineTint[16];
+    float4 timelineTimeScale[VKRT_SCENE_TIMELINE_MAX_KEYFRAMES];
+    float4 timelineTint[VKRT_SCENE_TIMELINE_MAX_KEYFRAMES];
 };
 
 struct PickBuffer {

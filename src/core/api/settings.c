@@ -1,20 +1,13 @@
 #include "constants.h"
-#include "shared.h"
 #include "scene.h"
+#include "state.h"
 #include "vkrt_internal.h"
+#include "numeric.h"
 
 #include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-
-static int compareTimelineKeyframesByTime(const void* lhs, const void* rhs) {
-    const VKRT_SceneTimelineKeyframe* a = (const VKRT_SceneTimelineKeyframe*)lhs;
-    const VKRT_SceneTimelineKeyframe* b = (const VKRT_SceneTimelineKeyframe*)rhs;
-    if (a->time < b->time) return -1;
-    if (a->time > b->time) return 1;
-    return 0;
-}
 
 static uint32_t sanitizeMeshSelection(const VKRT* vkrt, uint32_t meshIndex) {
     if (!vkrt || meshIndex == VKRT_INVALID_INDEX) return VKRT_INVALID_INDEX;
@@ -30,6 +23,18 @@ static void cancelPendingPick(VKRT* vkrt) {
     if (vkrt->core.pickData) {
         vkrt->core.pickData->hitMeshIndex = VKRT_INVALID_INDEX;
     }
+}
+
+static uint32_t sanitizeAutoSPPTargetFPS(const VKRT* vkrt, uint32_t targetFPS) {
+    if (targetFPS == 0) {
+        float refreshHz = vkrt ? vkrt->runtime.displayRefreshHz : 0.0f;
+        if (refreshHz <= 0.0f) refreshHz = 60.0f;
+        targetFPS = (uint32_t)(refreshHz + 0.5f);
+    }
+
+    if (targetFPS < 30u) return 30u;
+    if (targetFPS > 360u) return 360u;
+    return targetFPS;
 }
 
 VKRT_Result VKRT_applyCameraInput(VKRT* vkrt, const VKRT_CameraInput* input) {
@@ -51,11 +56,11 @@ VKRT_Result VKRT_setSamplesPerPixel(VKRT* vkrt, uint32_t samplesPerPixel) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
     if (samplesPerPixel == 0) samplesPerPixel = 1;
 
-    if (vkrt->state.samplesPerPixel == samplesPerPixel) return VKRT_SUCCESS;
-    vkrt->state.samplesPerPixel = samplesPerPixel;
+    if (vkrt->sceneSettings.samplesPerPixel == samplesPerPixel) return VKRT_SUCCESS;
+    vkrt->sceneSettings.samplesPerPixel = samplesPerPixel;
 
     if (vkrt->core.sceneData) {
-        vkrt->core.sceneData->samplesPerPixel = samplesPerPixel;
+        resetSceneData(vkrt);
     }
     return VKRT_SUCCESS;
 }
@@ -68,37 +73,30 @@ VKRT_Result VKRT_setPathDepth(VKRT* vkrt, uint32_t rrMinDepth, uint32_t rrMaxDep
     if (rrMaxDepth > 64u) rrMaxDepth = 64u;
     if (rrMinDepth > rrMaxDepth) rrMinDepth = rrMaxDepth;
 
-    if (vkrt->state.rrMinDepth == rrMinDepth && vkrt->state.rrMaxDepth == rrMaxDepth) return VKRT_SUCCESS;
+    if (vkrt->sceneSettings.rrMinDepth == rrMinDepth && vkrt->sceneSettings.rrMaxDepth == rrMaxDepth) return VKRT_SUCCESS;
 
-    vkrt->state.rrMinDepth = rrMinDepth;
-    vkrt->state.rrMaxDepth = rrMaxDepth;
+    vkrt->sceneSettings.rrMinDepth = rrMinDepth;
+    vkrt->sceneSettings.rrMaxDepth = rrMaxDepth;
     resetSceneData(vkrt);
     return VKRT_SUCCESS;
 }
 
 VKRT_Result VKRT_setAutoSPPEnabled(VKRT* vkrt, uint8_t enabled) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
-    vkrt->state.autoSPPEnabled = enabled ? 1 : 0;
-    vkrt->state.autoSPPControlMs = 0.0f;
-    vkrt->state.autoSPPFramesUntilNextAdjust = 0;
+    vkrt->sceneSettings.autoSPPEnabled = enabled ? 1 : 0;
+    vkrt->autoSPP.controlMs = 0.0f;
+    vkrt->autoSPP.framesUntilNextAdjust = 0;
+    vkrt->runtime.autoSPPFastAdaptFrames = enabled ? 8u : 0u;
     return VKRT_SUCCESS;
 }
 
 VKRT_Result VKRT_setAutoSPPTargetFPS(VKRT* vkrt, uint32_t targetFPS) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
-
-    if (targetFPS == 0) {
-        float hz = vkrt->runtime.displayRefreshHz;
-        if (hz <= 0.0f) hz = 60.0f;
-        targetFPS = (uint32_t)(hz + 0.5f);
-    }
-
-    if (targetFPS < 30) targetFPS = 30;
-    if (targetFPS > 360) targetFPS = 360;
-    vkrt->state.autoSPPTargetFPS = targetFPS;
-    vkrt->state.autoSPPTargetFrameMs = 1000.0f / (float)targetFPS;
-    vkrt->state.autoSPPControlMs = 0.0f;
-    vkrt->state.autoSPPFramesUntilNextAdjust = 0;
+    targetFPS = sanitizeAutoSPPTargetFPS(vkrt, targetFPS);
+    vkrt->sceneSettings.autoSPPTargetFPS = targetFPS;
+    vkrt->autoSPP.targetFrameMs = 1000.0f / (float)targetFPS;
+    vkrt->autoSPP.controlMs = 0.0f;
+    vkrt->autoSPP.framesUntilNextAdjust = 0;
     return VKRT_SUCCESS;
 }
 
@@ -106,8 +104,8 @@ VKRT_Result VKRT_setToneMappingMode(VKRT* vkrt, VKRT_ToneMappingMode toneMapping
     VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
     if (stateReady != VKRT_SUCCESS) return stateReady;
 
-    if (vkrt->state.toneMappingMode == toneMappingMode) return VKRT_SUCCESS;
-    vkrt->state.toneMappingMode = toneMappingMode;
+    if (vkrt->sceneSettings.toneMappingMode == toneMappingMode) return VKRT_SUCCESS;
+    vkrt->sceneSettings.toneMappingMode = toneMappingMode;
     resetSceneData(vkrt);
     return VKRT_SUCCESS;
 }
@@ -115,10 +113,10 @@ VKRT_Result VKRT_setToneMappingMode(VKRT* vkrt, VKRT_ToneMappingMode toneMapping
 VKRT_Result VKRT_setFogDensity(VKRT* vkrt, float fogDensity) {
     VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
     if (stateReady != VKRT_SUCCESS) return stateReady;
-    if (!isfinite(fogDensity) || fogDensity < 0.0f) fogDensity = 0.0f;
+    fogDensity = vkrtFiniteClampf(fogDensity, 0.0f, 0.0f, INFINITY);
 
-    if (vkrt->state.fogDensity == fogDensity) return VKRT_SUCCESS;
-    vkrt->state.fogDensity = fogDensity;
+    if (vkrt->sceneSettings.fogDensity == fogDensity) return VKRT_SUCCESS;
+    vkrt->sceneSettings.fogDensity = fogDensity;
     resetSceneData(vkrt);
     return VKRT_SUCCESS;
 }
@@ -126,8 +124,8 @@ VKRT_Result VKRT_setFogDensity(VKRT* vkrt, float fogDensity) {
 VKRT_Result VKRT_setDebugMode(VKRT* vkrt, uint32_t mode) {
     VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
     if (stateReady != VKRT_SUCCESS) return stateReady;
-    if (vkrt->state.debugMode == mode) return VKRT_SUCCESS;
-    vkrt->state.debugMode = mode;
+    if (vkrt->sceneSettings.debugMode == mode) return VKRT_SUCCESS;
+    vkrt->sceneSettings.debugMode = mode;
     resetSceneData(vkrt);
     return VKRT_SUCCESS;
 }
@@ -136,8 +134,8 @@ VKRT_Result VKRT_setMISNEEEnabled(VKRT* vkrt, uint32_t enabled) {
     VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
     if (stateReady != VKRT_SUCCESS) return stateReady;
     enabled = enabled ? 1u : 0u;
-    if (vkrt->state.misNeeEnabled == enabled) return VKRT_SUCCESS;
-    vkrt->state.misNeeEnabled = enabled;
+    if (vkrt->sceneSettings.misNeeEnabled == enabled) return VKRT_SUCCESS;
+    vkrt->sceneSettings.misNeeEnabled = enabled;
     resetSceneData(vkrt);
     return VKRT_SUCCESS;
 }
@@ -146,6 +144,8 @@ VKRT_Result VKRT_setTimeRange(VKRT* vkrt, float timeBase, float timeStep) {
     VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
     if (stateReady != VKRT_SUCCESS) return stateReady;
 
+    timeBase = vkrtFiniteOrf(timeBase, -1.0f);
+    timeStep = vkrtFiniteOrf(timeStep, timeBase);
     if (timeBase < 0.0f) {
         timeBase = -1.0f;
         timeStep = -1.0f;
@@ -153,10 +153,10 @@ VKRT_Result VKRT_setTimeRange(VKRT* vkrt, float timeBase, float timeStep) {
         timeStep = timeBase;
     }
 
-    if (vkrt->state.timeBase == timeBase && vkrt->state.timeStep == timeStep) return VKRT_SUCCESS;
+    if (vkrt->sceneSettings.timeBase == timeBase && vkrt->sceneSettings.timeStep == timeStep) return VKRT_SUCCESS;
 
-    vkrt->state.timeBase = timeBase;
-    vkrt->state.timeStep = timeStep;
+    vkrt->sceneSettings.timeBase = timeBase;
+    vkrt->sceneSettings.timeStep = timeStep;
     resetSceneData(vkrt);
     return VKRT_SUCCESS;
 }
@@ -177,13 +177,11 @@ VKRT_Result VKRT_setSceneTimeline(VKRT* vkrt, const VKRT_SceneTimelineSettings* 
         sanitized.keyframeCount = keyCount;
         for (uint32_t keyIndex = 0; keyIndex < keyCount; keyIndex++) {
             VKRT_SceneTimelineKeyframe key = timeline->keyframes[keyIndex];
-            if (!isfinite(key.time)) key.time = 0.0f;
-            if (!isfinite(key.emissionScale)) key.emissionScale = 1.0f;
-            if (key.emissionScale < 0.0f) key.emissionScale = 0.0f;
+            key.time = vkrtFiniteOrf(key.time, 0.0f);
+            key.emissionScale = vkrtFiniteClampf(key.emissionScale, 1.0f, 0.0f, INFINITY);
 
             for (int channel = 0; channel < 3; channel++) {
-                if (!isfinite(key.emissionTint[channel])) key.emissionTint[channel] = 1.0f;
-                if (key.emissionTint[channel] < 0.0f) key.emissionTint[channel] = 0.0f;
+                key.emissionTint[channel] = vkrtFiniteClampf(key.emissionTint[channel], 1.0f, 0.0f, INFINITY);
             }
 
             sanitized.keyframes[keyIndex] = key;
@@ -193,12 +191,12 @@ VKRT_Result VKRT_setSceneTimeline(VKRT* vkrt, const VKRT_SceneTimelineSettings* 
             qsort(sanitized.keyframes,
                 sanitized.keyframeCount,
                 sizeof(sanitized.keyframes[0]),
-                compareTimelineKeyframesByTime);
+                vkrtCompareSceneTimelineKeyframesByTime);
         }
     }
 
-    if (memcmp(&vkrt->state.sceneTimeline, &sanitized, sizeof(sanitized)) == 0) return VKRT_SUCCESS;
-    vkrt->state.sceneTimeline = sanitized;
+    if (memcmp(&vkrt->sceneSettings.sceneTimeline, &sanitized, sizeof(sanitized)) == 0) return VKRT_SUCCESS;
+    vkrt->sceneSettings.sceneTimeline = sanitized;
     resetSceneData(vkrt);
     return VKRT_SUCCESS;
 }
@@ -237,10 +235,10 @@ VKRT_Result VKRT_setSelectedMesh(VKRT* vkrt, uint32_t meshIndex) {
 
     uint32_t nextSelectedMesh = sanitizeMeshSelection(vkrt, meshIndex);
     cancelPendingPick(vkrt);
-    if (vkrt->state.selectedMeshIndex == nextSelectedMesh) return VKRT_SUCCESS;
+    if (vkrt->sceneSettings.selectedMeshIndex == nextSelectedMesh) return VKRT_SUCCESS;
 
-    vkrt->state.selectedMeshIndex = nextSelectedMesh;
-    vkrt->state.selectionEnabled = nextSelectedMesh != VKRT_INVALID_INDEX;
+    vkrt->sceneSettings.selectedMeshIndex = nextSelectedMesh;
+    vkrt->sceneSettings.selectionEnabled = nextSelectedMesh != VKRT_INVALID_INDEX;
 
     syncSelectionSceneData(vkrt);
     return VKRT_SUCCESS;
@@ -248,6 +246,6 @@ VKRT_Result VKRT_setSelectedMesh(VKRT* vkrt, uint32_t meshIndex) {
 
 VKRT_Result VKRT_getSelectedMesh(const VKRT* vkrt, uint32_t* outMeshIndex) {
     if (!vkrt || !outMeshIndex) return VKRT_ERROR_INVALID_ARGUMENT;
-    *outMeshIndex = vkrt->state.selectedMeshIndex;
+    *outMeshIndex = vkrt->sceneSettings.selectedMeshIndex;
     return VKRT_SUCCESS;
 }

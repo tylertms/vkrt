@@ -1,18 +1,19 @@
+#include "rebuild.h"
+
+#include "lighting.h"
+#include "state.h"
 #include "buffer.h"
-#include "shared.h"
-#include "scene.h"
 #include "accel/accel.h"
 #include "debug.h"
 
+#include <stdint.h>
 #include <stdlib.h>
-#include <string.h>
 
 static Buffer* getMaterialData(VKRT* vkrt) {
     return &vkrt->core.sceneMaterialData;
 }
 
-
-void cleanupPendingGeometryUploads(VKRT* vkrt, FrameSceneUpdate* update) {
+void vkrtCleanupPendingGeometryUploads(VKRT* vkrt, FrameSceneUpdate* update) {
     if (!vkrt || !update) return;
     for (uint32_t i = 0; i < update->geometryUploadCount; i++) {
         if (update->geometryUploads[i].stagingBuffer != VK_NULL_HANDLE) {
@@ -27,7 +28,7 @@ void cleanupPendingGeometryUploads(VKRT* vkrt, FrameSceneUpdate* update) {
     update->geometryUploadCount = 0;
 }
 
-void cleanupPendingBLASBuilds(VKRT* vkrt, FrameSceneUpdate* update) {
+void vkrtCleanupPendingBLASBuilds(VKRT* vkrt, FrameSceneUpdate* update) {
     if (!vkrt || !update) return;
     for (uint32_t i = 0; i < update->blasBuildCount; i++) {
         if (update->blasBuilds[i].scratchBuffer != VK_NULL_HANDLE) {
@@ -42,7 +43,7 @@ void cleanupPendingBLASBuilds(VKRT* vkrt, FrameSceneUpdate* update) {
     update->blasBuildCount = 0;
 }
 
-void cleanupFrameSceneUpdate(VKRT* vkrt, uint32_t frameIndex) {
+void vkrtCleanupFrameSceneUpdate(VKRT* vkrt, uint32_t frameIndex) {
     if (!vkrt || frameIndex >= VKRT_MAX_FRAMES_IN_FLIGHT) return;
 
     FrameSceneUpdate* update = &vkrt->runtime.frameSceneUpdates[frameIndex];
@@ -59,8 +60,8 @@ void cleanupFrameSceneUpdate(VKRT* vkrt, uint32_t frameIndex) {
     update->sceneTransfers = NULL;
     update->sceneTransferCount = 0;
 
-    cleanupPendingGeometryUploads(vkrt, update);
-    cleanupPendingBLASBuilds(vkrt, update);
+    vkrtCleanupPendingGeometryUploads(vkrt, update);
+    vkrtCleanupPendingBLASBuilds(vkrt, update);
 
     destroyTransfer(vkrt, &update->instanceBuffer);
     destroyTransfer(vkrt, &update->tlasScratch);
@@ -68,28 +69,12 @@ void cleanupFrameSceneUpdate(VKRT* vkrt, uint32_t frameIndex) {
     update->tlasBuildPending = VK_FALSE;
 }
 
-void destroyMeshAccelerationStructure(VKRT* vkrt, Mesh* mesh) {
-    if (!vkrt || !vkrt->core.device || !mesh) return;
-
-    PFN_vkDestroyAccelerationStructureKHR destroyAS = vkrt->core.procs.vkDestroyAccelerationStructureKHR;
-    if (!destroyAS) return;
-
-    if (mesh->bottomLevelAccelerationStructure.structure != VK_NULL_HANDLE) {
-        destroyAS(vkrt->core.device, mesh->bottomLevelAccelerationStructure.structure, NULL);
-        mesh->bottomLevelAccelerationStructure.structure = VK_NULL_HANDLE;
-    }
-    if (mesh->bottomLevelAccelerationStructure.buffer != VK_NULL_HANDLE) {
-        vkDestroyBuffer(vkrt->core.device, mesh->bottomLevelAccelerationStructure.buffer, NULL);
-        mesh->bottomLevelAccelerationStructure.buffer = VK_NULL_HANDLE;
-    }
-    if (mesh->bottomLevelAccelerationStructure.memory != VK_NULL_HANDLE) {
-        vkFreeMemory(vkrt->core.device, mesh->bottomLevelAccelerationStructure.memory, NULL);
-        mesh->bottomLevelAccelerationStructure.memory = VK_NULL_HANDLE;
-    }
-    mesh->bottomLevelAccelerationStructure.deviceAddress = 0;
+void vkrtDestroyMeshAccelerationStructure(VKRT* vkrt, Mesh* mesh) {
+    if (!mesh) return;
+    vkrtDestroyAccelerationStructureResources(vkrt, &mesh->bottomLevelAccelerationStructure);
 }
 
-VKRT_Result rebuildMaterialBuffer(VKRT* vkrt) {
+VKRT_Result vkrtSceneRebuildMaterialBuffer(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
 
     Buffer* materialData = getMaterialData(vkrt);
@@ -98,7 +83,7 @@ VKRT_Result rebuildMaterialBuffer(VKRT* vkrt) {
     uint32_t materialCount = vkrt->core.meshCount;
     materialData->count = materialCount;
     if (materialCount == 0) {
-        return rebuildLightBuffers(vkrt);
+        return vkrtSceneRebuildLightBuffers(vkrt);
     }
 
     Material* materials = (Material*)malloc((size_t)materialCount * sizeof(Material));
@@ -125,14 +110,14 @@ VKRT_Result rebuildMaterialBuffer(VKRT* vkrt) {
         return result;
     }
 
-    if ((result = rebuildLightBuffers(vkrt)) != VKRT_SUCCESS) {
+    if ((result = vkrtSceneRebuildLightBuffers(vkrt)) != VKRT_SUCCESS) {
         return result;
     }
 
     return VKRT_SUCCESS;
 }
 
-VKRT_Result rebuildTopLevelScene(VKRT* vkrt) {
+VKRT_Result vkrtSceneRebuildTopLevelScene(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
     return createTopLevelAccelerationStructure(vkrt);
 }

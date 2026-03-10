@@ -1,7 +1,7 @@
 #include "accel.h"
 
 #include "buffer.h"
-#include "shared.h"
+#include "rebuild.h"
 #include "device.h"
 
 #include <stdlib.h>
@@ -153,7 +153,7 @@ VKRT_Result prepareBottomLevelAccelerationStructureBuilds(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
 
     FrameSceneUpdate* update = vkrtCurrentFrameSceneUpdate(vkrt);
-    cleanupPendingBLASBuilds(vkrt, update);
+    vkrtCleanupPendingBLASBuilds(vkrt, update);
 
     uint32_t pendingCount = 0;
     for (uint32_t i = 0; i < vkrt->core.meshCount; i++) {

@@ -2,7 +2,7 @@
 
 int outlineRadius(int2 size) {
     int minDimension = min(size.x, size.y);
-    return clamp((int)round((float)minDimension * (2.5 / 1080.0)), 1, 5);
+    return clamp((int)round((float)minDimension * (2.0 / 1080.0)), 1, 5);
 }
 
 bool isSelected(int2 pixel) {

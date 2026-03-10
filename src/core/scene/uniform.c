@@ -14,20 +14,20 @@ static VKRT_SceneTimelineKeyframe makeDefaultSceneTimelineKeyframe(float time) {
     };
 }
 
-static void resetTimelineDefaults(VKRT_PublicState* state) {
-    if (!state) return;
+static void resetTimelineDefaults(VKRT_SceneSettingsSnapshot* settings) {
+    if (!settings) return;
 
-    state->sceneTimeline.enabled = 0;
-    state->sceneTimeline.keyframeCount = 2;
-    state->sceneTimeline.keyframes[0] = makeDefaultSceneTimelineKeyframe(0.0f);
-    state->sceneTimeline.keyframes[1] = makeDefaultSceneTimelineKeyframe(1.0f);
+    settings->sceneTimeline.enabled = 0;
+    settings->sceneTimeline.keyframeCount = 2;
+    settings->sceneTimeline.keyframes[0] = makeDefaultSceneTimelineKeyframe(0.0f);
+    settings->sceneTimeline.keyframes[1] = makeDefaultSceneTimelineKeyframe(1.0f);
 }
 
-static void writeTimelineUniform(SceneData* sceneData, const VKRT_PublicState* state) {
-    if (!sceneData || !state) return;
+static void writeTimelineUniform(SceneData* sceneData, const VKRT_SceneSettingsSnapshot* settings) {
+    if (!sceneData || !settings) return;
 
-    sceneData->timelineEnabled = state->sceneTimeline.enabled ? 1u : 0u;
-    uint32_t keyCount = state->sceneTimeline.keyframeCount;
+    sceneData->timelineEnabled = settings->sceneTimeline.enabled ? 1u : 0u;
+    uint32_t keyCount = settings->sceneTimeline.keyframeCount;
     if (keyCount > VKRT_SCENE_TIMELINE_MAX_KEYFRAMES) keyCount = VKRT_SCENE_TIMELINE_MAX_KEYFRAMES;
     sceneData->timelineKeyframeCount = keyCount;
 
@@ -37,7 +37,7 @@ static void writeTimelineUniform(SceneData* sceneData, const VKRT_PublicState* s
         vec3 tint = {1.0f, 1.0f, 1.0f};
 
         if (i < keyCount) {
-            VKRT_SceneTimelineKeyframe key = state->sceneTimeline.keyframes[i];
+            VKRT_SceneTimelineKeyframe key = settings->sceneTimeline.keyframes[i];
             if (isfinite(key.time)) time = key.time;
             if (isfinite(key.emissionScale)) scale = key.emissionScale;
             for (int c = 0; c < 3; c++) {
@@ -57,6 +57,23 @@ static void writeTimelineUniform(SceneData* sceneData, const VKRT_PublicState* s
     }
 }
 
+static void writeSceneStateUniform(SceneData* sceneData, const VKRT_SceneSettingsSnapshot* settings) {
+    if (!sceneData || !settings) return;
+
+    sceneData->samplesPerPixel = settings->samplesPerPixel;
+    sceneData->rrMaxDepth = settings->rrMaxDepth;
+    sceneData->rrMinDepth = settings->rrMinDepth;
+    sceneData->toneMappingMode = settings->toneMappingMode;
+    sceneData->timeBase = settings->timeBase;
+    sceneData->timeStep = settings->timeStep;
+    sceneData->fogDensity = settings->fogDensity;
+    sceneData->debugMode = settings->debugMode;
+    sceneData->misNeeEnabled = settings->misNeeEnabled ? 1u : 0u;
+    sceneData->selectionEnabled = settings->selectionEnabled ? 1u : 0u;
+    sceneData->selectedMeshIndex = settings->selectedMeshIndex;
+    writeTimelineUniform(sceneData, settings);
+}
+
 static void syncSceneDataToFrame(VKRT* vkrt, uint32_t frameIndex) {
     if (!vkrt || !vkrt->core.sceneData || frameIndex >= VKRT_MAX_FRAMES_IN_FLIGHT) return;
     if (!vkrt->core.sceneFrameData[frameIndex]) return;
@@ -73,6 +90,11 @@ static void syncAllSceneDataFrames(VKRT* vkrt) {
 void syncCurrentFrameSceneData(VKRT* vkrt) {
     if (!vkrt) return;
     syncSceneDataToFrame(vkrt, vkrt->runtime.currentFrame);
+}
+
+void syncSceneStateData(VKRT* vkrt) {
+    if (!vkrt || !vkrt->core.sceneData) return;
+    writeSceneStateUniform(vkrt->core.sceneData, &vkrt->sceneSettings);
 }
 
 void markSelectionMaskDirty(VKRT* vkrt) {
@@ -139,29 +161,28 @@ VKRT_Result createSceneUniform(VKRT* vkrt) {
     vkrt->runtime.displayViewportRect[2] = initialWidth;
     vkrt->runtime.displayViewportRect[3] = initialHeight;
 
-    vkrt->state.samplesPerPixel = 8;
-    vkrt->state.rrMaxDepth = 8;
-    vkrt->state.rrMinDepth = 4;
-    vkrt->state.toneMappingMode = VKRT_TONE_MAPPING_ACES;
-    vkrt->state.renderModeActive = 0;
-    vkrt->state.renderModeFinished = 0;
-    vkrt->state.renderTargetSamples = 0;
-    vkrt->state.renderViewZoom = 1.0f;
-    vkrt->state.renderViewPanX = 0.0f;
-    vkrt->state.renderViewPanY = 0.0f;
-    vkrt->state.autoSPPEnabled = 1;
+    vkrt->sceneSettings.samplesPerPixel = 8;
+    vkrt->sceneSettings.rrMaxDepth = 8;
+    vkrt->sceneSettings.rrMinDepth = 4;
+    vkrt->sceneSettings.toneMappingMode = VKRT_TONE_MAPPING_ACES;
+    vkrt->renderStatus.renderModeActive = 0;
+    vkrt->renderStatus.renderModeFinished = 0;
+    vkrt->renderStatus.renderTargetSamples = 0;
+    vkrt->renderView.zoom = 1.0f;
+    vkrt->renderView.panX = 0.0f;
+    vkrt->renderView.panY = 0.0f;
+    vkrt->sceneSettings.autoSPPEnabled = 1;
     float refreshHz = vkrt->runtime.displayRefreshHz;
     if (refreshHz <= 0.0f) refreshHz = 60.0f;
     uint32_t targetFPS = (uint32_t)(refreshHz + 0.5f);
     if (targetFPS < 30) targetFPS = 30;
     if (targetFPS > 360) targetFPS = 360;
-    vkrt->state.autoSPPTargetFPS = targetFPS;
-    vkrt->state.autoSPPTargetFrameMs = 1000.0f / (float)vkrt->state.autoSPPTargetFPS;
-    vkrt->state.autoSPPControlMs = 0.0f;
-    vkrt->state.autoSPPFramesUntilNextAdjust = 0;
+    vkrt->sceneSettings.autoSPPTargetFPS = targetFPS;
+    vkrt->autoSPP.targetFrameMs = 1000.0f / (float)targetFPS;
+    vkrt->autoSPP.controlMs = 0.0f;
+    vkrt->autoSPP.framesUntilNextAdjust = 0;
 
-    vkrt->state.camera = (Camera){
-        .width = initialWidth, .height = initialHeight,
+    vkrt->sceneSettings.camera = (Camera){
         .nearZ = 0.001f, .farZ = 10000.0f,
         .vfov = 40.0f,
         .pos = {-0.5f, 0.2f, -0.2f},
@@ -169,32 +190,22 @@ VKRT_Result createSceneUniform(VKRT* vkrt) {
         .up = {0.0f, 0.0f, 1.0f}
     };
 
-    vkrt->core.sceneData->rrMaxDepth = vkrt->state.rrMaxDepth;
-    vkrt->core.sceneData->rrMinDepth = vkrt->state.rrMinDepth;
-    vkrt->core.sceneData->toneMappingMode = vkrt->state.toneMappingMode;
-
     vkrt->core.sceneData->viewportRect[0] = 0;
     vkrt->core.sceneData->viewportRect[1] = 0;
     vkrt->core.sceneData->viewportRect[2] = initialWidth;
     vkrt->core.sceneData->viewportRect[3] = initialHeight;
 
-    vkrt->state.timeBase = -1.0f;
-    vkrt->state.timeStep = 0.5f;
-    vkrt->state.fogDensity = 0.0f;
-    vkrt->state.debugMode = VKRT_DEBUG_MODE_NONE;
-    vkrt->state.misNeeEnabled = 1u;
-    vkrt->state.selectionEnabled = 0;
-    vkrt->state.selectedMeshIndex = VKRT_INVALID_INDEX;
-    resetTimelineDefaults(&vkrt->state);
-    vkrt->core.sceneData->timeBase = vkrt->state.timeBase;
-    vkrt->core.sceneData->timeStep = vkrt->state.timeStep;
-    vkrt->core.sceneData->fogDensity = vkrt->state.fogDensity;
-    vkrt->core.sceneData->debugMode = VKRT_DEBUG_MODE_NONE;
-    vkrt->core.sceneData->misNeeEnabled = 1u;
-    vkrt->core.sceneData->emissiveMeshCount = 0;
-    vkrt->core.sceneData->emissiveTriangleCount = 0;
+    vkrt->sceneSettings.timeBase = -1.0f;
+    vkrt->sceneSettings.timeStep = 0.5f;
+    vkrt->sceneSettings.fogDensity = 0.0f;
+    vkrt->sceneSettings.debugMode = VKRT_DEBUG_MODE_NONE;
+    vkrt->sceneSettings.misNeeEnabled = 1u;
+    vkrt->sceneSettings.selectionEnabled = 0;
+    vkrt->sceneSettings.selectedMeshIndex = VKRT_INVALID_INDEX;
+    resetTimelineDefaults(&vkrt->sceneSettings);
 
-    updateMatricesFromCamera(vkrt);
+    syncCameraMatrices(vkrt);
+    syncSceneStateData(vkrt);
     syncAllSceneDataFrames(vkrt);
     return VKRT_SUCCESS;
 }
@@ -203,35 +214,24 @@ void resetSceneData(VKRT* vkrt) {
     if (!vkrt || !vkrt->core.sceneData) return;
 
     vkrt->core.sceneData->frameNumber = 0;
-    vkrt->core.sceneData->samplesPerPixel = vkrt->state.samplesPerPixel;
-    vkrt->core.sceneData->rrMaxDepth = vkrt->state.rrMaxDepth;
-    vkrt->core.sceneData->rrMinDepth = vkrt->state.rrMinDepth;
-    vkrt->core.sceneData->toneMappingMode = vkrt->state.toneMappingMode;
-    vkrt->core.sceneData->timeBase = vkrt->state.timeBase;
-    vkrt->core.sceneData->timeStep = vkrt->state.timeStep;
-    vkrt->core.sceneData->fogDensity = vkrt->state.fogDensity;
-    vkrt->core.sceneData->debugMode = vkrt->state.debugMode;
-    vkrt->core.sceneData->misNeeEnabled = vkrt->state.misNeeEnabled ? 1u : 0u;
+    syncSceneStateData(vkrt);
     vkrt->core.sceneData->emissiveMeshCount = vkrt->core.emissiveMeshCount;
     vkrt->core.sceneData->emissiveTriangleCount = vkrt->core.emissiveTriangleCount;
-    vkrt->core.sceneData->selectionEnabled = vkrt->state.selectionEnabled ? 1u : 0u;
-    vkrt->core.sceneData->selectedMeshIndex = vkrt->state.selectedMeshIndex;
-    writeTimelineUniform(vkrt->core.sceneData, &vkrt->state);
 
-    vkrt->state.renderModeFinished = 0;
-    vkrt->state.accumulationFrame = 0;
-    vkrt->state.totalSamples = 0;
-    vkrt->state.averageFrametime = 0.0f;
-    vkrt->state.frametimeStartIndex = 0;
+    vkrt->renderStatus.renderModeFinished = 0;
+    vkrt->renderStatus.accumulationFrame = 0;
+    vkrt->renderStatus.totalSamples = 0;
+    vkrt->renderStatus.averageFrametime = 0.0f;
+    vkrt->timing.frametimeStartIndex = 0;
     vkrt->core.accumulationNeedsReset = VK_TRUE;
-    memset(vkrt->state.frametimes, 0, sizeof(vkrt->state.frametimes));
+    memset(vkrt->renderStatus.frametimes, 0, sizeof(vkrt->renderStatus.frametimes));
 }
 
 void syncSelectionSceneData(VKRT* vkrt) {
     if (!vkrt || !vkrt->core.sceneData) return;
 
-    vkrt->core.sceneData->selectionEnabled = vkrt->state.selectionEnabled ? 1u : 0u;
-    vkrt->core.sceneData->selectedMeshIndex = vkrt->state.selectedMeshIndex;
+    vkrt->core.sceneData->selectionEnabled = vkrt->sceneSettings.selectionEnabled ? 1u : 0u;
+    vkrt->core.sceneData->selectedMeshIndex = vkrt->sceneSettings.selectedMeshIndex;
     markSelectionMaskDirty(vkrt);
     syncAllSceneDataFrames(vkrt);
 }

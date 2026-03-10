@@ -1,7 +1,8 @@
+#include "lighting.h"
+
 #include "buffer.h"
 #include "scene.h"
 #include "debug.h"
-#include "vkrt_internal.h"
 
 #include <math.h>
 #include <stdint.h>
@@ -43,7 +44,7 @@ static void destroyLightBuffers(VKRT* vkrt) {
     vkrt->core.emissiveTriangleCount = 0;
 }
 
-VKRT_Result rebuildLightBuffers(VKRT* vkrt) {
+VKRT_Result vkrtSceneRebuildLightBuffers(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
 
     destroyLightBuffers(vkrt);

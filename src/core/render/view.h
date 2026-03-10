@@ -2,7 +2,6 @@
 
 #include "vkrt_types.h"
 
-float vkrtClampFloatValue(float value, float minValue, float maxValue);
 void vkrtClampViewportRect(VkExtent2D extent, uint32_t* x, uint32_t* y, uint32_t* width, uint32_t* height);
 void vkrtQueryRenderViewCropExtent(
     VkExtent2D renderExtent,

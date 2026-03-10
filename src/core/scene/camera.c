@@ -10,8 +10,8 @@ void applyCameraInput(VKRT* vkrt, const VKRT_CameraInput* input) {
     const float orbitSpeed = 0.004f;
     const float zoomSpeed = -0.075f;
 
-    float* pos = vkrt->state.camera.pos;
-    float* tgt = vkrt->state.camera.target;
+    float* pos = vkrt->sceneSettings.camera.pos;
+    float* tgt = vkrt->sceneSettings.camera.target;
     vec3 viewDir = {tgt[0] - pos[0], tgt[1] - pos[1], tgt[2] - pos[2]};
     float dist = glm_vec3_norm(viewDir);
 
@@ -38,7 +38,7 @@ void applyCameraInput(VKRT* vkrt, const VKRT_CameraInput* input) {
             pos[i] += d;
             tgt[i] += d;
         }
-        updateMatricesFromCamera(vkrt);
+        updateCamera(vkrt);
     }
 
     if (input->orbiting) {
@@ -54,29 +54,34 @@ void applyCameraInput(VKRT* vkrt, const VKRT_CameraInput* input) {
         for (int i = 0; i < 3; i++)
             pos[i] = tgt[i] - fwd[i] * dist;
 
-        updateMatricesFromCamera(vkrt);
+        updateCamera(vkrt);
     }
 
     if (input->scroll != 0.0f) {
         float s = input->scroll * zoomSpeed;
         for (int i = 0; i < 3; i++)
             pos[i] -= viewDir[i] * s;
-        updateMatricesFromCamera(vkrt);
+        updateCamera(vkrt);
     }
 }
 
-void updateMatricesFromCamera(VKRT* vkrt) {
+void updateCamera(VKRT* vkrt) {
+    syncCameraMatrices(vkrt);
+    markSelectionMaskDirty(vkrt);
+    resetSceneData(vkrt);
+}
+
+void syncCameraMatrices(VKRT* vkrt) {
     if (!vkrt || !vkrt->core.sceneData) return;
 
     mat4 view, proj;
-    Camera cam = vkrt->state.camera;
+    Camera cam = vkrt->sceneSettings.camera;
+    uint32_t viewportWidth = vkrt->core.sceneData->viewportRect[2] > 0u ? vkrt->core.sceneData->viewportRect[2] : 1u;
+    uint32_t viewportHeight = vkrt->core.sceneData->viewportRect[3] > 0u ? vkrt->core.sceneData->viewportRect[3] : 1u;
 
     glm_lookat(cam.pos, cam.target, cam.up, view);
-    glm_perspective(glm_rad(cam.vfov), (float)cam.width / cam.height, cam.nearZ, cam.farZ, proj);
+    glm_perspective(glm_rad(cam.vfov), (float)viewportWidth / (float)viewportHeight, cam.nearZ, cam.farZ, proj);
 
     glm_mat4_inv(view, vkrt->core.sceneData->viewInverse);
     glm_mat4_inv(proj, vkrt->core.sceneData->projInverse);
-
-    markSelectionMaskDirty(vkrt);
-    resetSceneData(vkrt);
 }

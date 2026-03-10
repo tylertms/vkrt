@@ -4,44 +4,20 @@
 #include "vkrt_internal.h"
 #include <vulkan/vulkan_core.h>
 
-static AccelerationStructure* getSceneTLAS(VKRT* vkrt) {
-    return &vkrt->core.sceneTopLevelAccelerationStructure;
-}
-
-static Buffer* getSceneMeshData(VKRT* vkrt) {
-    return &vkrt->core.sceneMeshData;
-}
-
-static Buffer* getSceneMaterialData(VKRT* vkrt) {
-    return &vkrt->core.sceneMaterialData;
-}
-
-static Buffer* getSceneEmissiveMeshData(VKRT* vkrt) {
-    return &vkrt->core.sceneEmissiveMeshData;
-}
-
-static Buffer* getSceneEmissiveTriangleData(VKRT* vkrt) {
-    return &vkrt->core.sceneEmissiveTriangleData;
-}
-
-static VkBuffer getFrameSceneDataBuffer(VKRT* vkrt, uint32_t frameIndex) {
-    return vkrt->core.sceneDataBuffers[frameIndex];
-}
-
 static VkBool32 descriptorResourcesReadyForFrame(VKRT* vkrt, uint32_t frameIndex) {
     if (!vkrt || frameIndex >= VKRT_MAX_FRAMES_IN_FLIGHT) return VK_FALSE;
     if (vkrt->core.accumulationReadIndex >= 2u || vkrt->core.accumulationWriteIndex >= 2u) {
         return VK_FALSE;
     }
 
-    const AccelerationStructure* tlas = getSceneTLAS(vkrt);
-    const Buffer* meshData = getSceneMeshData(vkrt);
-    const Buffer* materialData = getSceneMaterialData(vkrt);
-    const Buffer* emissiveMeshData = getSceneEmissiveMeshData(vkrt);
-    const Buffer* emissiveTriangleData = getSceneEmissiveTriangleData(vkrt);
+    const AccelerationStructure* tlas = &vkrt->core.sceneTopLevelAccelerationStructure;
+    const Buffer* meshData = &vkrt->core.sceneMeshData;
+    const Buffer* materialData = &vkrt->core.sceneMaterialData;
+    const Buffer* emissiveMeshData = &vkrt->core.sceneEmissiveMeshData;
+    const Buffer* emissiveTriangleData = &vkrt->core.sceneEmissiveTriangleData;
 
     return tlas->structure != VK_NULL_HANDLE &&
-           getFrameSceneDataBuffer(vkrt, frameIndex) != VK_NULL_HANDLE &&
+           vkrt->core.sceneDataBuffers[frameIndex] != VK_NULL_HANDLE &&
            vkrt->core.outputImageView != VK_NULL_HANDLE &&
            vkrt->core.selectionMaskImageView != VK_NULL_HANDLE &&
            vkrt->core.accumulationImageViews[vkrt->core.accumulationReadIndex] != VK_NULL_HANDLE &&
@@ -62,11 +38,11 @@ static VKRT_Result updateDescriptorSetForFrame(VKRT* vkrt, uint32_t frameIndex) 
         return VKRT_SUCCESS;
     }
 
-    Buffer* meshData = getSceneMeshData(vkrt);
-    Buffer* materialData = getSceneMaterialData(vkrt);
-    Buffer* emissiveMeshData = getSceneEmissiveMeshData(vkrt);
-    Buffer* emissiveTriangleData = getSceneEmissiveTriangleData(vkrt);
-    AccelerationStructure* tlas = getSceneTLAS(vkrt);
+    Buffer* meshData = &vkrt->core.sceneMeshData;
+    Buffer* materialData = &vkrt->core.sceneMaterialData;
+    Buffer* emissiveMeshData = &vkrt->core.sceneEmissiveMeshData;
+    Buffer* emissiveTriangleData = &vkrt->core.sceneEmissiveTriangleData;
+    AccelerationStructure* tlas = &vkrt->core.sceneTopLevelAccelerationStructure;
     VkDescriptorSet descriptorSet = vkrt->core.descriptorSets[frameIndex];
 
     VkWriteDescriptorSetAccelerationStructureKHR accelerationStructureInfo = {0};
@@ -159,7 +135,7 @@ static VKRT_Result updateDescriptorSetForFrame(VKRT* vkrt, uint32_t frameIndex) 
     indexBufferWrite.pBufferInfo = &indexBufferInfo;
 
     VkDescriptorBufferInfo sceneDataInfo = {
-        .buffer = getFrameSceneDataBuffer(vkrt, frameIndex),
+        .buffer = vkrt->core.sceneDataBuffers[frameIndex],
         .offset = 0,
         .range = sizeof(SceneData),
     };

@@ -15,6 +15,10 @@
 #include <unistd.h>
 #endif
 
+enum {
+    kExeRelativePathCapacity = 4096,
+};
+
 static int get_exe_dir(char* out, size_t sz) {
 #if defined(_WIN32)
     DWORD len = GetModuleFileNameA(NULL, out, (DWORD)sz);
@@ -88,7 +92,7 @@ const char* pathBasename(const char* path) {
 }
 
 static FILE* fopen_exe_relative(const char* relpath, const char* mode) {
-    char buf[4096];
+    char buf[kExeRelativePathCapacity];
     if (get_exe_dir(buf, sizeof buf) < 0) {
         LOG_ERROR("Failed to determine executable path");
         return NULL;
@@ -150,12 +154,12 @@ int resolveExistingPath(const char* path, char* outPath, size_t outPathSize) {
         return 0;
     }
 
-    char executableDir[VKRT_PATH_MAX] = {0};
+    char executableDir[VKRT_PATH_MAX];
     if (get_exe_dir(executableDir, sizeof(executableDir)) != 0) {
         return -1;
     }
 
-    char candidate[VKRT_PATH_MAX] = {0};
+    char candidate[VKRT_PATH_MAX];
     if (joinPath(candidate, sizeof(candidate), executableDir, path) == 0 &&
         resolveExistingCandidate(candidate, outPath, outPathSize) == 0) {
         return 0;
@@ -185,7 +189,7 @@ int resolveExistingParentPath(const char* preferredPath, const char* fallbackPat
     if (!outPath || outPathSize == 0) return -1;
 
     if (preferredPath && preferredPath[0]) {
-        char candidate[VKRT_PATH_MAX] = {0};
+        char candidate[VKRT_PATH_MAX];
         if (copyPathString(candidate, sizeof(candidate), preferredPath) == 0) {
             while (candidate[0]) {
                 pathTrimTrailingSeparators(candidate);

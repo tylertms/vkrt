@@ -6,6 +6,18 @@
 #if defined(_WIN32)
 #include <process.h>
 
+uint64_t getMicroseconds(void) {
+    static LARGE_INTEGER frequency = {0};
+    LARGE_INTEGER counter;
+
+    if (frequency.QuadPart == 0) {
+        QueryPerformanceFrequency(&frequency);
+    }
+
+    QueryPerformanceCounter(&counter);
+    return (uint64_t)(counter.QuadPart * 1000000 / frequency.QuadPart);
+}
+
 typedef struct ThreadStartContext {
     VKRT_ThreadFunc function;
     void* argument;
@@ -113,10 +125,18 @@ int vkrtThreadJoin(VKRT_Thread thread, int* result) {
 
 #else
 
+#include <time.h>
+
 typedef struct ThreadStartContext {
     VKRT_ThreadFunc function;
     void* argument;
 } ThreadStartContext;
+
+uint64_t getMicroseconds(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
+}
 
 static void* vkrtThreadTrampoline(void* rawContext) {
     ThreadStartContext* context = (ThreadStartContext*)rawContext;

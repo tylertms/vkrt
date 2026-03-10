@@ -3,41 +3,20 @@
 #include "buffer.h"
 #include "device.h"
 #include "scene.h"
+#include "state.h"
 #include "debug.h"
 
 #include <stdlib.h>
 #include <string.h>
 
-static AccelerationStructure* getSceneTLAS(VKRT* vkrt) {
-    return &vkrt->core.sceneTopLevelAccelerationStructure;
-}
-
-static Buffer* getSceneMeshData(VKRT* vkrt) {
-    return &vkrt->core.sceneMeshData;
-}
-
-
-
 static void destroySceneBuffers(VKRT* vkrt) {
     if (!vkrt) return;
 
-    Buffer* meshData = getSceneMeshData(vkrt);
+    Buffer* meshData = &vkrt->core.sceneMeshData;
     destroyBufferResources(vkrt, meshData);
 
-    AccelerationStructure* tlas = getSceneTLAS(vkrt);
-    if (tlas->structure != VK_NULL_HANDLE) {
-        vkrt->core.procs.vkDestroyAccelerationStructureKHR(vkrt->core.device, tlas->structure, NULL);
-        tlas->structure = VK_NULL_HANDLE;
-    }
-    if (tlas->buffer != VK_NULL_HANDLE) {
-        vkDestroyBuffer(vkrt->core.device, tlas->buffer, NULL);
-        tlas->buffer = VK_NULL_HANDLE;
-    }
-    if (tlas->memory != VK_NULL_HANDLE) {
-        vkFreeMemory(vkrt->core.device, tlas->memory, NULL);
-        tlas->memory = VK_NULL_HANDLE;
-    }
-    tlas->deviceAddress = 0;
+    AccelerationStructure* tlas = &vkrt->core.sceneTopLevelAccelerationStructure;
+    vkrtDestroyAccelerationStructureResources(vkrt, tlas);
 }
 
 VKRT_Result createTopLevelAccelerationStructure(VKRT* vkrt) {
@@ -60,8 +39,8 @@ VKRT_Result createTopLevelAccelerationStructure(VKRT* vkrt) {
     uint32_t graphicsFamily = vkrt->core.indices.graphics;
     VkAccelerationStructureInstanceKHR* instances = NULL;
     MeshInfo* meshInfos = NULL;
-    Buffer* meshData = getSceneMeshData(vkrt);
-    AccelerationStructure* tlas = getSceneTLAS(vkrt);
+    Buffer* meshData = &vkrt->core.sceneMeshData;
+    AccelerationStructure* tlas = &vkrt->core.sceneTopLevelAccelerationStructure;
 
     instances = (VkAccelerationStructureInstanceKHR*)malloc(sizeof(*instances) * instanceCount);
     meshInfos = (MeshInfo*)malloc(sizeof(*meshInfos) * instanceCount);
@@ -246,8 +225,8 @@ VKRT_Result recordTopLevelAccelerationStructureBuild(VKRT* vkrt, VkCommandBuffer
     FrameSceneUpdate* update = vkrtCurrentFrameSceneUpdate(vkrt);
     if (!update->tlasBuildPending) return VKRT_SUCCESS;
 
-    AccelerationStructure* tlas = getSceneTLAS(vkrt);
-    uint32_t instanceCount = getSceneMeshData(vkrt)->count;
+    AccelerationStructure* tlas = &vkrt->core.sceneTopLevelAccelerationStructure;
+    uint32_t instanceCount = vkrt->core.sceneMeshData.count;
     if (tlas->structure == VK_NULL_HANDLE || update->instanceBuffer.buffer == VK_NULL_HANDLE || instanceCount == 0) {
         return VKRT_SUCCESS;
     }

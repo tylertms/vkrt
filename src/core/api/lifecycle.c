@@ -1,5 +1,4 @@
 #include "buffer.h"
-#include "shared.h"
 #include "command/pool.h"
 #include "descriptor.h"
 #include "device.h"
@@ -12,6 +11,8 @@
 #include "surface.h"
 #include "sync.h"
 #include "swapchain.h"
+#include "rebuild.h"
+#include "state.h"
 #include "validation.h"
 #include "export.h"
 #include "debug.h"
@@ -37,22 +38,6 @@ static void destroyBufferAndMemory(VKRT* vkrt, VkBuffer* buffer, VkDeviceMemory*
         vkFreeMemory(vkrt->core.device, *memory, NULL);
         *memory = VK_NULL_HANDLE;
     }
-}
-
-static void destroyAccelerationStructureResources(VKRT* vkrt, AccelerationStructure* accelerationStructure) {
-    if (!vkrt || !accelerationStructure || vkrt->core.device == VK_NULL_HANDLE) return;
-
-    if (vkrt->core.procs.vkDestroyAccelerationStructureKHR &&
-        accelerationStructure->structure != VK_NULL_HANDLE) {
-        vkrt->core.procs.vkDestroyAccelerationStructureKHR(
-            vkrt->core.device,
-            accelerationStructure->structure,
-            NULL);
-    }
-    accelerationStructure->structure = VK_NULL_HANDLE;
-
-    destroyBufferAndMemory(vkrt, &accelerationStructure->buffer, &accelerationStructure->memory);
-    accelerationStructure->deviceAddress = 0;
 }
 
 static void releaseMeshHostGeometry(VKRT* vkrt) {
@@ -106,9 +91,9 @@ static void cleanupSceneAndAccelerationResources(VKRT* vkrt) {
     if (!vkrt || vkrt->core.device == VK_NULL_HANDLE) return;
 
     for (uint32_t i = 0; i < VKRT_MAX_FRAMES_IN_FLIGHT; i++) {
-        cleanupFrameSceneUpdate(vkrt, i);
+        vkrtCleanupFrameSceneUpdate(vkrt, i);
     }
-    destroyAccelerationStructureResources(vkrt, &vkrt->core.sceneTopLevelAccelerationStructure);
+    vkrtDestroyAccelerationStructureResources(vkrt, &vkrt->core.sceneTopLevelAccelerationStructure);
     destroyBufferAndMemory(vkrt, &vkrt->core.sceneMeshData.buffer, &vkrt->core.sceneMeshData.memory);
     destroyBufferAndMemory(vkrt, &vkrt->core.sceneMaterialData.buffer, &vkrt->core.sceneMaterialData.memory);
     destroyBufferAndMemory(vkrt, &vkrt->core.sceneEmissiveMeshData.buffer, &vkrt->core.sceneEmissiveMeshData.memory);
@@ -116,7 +101,7 @@ static void cleanupSceneAndAccelerationResources(VKRT* vkrt) {
 
     for (uint32_t i = 0; i < vkrt->core.meshCount; i++) {
         if (!vkrt->core.meshes[i].ownsGeometry) continue;
-        destroyAccelerationStructureResources(vkrt, &vkrt->core.meshes[i].bottomLevelAccelerationStructure);
+        vkrtDestroyAccelerationStructureResources(vkrt, &vkrt->core.meshes[i].bottomLevelAccelerationStructure);
     }
 
     releaseMeshHostGeometry(vkrt);
@@ -217,10 +202,14 @@ void VKRT_defaultCreateInfo(VKRT_CreateInfo* createInfo) {
     if (!createInfo) return;
 
     *createInfo = (VKRT_CreateInfo){
-        .width = VKRT_DEFAULT_WIDTH,
-        .height = VKRT_DEFAULT_HEIGHT,
+        .width = 0,
+        .height = 0,
         .title = "VKRT",
-        .vsync = 1,
+        .presentModePreference = VKRT_PRESENT_MODE_ADAPTIVE,
+        .startMaximized = 1,
+        .startFullscreen = 0,
+        .preferredDeviceIndex = -1,
+        .preferredDeviceName = NULL,
     };
 }
 
@@ -257,7 +246,8 @@ VKRT_Result VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInf
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
     logStepTime("GLFW setup complete", stepStartTime);
 
-    vkrt->runtime.vsync = createInfo->vsync;
+    vkrt->runtime.presentModePreference = createInfo->presentModePreference;
+    vkrt->runtime.savedPresentModePreference = createInfo->presentModePreference;
     vkrt->runtime.autoSPPFastAdaptFrames = 0;
     vkrt->runtime.swapChainFormatLogInitialized = VK_FALSE;
     vkrt->runtime.lastLoggedSwapChainFormat = VK_FORMAT_UNDEFINED;
@@ -274,12 +264,23 @@ VKRT_Result VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInf
     vkrt->core.emissiveTriangleCount = 0;
 
     const char* title = createInfo->title ? createInfo->title : "VKRT";
-    uint32_t width = createInfo->width ? createInfo->width : VKRT_DEFAULT_WIDTH;
-    uint32_t height = createInfo->height ? createInfo->height : VKRT_DEFAULT_HEIGHT;
+    uint32_t displayWidth = VKRT_DEFAULT_WIDTH;
+    uint32_t displayHeight = VKRT_DEFAULT_HEIGHT;
+    vkrtQueryDisplayMetrics(NULL, &displayWidth, &displayHeight, NULL);
+    vkrt->runtime.displayWidth = displayWidth;
+    vkrt->runtime.displayHeight = displayHeight;
+
+    uint32_t width = createInfo->startFullscreen ? displayWidth : createInfo->width;
+    uint32_t height = createInfo->startFullscreen ? displayHeight : createInfo->height;
+    if (width == 0) width = createInfo->startMaximized ? displayWidth : (displayWidth > 1u ? displayWidth * 0.8 : 1u);
+    if (height == 0) height = createInfo->startMaximized ? displayHeight : (displayHeight > 1u ? displayHeight * 0.8 : 1u);
+    if (width == 0) width = VKRT_DEFAULT_WIDTH;
+    if (height == 0) height = VKRT_DEFAULT_HEIGHT;
 
     stepStartTime = getMicroseconds();
-    glfwWindowHint(GLFW_MAXIMIZED, GLFW_TRUE);
-    vkrt->runtime.window = glfwCreateWindow((int)width, (int)height, title, 0, 0);
+    GLFWmonitor* fullscreenMonitor = createInfo->startFullscreen ? glfwGetPrimaryMonitor() : NULL;
+    glfwWindowHint(GLFW_MAXIMIZED, (!createInfo->startFullscreen && createInfo->startMaximized) ? GLFW_TRUE : GLFW_FALSE);
+    vkrt->runtime.window = glfwCreateWindow((int)width, (int)height, title, fullscreenMonitor, 0);
     if (!vkrt->runtime.window) {
         LOG_ERROR("Failed to create GLFW window");
         goto init_failed;
@@ -303,7 +304,7 @@ VKRT_Result VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInf
     logStepTime("Surface created", stepStartTime);
 
     stepStartTime = getMicroseconds();
-    if (pickPhysicalDevice(vkrt) != VKRT_SUCCESS) goto init_failed;
+    if (pickPhysicalDevice(vkrt, createInfo) != VKRT_SUCCESS) goto init_failed;
     logStepTime("Physical device selection complete", stepStartTime);
 
     stepStartTime = getMicroseconds();
@@ -469,7 +470,11 @@ void VKRT_deinit(VKRT* vkrt) {
     VKRT_AppHooks hooks = vkrt->appHooks;
     memset(&vkrt->core, 0, sizeof(vkrt->core));
     memset(&vkrt->runtime, 0, sizeof(vkrt->runtime));
-    memset(&vkrt->state, 0, sizeof(vkrt->state));
+    memset(&vkrt->sceneSettings, 0, sizeof(vkrt->sceneSettings));
+    memset(&vkrt->renderStatus, 0, sizeof(vkrt->renderStatus));
+    memset(&vkrt->renderView, 0, sizeof(vkrt->renderView));
+    memset(&vkrt->timing, 0, sizeof(vkrt->timing));
+    memset(&vkrt->autoSPP, 0, sizeof(vkrt->autoSPP));
     vkrt->appHooks = hooks;
 
     LOG_INFO("VKRT deinitialization complete in %.3f ms", (double)(getMicroseconds() - deinitStartTime) / 1e3);

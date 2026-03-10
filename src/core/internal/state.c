@@ -1,4 +1,6 @@
-#include "shared.h"
+#include "state.h"
+
+#include <stdint.h>
 
 VKRT_Result vkrtRequireSceneStateReady(const VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
@@ -24,6 +26,29 @@ uint32_t vkrtResolveMeshRenderBackfaces(const Mesh* mesh) {
         return mesh->renderBackfacesOverride ? 1u : 0u;
     }
     return mesh->info.renderBackfaces ? 1u : 0u;
+}
+
+void vkrtDestroyAccelerationStructureResources(VKRT* vkrt, AccelerationStructure* accelerationStructure) {
+    if (!vkrt || !accelerationStructure || vkrt->core.device == VK_NULL_HANDLE) return;
+
+    if (vkrt->core.procs.vkDestroyAccelerationStructureKHR &&
+        accelerationStructure->structure != VK_NULL_HANDLE) {
+        vkrt->core.procs.vkDestroyAccelerationStructureKHR(
+            vkrt->core.device,
+            accelerationStructure->structure,
+            NULL);
+    }
+    accelerationStructure->structure = VK_NULL_HANDLE;
+
+    if (accelerationStructure->buffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(vkrt->core.device, accelerationStructure->buffer, NULL);
+        accelerationStructure->buffer = VK_NULL_HANDLE;
+    }
+    if (accelerationStructure->memory != VK_NULL_HANDLE) {
+        vkFreeMemory(vkrt->core.device, accelerationStructure->memory, NULL);
+        accelerationStructure->memory = VK_NULL_HANDLE;
+    }
+    accelerationStructure->deviceAddress = 0;
 }
 
 void vkrtMarkSceneResourcesDirty(VKRT* vkrt) {

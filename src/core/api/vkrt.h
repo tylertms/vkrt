@@ -43,7 +43,8 @@ VKRT_Result VKRT_saveRenderPNG(VKRT* vkrt, const char* path);
 VKRT_Result VKRT_startRender(VKRT* vkrt, uint32_t width, uint32_t height, uint32_t targetSamples);
 VKRT_Result VKRT_stopRenderSampling(VKRT* vkrt);
 VKRT_Result VKRT_stopRender(VKRT* vkrt);
-const VKRT_PublicState* VKRT_getPublicState(const VKRT* vkrt);
+VKRT_Result VKRT_getSceneSettings(const VKRT* vkrt, VKRT_SceneSettingsSnapshot* outSettings);
+VKRT_Result VKRT_getRenderStatus(const VKRT* vkrt, VKRT_RenderStatusSnapshot* outStatus);
 VKRT_Result VKRT_getRuntimeSnapshot(const VKRT* vkrt, VKRT_RuntimeSnapshot* outRuntime);
 VKRT_Result VKRT_getSystemInfo(const VKRT* vkrt, VKRT_SystemInfo* outSystemInfo);
 VKRT_Result VKRT_getOverlayInfo(const VKRT* vkrt, VKRT_OverlayInfo* outOverlayInfo);
@@ -56,6 +57,7 @@ VKRT_Result VKRT_setRenderViewState(VKRT* vkrt, float zoom, float panX, float pa
 
 VKRT_Result VKRT_getMeshCount(const VKRT* vkrt, uint32_t* outMeshCount);
 VKRT_Result VKRT_getMeshSnapshot(const VKRT* vkrt, uint32_t meshIndex, VKRT_MeshSnapshot* outMesh);
+VKRT_Result VKRT_setMeshName(VKRT* vkrt, uint32_t meshIndex, const char* name);
 VKRT_Result VKRT_setMeshTransform(VKRT* vkrt, uint32_t meshIndex, vec3 position, vec3 rotation, vec3 scale);
 VKRT_Result VKRT_setMeshMaterial(VKRT* vkrt, uint32_t meshIndex, const Material* material);
 VKRT_Result VKRT_setMeshRenderBackfaces(VKRT* vkrt, uint32_t meshIndex, uint32_t enabled);

@@ -1,16 +1,12 @@
 #include "view.h"
 
+#include "numeric.h"
+
 static VkExtent2D normalizeExtent(VkExtent2D extent) {
     VkExtent2D normalized = extent;
     if (normalized.width == 0) normalized.width = 1;
     if (normalized.height == 0) normalized.height = 1;
     return normalized;
-}
-
-float vkrtClampFloatValue(float value, float minValue, float maxValue) {
-    if (value < minValue) return minValue;
-    if (value > maxValue) return maxValue;
-    return value;
 }
 
 void vkrtClampViewportRect(VkExtent2D extent, uint32_t* x, uint32_t* y, uint32_t* width, uint32_t* height) {
@@ -57,7 +53,7 @@ void vkrtQueryRenderViewCropExtent(
     renderExtent = normalizeExtent(renderExtent);
     float renderWidth = (float)renderExtent.width;
     float renderHeight = (float)renderExtent.height;
-    float clampedZoom = vkrtClampFloatValue(zoom, VKRT_RENDER_VIEW_ZOOM_MIN, VKRT_RENDER_VIEW_ZOOM_MAX);
+    float clampedZoom = vkrtClampf(zoom, VKRT_RENDER_VIEW_ZOOM_MIN, VKRT_RENDER_VIEW_ZOOM_MAX);
 
     VkBool32 fillViewport = (clampedZoom > (VKRT_RENDER_VIEW_ZOOM_MIN + 0.0001f)) &&
                             viewportExtent.width > 0 &&
@@ -117,12 +113,12 @@ void vkrtClampRenderViewPanOffset(
     if (maxPanX <= 0.0f) {
         *panX = 0.0f;
     } else {
-        *panX = vkrtClampFloatValue(*panX, -maxPanX, maxPanX);
+        *panX = vkrtClampf(*panX, -maxPanX, maxPanX);
     }
 
     if (maxPanY <= 0.0f) {
         *panY = 0.0f;
     } else {
-        *panY = vkrtClampFloatValue(*panY, -maxPanY, maxPanY);
+        *panY = vkrtClampf(*panY, -maxPanY, maxPanY);
     }
 }

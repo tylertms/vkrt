@@ -1,32 +1,27 @@
-#include "shared.h"
+#include "state.h"
 #include "scene.h"
 #include "vkrt_internal.h"
+#include "numeric.h"
 
 #include <math.h>
 #include <string.h>
 
-static float clampFloatValue(float value, float minValue, float maxValue) {
-    if (value < minValue) return minValue;
-    if (value > maxValue) return maxValue;
-    return value;
-}
-
 static Material sanitizeMaterial(Material material) {
     for (int c = 0; c < 3; c++) {
-        material.baseColor[c] = clampFloatValue(material.baseColor[c], 0.0f, 1.0f);
-        material.emissionColor[c] = fmaxf(material.emissionColor[c], 0.0f);
+        material.baseColor[c] = vkrtFiniteClampf(material.baseColor[c], 0.0f, 0.0f, 1.0f);
+        material.emissionColor[c] = vkrtFiniteClampf(material.emissionColor[c], 0.0f, 0.0f, INFINITY);
     }
 
-    material.metallic = clampFloatValue(material.metallic, 0.0f, 1.0f);
-    material.roughness = clampFloatValue(material.roughness, 0.0f, 1.0f);
-    material.specular = clampFloatValue(material.specular, 0.0f, 1.0f);
-    material.specularTint = clampFloatValue(material.specularTint, 0.0f, 1.0f);
-    material.anisotropic = clampFloatValue(material.anisotropic, 0.0f, 1.0f);
-    material.sheen = clampFloatValue(material.sheen, 0.0f, 1.0f);
-    material.sheenTint = clampFloatValue(material.sheenTint, 0.0f, 1.0f);
-    material.clearcoat = clampFloatValue(material.clearcoat, 0.0f, 1.0f);
-    material.clearcoatGloss = clampFloatValue(material.clearcoatGloss, 0.0f, 1.0f);
-    material.emissionLuminance = fmaxf(material.emissionLuminance, 0.0f);
+    material.metallic = vkrtFiniteClampf(material.metallic, 0.0f, 0.0f, 1.0f);
+    material.roughness = vkrtFiniteClampf(material.roughness, 0.0f, 0.0f, 1.0f);
+    material.specular = vkrtFiniteClampf(material.specular, 0.0f, 0.0f, 1.0f);
+    material.specularTint = vkrtFiniteClampf(material.specularTint, 0.0f, 0.0f, 1.0f);
+    material.anisotropic = vkrtFiniteClampf(material.anisotropic, 0.0f, 0.0f, 1.0f);
+    material.sheen = vkrtFiniteClampf(material.sheen, 0.0f, 0.0f, 1.0f);
+    material.sheenTint = vkrtFiniteClampf(material.sheenTint, 0.0f, 0.0f, 1.0f);
+    material.clearcoat = vkrtFiniteClampf(material.clearcoat, 0.0f, 0.0f, 1.0f);
+    material.clearcoatGloss = vkrtFiniteClampf(material.clearcoatGloss, 0.0f, 0.0f, 1.0f);
+    material.emissionLuminance = vkrtFiniteClampf(material.emissionLuminance, 0.0f, 0.0f, INFINITY);
 
     return material;
 }
@@ -41,6 +36,19 @@ static int updateMeshVector(vec3 destination, vec3 source) {
 VKRT_Result VKRT_getMeshCount(const VKRT* vkrt, uint32_t* outMeshCount) {
     if (!vkrt || !outMeshCount) return VKRT_ERROR_INVALID_ARGUMENT;
     *outMeshCount = vkrt->core.meshCount;
+    return VKRT_SUCCESS;
+}
+
+VKRT_Result VKRT_setMeshName(VKRT* vkrt, uint32_t meshIndex, const char* name) {
+    VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
+    if (stateReady != VKRT_SUCCESS) return stateReady;
+    if (!name || meshIndex >= vkrt->core.meshCount) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    Mesh* mesh = &vkrt->core.meshes[meshIndex];
+    const char* sanitizedName = name[0] ? name : "(unknown)";
+    if (strncmp(mesh->name, sanitizedName, sizeof(mesh->name)) == 0) return VKRT_SUCCESS;
+
+    snprintf(mesh->name, sizeof(mesh->name), "%s", sanitizedName);
     return VKRT_SUCCESS;
 }
 

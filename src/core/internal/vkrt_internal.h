@@ -98,7 +98,7 @@ typedef struct VKRT_Core {
     uint32_t emissiveMeshCount;
     uint32_t emissiveTriangleCount;
     DeviceExtensionSupport deviceExtensionSupport;
-    char deviceName[256];
+    char deviceName[VKRT_DEVICE_NAME_LEN];
     uint32_t vendorID;
     uint32_t driverVersion;
     VKRT_DeviceProcedures procs;
@@ -151,6 +151,8 @@ typedef struct VKRT_Runtime {
     VkFormat swapChainImageFormat;
     VkExtent2D swapChainExtent;
     VkExtent2D renderExtent;
+    uint32_t displayWidth;
+    uint32_t displayHeight;
     uint32_t displayViewportRect[4];
     VkRenderPass renderPass;
     VkFramebuffer* framebuffers;
@@ -165,10 +167,11 @@ typedef struct VKRT_Runtime {
     VkQueryPool timestampPool;
     float timestampPeriod;
     VkBool32 frameTimingPending[VKRT_MAX_FRAMES_IN_FLIGHT];
-    uint8_t vsync;
-    uint8_t savedVsync;
+    VKRT_PresentModePreference presentModePreference;
+    VKRT_PresentModePreference savedPresentModePreference;
     uint32_t frameImageIndex;
     VkBool32 frameAcquired;
+    VkBool32 frameOffscreen;
     VkBool32 frameSubmitted;
     VkBool32 framePresented;
     VkBool32 frameTraced;
@@ -182,10 +185,31 @@ typedef struct VKRT_Runtime {
     uint8_t appInitialized;
 } VKRT_Runtime;
 
+typedef struct VKRT_RenderViewState {
+    float zoom;
+    float panX;
+    float panY;
+} VKRT_RenderViewState;
+
+typedef struct VKRT_TimingState {
+    uint64_t lastFrameTimestamp;
+    uint8_t frametimeStartIndex;
+} VKRT_TimingState;
+
+typedef struct VKRT_AutoSPPState {
+    float targetFrameMs;
+    float controlMs;
+    uint32_t framesUntilNextAdjust;
+} VKRT_AutoSPPState;
+
 typedef struct VKRT {
     VKRT_Core core;
     VKRT_Runtime runtime;
-    VKRT_PublicState state;
+    VKRT_SceneSettingsSnapshot sceneSettings;
+    VKRT_RenderStatusSnapshot renderStatus;
+    VKRT_RenderViewState renderView;
+    VKRT_TimingState timing;
+    VKRT_AutoSPPState autoSPP;
     VKRT_AppHooks appHooks;
 } VKRT;
 

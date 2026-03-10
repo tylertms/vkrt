@@ -12,6 +12,7 @@ typedef struct AccelerationStructure {
 typedef struct Mesh {
     MeshInfo info;
     Material material;
+    char name[VKRT_NAME_LEN];
     AccelerationStructure bottomLevelAccelerationStructure;
     Vertex* vertices;
     uint32_t* indices;
