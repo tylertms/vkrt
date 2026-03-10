@@ -1,5 +1,6 @@
 #include "editor.h"
 #include "editor_internal.h"
+#include "inspector/panel.h"
 
 #include "dcimgui.h"
 #include "dcimgui_impl_glfw.h"
@@ -7,6 +8,7 @@
 #include "dcimgui_internal.h"
 #include "theme.h"
 #include "debug.h"
+#include "numeric.h"
 #include "IBMPlexMono_Regular.h"
 #include "fa_solid_900.h"
 #include "IconsFontAwesome6.h"
@@ -19,6 +21,11 @@ static const float kEditorBaseTextSizePx = 15.5f;
 static const float kEditorBaseIconSizePx = 11.0f;
 static const float kEditorScaleEpsilon = 0.01f;
 static const float kRenderViewWheelStep = 1.12f;
+static const float kSceneDockFraction = 0.18f;
+static const float kPropertiesDockFraction = 0.28f;
+static const float kWorkspaceHostBorderOverlapPx = 1.0f;
+static const float kMinimumViewportExtentPx = 1.0f;
+static const uint32_t kViewportRectSnapTolerancePx = 1u;
 
 static float gEditorUIScale = 0.0f;
 static GLFWwindow* gEditorWindow = NULL;
@@ -48,8 +55,7 @@ static float queryEditorContentScale(GLFWwindow* window) {
     glfwGetWindowContentScale(window, &scaleX, &scaleY);
 
     float scale = fmaxf(scaleX, scaleY);
-    if (!isfinite(scale) || scale <= 0.0f) return 1.0f;
-    return scale;
+    return vkrtFiniteClampf(scale, 1.0f, FLT_MIN, INFINITY);
 }
 
 static void rebuildEditorFonts(ImGuiIO* io, float uiScale) {
@@ -91,7 +97,7 @@ static float queryTopMenuBarHeight(void) {
     return ImGui_GetFrameHeight();
 }
 
-static void drawMainMenuBar(VKRT* vkrt, Session* session, const VKRT_PublicState* state) {
+static void drawMainMenuBar(VKRT* vkrt, Session* session, const VKRT_RenderStatusSnapshot* status) {
     if (!vkrt || !session) return;
     if (!ImGui_BeginMainMenuBar()) return;
 
@@ -100,10 +106,10 @@ static void drawMainMenuBar(VKRT* vkrt, Session* session, const VKRT_PublicState
             sessionRequestMeshImportDialog(session);
         }
 
-        bool canSaveRender = state &&
-            state->renderModeActive &&
-            state->renderModeFinished &&
-            !session->runtime.sequenceProgress.active;
+        bool canSaveRender = status &&
+            status->renderModeActive &&
+            status->renderModeFinished &&
+            !session->runtime.sequencer.active;
         if (ImGui_MenuItemEx("Save Render", NULL, false, canSaveRender)) {
             sessionRequestRenderSaveDialog(session);
         }
@@ -115,7 +121,7 @@ static void drawMainMenuBar(VKRT* vkrt, Session* session, const VKRT_PublicState
     }
 
     if (ImGui_BeginMenu("View")) {
-        if (ImGui_MenuItemEx("Reset Accumulation", NULL, false, state != NULL)) {
+        if (ImGui_MenuItemEx("Reset Accumulation", NULL, false, status != NULL)) {
             VKRT_Result result = VKRT_invalidateAccumulation(vkrt);
             if (result != VKRT_SUCCESS) {
                 LOG_ERROR("Resetting accumulation failed (%d)", (int)result);
@@ -143,7 +149,7 @@ static void initializeDockLayout(void) {
     const ImGuiViewport* viewport = ImGui_GetMainViewport();
     ImVec2 dockspaceSize = viewport->Size;
     dockspaceSize.y -= queryTopMenuBarHeight();
-    if (dockspaceSize.y < 1.0f) dockspaceSize.y = 1.0f;
+    if (dockspaceSize.y < kMinimumViewportExtentPx) dockspaceSize.y = kMinimumViewportExtentPx;
     ImGuiID dockspaceID = ImGui_GetID("WorkspaceDockspace");
     ImGuiDockNode* existingDockNode = ImGui_DockBuilderGetNode(dockspaceID);
     if (existingDockNode &&
@@ -161,8 +167,8 @@ static void initializeDockLayout(void) {
     ImGuiID centerWorkspaceDockID = 0;
     ImGuiID viewportDockID = 0;
 
-    ImGui_DockBuilderSplitNode(dockspaceID, ImGuiDir_Left, 0.18f, &sceneDockID, &centerWorkspaceDockID);
-    ImGui_DockBuilderSplitNode(centerWorkspaceDockID, ImGuiDir_Right, 0.28f, &propertiesDockID, &viewportDockID);
+    ImGui_DockBuilderSplitNode(dockspaceID, ImGuiDir_Left, kSceneDockFraction, &sceneDockID, &centerWorkspaceDockID);
+    ImGui_DockBuilderSplitNode(centerWorkspaceDockID, ImGuiDir_Right, kPropertiesDockFraction, &propertiesDockID, &viewportDockID);
 
     ImGui_DockBuilderDockWindow("Scene Browser", sceneDockID);
     ImGui_DockBuilderDockWindow("Properties", propertiesDockID);
@@ -201,10 +207,10 @@ static void initializeDockLayout(void) {
 static bool drawWorkspaceDockspace(void) {
     const ImGuiViewport* mainViewport = ImGui_GetMainViewport();
     ImVec2 dockspacePos = mainViewport->Pos;
-    dockspacePos.y += queryTopMenuBarHeight() - 1.0f;
+    dockspacePos.y += queryTopMenuBarHeight() - kWorkspaceHostBorderOverlapPx;
     ImVec2 dockspaceSize = mainViewport->Size;
-    dockspaceSize.y -= queryTopMenuBarHeight() - 1.0f;
-    if (dockspaceSize.y < 1.0f) dockspaceSize.y = 1.0f;
+    dockspaceSize.y -= queryTopMenuBarHeight() - kWorkspaceHostBorderOverlapPx;
+    if (dockspaceSize.y < kMinimumViewportExtentPx) dockspaceSize.y = kMinimumViewportExtentPx;
 
     ImGui_SetNextWindowPos(dockspacePos, ImGuiCond_Always);
     ImGui_SetNextWindowSize(dockspaceSize, ImGuiCond_Always);
@@ -228,19 +234,12 @@ static bool drawWorkspaceDockspace(void) {
     return true;
 }
 
-static const VKRT_PublicState* queryEditorFrameState(
+static bool drawViewportWindow(
     VKRT* vkrt,
-    VKRT_RuntimeSnapshot* outRuntime
+    const VKRT_RenderStatusSnapshot* status,
+    VKRT_RuntimeSnapshot* runtime
 ) {
-    if (!vkrt || !outRuntime) return NULL;
-    const VKRT_PublicState* state = VKRT_getPublicState(vkrt);
-    if (!state) return NULL;
-    if (VKRT_getRuntimeSnapshot(vkrt, outRuntime) != VKRT_SUCCESS) return NULL;
-    return state;
-}
-
-static bool drawViewportWindow(VKRT* vkrt, const VKRT_PublicState* state, VKRT_RuntimeSnapshot* runtime) {
-    if (!vkrt || !state || !runtime) return false;
+    if (!vkrt || !status || !runtime) return false;
 
     ImGuiWindowClass viewportWindowClass = {0};
     viewportWindowClass.DockNodeFlagsOverrideSet = ImGuiDockNodeFlags_NoTabBar |
@@ -250,7 +249,7 @@ static bool drawViewportWindow(VKRT* vkrt, const VKRT_PublicState* state, VKRT_R
     ImGui_SetNextWindowClass(&viewportWindowClass);
 
     ImGui_PushStyleVarImVec2(ImGuiStyleVar_WindowPadding, (ImVec2){0.0f, 0.0f});
-    const char* viewportWindowLabel = state->renderModeActive
+    const char* viewportWindowLabel = status->renderModeActive
         ? "Render###ViewWindow"
         : "Viewport###ViewWindow";
     ImGui_Begin(viewportWindowLabel, NULL, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar |
@@ -269,14 +268,14 @@ static bool drawViewportWindow(VKRT* vkrt, const VKRT_PublicState* state, VKRT_R
 
     uint32_t viewportX = x > 0.0f ? (uint32_t)lroundf(x) : 0;
     uint32_t viewportY = y > 0.0f ? (uint32_t)lroundf(y) : 0;
-    uint32_t viewportWidth = width > 1.0f ? (uint32_t)lroundf(width) : 1;
-    uint32_t viewportHeight = height > 1.0f ? (uint32_t)lroundf(height) : 1;
+    uint32_t viewportWidth = width > kMinimumViewportExtentPx ? (uint32_t)lroundf(width) : 1;
+    uint32_t viewportHeight = height > kMinimumViewportExtentPx ? (uint32_t)lroundf(height) : 1;
 
     const uint32_t* prevViewport = runtime->displayViewportRect;
-    if (absDiffU32(viewportX, prevViewport[0]) <= 1 &&
-        absDiffU32(viewportY, prevViewport[1]) <= 1 &&
-        absDiffU32(viewportWidth, prevViewport[2]) <= 1 &&
-        absDiffU32(viewportHeight, prevViewport[3]) <= 1) {
+    if (absDiffU32(viewportX, prevViewport[0]) <= kViewportRectSnapTolerancePx &&
+        absDiffU32(viewportY, prevViewport[1]) <= kViewportRectSnapTolerancePx &&
+        absDiffU32(viewportWidth, prevViewport[2]) <= kViewportRectSnapTolerancePx &&
+        absDiffU32(viewportHeight, prevViewport[3]) <= kViewportRectSnapTolerancePx) {
         viewportX = prevViewport[0];
         viewportY = prevViewport[1];
         viewportWidth = prevViewport[2];
@@ -300,12 +299,6 @@ static bool drawViewportWindow(VKRT* vkrt, const VKRT_PublicState* state, VKRT_R
     ImGui_PopStyleVar();
 
     return viewportHovered;
-}
-
-static float clampFloatValue(float value, float minValue, float maxValue) {
-    if (value < minValue) return minValue;
-    if (value > maxValue) return maxValue;
-    return value;
 }
 
 static void applyCompletedViewportSelection(VKRT* vkrt) {
@@ -364,12 +357,12 @@ static bool queryViewportClickPixel(const VKRT_RuntimeSnapshot* runtime, uint32_
 
 static void requestViewportSelection(
     VKRT* vkrt,
-    const VKRT_PublicState* state,
+    const VKRT_RenderStatusSnapshot* status,
     const VKRT_RuntimeSnapshot* runtime,
     bool viewportHovered
 ) {
-    if (!vkrt || !state || !runtime || !viewportHovered) return;
-    if (state->renderModeActive) return;
+    if (!vkrt || !status || !runtime || !viewportHovered) return;
+    if (status->renderModeActive) return;
 
     if (!ImGui_IsMouseClicked(ImGuiMouseButton_Left)) return;
 
@@ -393,9 +386,13 @@ static void clearViewportSelectionOnEscape(VKRT* vkrt) {
     }
 }
 
-static void queueSelectedMeshRemovalOnDelete(VKRT* vkrt, Session* session, const VKRT_PublicState* state) {
-    if (!vkrt || !session || !state) return;
-    if (state->renderModeActive) return;
+static void queueSelectedMeshRemovalOnDelete(
+    VKRT* vkrt,
+    Session* session,
+    const VKRT_RenderStatusSnapshot* status
+) {
+    if (!vkrt || !session || !status) return;
+    if (status->renderModeActive) return;
 
     ImGuiIO* io = ImGui_GetIO();
     if (io->WantTextInput || ImGui_IsAnyItemActive() || ImGui_IsPopupOpen(NULL, ImGuiPopupFlags_AnyPopupId)) {
@@ -404,7 +401,11 @@ static void queueSelectedMeshRemovalOnDelete(VKRT* vkrt, Session* session, const
     if (!ImGui_IsKeyPressed(ImGuiKey_Delete) && !ImGui_IsKeyPressed(ImGuiKey_Backspace)) return;
 
     uint32_t selectedMeshIndex = VKRT_INVALID_INDEX;
-    if (VKRT_getSelectedMesh(vkrt, &selectedMeshIndex) != VKRT_SUCCESS) return;
+    VKRT_Result result = VKRT_getSelectedMesh(vkrt, &selectedMeshIndex);
+    if (result != VKRT_SUCCESS) {
+        LOG_ERROR("Querying selected mesh failed (%d)", (int)result);
+        return;
+    }
     if (selectedMeshIndex == VKRT_INVALID_INDEX) return;
 
     sessionQueueMeshRemoval(session, selectedMeshIndex);
@@ -412,24 +413,29 @@ static void queueSelectedMeshRemovalOnDelete(VKRT* vkrt, Session* session, const
 
 static void applyEditorCameraInput(
     VKRT* vkrt,
-    const VKRT_PublicState* state,
+    const VKRT_RenderStatusSnapshot* status,
     const VKRT_RuntimeSnapshot* runtime,
     bool viewportHovered
 ) {
-    if (!vkrt || !state || !runtime) return;
+    if (!vkrt || !status || !runtime) return;
 
     ImGuiIO* io = ImGui_GetIO();
-    if (state->renderModeActive) {
+    if (status->renderModeActive) {
         if (!viewportHovered) return;
 
-        float zoom = state->renderViewZoom;
-        float panX = state->renderViewPanX;
-        float panY = state->renderViewPanY;
+        float zoom = 1.0f;
+        float panX = 0.0f;
+        float panY = 0.0f;
+        VKRT_Result result = VKRT_getRenderViewState(vkrt, &zoom, &panX, &panY);
+        if (result != VKRT_SUCCESS) {
+            LOG_ERROR("Querying render view state failed (%d)", (int)result);
+            return;
+        }
 
         if (io->MouseWheel != 0.0f) {
             zoom = zoom * powf(kRenderViewWheelStep, io->MouseWheel);
-            zoom = clampFloatValue(zoom, VKRT_RENDER_VIEW_ZOOM_MIN, VKRT_RENDER_VIEW_ZOOM_MAX);
-            VKRT_Result result = VKRT_setRenderViewState(vkrt, zoom, panX, panY);
+            zoom = vkrtClampf(zoom, VKRT_RENDER_VIEW_ZOOM_MIN, VKRT_RENDER_VIEW_ZOOM_MAX);
+            result = VKRT_setRenderViewState(vkrt, zoom, panX, panY);
             if (result != VKRT_SUCCESS) {
                 LOG_ERROR("Updating render zoom failed (%d)", (int)result);
                 return;
@@ -451,11 +457,15 @@ static void applyEditorCameraInput(
             float cropWidth = 1.0f;
             float cropHeight = 1.0f;
 
-            if (VKRT_getRenderViewCrop(vkrt, zoom, &cropWidth, &cropHeight) != VKRT_SUCCESS) return;
+            result = VKRT_getRenderViewCrop(vkrt, zoom, &cropWidth, &cropHeight);
+            if (result != VKRT_SUCCESS) {
+                LOG_ERROR("Querying render view crop failed (%d)", (int)result);
+                return;
+            }
 
             panX -= (io->MouseDelta.x * cropWidth) / viewWidth;
             panY -= (io->MouseDelta.y * cropHeight) / viewHeight;
-            VKRT_Result result = VKRT_setRenderViewState(vkrt, zoom, panX, panY);
+            result = VKRT_setRenderViewState(vkrt, zoom, panX, panY);
             if (result != VKRT_SUCCESS) {
                 LOG_ERROR("Updating render pan failed (%d)", (int)result);
                 return;
@@ -486,12 +496,16 @@ void editorUIInitialize(VKRT* vkrt, void* userData) {
     (void)userData;
 
     ImGui_CreateContext(NULL);
+    gEditorFrameReady = false;
 
     ImGuiIO* io = ImGui_GetIO();
     io->ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
     VKRT_OverlayInfo overlay = {0};
-    if (VKRT_getOverlayInfo(vkrt, &overlay) != VKRT_SUCCESS) {
+    VKRT_Result result = VKRT_getOverlayInfo(vkrt, &overlay);
+    if (result != VKRT_SUCCESS) {
+        LOG_ERROR("Querying overlay info during editor initialization failed (%d)", (int)result);
+        ImGui_DestroyContext(NULL);
         return;
     }
 
@@ -550,12 +564,14 @@ void editorUIDraw(VKRT* vkrt, VkCommandBuffer commandBuffer, void* userData) {
     (void)vkrt;
     (void)userData;
 
+    if (!ImGui_GetCurrentContext()) return;
     if (!gEditorFrameReady) return;
     cImGui_ImplVulkan_RenderDrawData(ImGui_GetDrawData(), commandBuffer);
 }
 
 void editorUIUpdate(VKRT* vkrt, Session* session) {
     if (!vkrt || !session) return;
+    if (!ImGui_GetCurrentContext()) return;
 
     if (!gEditorWindow) {
         VKRT_OverlayInfo overlay = {0};
@@ -573,19 +589,21 @@ void editorUIUpdate(VKRT* vkrt, Session* session) {
     applyCompletedViewportSelection(vkrt);
     clearViewportSelectionOnEscape(vkrt);
 
+    VKRT_RenderStatusSnapshot status = {0};
+    bool hasStatus = VKRT_getRenderStatus(vkrt, &status) == VKRT_SUCCESS;
     VKRT_RuntimeSnapshot runtime = {0};
-    const VKRT_PublicState* state = queryEditorFrameState(vkrt, &runtime);
-    queueSelectedMeshRemovalOnDelete(vkrt, session, state);
+    bool hasRuntime = VKRT_getRuntimeSnapshot(vkrt, &runtime) == VKRT_SUCCESS;
+    queueSelectedMeshRemovalOnDelete(vkrt, session, hasStatus ? &status : NULL);
 
-    drawMainMenuBar(vkrt, session, state);
+    drawMainMenuBar(vkrt, session, hasStatus ? &status : NULL);
     drawWorkspaceDockspace();
 
     bool viewportHovered = false;
-    if (state) {
-        viewportHovered = drawViewportWindow(vkrt, state, &runtime);
-        editorUIDrawWorkspacePanels(vkrt, session);
-        requestViewportSelection(vkrt, state, &runtime, viewportHovered);
-        applyEditorCameraInput(vkrt, state, &runtime, viewportHovered);
+    if (hasStatus && hasRuntime) {
+        viewportHovered = drawViewportWindow(vkrt, &status, &runtime);
+        inspectorDrawWorkspacePanels(vkrt, session);
+        requestViewportSelection(vkrt, &status, &runtime, viewportHovered);
+        applyEditorCameraInput(vkrt, &status, &runtime, viewportHovered);
     }
 
     ImGui_Render();

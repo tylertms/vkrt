@@ -39,14 +39,31 @@ typedef struct SessionRenderSettings {
     SessionRenderAnimationSettings animation;
 } SessionRenderSettings;
 
-typedef struct SessionSequenceProgress {
+enum {
+    RENDER_SEQUENCE_PATH_CAPACITY = 1024,
+    RENDER_SEQUENCE_ETA_WINDOW = 4
+};
+
+typedef struct RenderSequencer {
     uint8_t active;
+    SessionRenderSettings renderSettings;
     uint32_t frameIndex;
     uint32_t frameCount;
+    float minTime;
+    float maxTime;
+    float step;
     float currentTime;
     uint8_t hasEstimatedRemaining;
     float estimatedRemainingSeconds;
-} SessionSequenceProgress;
+    uint64_t frameStartTimeUs;
+    uint32_t timedFrameCount;
+    float averageFrameSeconds;
+    uint32_t recentFrameCount;
+    uint32_t recentFrameWriteIndex;
+    float recentFrameSumSeconds;
+    float recentFrameSeconds[RENDER_SEQUENCE_ETA_WINDOW];
+    char outputFolder[RENDER_SEQUENCE_PATH_CAPACITY];
+} RenderSequencer;
 
 typedef struct SessionRenderTimer {
     uint8_t wasActive;
@@ -55,8 +72,6 @@ typedef struct SessionRenderTimer {
 } SessionRenderTimer;
 
 typedef struct SessionEditorState {
-    char** meshNames;
-    uint32_t meshCount;
     uint32_t propertiesPanelIndex;
     char* renderSequenceFolderPath;
     uint8_t requestMeshImportDialog;
@@ -74,7 +89,7 @@ typedef struct SessionCommandQueue {
 } SessionCommandQueue;
 
 typedef struct SessionRuntimeState {
-    SessionSequenceProgress sequenceProgress;
+    RenderSequencer sequencer;
     SessionRenderTimer renderTimer;
 } SessionRuntimeState;
 
@@ -86,10 +101,6 @@ typedef struct Session {
 
 void sessionInit(Session* session);
 void sessionDeinit(Session* session);
-
-int sessionSetMeshName(Session* session, const char* filePath, uint32_t meshIndex);
-void sessionRemoveMeshName(Session* session, uint32_t meshIndex);
-char* sessionGetMeshName(const Session* session, uint32_t meshIndex);
 
 void sessionRequestMeshImportDialog(Session* session);
 void sessionRequestRenderSaveDialog(Session* session);

@@ -7,7 +7,8 @@
 #define GLFW_EXPOSE_NATIVE_WAYLAND
 #endif
 
-#include "editor.h"
+#include "editor_internal.h"
+#include "session.h"
 
 #include "debug.h"
 #include "io.h"
@@ -27,10 +28,12 @@ typedef enum DialogKind {
     DIALOG_KIND_PICK_SEQUENCE_FOLDER,
 } DialogKind;
 
+enum { kDialogDefaultNameCapacity = 256 };
+
 typedef struct DialogRequest {
     DialogKind kind;
     char defaultPath[VKRT_PATH_MAX];
-    char defaultName[256];
+    char defaultName[kDialogDefaultNameCapacity];
     nfdwindowhandle_t parentWindow;
 } DialogRequest;
 
@@ -344,7 +347,8 @@ static void executeDialogSynchronously(Session* session, const DialogRequest* re
 static int tryScheduleImportMeshDialog(Session* session) {
     if (!sessionTakeMeshImportDialogRequest(session)) return 0;
 
-    char defaultPath[VKRT_PATH_MAX] = {0};
+    char defaultPath[VKRT_PATH_MAX];
+    defaultPath[0] = '\0';
     resolveExistingParentPath("assets/models", NULL, defaultPath, sizeof(defaultPath));
 
     DialogRequest request = {0};
@@ -360,7 +364,8 @@ static int tryScheduleImportMeshDialog(Session* session) {
 static int tryScheduleRenderSaveDialog(Session* session) {
     if (!sessionTakeRenderSaveDialogRequest(session)) return 0;
 
-    char defaultPath[VKRT_PATH_MAX] = {0};
+    char defaultPath[VKRT_PATH_MAX];
+    defaultPath[0] = '\0';
     resolveExistingParentPath("captures", NULL, defaultPath, sizeof(defaultPath));
 
     DialogRequest request = {0};
@@ -376,7 +381,8 @@ static int tryScheduleRenderSaveDialog(Session* session) {
 static int tryScheduleSequenceFolderDialog(Session* session) {
     if (!sessionTakeRenderSequenceFolderDialogRequest(session)) return 0;
 
-    char defaultPath[VKRT_PATH_MAX] = {0};
+    char defaultPath[VKRT_PATH_MAX];
+    defaultPath[0] = '\0';
     resolveExistingParentPath(sessionGetRenderSequenceFolder(session), "captures", defaultPath, sizeof(defaultPath));
 
     DialogRequest request = {0};

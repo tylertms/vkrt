@@ -1,35 +1,64 @@
 #include "common.h"
 #include "constants.h"
 #include "debug.h"
+#include "session.h"
+#include "vkrt.h"
 
 #include "IconsFontAwesome6.h"
-#include "session.h"
 
 #include <dcimgui.h>
+#include <limits.h>
 #include <math.h>
 #include <stdio.h>
+#include <string.h>
+
+enum {
+    kSceneSuffixTextCapacity = 32,
+    kSceneStatTextCapacity = 48,
+    kSceneSizeTextCapacity = 32,
+    kSceneBrowserNameTextCapacity = 192,
+    kSceneBrowserIdCapacity = 32,
+    kSceneSourceTextCapacity = 192,
+};
+
+static void formatPrefixedText(char* out, size_t outSize, const char* prefix, const char* text) {
+    if (!out || outSize == 0 || !prefix || !text) return;
+
+    size_t prefixLength = strlen(prefix);
+    size_t available = outSize > prefixLength + 2u ? outSize - prefixLength - 2u : 0u;
+    int textLimit = available > (size_t)INT_MAX ? INT_MAX : (int)available;
+    snprintf(out, outSize, "%s %.*s", prefix, textLimit, text);
+}
+
+static void formatMeshSourceText(char* out, size_t outSize, const char* sourceName, uint32_t sourceIndex) {
+    if (!out || outSize == 0 || !sourceName) return;
+
+    char suffix[kSceneSuffixTextCapacity];
+    int suffixLength = snprintf(suffix, sizeof(suffix), " (#%u)", sourceIndex);
+    if (suffixLength < 0) return;
+
+    size_t suffixSize = (size_t)suffixLength;
+    size_t available = outSize > suffixSize + 1u ? outSize - suffixSize - 1u : 0u;
+    int nameLimit = available > (size_t)INT_MAX ? INT_MAX : (int)available;
+    snprintf(out, outSize, "%.*s%s", nameLimit, sourceName, suffix);
+}
 
 static void formatMeshGeometryText(const VKRT_MeshSnapshot* mesh, char* out, size_t outSize) {
     if (!mesh || !out || outSize == 0) return;
-
-    if (mesh->ownsGeometry) {
-        snprintf(out, outSize, "Unique");
-        return;
-    }
-
-    snprintf(out, outSize, "Instanced");
+    snprintf(out, outSize, mesh->ownsGeometry ? "Unique" : "Instanced");
 }
 
-static bool drawSceneBrowserEntry(Session* session, uint32_t meshIndex, const VKRT_MeshSnapshot* mesh, bool isSelected) {
-    if (!session || !mesh) return false;
+static bool drawSceneBrowserEntry(uint32_t meshIndex, const VKRT_MeshSnapshot* mesh, bool isSelected) {
+    if (!mesh) return false;
 
-    char id[32] = {0};
-    char nameText[192] = {0};
+    char id[kSceneBrowserIdCapacity];
+    char nameText[kSceneBrowserNameTextCapacity];
     const float rowHeight = ImGui_GetTextLineHeight() + 2.0f;
     snprintf(id, sizeof(id), "##mesh_%u", meshIndex);
 
-    const char* meshName = sessionGetMeshName(session, meshIndex);
-    snprintf(nameText, sizeof(nameText), "%s %s",
+    const char* meshName = mesh->name[0] ? mesh->name : "(unknown)";
+    formatPrefixedText(nameText,
+        sizeof(nameText),
         mesh->ownsGeometry ? ICON_FA_CUBE : ICON_FA_CLONE,
         meshName);
 
@@ -82,35 +111,44 @@ static void updateSelectedMesh(VKRT* vkrt, uint32_t meshIndex) {
     }
 }
 
-static void drawMeshInfoHeader(Session* session, uint32_t meshIndex, const VKRT_MeshSnapshot* mesh) {
-    if (!session || !mesh) return;
+static void drawMeshInfoHeader(VKRT* vkrt, uint32_t meshIndex, const VKRT_MeshSnapshot* mesh) {
+    if (!vkrt || !mesh) return;
 
     uint32_t triangleCount = mesh->info.indexCount / 3;
     uint64_t vertexBytes = (uint64_t)mesh->info.vertexCount * 32;
     uint64_t indexBytes = (uint64_t)mesh->info.indexCount * 4;
 
-    char countText[48] = {0};
-    char sizeText[32] = {0};
-    char geometryText[48] = {0};
-    char sourceText[192] = {0};
+    char countText[kSceneStatTextCapacity];
+    char sizeText[kSceneSizeTextCapacity];
+    char geometryText[kSceneStatTextCapacity];
+    char sourceText[kSceneSourceTextCapacity];
     snprintf(countText, sizeof(countText), "%u verts / %u tris", mesh->info.vertexCount, triangleCount);
     formatByteSize(vertexBytes + indexBytes, sizeText, sizeof(sizeText));
     formatMeshGeometryText(mesh, geometryText, sizeof(geometryText));
     if (!mesh->ownsGeometry) {
-        snprintf(sourceText, sizeof(sourceText), "%s (#%u)",
-            sessionGetMeshName(session, mesh->geometrySource),
-            mesh->geometrySource);
+        VKRT_MeshSnapshot sourceMesh = {0};
+        const char* sourceName = "(unknown)";
+        if (VKRT_getMeshSnapshot(vkrt, mesh->geometrySource, &sourceMesh) == VKRT_SUCCESS && sourceMesh.name[0]) {
+            sourceName = sourceMesh.name;
+        }
+        formatMeshSourceText(sourceText, sizeof(sourceText), sourceName, mesh->geometrySource);
     }
 
-    inspectorTightSeparatorText(ICON_FA_CIRCLE_INFO " Stats");
+    ImGui_SeparatorText(ICON_FA_CIRCLE_INFO " Stats");
     inspectorIndentSection();
     if (inspectorBeginKeyValueTable("##mesh_stats")) {
         ImGui_TableNextRow();
         ImGui_TableSetColumnIndex(0);
         ImGui_TextDisabled("Name");
         ImGui_TableSetColumnIndex(1);
-        char* meshName = sessionGetMeshName(session, meshIndex);
-        ImGui_InputText("##mesh_name", meshName, VKRT_NAME_LEN, ImGuiInputTextFlags_None);
+        char meshName[VKRT_NAME_LEN];
+        snprintf(meshName, sizeof(meshName), "%s", mesh->name[0] ? mesh->name : "(unknown)");
+        if (ImGui_InputText("##mesh_name", meshName, sizeof(meshName), ImGuiInputTextFlags_None)) {
+            VKRT_Result result = VKRT_setMeshName(vkrt, meshIndex, meshName);
+            if (result != VKRT_SUCCESS) {
+                LOG_ERROR("Updating mesh name failed (%d)", (int)result);
+            }
+        }
 
         inspectorKeyValueRow("Geometry", geometryText);
         if (!mesh->ownsGeometry) {
@@ -130,11 +168,9 @@ static void drawMeshTransformEditor(VKRT* vkrt, uint32_t meshIndex, const VKRT_M
     float scale[3] = {mesh->info.scale[0], mesh->info.scale[1], mesh->info.scale[2]};
 
     bool transformChanged = false;
-    inspectorPushWidgetSpacing();
     transformChanged |= ImGui_DragFloat3Ex("Translate", position, 0.001f, 0.0f, 0.0f, "%.3f", ImGuiSliderFlags_None);
     transformChanged |= ImGui_DragFloat3Ex("Rotate", rotation, 0.05f, 0.0f, 0.0f, "%.2f", ImGuiSliderFlags_None);
     transformChanged |= ImGui_DragFloat3Ex("Scale", scale, 0.001f, 0.001f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-    inspectorPopWidgetSpacing();
 
     if (transformChanged) {
         for (int axis = 0; axis < 3; axis++) {
@@ -155,7 +191,6 @@ static void drawMeshMaterialEditor(VKRT* vkrt, uint32_t meshIndex, const VKRT_Me
     Material material = mesh->material;
     bool materialChanged = false;
 
-    inspectorPushWidgetSpacing();
     materialChanged |= ImGui_ColorEdit3("Base Color", material.baseColor, ImGuiColorEditFlags_Float);
     materialChanged |= ImGui_SliderFloatEx("Metallic", &material.metallic, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     materialChanged |= ImGui_SliderFloatEx("Roughness", &material.roughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
@@ -168,7 +203,6 @@ static void drawMeshMaterialEditor(VKRT* vkrt, uint32_t meshIndex, const VKRT_Me
     materialChanged |= ImGui_SliderFloatEx("Clearcoat Gloss", &material.clearcoatGloss, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     materialChanged |= ImGui_DragFloatEx("Emission", &material.emissionLuminance, 0.1f, 0.0f, 1000000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     materialChanged |= ImGui_ColorEdit3("Emission Color", material.emissionColor, ImGuiColorEditFlags_Float);
-    inspectorPopWidgetSpacing();
 
     if (!materialChanged) return;
 
@@ -187,16 +221,16 @@ static void drawSelectedMeshEditor(VKRT* vkrt, Session* session, uint32_t meshIn
         return;
     }
 
-    drawMeshInfoHeader(session, meshIndex, &mesh);
+    drawMeshInfoHeader(vkrt, meshIndex, &mesh);
 
     ImGui_BeginDisabled(renderModeActive);
 
-    inspectorTightSeparatorText(ICON_FA_ARROWS_UP_DOWN_LEFT_RIGHT " Transform");
+    ImGui_SeparatorText(ICON_FA_ARROWS_UP_DOWN_LEFT_RIGHT " Transform");
     inspectorIndentSection();
     drawMeshTransformEditor(vkrt, meshIndex, &mesh);
     inspectorUnindentSection();
 
-    inspectorTightSeparatorText(ICON_FA_PALETTE " Material");
+    ImGui_SeparatorText(ICON_FA_PALETTE " Material");
     inspectorIndentSection();
     drawMeshMaterialEditor(vkrt, meshIndex, &mesh);
     inspectorUnindentSection();
@@ -215,11 +249,8 @@ static void drawSelectedMeshEditor(VKRT* vkrt, Session* session, uint32_t meshIn
     }
 }
 
-void inspectorDrawSceneBrowser(VKRT* vkrt, Session* session) {
+void inspectorDrawSceneBrowserSection(VKRT* vkrt, Session* session) {
     if (!vkrt || !session) return;
-
-    const VKRT_PublicState* state = VKRT_getPublicState(vkrt);
-    if (!state) return;
 
     uint32_t meshCount = 0;
     if (VKRT_getMeshCount(vkrt, &meshCount) != VKRT_SUCCESS) {
@@ -236,7 +267,7 @@ void inspectorDrawSceneBrowser(VKRT* vkrt, Session* session) {
         if (VKRT_getMeshSnapshot(vkrt, meshIndex, &mesh) != VKRT_SUCCESS) continue;
 
         bool isSelected = selectedMeshIndex == meshIndex;
-        if (drawSceneBrowserEntry(session, meshIndex, &mesh, isSelected)) {
+        if (drawSceneBrowserEntry(meshIndex, &mesh, isSelected)) {
             updateSelectedMesh(vkrt, isSelected ? VKRT_INVALID_INDEX : meshIndex);
             selectedMeshIndex = isSelected ? VKRT_INVALID_INDEX : meshIndex;
         }
@@ -249,15 +280,13 @@ void inspectorDrawSceneBrowser(VKRT* vkrt, Session* session) {
         ImGui_TextDisabled("No meshes. Use File > Import Mesh.");
         inspectorUnindentSection();
     }
-
-    (void)state;
 }
 
-void inspectorDrawSelectionPanel(VKRT* vkrt, Session* session) {
+void inspectorDrawSelectionTab(VKRT* vkrt, Session* session) {
     if (!vkrt || !session) return;
 
-    const VKRT_PublicState* state = VKRT_getPublicState(vkrt);
-    if (!state) return;
+    VKRT_RenderStatusSnapshot status = {0};
+    if (VKRT_getRenderStatus(vkrt, &status) != VKRT_SUCCESS) return;
 
     uint32_t selectedMeshIndex = querySelectedMeshIndex(vkrt);
     if (selectedMeshIndex == VKRT_INVALID_INDEX) {
@@ -265,5 +294,5 @@ void inspectorDrawSelectionPanel(VKRT* vkrt, Session* session) {
         return;
     }
 
-    drawSelectedMeshEditor(vkrt, session, selectedMeshIndex, state->renderModeActive != 0);
+    drawSelectedMeshEditor(vkrt, session, selectedMeshIndex, status.renderModeActive != 0);
 }

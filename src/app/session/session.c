@@ -1,6 +1,7 @@
 #include "session.h"
 #include "debug.h"
 #include "io.h"
+#include "numeric.h"
 
 #include <math.h>
 #include <stdint.h>
@@ -12,26 +13,15 @@ static const char* kDefaultRenderSequenceFolder = "captures/sequence";
 static const float kDefaultTimelineStartTime = 0.0f;
 static const float kDefaultTimelineEndTime = 0.5f;
 static const float kDefaultTimelineEmissionScale = 1.0f;
-
-static int compareTimelineKeyframesByTime(const void* lhs, const void* rhs) {
-    const SessionSceneTimelineKeyframe* a = (const SessionSceneTimelineKeyframe*)lhs;
-    const SessionSceneTimelineKeyframe* b = (const SessionSceneTimelineKeyframe*)rhs;
-    if (a->time < b->time) return -1;
-    if (a->time > b->time) return 1;
-    return 0;
-}
-
-static float clampFloatValue(float value, float minValue, float maxValue) {
-    if (value < minValue) return minValue;
-    if (value > maxValue) return maxValue;
-    return value;
-}
+static const float kDefaultAnimationStep = 0.05f;
+static const uint32_t kDefaultTimelineKeyframeCount = 2u;
+static const uint32_t kDefaultRenderTargetSamples = 1024u;
 
 static void sessionResetTimelineDefaults(SessionSceneTimelineSettings* timeline) {
     if (!timeline) return;
 
     timeline->enabled = 0;
-    timeline->keyframeCount = 2;
+    timeline->keyframeCount = kDefaultTimelineKeyframeCount;
     timeline->keyframes[0] = (SessionSceneTimelineKeyframe){
         .time = kDefaultTimelineStartTime,
         .emissionScale = kDefaultTimelineEmissionScale,
@@ -50,39 +40,21 @@ static void clearOwnedString(char** value) {
     *value = NULL;
 }
 
-static int ensureMeshSlotCount(Session* session, uint32_t requiredCount) {
-    if (!session || requiredCount <= session->editor.meshCount) return 1;
-
-    char** resized = (char**)realloc(session->editor.meshNames, (size_t)requiredCount * sizeof(char*));
-    if (!resized) {
-        LOG_ERROR("Failed to resize mesh label list");
-        return 0;
-    }
-
-    for (uint32_t index = session->editor.meshCount; index < requiredCount; index++) {
-        resized[index] = NULL;
-    }
-
-    session->editor.meshNames = resized;
-    session->editor.meshCount = requiredCount;
-    return 1;
-}
-
 void sessionInit(Session* session) {
     if (!session) return;
 
     memset(session, 0, sizeof(*session));
     session->commands.meshToRemove = VKRT_INVALID_INDEX;
     session->commands.renderCommand = SESSION_RENDER_COMMAND_NONE;
-    session->editor.renderConfig.targetSamples = 1024;
+    session->editor.renderConfig.targetSamples = kDefaultRenderTargetSamples;
     session->editor.renderConfig.animation.minTime = kDefaultTimelineStartTime;
     session->editor.renderConfig.animation.maxTime = kDefaultTimelineEndTime;
-    session->editor.renderConfig.animation.timeStep = 0.05f;
+    session->editor.renderConfig.animation.timeStep = kDefaultAnimationStep;
     sessionResetTimelineDefaults(&session->editor.renderConfig.animation.sceneTimeline);
 
-    char capturesPath[VKRT_PATH_MAX] = {0};
+    char capturesPath[VKRT_PATH_MAX];
     if (resolveExistingPath("captures", capturesPath, sizeof(capturesPath)) == 0) {
-        char sequencePath[VKRT_PATH_MAX] = {0};
+        char sequencePath[VKRT_PATH_MAX];
         if (snprintf(sequencePath, sizeof(sequencePath), "%s/sequence", capturesPath) < (int)sizeof(sequencePath)) {
             sessionSetRenderSequenceFolder(session, sequencePath);
             return;
@@ -95,53 +67,9 @@ void sessionInit(Session* session) {
 void sessionDeinit(Session* session) {
     if (!session) return;
 
-    for (uint32_t index = 0; index < session->editor.meshCount; index++) {
-        free(session->editor.meshNames[index]);
-    }
-    free(session->editor.meshNames);
-    session->editor.meshNames = NULL;
-    session->editor.meshCount = 0;
-
     clearOwnedString(&session->commands.meshImportPath);
     clearOwnedString(&session->commands.saveImagePath);
     clearOwnedString(&session->editor.renderSequenceFolderPath);
-}
-
-int sessionSetMeshName(Session* session, const char* filePath, uint32_t meshIndex) {
-    if (!session) return 0;
-
-    if (!ensureMeshSlotCount(session, meshIndex + 1)) return 0;
-    free(session->editor.meshNames[meshIndex]);
-    const char* meshName = pathBasename(filePath);
-    if (!meshName[0]) meshName = "(unknown)";
-    session->editor.meshNames[meshIndex] = realloc(stringDuplicate(meshName), VKRT_NAME_LEN);
-    return session->editor.meshNames[meshIndex] != NULL;
-}
-
-void sessionRemoveMeshName(Session* session, uint32_t meshIndex) {
-    if (!session || meshIndex >= session->editor.meshCount) return;
-
-    free(session->editor.meshNames[meshIndex]);
-    for (uint32_t index = meshIndex; index + 1 < session->editor.meshCount; index++) {
-        session->editor.meshNames[index] = session->editor.meshNames[index + 1];
-    }
-
-    session->editor.meshCount--;
-    if (session->editor.meshCount == 0) {
-        free(session->editor.meshNames);
-        session->editor.meshNames = NULL;
-        return;
-    }
-
-    char** shrunk = (char**)realloc(session->editor.meshNames, (size_t)session->editor.meshCount * sizeof(char*));
-    if (shrunk) session->editor.meshNames = shrunk;
-}
-
-char* sessionGetMeshName(const Session* session, uint32_t meshIndex) {
-    if (!session || meshIndex >= session->editor.meshCount || !session->editor.meshNames[meshIndex]) {
-        return "(unknown)";
-    }
-    return session->editor.meshNames[meshIndex];
 }
 
 void sessionRequestMeshImportDialog(Session* session) {
@@ -293,33 +221,28 @@ static void sessionSanitizeTimelineSettings(SessionSceneTimelineSettings* timeli
 
     for (uint32_t keyIndex = 0; keyIndex < timeline->keyframeCount; keyIndex++) {
         SessionSceneTimelineKeyframe* key = &timeline->keyframes[keyIndex];
-        if (!isfinite(key->time)) key->time = kDefaultTimelineStartTime;
-        key->time = clampFloatValue(key->time, SESSION_SCENE_TIMELINE_TIME_MIN, SESSION_SCENE_TIMELINE_TIME_MAX);
+        key->time = vkrtFiniteClampf(key->time, kDefaultTimelineStartTime, SESSION_SCENE_TIMELINE_TIME_MIN, SESSION_SCENE_TIMELINE_TIME_MAX);
 
-        if (!isfinite(key->emissionScale)) key->emissionScale = 0.0f;
-        key->emissionScale = clampFloatValue(key->emissionScale,
-            SESSION_SCENE_TIMELINE_EMISSION_SCALE_MIN,
-            SESSION_SCENE_TIMELINE_EMISSION_SCALE_MAX);
+        key->emissionScale = vkrtFiniteClampf(key->emissionScale, 0.0f, SESSION_SCENE_TIMELINE_EMISSION_SCALE_MIN, SESSION_SCENE_TIMELINE_EMISSION_SCALE_MAX);
 
         for (int channel = 0; channel < 3; channel++) {
-            if (!isfinite(key->emissionTint[channel])) key->emissionTint[channel] = 1.0f;
-            key->emissionTint[channel] = clampFloatValue(key->emissionTint[channel],
-                SESSION_SCENE_TIMELINE_EMISSION_TINT_MIN,
-                SESSION_SCENE_TIMELINE_EMISSION_TINT_MAX);
+            key->emissionTint[channel] = vkrtFiniteClampf(key->emissionTint[channel], 1.0f, SESSION_SCENE_TIMELINE_EMISSION_TINT_MIN, SESSION_SCENE_TIMELINE_EMISSION_TINT_MAX);
         }
     }
 
     qsort(timeline->keyframes,
         timeline->keyframeCount,
         sizeof(timeline->keyframes[0]),
-        compareTimelineKeyframesByTime);
+        vkrtCompareSceneTimelineKeyframesByTime);
 }
 
 void sessionSanitizeAnimationSettings(SessionRenderAnimationSettings* animation) {
     if (!animation) return;
-    if (!isfinite(animation->minTime) || animation->minTime < 0.0f) animation->minTime = 0.0f;
-    if (!isfinite(animation->maxTime) || animation->maxTime < animation->minTime) animation->maxTime = animation->minTime;
-    if (!isfinite(animation->timeStep) || animation->timeStep <= 0.0f) animation->timeStep = 0.05f;
+    animation->minTime = vkrtFiniteClampf(animation->minTime, 0.0f, 0.0f, INFINITY);
+    animation->maxTime = vkrtFiniteOrf(animation->maxTime, animation->minTime);
+    if (animation->maxTime < animation->minTime) animation->maxTime = animation->minTime;
+    animation->timeStep = vkrtFiniteOrf(animation->timeStep, kDefaultAnimationStep);
+    if (animation->timeStep <= 0.0f) animation->timeStep = kDefaultAnimationStep;
     sessionSanitizeTimelineSettings(&animation->sceneTimeline);
 }
 

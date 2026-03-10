@@ -18,11 +18,11 @@ void editorThemeApplyDefault(void) {
     style->WindowPadding = (ImVec2){10.0f, 8.0f};
     style->FramePadding = (ImVec2){3.0f, 4.0f};
     style->ItemSpacing = (ImVec2){6.0f, 6.0f};
-    style->ItemInnerSpacing = (ImVec2){2.0f, 4.0f};
+    style->ItemInnerSpacing = (ImVec2){6.0f, 4.0f};
     style->IndentSpacing = 14.0f;
     style->SeparatorTextBorderSize = 1.0f;
     style->SeparatorTextAlign = (ImVec2){0.0f, 0.5f};
-    style->SeparatorTextPadding = (ImVec2){8.0f, 4.0f};
+    style->SeparatorTextPadding = (ImVec2){8.0f, 1.0f};
     style->CellPadding = (ImVec2){6.0f, 3.0f};
     style->ScrollbarSize = 10.0f;
     style->GrabMinSize = 8.0f;
@@ -41,7 +41,7 @@ void editorThemeApplyDefault(void) {
 
     colors[ImGuiCol_Text] = ink;
     colors[ImGuiCol_TextDisabled] = mutedInk;
-    colors[ImGuiCol_WindowBg] = (ImVec4){0.08f, 0.09f, 0.11f, 0.98f};
+    colors[ImGuiCol_WindowBg] = (ImVec4){0.08f, 0.09f, 0.11f, 1.00f};
     colors[ImGuiCol_ChildBg] = (ImVec4){0.08f, 0.09f, 0.11f, 0.00f};
     colors[ImGuiCol_PopupBg] = (ImVec4){0.10f, 0.11f, 0.14f, 0.98f};
     colors[ImGuiCol_Border] = (ImVec4){0.18f, 0.20f, 0.24f, 0.60f};
@@ -81,7 +81,7 @@ void editorThemeApplyDefault(void) {
     colors[ImGuiCol_DockingPreview] = (ImVec4){0.45f, 0.55f, 0.65f, 0.55f};
     colors[ImGuiCol_PlotLines] = accentSoft;
     colors[ImGuiCol_PlotLinesHovered] = accentHover;
-    colors[ImGuiCol_PlotHistogram] = accent;
+    colors[ImGuiCol_PlotHistogram] = (ImVec4){0.35f, 0.45f, 0.55f, 1.00f};
     colors[ImGuiCol_PlotHistogramHovered] = accentHover;
     colors[ImGuiCol_TableHeaderBg] = base2;
     colors[ImGuiCol_TableBorderStrong] = base4;

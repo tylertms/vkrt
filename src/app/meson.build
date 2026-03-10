@@ -9,7 +9,7 @@ app_sources = files(
   'editor/editor.c',
   'editor/inspector/panel.c',
   'editor/inspector/common.c',
-  'editor/inspector/config.c',
+  'editor/inspector/overview.c',
   'editor/inspector/camera.c',
   'editor/inspector/render.c',
   'editor/inspector/scene.c',

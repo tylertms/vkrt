@@ -1,12 +1,30 @@
 #include "common.h"
 #include "config.h"
+#include "session.h"
+#include "vkrt.h"
 
 #include "IconsFontAwesome6.h"
 #include "debug.h"
 
+#include <inttypes.h>
 #include <limits.h>
 #include <math.h>
 #include <stdio.h>
+
+static const float kMicrosecondsPerSecond = 1000000.0f;
+static const int kRenderOutputDimensionMin = 1;
+static const int kRenderOutputDimensionMax = 16384;
+static const float kAnimationTimeDragSpeed = 0.01f;
+static const float kAnimationTimeMin = 0.0f;
+static const float kAnimationTimeMax = 1000.0f;
+static const float kAnimationStepDragSpeed = 0.005f;
+static const float kAnimationStepMin = 0.001f;
+
+enum {
+    kRenderFolderPathCapacity = 256,
+    kRenderTimeTextCapacity = 32,
+    kRenderProgressOverlayCapacity = 96,
+};
 
 static void initializeRenderConfig(VKRT* vkrt, Session* session) {
     if (!session) return;
@@ -15,7 +33,10 @@ static void initializeRenderConfig(VKRT* vkrt, Session* session) {
         uint32_t width = VKRT_DEFAULT_WIDTH;
         uint32_t height = VKRT_DEFAULT_HEIGHT;
         if (vkrt && VKRT_getRuntimeSnapshot(vkrt, &runtime) == VKRT_SUCCESS) {
-            if (runtime.displayViewportRect[2] > 0 && runtime.displayViewportRect[3] > 0) {
+            if (runtime.displayWidth > 0 && runtime.displayHeight > 0) {
+                width = runtime.displayWidth;
+                height = runtime.displayHeight;
+            } else if (runtime.displayViewportRect[2] > 0 && runtime.displayViewportRect[3] > 0) {
                 width = runtime.displayViewportRect[2];
                 height = runtime.displayViewportRect[3];
             } else if (runtime.swapchainWidth > 0 && runtime.swapchainHeight > 0) {
@@ -32,35 +53,33 @@ static void initializeRenderConfig(VKRT* vkrt, Session* session) {
     sessionSanitizeAnimationSettings(&session->editor.renderConfig.animation);
 }
 
-static void updateRenderTimer(const VKRT_PublicState* state, SessionRenderTimer* timer, uint64_t nowUs) {
-    if (!state || !timer) return;
+static void updateRenderTimer(const VKRT_RenderStatusSnapshot* status, SessionRenderTimer* timer, uint64_t nowUs) {
+    if (!status || !timer) return;
 
-    uint8_t renderModeActive = state->renderModeActive != 0;
-    uint8_t renderModeFinished = (renderModeActive && state->renderModeFinished != 0) ? 1u : 0u;
-
-    if (renderModeActive && !timer->wasActive) {
+    uint8_t renderModeFinished = status->renderModeActive && status->renderModeFinished;
+    if (status->renderModeActive && !timer->wasActive) {
         timer->startTimeUs = nowUs;
         timer->completedSeconds = 0.0f;
     }
 
-    if (renderModeActive && renderModeFinished && timer->completedSeconds <= 0.0f &&
+    if (status->renderModeActive && renderModeFinished && timer->completedSeconds <= 0.0f &&
         timer->startTimeUs > 0 && nowUs >= timer->startTimeUs) {
-        timer->completedSeconds = (float)(nowUs - timer->startTimeUs) / 1000000.0f;
+        timer->completedSeconds = (float)(nowUs - timer->startTimeUs) / kMicrosecondsPerSecond;
     }
 
-    if (!renderModeActive && timer->wasActive) {
+    if (!status->renderModeActive && timer->wasActive) {
         if (timer->completedSeconds <= 0.0f && timer->startTimeUs > 0 && nowUs >= timer->startTimeUs) {
-            timer->completedSeconds = (float)(nowUs - timer->startTimeUs) / 1000000.0f;
+            timer->completedSeconds = (float)(nowUs - timer->startTimeUs) / kMicrosecondsPerSecond;
         }
         timer->startTimeUs = 0;
     }
 
-    timer->wasActive = renderModeActive;
+    timer->wasActive = status->renderModeActive;
 }
 
 static float queryActiveRenderSeconds(const SessionRenderTimer* timer, uint64_t nowUs) {
     if (!timer || timer->startTimeUs == 0 || nowUs < timer->startTimeUs) return 0.0f;
-    return (float)(nowUs - timer->startTimeUs) / 1000000.0f;
+    return (float)(nowUs - timer->startTimeUs) / kMicrosecondsPerSecond;
 }
 
 void inspectorPrepareRenderState(VKRT* vkrt, Session* session) {
@@ -68,12 +87,12 @@ void inspectorPrepareRenderState(VKRT* vkrt, Session* session) {
 
     initializeRenderConfig(vkrt, session);
 
-    const VKRT_PublicState* state = VKRT_getPublicState(vkrt);
-    if (!state) return;
+    VKRT_RenderStatusSnapshot status = {0};
+    if (VKRT_getRenderStatus(vkrt, &status) != VKRT_SUCCESS) return;
 
     uint64_t nowUs = getMicroseconds();
     SessionRenderTimer* timer = &session->runtime.renderTimer;
-    updateRenderTimer(state, timer, nowUs);
+    updateRenderTimer(&status, timer, nowUs);
 }
 
 static void drawIdleOutputSection(Session* session) {
@@ -86,8 +105,7 @@ static void drawIdleOutputSection(Session* session) {
     if (!ImGui_CollapsingHeader("Output", ImGuiTreeNodeFlags_DefaultOpen)) return;
 
     inspectorIndentSection();
-    inspectorPushWidgetSpacing();
-    if (ImGui_DragInt2Ex("Output Size", outputSize, 1.0f, 1, 16384, "%d", ImGuiSliderFlags_AlwaysClamp)) {
+    if (ImGui_DragInt2Ex("Output Size", outputSize, 1.0f, kRenderOutputDimensionMin, kRenderOutputDimensionMax, "%d", ImGuiSliderFlags_AlwaysClamp)) {
         session->editor.renderConfig.width = clampRenderDimension(outputSize[0]);
         session->editor.renderConfig.height = clampRenderDimension(outputSize[1]);
     }
@@ -97,7 +115,6 @@ static void drawIdleOutputSection(Session* session) {
         session->editor.renderConfig.targetSamples = (uint32_t)targetSamples;
     }
     tooltipOnHover("Total samples to render. Set to 0 for manual stop.");
-    inspectorPopWidgetSpacing();
     inspectorUnindentSection();
 }
 
@@ -161,9 +178,7 @@ static void drawTimelineEditor(SessionRenderAnimationSettings* animation) {
             "%.3f",
             ImGuiSliderFlags_AlwaysClamp);
 
-        inspectorPushWidgetSpacing();
         timelineEdited |= ImGui_ColorEdit3("Emission Tint", key->emissionTint, ImGuiColorEditFlags_Float);
-        inspectorPopWidgetSpacing();
         ImGui_PopID();
     }
 
@@ -184,8 +199,6 @@ static void drawIdleAnimationSection(Session* session) {
     if (!ImGui_CollapsingHeader("Sequence", ImGuiTreeNodeFlags_None)) return;
 
     inspectorIndentSection();
-    inspectorPushWidgetSpacing();
-
     if (ImGui_Checkbox("Enabled##render_animation_enabled", &animationEnabled)) {
         animation->enabled = animationEnabled ? 1 : 0;
         if (!animationEnabled) {
@@ -200,19 +213,19 @@ static void drawIdleAnimationSection(Session* session) {
 
     ImGui_BeginDisabled(!animationEnabled);
 
-    if (ImGui_DragFloatEx("Time Min", &timeMin, 0.01f, 0.0f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+    if (ImGui_DragFloatEx("Time Min", &timeMin, kAnimationTimeDragSpeed, kAnimationTimeMin, kAnimationTimeMax, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
         animation->minTime = timeMin;
         sessionSanitizeAnimationSettings(animation);
         frameCount = sessionComputeAnimationFrameCount(animation);
     }
 
-    if (ImGui_DragFloatEx("Time Max", &timeMax, 0.01f, 0.0f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+    if (ImGui_DragFloatEx("Time Max", &timeMax, kAnimationTimeDragSpeed, kAnimationTimeMin, kAnimationTimeMax, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
         animation->maxTime = timeMax;
         sessionSanitizeAnimationSettings(animation);
         frameCount = sessionComputeAnimationFrameCount(animation);
     }
 
-    if (ImGui_DragFloatEx("Step", &timeStep, 0.005f, 0.001f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+    if (ImGui_DragFloatEx("Step", &timeStep, kAnimationStepDragSpeed, kAnimationStepMin, kAnimationTimeMax, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
         animation->timeStep = timeStep;
         sessionSanitizeAnimationSettings(animation);
         frameCount = sessionComputeAnimationFrameCount(animation);
@@ -224,7 +237,7 @@ static void drawIdleAnimationSection(Session* session) {
         sessionRequestRenderSequenceFolderDialog(session);
     }
 
-    char folderPathBuffer[256] = {0};
+    char folderPathBuffer[kRenderFolderPathCapacity];
     snprintf(folderPathBuffer, sizeof(folderPathBuffer), "%s", sequenceFolder);
     ImGui_InputTextEx("Folder", folderPathBuffer, sizeof(folderPathBuffer), ImGuiInputTextFlags_ReadOnly, NULL, NULL);
     tooltipOnHover(sequenceFolder);
@@ -237,14 +250,10 @@ static void drawIdleAnimationSection(Session* session) {
     }
 
     ImGui_EndDisabled();
-    inspectorPopWidgetSpacing();
     inspectorUnindentSection();
 }
 
-static void drawIdleRenderState(VKRT* vkrt, Session* session, const SessionRenderTimer* timer) {
-    const VKRT_PublicState* state = VKRT_getPublicState(vkrt);
-    if (!state) return;
-
+static void drawIdleRenderState(Session* session, const SessionRenderTimer* timer) {
     bool animationEnabled = session->editor.renderConfig.animation.enabled != 0;
 
     drawIdleOutputSection(session);
@@ -266,84 +275,78 @@ static void drawIdleRenderState(VKRT* vkrt, Session* session, const SessionRende
     }
 
     if (timer->completedSeconds > 0.0f) {
-        char totalText[32] = {0};
+        char totalText[kRenderTimeTextCapacity];
         formatTime(timer->completedSeconds, totalText, sizeof(totalText));
         ImGui_TextDisabled(ICON_FA_CLOCK " Last render: %s", totalText);
     }
 }
 
 static void drawRenderProgressSection(
-    const VKRT_PublicState* state,
+    const VKRT_RenderStatusSnapshot* status,
     const VKRT_RuntimeSnapshot* runtime,
-    const SessionSequenceProgress* sequence,
+    const RenderSequencer* sequencer,
     float elapsedActiveSeconds,
     float completedSeconds
 ) {
-    if (!state || !runtime || !sequence) return;
-
-    ImGui_PushStyleColorImVec4(ImGuiCol_FrameBg, kProgressBgColor);
-    ImGui_PushStyleColorImVec4(ImGuiCol_PlotHistogram, kProgressFillColor);
-    ImGui_PushStyleColorImVec4(ImGuiCol_Text, kProgressTextColor);
+    if (!status || !runtime || !sequencer) return;
 
     ImGui_TextDisabled("Output %ux%u", runtime->renderWidth, runtime->renderHeight);
 
-    if (state->renderTargetSamples > 0) {
-        uint64_t shownSamples = state->totalSamples;
-        if (shownSamples > state->renderTargetSamples) {
-            shownSamples = state->renderTargetSamples;
+    if (status->renderTargetSamples > 0) {
+        uint64_t shownSamples = status->totalSamples;
+        if (shownSamples > status->renderTargetSamples) {
+            shownSamples = status->renderTargetSamples;
         }
-        float progress = (float)shownSamples / (float)state->renderTargetSamples;
+        float progress = (float)shownSamples / (float)status->renderTargetSamples;
         if (progress < 0.0f) progress = 0.0f;
         if (progress > 1.0f) progress = 1.0f;
-        char overlay[96] = {0};
-        snprintf(overlay, sizeof(overlay), "%llu / %u samples",
-            (unsigned long long)shownSamples, state->renderTargetSamples);
+        char overlay[kRenderProgressOverlayCapacity];
+        snprintf(overlay, sizeof(overlay), "%" PRIu64 " / %u samples",
+            shownSamples, status->renderTargetSamples);
         ImGui_ProgressBar(progress, (ImVec2){-1.0f, 0.0f}, overlay);
     } else {
-        char overlay[96] = {0};
-        snprintf(overlay, sizeof(overlay), "%llu samples",
-            (unsigned long long)state->totalSamples);
+        char overlay[kRenderProgressOverlayCapacity];
+        snprintf(overlay, sizeof(overlay), "%" PRIu64 " samples",
+            status->totalSamples);
         ImGui_ProgressBar(0.0f, (ImVec2){-1.0f, 0.0f}, overlay);
     }
 
-    if (sequence->active) {
+    if (sequencer->active) {
         float sequenceProgress = 0.0f;
-        if (sequence->frameCount > 0u) {
-            uint32_t frameShown = sequence->frameIndex;
-            if (frameShown > sequence->frameCount) frameShown = sequence->frameCount;
-            sequenceProgress = (float)frameShown / (float)sequence->frameCount;
+        if (sequencer->frameCount > 0u) {
+            uint32_t frameShown = sequencer->frameIndex + 1u;
+            if (frameShown > sequencer->frameCount) frameShown = sequencer->frameCount;
+            sequenceProgress = (float)frameShown / (float)sequencer->frameCount;
         }
         if (sequenceProgress < 0.0f) sequenceProgress = 0.0f;
         if (sequenceProgress > 1.0f) sequenceProgress = 1.0f;
 
-        char sequenceOverlay[96] = {0};
+        char sequenceOverlay[kRenderProgressOverlayCapacity];
         snprintf(sequenceOverlay, sizeof(sequenceOverlay), "Frame %u / %u",
-            sequence->frameIndex, sequence->frameCount);
+            sequencer->frameIndex + 1u, sequencer->frameCount);
         ImGui_ProgressBar(sequenceProgress, (ImVec2){-1.0f, 0.0f}, sequenceOverlay);
     }
 
-    ImGui_PopStyleColorEx(3);
-
     ImGui_Spacing();
 
-    if (state->renderModeFinished) {
+    if (status->renderModeFinished) {
         float elapsedDoneSeconds = completedSeconds > 0.0f ? completedSeconds : elapsedActiveSeconds;
-        char elapsedText[32] = {0};
+        char elapsedText[kRenderTimeTextCapacity];
         formatTime(fmaxf(elapsedDoneSeconds, 0.0f), elapsedText, sizeof(elapsedText));
         ImGui_Text(ICON_FA_CHECK " Complete  " ICON_FA_CLOCK " %s", elapsedText);
     } else {
         float etaSeconds = -1.0f;
-        if (sequence->active && sequence->hasEstimatedRemaining) {
-            etaSeconds = fmaxf(sequence->estimatedRemainingSeconds, 0.0f);
-        } else if (state->renderTargetSamples > 0 && state->totalSamples > 0 && elapsedActiveSeconds > 0.0f) {
-            float samplesPerSecond = (float)state->totalSamples / elapsedActiveSeconds;
-            if (samplesPerSecond > 0.0f && state->renderTargetSamples > state->totalSamples) {
-                etaSeconds = (float)(state->renderTargetSamples - state->totalSamples) / samplesPerSecond;
+        if (sequencer->active && sequencer->hasEstimatedRemaining) {
+            etaSeconds = fmaxf(sequencer->estimatedRemainingSeconds, 0.0f);
+        } else if (status->renderTargetSamples > 0 && status->totalSamples > 0 && elapsedActiveSeconds > 0.0f) {
+            float samplesPerSecond = (float)status->totalSamples / elapsedActiveSeconds;
+            if (samplesPerSecond > 0.0f && status->renderTargetSamples > status->totalSamples) {
+                etaSeconds = (float)(status->renderTargetSamples - status->totalSamples) / samplesPerSecond;
             }
         }
 
         if (etaSeconds >= 0.0f) {
-            char etaText[32] = {0};
+            char etaText[kRenderTimeTextCapacity];
             formatTime(etaSeconds, etaText, sizeof(etaText));
             ImGui_Text("Rendering  " ICON_FA_CLOCK " ETA %s", etaText);
         } else {
@@ -352,13 +355,13 @@ static void drawRenderProgressSection(
     }
 }
 
-static void drawRenderActionsSection(VKRT* vkrt, Session* session, const VKRT_PublicState* state, const SessionSequenceProgress* sequence) {
-    if (!vkrt || !session || !state || !sequence) return;
+static void drawRenderActionsSection(VKRT* vkrt, Session* session, const VKRT_RenderStatusSnapshot* status, const RenderSequencer* sequencer) {
+    if (!vkrt || !session || !status || !sequencer) return;
 
     ImGui_Spacing();
 
-    if (!state->renderModeFinished) {
-        if (sequence->active) {
+    if (!status->renderModeFinished) {
+        if (sequencer->active) {
             if (inspectorPaddedButton(ICON_FA_STOP " Stop Sequence")) {
                 sessionQueueRenderStop(session);
             }
@@ -369,7 +372,7 @@ static void drawRenderActionsSection(VKRT* vkrt, Session* session, const VKRT_Pu
             }
         }
     } else {
-        if (!sequence->active) {
+        if (!sequencer->active) {
             if (inspectorPaddedButton(ICON_FA_FLOPPY_DISK " Save Image")) {
                 sessionRequestRenderSaveDialog(session);
             }
@@ -385,21 +388,22 @@ void inspectorDrawRenderTab(VKRT* vkrt, Session* session) {
     if (!vkrt || !session) return;
     inspectorPrepareRenderState(vkrt, session);
 
-    const VKRT_PublicState* state = VKRT_getPublicState(vkrt);
+    VKRT_RenderStatusSnapshot status = {0};
     VKRT_RuntimeSnapshot runtime = {0};
-    if (!state || VKRT_getRuntimeSnapshot(vkrt, &runtime) != VKRT_SUCCESS) {
+    if (VKRT_getRenderStatus(vkrt, &status) != VKRT_SUCCESS ||
+        VKRT_getRuntimeSnapshot(vkrt, &runtime) != VKRT_SUCCESS) {
         return;
     }
 
     uint64_t nowUs = getMicroseconds();
     SessionRenderTimer* timer = &session->runtime.renderTimer;
 
-    if (!state->renderModeActive) {
-        drawIdleRenderState(vkrt, session, timer);
+    if (!status.renderModeActive) {
+        drawIdleRenderState(session, timer);
         return;
     }
 
     float elapsedActiveSeconds = queryActiveRenderSeconds(timer, nowUs);
-    drawRenderProgressSection(state, &runtime, &session->runtime.sequenceProgress, elapsedActiveSeconds, timer->completedSeconds);
-    drawRenderActionsSection(vkrt, session, state, &session->runtime.sequenceProgress);
+    drawRenderProgressSection(&status, &runtime, &session->runtime.sequencer, elapsedActiveSeconds, timer->completedSeconds);
+    drawRenderActionsSection(vkrt, session, &status, &session->runtime.sequencer);
 }
