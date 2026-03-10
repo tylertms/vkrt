@@ -6,6 +6,9 @@ on:
       - "v*"
   workflow_dispatch:
 
+env:
+  VULKAN_SDK_VERSION: 1.4.341.1
+
 permissions:
   contents: write
 
@@ -27,14 +30,16 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Install Vulkan SDK
-        uses: humbletim/install-vulkan-sdk@v1.2
-        with:
-          version: 1.4.341.1
-          cache: true
-
-      - name: Install Windows pkg-config
         shell: pwsh
-        run: choco install pkgconfiglite -y --no-progress
+        run: |
+          $sdkVersion = '${{ env.VULKAN_SDK_VERSION }}'
+          $sdkDir = Join-Path $PWD 'VULKAN_SDK'
+          $installer = Join-Path $PWD 'vulkan_sdk.exe'
+          Invoke-WebRequest -Uri "https://sdk.lunarg.com/sdk/download/$sdkVersion/windows/vulkan_sdk.exe?Human=true" -OutFile $installer
+          Start-Process -FilePath $installer -ArgumentList @('--root', $sdkDir, '--accept-licenses', '--default-answer', '--confirm-command', 'install', 'copy_only=1') -Wait -NoNewWindow
+          "VULKAN_SDK=$sdkDir" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "VK_SDK_PATH=$sdkDir" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          (Join-Path $sdkDir 'Bin') | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
 
       - name: Install Meson and Ninja
         run: python -m pip install meson ninja
@@ -84,16 +89,13 @@ jobs:
           python-version: "3.13"
 
       - name: Install Vulkan SDK
-        uses: humbletim/install-vulkan-sdk@v1.2
-        with:
-          version: 1.4.341.1
-          cache: true
-
-      - name: Vulkan Tool Versions
+        shell: bash
         run: |
-          echo "VULKAN_SDK=$VULKAN_SDK"
-          "$VULKAN_SDK/bin/glslc" --version
-          "$VULKAN_SDK/bin/glslangValidator" --version
+          mkdir -p VULKAN_SDK
+          curl -L "https://sdk.lunarg.com/sdk/download/${VULKAN_SDK_VERSION}/linux/vulkan_sdk.tar.gz?Human=true" -o vulkan_sdk.tar.gz
+          tar -xzf vulkan_sdk.tar.gz -C VULKAN_SDK --strip-components=2 "${VULKAN_SDK_VERSION}/x86_64"
+          echo "VULKAN_SDK=$PWD/VULKAN_SDK" >> "$GITHUB_ENV"
+          echo "$PWD/VULKAN_SDK/bin" >> "$GITHUB_PATH"
 
       - name: Install Linux Packages
         run: |
