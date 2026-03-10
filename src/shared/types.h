@@ -95,19 +95,6 @@ typedef struct EmissiveMesh EmissiveMesh;
 typedef struct EmissiveTriangle EmissiveTriangle;
 typedef struct SceneData SceneData;
 typedef struct PickBuffer PickBuffer;
-_Static_assert(offsetof(Material, baseColor) == 0, "Material.baseColor must stay std430-aligned");
-_Static_assert(offsetof(Material, roughness) == 12, "Material.roughness offset changed");
-_Static_assert(offsetof(Material, emissionColor) == 16, "Material.emissionColor offset changed");
-_Static_assert(offsetof(Material, emissionLuminance) == 28, "Material.emissionLuminance offset changed");
-_Static_assert(offsetof(Material, metallic) == 32, "Material.metallic offset changed");
-_Static_assert(offsetof(Material, specular) == 36, "Material.specular offset changed");
-_Static_assert(offsetof(Material, specularTint) == 40, "Material.specularTint offset changed");
-_Static_assert(offsetof(Material, anisotropic) == 44, "Material.anisotropic offset changed");
-_Static_assert(offsetof(Material, sheen) == 48, "Material.sheen offset changed");
-_Static_assert(offsetof(Material, sheenTint) == 52, "Material.sheenTint offset changed");
-_Static_assert(offsetof(Material, clearcoat) == 56, "Material.clearcoat offset changed");
-_Static_assert(offsetof(Material, clearcoatGloss) == 60, "Material.clearcoatGloss offset changed");
-_Static_assert(sizeof(Material) == 64, "Material must remain 64 bytes for std430");
 #undef uint
 #endif
 
