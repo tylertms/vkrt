@@ -3,6 +3,8 @@ project('vkrt', ['c', 'cpp'],
   default_options: [
     'c_std=c11',
     'cpp_std=c++17',
+    'buildtype=release',
+    'b_lto=false',
     'warning_level=3',
   ],
 )
@@ -29,14 +31,17 @@ c_args += [define_prefix + 'GLFW_INCLUDE_NONE']
 cpp_args += [define_prefix + 'GLFW_INCLUDE_NONE']
 
 buildtype = get_option('buildtype')
+selection_enabled = get_option('selection')
 trace_enabled = buildtype == 'debug' or buildtype == 'debugoptimized'
 if trace_enabled
   c_args += [define_prefix + 'VKRT_TRACE_ENABLED=1']
 else
   c_args += [define_prefix + 'VKRT_TRACE_ENABLED=0']
 endif
+c_args += [define_prefix + 'VKRT_SELECTION_ENABLED=' + (selection_enabled ? '1' : '0')]
+cpp_args += [define_prefix + 'VKRT_SELECTION_ENABLED=' + (selection_enabled ? '1' : '0')]
 
-glslc = find_program('glslc', required: true)
+slangc = find_program('slangc', required: true)
 
 project_includes = include_directories(
   'assets/fonts',

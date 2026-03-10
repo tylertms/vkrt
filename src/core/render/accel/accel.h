@@ -2,7 +2,9 @@
 #include "vkrt_internal.h"
 
 VKRT_Result createShaderBindingTable(VKRT* vkrt);
+#if VKRT_SELECTION_ENABLED
 VKRT_Result createSelectionShaderBindingTable(VKRT* vkrt);
+#endif
 VKRT_Result createBottomLevelAccelerationStructureForGeometry(
     VKRT* vkrt,
     const MeshInfo* meshInfo,

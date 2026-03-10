@@ -175,9 +175,9 @@ VKRT_Result recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
     VkBool32 renderFinished = renderModeActive && vkrt->state.renderModeFinished;
     VkBool32 descriptorReady = vkrt->core.descriptorSetReady[vkrt->runtime.currentFrame];
     VkBool32 shouldTrace = descriptorReady && !renderFinished;
+#if VKRT_SELECTION_ENABLED
     VkBool32 selectionOverlayEnabled = !renderModeActive &&
-                                       (vkrt->state.selectionEnabled != 0u ||
-                                        vkrt->state.debugMode == VKRT_DEBUG_MODE_SELECTION_MASK);
+                                       vkrt->state.selectionEnabled != 0u;
     VkBool32 shouldSelectionTrace = shouldTrace &&
                                     selectionOverlayEnabled &&
                                     vkrt->core.selectionMaskDirty &&
@@ -185,6 +185,11 @@ VKRT_Result recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex) {
     VkBool32 shouldSelectionPost = shouldTrace &&
                                    selectionOverlayEnabled &&
                                    vkrt->core.computePipeline != VK_NULL_HANDLE;
+#else
+    VkBool32 shouldSelectionTrace = VK_FALSE;
+    VkBool32 shouldSelectionPost = VK_FALSE;
+    (void)selectionMaskImage;
+#endif
     vkrt->runtime.frameTraced = VK_FALSE;
     vkrt->runtime.frameSelectionTraced = VK_FALSE;
 

@@ -27,17 +27,13 @@ VKRT_Result createRayTracingPipeline(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
 
     uint64_t startTime = getMicroseconds();
-    VkBool32 useSerRayGen = (vkrt->core.deviceExtensionSupport.enabledMask & DEVICE_EXTENSION_RAY_TRACING_INVOCATION_REORDER_BIT) != 0u;
-    const unsigned char* rayGenData = useSerRayGen ? shader_rgen_ser_data : shader_rgen_data;
-    size_t rayGenSize = useSerRayGen ? shader_rgen_ser_size : shader_rgen_size;
-    const char* rayGenVariant = useSerRayGen ? "SER" : "default";
 
     if (createRayTracingPipelineLayout(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
 
     VkShaderModule rayGenModule = VK_NULL_HANDLE;
     VkShaderModule closestHitModule = VK_NULL_HANDLE;
     VkShaderModule missModule = VK_NULL_HANDLE;
-    if (createShaderModule(vkrt, (const char*)rayGenData, rayGenSize, &rayGenModule) != VKRT_SUCCESS ||
+    if (createShaderModule(vkrt, (const char*)shader_rgen_data, shader_rgen_size, &rayGenModule) != VKRT_SUCCESS ||
         createShaderModule(vkrt, (const char*)shader_rchit_data, shader_rchit_size, &closestHitModule) != VKRT_SUCCESS ||
         createShaderModule(vkrt, (const char*)shader_rmiss_data, shader_rmiss_size, &missModule) != VKRT_SUCCESS) {
         if (rayGenModule != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, rayGenModule, NULL);
@@ -46,8 +42,8 @@ VKRT_Result createRayTracingPipeline(VKRT* vkrt) {
         return VKRT_ERROR_OPERATION_FAILED;
     }
 
-    LOG_INFO("Using embedded ray tracing shaders (rgen [%s]: %zu bytes, rchit: %zu bytes, rmiss: %zu bytes)",
-        rayGenVariant, rayGenSize, shader_rchit_size, shader_rmiss_size);
+    LOG_INFO("Using embedded ray tracing shaders (rgen: %zu bytes, rchit: %zu bytes, rmiss: %zu bytes)",
+        shader_rgen_size, shader_rchit_size, shader_rmiss_size);
 
     VkPipelineShaderStageCreateInfo rayGenStageInfo = {0};
     rayGenStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -131,6 +127,7 @@ VKRT_Result createRayTracingPipeline(VKRT* vkrt) {
     return VKRT_SUCCESS;
 }
 
+#if VKRT_SELECTION_ENABLED
 VKRT_Result createSelectionRayTracingPipeline(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
     if (createRayTracingPipelineLayout(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
@@ -227,6 +224,7 @@ VKRT_Result createComputePipeline(VKRT* vkrt) {
         (double)(getMicroseconds() - startTime) / 1e3);
     return VKRT_SUCCESS;
 }
+#endif
 
 VKRT_Result createSyncObjects(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;

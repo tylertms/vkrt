@@ -76,50 +76,6 @@ void inspectorPrepareRenderState(VKRT* vkrt, Session* session) {
     updateRenderTimer(state, timer, nowUs);
 }
 
-static void drawDebugSection(VKRT* vkrt, const VKRT_PublicState* state, bool controlsDisabled) {
-    if (!vkrt || !state) return;
-    if (!ImGui_CollapsingHeader("Debug", ImGuiTreeNodeFlags_None)) return;
-
-    inspectorIndentSection();
-    inspectorPushWidgetSpacing();
-    if (controlsDisabled) ImGui_BeginDisabled(true);
-
-    const char* debugModeLabels[] = {"None", "Normals", "Depth", "Bounce Count", "NEE Only", "BSDF Only", "Selection Mask", "Fresnel"};
-    int debugMode = (int)state->debugMode;
-    if (ImGui_ComboCharEx("Debug Mode", &debugMode, debugModeLabels, (int)VKRT_DEBUG_MODE_COUNT, (int)VKRT_DEBUG_MODE_COUNT)) {
-        VKRT_Result result = VKRT_setDebugMode(vkrt, (uint32_t)debugMode);
-        if (result != VKRT_SUCCESS) {
-            LOG_ERROR("Updating debug mode failed (%d)", (int)result);
-        }
-    }
-
-    int rrMinDepth = (int)state->rrMinDepth;
-    int rrMaxDepth = (int)state->rrMaxDepth;
-    bool depthChanged = false;
-    depthChanged |= ImGui_SliderIntEx("RR Min Depth", &rrMinDepth, 0, 64, "%d", ImGuiSliderFlags_AlwaysClamp);
-    depthChanged |= ImGui_SliderIntEx("RR Max Depth", &rrMaxDepth, 1, 64, "%d", ImGuiSliderFlags_AlwaysClamp);
-    if (depthChanged) {
-        VKRT_Result result = VKRT_setPathDepth(vkrt, (uint32_t)rrMinDepth, (uint32_t)rrMaxDepth);
-        if (result != VKRT_SUCCESS) {
-            LOG_ERROR("Updating path depth failed (%d)", (int)result);
-        }
-    }
-    tooltipOnHover("Russian roulette starts at RR Min Depth. Set equal to disable RR.");
-
-    bool misNeeEnabled = state->misNeeEnabled != 0u;
-    if (ImGui_Checkbox("MIS + NEE", &misNeeEnabled)) {
-        VKRT_Result result = VKRT_setMISNEEEnabled(vkrt, misNeeEnabled ? 1u : 0u);
-        if (result != VKRT_SUCCESS) {
-            LOG_ERROR("Updating MIS/NEE toggle failed (%d)", (int)result);
-        }
-    }
-    tooltipOnHover("Multiple Importance Sampling + Next Event Estimation.");
-
-    if (controlsDisabled) ImGui_EndDisabled();
-    inspectorPopWidgetSpacing();
-    inspectorUnindentSection();
-}
-
 static void drawIdleOutputSection(Session* session) {
     int outputSize[2] = {
         (int)session->editor.renderConfig.width,
@@ -289,11 +245,9 @@ static void drawIdleRenderState(VKRT* vkrt, Session* session, const SessionRende
     const VKRT_PublicState* state = VKRT_getPublicState(vkrt);
     if (!state) return;
 
-    bool renderModeActive = state->renderModeActive != 0;
     bool animationEnabled = session->editor.renderConfig.animation.enabled != 0;
 
     drawIdleOutputSection(session);
-    drawDebugSection(vkrt, state, renderModeActive);
     drawIdleAnimationSection(session);
 
     ImGui_Spacing();

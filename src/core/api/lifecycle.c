@@ -332,8 +332,10 @@ VKRT_Result VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInf
 
     stepStartTime = getMicroseconds();
     if (createRayTracingPipeline(vkrt) != VKRT_SUCCESS) goto init_failed;
+#if VKRT_SELECTION_ENABLED
     if (createSelectionRayTracingPipeline(vkrt) != VKRT_SUCCESS) goto init_failed;
     if (createComputePipeline(vkrt) != VKRT_SUCCESS) goto init_failed;
+#endif
     logStepTime("Ray tracing pipelines and compute pipeline ready", stepStartTime);
 
     stepStartTime = getMicroseconds();
@@ -354,7 +356,9 @@ VKRT_Result VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInf
 
     stepStartTime = getMicroseconds();
     if (createShaderBindingTable(vkrt) != VKRT_SUCCESS) goto init_failed;
+#if VKRT_SELECTION_ENABLED
     if (createSelectionShaderBindingTable(vkrt) != VKRT_SUCCESS) goto init_failed;
+#endif
     logStepTime("Shader binding tables ready", stepStartTime);
 
     stepStartTime = getMicroseconds();

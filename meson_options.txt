@@ -12,3 +12,10 @@ option(
   value: 'auto',
   description: 'Build native file dialog support when a platform backend is available.',
 )
+
+option(
+  'selection',
+  type: 'boolean',
+  value: true,
+  description: 'Build selection ray tracing and outline pipelines.',
+)
