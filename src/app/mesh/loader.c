@@ -11,6 +11,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+enum { kGeneratedMeshNameCapacity = 256 };
+
 static void releaseImportEntry(MeshImportEntry* entry) {
     if (!entry) return;
     free(entry->name);
@@ -265,7 +267,7 @@ static int buildPrimitiveEntry(
     entry.material = buildMaterial(primitive->material);
     entry.renderBackfaces = primitive->material && primitive->material->double_sided ? 1u : 0u;
 
-    char generatedName[256] = {0};
+    char generatedName[kGeneratedMeshNameCapacity];
     buildEntryName(generatedName, sizeof(generatedName), node, mesh, primitiveIndex);
     entry.name = stringDuplicate(generatedName);
     entry.vertices = (Vertex*)calloc(entry.vertexCount, sizeof(Vertex));
@@ -353,7 +355,7 @@ static int collectNodeEntries(const cgltf_node* node, MeshImportData* importData
 int meshLoadFromFile(const char* filePath, MeshImportData* outImportData) {
     if (!filePath || !filePath[0] || !outImportData) return -1;
 
-    char resolvedPath[VKRT_PATH_MAX] = {0};
+    char resolvedPath[VKRT_PATH_MAX];
     if (resolveExistingPath(filePath, resolvedPath, sizeof(resolvedPath)) != 0) {
         LOG_ERROR("Mesh file not found: %s", filePath);
         return -1;

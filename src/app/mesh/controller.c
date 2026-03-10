@@ -1,10 +1,10 @@
 #include "controller.h"
 #include "loader.h"
 #include "debug.h"
+#include "vkrt.h"
 
 #include <stdint.h>
 #include <stdlib.h>
-#include <vkrt.h>
 
 typedef struct DefaultMeshSpec {
     const char* assetPath;
@@ -15,17 +15,15 @@ typedef struct DefaultMeshSpec {
     Material material;
 } DefaultMeshSpec;
 
-static void rollbackImportedMeshes(VKRT* vkrt, Session* session, uint32_t meshCountBefore) {
-    if (!vkrt || !session) return;
+static void rollbackImportedMeshes(VKRT* vkrt, uint32_t meshCountBefore) {
+    if (!vkrt) return;
 
     uint32_t meshCount = 0;
     if (VKRT_getMeshCount(vkrt, &meshCount) != VKRT_SUCCESS) return;
 
     while (meshCount > meshCountBefore) {
         uint32_t meshIndex = meshCount - 1u;
-        if (VKRT_removeMesh(vkrt, meshIndex) == VKRT_SUCCESS) {
-            sessionRemoveMeshName(session, meshIndex);
-        } else {
+        if (VKRT_removeMesh(vkrt, meshIndex) != VKRT_SUCCESS) {
             LOG_ERROR("Rolling back imported mesh failed at index %u", meshIndex);
             break;
         }
@@ -88,7 +86,7 @@ int meshControllerImportMesh(VKRT* vkrt, Session* session, const char* path, con
 
         if (VKRT_uploadMeshData(vkrt, entry->vertices, entry->vertexCount, entry->indices, entry->indexCount) != VKRT_SUCCESS) {
             LOG_ERROR("Mesh upload failed. File: %s, Entry: %s", path, entry->name ? entry->name : "(unnamed)");
-            rollbackImportedMeshes(vkrt, session, meshCountBeforeImport);
+            rollbackImportedMeshes(vkrt, meshCountBeforeImport);
             meshReleaseImportData(&importData);
             return 0;
         }
@@ -96,7 +94,7 @@ int meshControllerImportMesh(VKRT* vkrt, Session* session, const char* path, con
         if (VKRT_setMeshMaterial(vkrt, meshIndex, &entry->material) != VKRT_SUCCESS ||
             VKRT_setMeshRenderBackfaces(vkrt, meshIndex, entry->renderBackfaces) != VKRT_SUCCESS) {
             LOG_ERROR("Mesh material import failed. File: %s, Entry: %s", path, entry->name ? entry->name : "(unnamed)");
-            rollbackImportedMeshes(vkrt, session, meshCountBeforeImport);
+            rollbackImportedMeshes(vkrt, meshCountBeforeImport);
             meshReleaseImportData(&importData);
             return 0;
         }
@@ -106,7 +104,7 @@ int meshControllerImportMesh(VKRT* vkrt, Session* session, const char* path, con
         vec3 scale = {entry->scale[0], entry->scale[1], entry->scale[2]};
         if (VKRT_setMeshTransform(vkrt, meshIndex, position, rotation, scale) != VKRT_SUCCESS) {
             LOG_ERROR("Mesh transform import failed. File: %s, Entry: %s", path, entry->name ? entry->name : "(unnamed)");
-            rollbackImportedMeshes(vkrt, session, meshCountBeforeImport);
+            rollbackImportedMeshes(vkrt, meshCountBeforeImport);
             meshReleaseImportData(&importData);
             return 0;
         }
@@ -118,7 +116,7 @@ int meshControllerImportMesh(VKRT* vkrt, Session* session, const char* path, con
         if (!meshName || !meshName[0]) {
             meshName = path;
         }
-        if (!sessionSetMeshName(session, meshName, meshIndex)) {
+        if (VKRT_setMeshName(vkrt, meshIndex, meshName) != VKRT_SUCCESS) {
             LOG_ERROR("Mesh imported but failed to store mesh label. File: %s", meshName);
         }
 
@@ -133,7 +131,7 @@ int meshControllerImportMesh(VKRT* vkrt, Session* session, const char* path, con
     uint32_t meshCountAfterImport = 0;
     if (VKRT_getMeshCount(vkrt, &meshCountAfterImport) != VKRT_SUCCESS || meshCountAfterImport <= meshCountBeforeImport) {
         LOG_ERROR("Mesh import failed. File: %s", path);
-        rollbackImportedMeshes(vkrt, session, meshCountBeforeImport);
+        rollbackImportedMeshes(vkrt, meshCountBeforeImport);
         return 0;
     }
 
@@ -158,9 +156,7 @@ void meshControllerApplySessionActions(VKRT* vkrt, Session* session) {
         if (VKRT_getMeshCount(vkrt, &meshCount) != VKRT_SUCCESS) return;
         if (removeIndex < meshCount) {
             VKRT_Result result = VKRT_removeMesh(vkrt, removeIndex);
-            if (result == VKRT_SUCCESS) {
-                sessionRemoveMeshName(session, removeIndex);
-            } else {
+            if (result != VKRT_SUCCESS) {
                 LOG_ERROR("Removing mesh failed (%d)", (int)result);
             }
         }
