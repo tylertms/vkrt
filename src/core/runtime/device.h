@@ -10,7 +10,7 @@ extern const char* optionalDeviceExtensions[NUM_OPT_EXTENSIONS];
 extern const uint32_t requiredDeviceExtensionBits[NUM_REQ_EXTENSIONS];
 extern const uint32_t optionalDeviceExtensionBits[NUM_OPT_EXTENSIONS];
 
-VKRT_Result pickPhysicalDevice(VKRT* vkrt);
+VKRT_Result pickPhysicalDevice(VKRT* vkrt, const VKRT_CreateInfo* createInfo);
 VKRT_Result createLogicalDevice(VKRT* vkrt);
 VKRT_Result createQueryPool(VKRT* vkrt);
 int32_t isDeviceSuitable(VKRT* vkrt);

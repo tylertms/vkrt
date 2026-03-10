@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <vulkan/vulkan_core.h>
 
 const char* requiredDeviceExtensions[NUM_REQ_EXTENSIONS] = {
@@ -144,7 +145,99 @@ static int32_t scoreDeviceSuitability(VKRT* vkrt, DeviceExtensionSupport* outExt
     return -1;
 }
 
-VKRT_Result pickPhysicalDevice(VKRT* vkrt) {
+static int stringContainsCaseInsensitive(const char* text, const char* pattern) {
+    if (!text || !pattern) return 0;
+    if (!pattern[0]) return 1;
+
+    size_t patternLength = strlen(pattern);
+    for (const char* cursor = text; cursor[0]; cursor++) {
+        size_t matched = 0;
+        while (matched < patternLength) {
+            char hay = cursor[matched];
+            char needle = pattern[matched];
+            if (!hay) return 0;
+            if (tolower((unsigned char)hay) != tolower((unsigned char)needle)) break;
+            matched++;
+        }
+        if (matched == patternLength) return 1;
+    }
+
+    return 0;
+}
+
+static VkBool32 deviceMatchesPreference(
+    uint32_t deviceIndex,
+    const VkPhysicalDeviceProperties* properties,
+    const VKRT_CreateInfo* createInfo
+) {
+    if (!properties) return VK_FALSE;
+    if (!createInfo) return VK_TRUE;
+
+    if (createInfo->preferredDeviceIndex >= 0 &&
+        createInfo->preferredDeviceIndex != (int32_t)deviceIndex) {
+        return VK_FALSE;
+    }
+
+    if (createInfo->preferredDeviceName &&
+        createInfo->preferredDeviceName[0] &&
+        !stringContainsCaseInsensitive(properties->deviceName, createInfo->preferredDeviceName)) {
+        return VK_FALSE;
+    }
+
+    return VK_TRUE;
+}
+
+static void logRequestedDevicePreference(const VKRT_CreateInfo* createInfo) {
+    if (!createInfo) return;
+    if (createInfo->preferredDeviceIndex < 0 &&
+        (!createInfo->preferredDeviceName || !createInfo->preferredDeviceName[0])) {
+        return;
+    }
+
+    if (createInfo->preferredDeviceIndex >= 0 && createInfo->preferredDeviceName && createInfo->preferredDeviceName[0]) {
+        LOG_INFO("Requested device: index %d, name contains \"%s\"",
+            createInfo->preferredDeviceIndex,
+            createInfo->preferredDeviceName);
+        return;
+    }
+    if (createInfo->preferredDeviceIndex >= 0) {
+        LOG_INFO("Requested device: index %d", createInfo->preferredDeviceIndex);
+        return;
+    }
+
+    LOG_INFO("Requested device: name contains \"%s\"", createInfo->preferredDeviceName);
+}
+
+static void formatDevicePreferenceText(const VKRT_CreateInfo* createInfo, char* out, size_t outSize) {
+    if (!out || outSize == 0) return;
+    out[0] = '\0';
+
+    if (!createInfo) {
+        snprintf(out, outSize, "default selection");
+        return;
+    }
+
+    if (createInfo->preferredDeviceIndex >= 0 &&
+        createInfo->preferredDeviceName &&
+        createInfo->preferredDeviceName[0]) {
+        snprintf(out, outSize, "index %d, name contains \"%s\"",
+            createInfo->preferredDeviceIndex,
+            createInfo->preferredDeviceName);
+        return;
+    }
+    if (createInfo->preferredDeviceIndex >= 0) {
+        snprintf(out, outSize, "index %d", createInfo->preferredDeviceIndex);
+        return;
+    }
+    if (createInfo->preferredDeviceName && createInfo->preferredDeviceName[0]) {
+        snprintf(out, outSize, "name contains \"%s\"", createInfo->preferredDeviceName);
+        return;
+    }
+
+    snprintf(out, outSize, "default selection");
+}
+
+VKRT_Result pickPhysicalDevice(VKRT* vkrt, const VKRT_CreateInfo* createInfo) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
     vkrt->core.physicalDevice = VK_NULL_HANDLE;
 
@@ -164,8 +257,13 @@ VKRT_Result pickPhysicalDevice(VKRT* vkrt) {
 
     int32_t highestScore = -1;
     int32_t bestDevice = -1;
+    VkBool32 preferenceFound = VK_FALSE;
+    VkBool32 preferenceRequested = createInfo &&
+        (createInfo->preferredDeviceIndex >= 0 ||
+         (createInfo->preferredDeviceName && createInfo->preferredDeviceName[0]));
 
     LOG_INFO("Found %u Vulkan device(s):", deviceCount);
+    logRequestedDevicePreference(createInfo);
     for (uint32_t i = 0; i < deviceCount; i++) {
         VkPhysicalDeviceProperties props = {0};
         DeviceExtensionSupport extensionSupport = {0};
@@ -173,6 +271,8 @@ VKRT_Result pickPhysicalDevice(VKRT* vkrt) {
 
         vkrt->core.physicalDevice = devices[i];
         int32_t score = scoreDeviceSuitability(vkrt, &extensionSupport);
+        VkBool32 preferenceMatch = deviceMatchesPreference(i, &props, createInfo);
+        if (preferenceMatch) preferenceFound = VK_TRUE;
 
         const char* typeName = "Unknown";
         switch (props.deviceType) {
@@ -182,17 +282,36 @@ VKRT_Result pickPhysicalDevice(VKRT* vkrt) {
             case VK_PHYSICAL_DEVICE_TYPE_CPU:            typeName = "CPU";            break;
             default: break;
         }
-        LOG_INFO("  [%u] %s (%s)%s", i, props.deviceName, typeName, score < 0 ? " - not suitable" : "");
+        LOG_INFO("  [%u] %s (%s)%s%s",
+            i,
+            props.deviceName,
+            typeName,
+            score < 0 ? " - not suitable" : "",
+            preferenceMatch ? " [preferred match]" : "");
         logDeviceExtensionSupport(props.deviceName, &extensionSupport);
 
-        if (score > highestScore) {
+        if (score > highestScore && (!preferenceRequested || preferenceMatch)) {
             highestScore = score;
             bestDevice = i;
         }
     }
 
+    if (preferenceRequested && !preferenceFound) {
+        char preferenceText[VKRT_NAME_LEN];
+        formatDevicePreferenceText(createInfo, preferenceText, sizeof(preferenceText));
+        LOG_ERROR("Requested Vulkan device was not found. Preference: %s", preferenceText);
+        free(devices);
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+
     if (bestDevice < 0) {
-        LOG_ERROR("Failed to find a suitable GPU");
+        if (preferenceRequested) {
+            char preferenceText[VKRT_NAME_LEN];
+            formatDevicePreferenceText(createInfo, preferenceText, sizeof(preferenceText));
+            LOG_ERROR("Requested Vulkan device is not suitable. Preference: %s", preferenceText);
+        } else {
+            LOG_ERROR("Failed to find a suitable GPU");
+        }
         free(devices);
         return VKRT_ERROR_OPERATION_FAILED;
     }

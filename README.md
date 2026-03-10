@@ -2,6 +2,8 @@
 
 real README coming soon (tm)
 
+the current master branch is non-functional, releases are still fine.
+
 ```bash
 git clone https://github.com/tylertms/vkrt
 cd vkrt

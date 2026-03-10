@@ -7,22 +7,20 @@
 #include "debug.h"
 
 #include <stdlib.h>
-#include <string.h>
 
 int main(int argc, char* argv[]) {
-    for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
-            cliPrintHelp();
-            return EXIT_SUCCESS;
-        }
-        if (strcmp(argv[i], "--version") == 0 || strcmp(argv[i], "-v") == 0) {
-            cliPrintVersion();
-            return EXIT_SUCCESS;
-        }
+    CLILaunchOptions launchOptions = {0};
+    char cliError[512];
+    if (!CLIParseArguments(argc, argv, &launchOptions, cliError, sizeof(cliError))) {
+        CLIPrintArgumentError(cliError);
+        return EXIT_FAILURE;
     }
+
+    int earlyExitCode = EXIT_SUCCESS;
+    if (CLIHandleImmediateMode(&launchOptions, &earlyExitCode)) return earlyExitCode;
+
     VKRT* vkrt = NULL;
     Session session = {0};
-    RenderSequencer renderSequencer = {0};
     int exitCode = EXIT_SUCCESS;
 
     if (VKRT_create(&vkrt) != VKRT_SUCCESS || !vkrt) {
@@ -40,11 +38,7 @@ int main(int argc, char* argv[]) {
     };
     VKRT_registerAppHooks(vkrt, hooks);
 
-    VKRT_CreateInfo createInfo = {0};
-    VKRT_defaultCreateInfo(&createInfo);
-    createInfo.title = "vkrt";
-
-    if (VKRT_initWithCreateInfo(vkrt, &createInfo) != VKRT_SUCCESS) {
+    if (VKRT_initWithCreateInfo(vkrt, &launchOptions.createInfo) != VKRT_SUCCESS) {
         LOG_ERROR("Failed to initialize VKRT runtime");
         VKRT_deinit(vkrt);
         VKRT_destroy(vkrt);
@@ -52,13 +46,24 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
-    meshControllerLoadDefaultAssets(vkrt, &session);
+    if (launchOptions.loadDefaultScene) {
+        meshControllerLoadDefaultAssets(vkrt, &session);
+    }
+    if (launchOptions.startupImportPath) {
+        if (!meshControllerImportMesh(vkrt, &session, launchOptions.startupImportPath, NULL, NULL)) {
+            LOG_ERROR("Startup mesh import failed. Path: %s", launchOptions.startupImportPath);
+            VKRT_deinit(vkrt);
+            VKRT_destroy(vkrt);
+            sessionDeinit(&session);
+            return EXIT_FAILURE;
+        }
+    }
 
     while (!VKRT_shouldDeinit(vkrt)) {
         VKRT_poll(vkrt);
         editorUIProcessDialogs(&session);
         meshControllerApplySessionActions(vkrt, &session);
-        renderSequencerHandleCommands(&renderSequencer, vkrt, &session);
+        renderSequencerHandleCommands(vkrt, &session);
         editorUIUpdate(vkrt, &session);
 
         if (VKRT_draw(vkrt) != VKRT_SUCCESS) {
@@ -66,12 +71,12 @@ int main(int argc, char* argv[]) {
             exitCode = EXIT_FAILURE;
             break;
         }
-        renderSequencerUpdate(&renderSequencer, vkrt, &session);
+        renderSequencerUpdate(vkrt, &session);
 
         char* savePath = NULL;
         if (sessionTakeRenderSave(&session, &savePath)) {
             if (VKRT_saveRenderPNG(vkrt, savePath) != VKRT_SUCCESS) {
-                LOG_ERROR("Failed to queue render PNG save: %s", savePath);
+                LOG_ERROR("Saving render PNG failed. Path: %s", savePath);
             }
             free(savePath);
         }

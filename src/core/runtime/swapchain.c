@@ -38,14 +38,65 @@ static const char* swapChainColorSpaceName(VkColorSpaceKHR colorSpace) {
     }
 }
 
-static float queryDisplayRefreshHz(VKRT* vkrt) {
-    GLFWmonitor* monitor = glfwGetWindowMonitor(vkrt->runtime.window);
+static const char* presentModeName(VkPresentModeKHR presentMode) {
+    switch (presentMode) {
+    case VK_PRESENT_MODE_IMMEDIATE_KHR:
+        return "immediate";
+    case VK_PRESENT_MODE_MAILBOX_KHR:
+        return "mailbox";
+    case VK_PRESENT_MODE_FIFO_KHR:
+        return "fifo";
+    case VK_PRESENT_MODE_FIFO_RELAXED_KHR:
+        return "fifo_relaxed";
+    default:
+        return "other";
+    }
+}
+
+static const char* presentModePreferenceName(VKRT_PresentModePreference preference) {
+    switch (preference) {
+    case VKRT_PRESENT_MODE_ADAPTIVE:
+        return "adaptive";
+    case VKRT_PRESENT_MODE_VSYNC:
+        return "vsync";
+    case VKRT_PRESENT_MODE_MAILBOX:
+        return "mailbox";
+    case VKRT_PRESENT_MODE_IMMEDIATE:
+        return "immediate";
+    default:
+        return "unknown";
+    }
+}
+
+static int hasPresentMode(const SwapChainSupportDetails* supportDetails, VkPresentModeKHR presentMode) {
+    if (!supportDetails) return 0;
+    for (uint32_t i = 0; i < supportDetails->presentModeCount; i++) {
+        if (supportDetails->presentModes[i] == presentMode) return 1;
+    }
+    return 0;
+}
+
+void vkrtQueryDisplayMetrics(GLFWwindow* window, uint32_t* outWidth, uint32_t* outHeight, float* outRefreshHz) {
+    GLFWmonitor* monitor = window ? glfwGetWindowMonitor(window) : NULL;
     if (!monitor) monitor = glfwGetPrimaryMonitor();
-    if (!monitor) return 60.0f;
+    if (!monitor) {
+        if (outWidth) *outWidth = VKRT_DEFAULT_WIDTH;
+        if (outHeight) *outHeight = VKRT_DEFAULT_HEIGHT;
+        if (outRefreshHz) *outRefreshHz = 60.0f;
+        return;
+    }
 
     const GLFWvidmode* mode = glfwGetVideoMode(monitor);
-    if (!mode || mode->refreshRate <= 0) return 60.0f;
-    return (float)mode->refreshRate;
+    if (!mode) {
+        if (outWidth) *outWidth = VKRT_DEFAULT_WIDTH;
+        if (outHeight) *outHeight = VKRT_DEFAULT_HEIGHT;
+        if (outRefreshHz) *outRefreshHz = 60.0f;
+        return;
+    }
+
+    if (outWidth) *outWidth = mode->width > 0 ? (uint32_t)mode->width : VKRT_DEFAULT_WIDTH;
+    if (outHeight) *outHeight = mode->height > 0 ? (uint32_t)mode->height : VKRT_DEFAULT_HEIGHT;
+    if (outRefreshHz) *outRefreshHz = mode->refreshRate > 0 ? (float)mode->refreshRate : 60.0f;
 }
 
 VKRT_Result createSwapChain(VKRT* vkrt) {
@@ -61,10 +112,10 @@ VKRT_Result createSwapChain(VKRT* vkrt) {
         return VKRT_ERROR_OPERATION_FAILED;
     }
 
-    VkPresentModeKHR presentMode = chooseSwapPresentMode(&supportDetails, vkrt->runtime.vsync);
+    VkPresentModeKHR presentMode = chooseSwapPresentMode(&supportDetails, vkrt->runtime.presentModePreference);
     VkExtent2D extent = chooseSwapExtent(vkrt, &supportDetails);
     vkrt->runtime.presentMode = presentMode;
-    vkrt->runtime.displayRefreshHz = queryDisplayRefreshHz(vkrt);
+    vkrtQueryDisplayMetrics(vkrt->runtime.window, &vkrt->runtime.displayWidth, &vkrt->runtime.displayHeight, &vkrt->runtime.displayRefreshHz);
     if (!vkrt->runtime.swapChainFormatLogInitialized ||
         vkrt->runtime.lastLoggedSwapChainFormat != surfaceFormat.format ||
         vkrt->runtime.lastLoggedSwapChainColorSpace != surfaceFormat.colorSpace) {
@@ -75,6 +126,10 @@ VKRT_Result createSwapChain(VKRT* vkrt) {
         vkrt->runtime.lastLoggedSwapChainFormat = surfaceFormat.format;
         vkrt->runtime.lastLoggedSwapChainColorSpace = surfaceFormat.colorSpace;
     }
+    LOG_TRACE("Swapchain present mode selected. Preference: %s (%d), actual: %s",
+        presentModePreferenceName(vkrt->runtime.presentModePreference),
+        (int)vkrt->runtime.presentModePreference,
+        presentModeName(presentMode));
 
     uint32_t imageCount = supportDetails.capabilities.minImageCount + 1;
     if (supportDetails.capabilities.maxImageCount && imageCount > supportDetails.capabilities.maxImageCount) {
@@ -142,7 +197,7 @@ VKRT_Result createSwapChain(VKRT* vkrt) {
 
     vkrt->runtime.swapChainImageFormat = surfaceFormat.format;
     vkrt->runtime.swapChainExtent = extent;
-    if (!vkrt->state.renderModeActive || vkrt->runtime.renderExtent.width == 0 || vkrt->runtime.renderExtent.height == 0) {
+    if (!vkrt->renderStatus.renderModeActive || vkrt->runtime.renderExtent.width == 0 || vkrt->runtime.renderExtent.height == 0) {
         vkrt->runtime.renderExtent = extent;
     }
 
@@ -161,9 +216,8 @@ VKRT_Result recreateSwapChain(VKRT* vkrt) {
     int framebufferHeight = 0;
     glfwGetFramebufferSize(vkrt->runtime.window, &framebufferWidth, &framebufferHeight);
 
-    while (framebufferWidth == 0 || framebufferHeight == 0) {
-        glfwGetFramebufferSize(vkrt->runtime.window, &framebufferWidth, &framebufferHeight);
-        glfwWaitEvents();
+    if (framebufferWidth == 0 || framebufferHeight == 0) {
+        return VKRT_SUCCESS;
     }
 
     vkDeviceWaitIdle(vkrt->core.device);
@@ -178,7 +232,7 @@ VKRT_Result recreateSwapChain(VKRT* vkrt) {
     if (createSwapChain(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
     if (createImageViews(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
 
-    if (!vkrt->state.renderModeActive) {
+    if (!vkrt->renderStatus.renderModeActive) {
         destroyGPUImages(vkrt);
         if (createGPUImages(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
     }
@@ -193,7 +247,7 @@ VKRT_Result recreateSwapChain(VKRT* vkrt) {
     if (updateAllDescriptorSets(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
     if (createFramebuffers(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
 
-    if (vkrt->state.renderModeActive) {
+    if (vkrt->renderStatus.renderModeActive) {
         VKRT_setRenderViewport(vkrt,
             preservedViewportX,
             preservedViewportY,
@@ -203,16 +257,17 @@ VKRT_Result recreateSwapChain(VKRT* vkrt) {
         VKRT_setRenderViewport(vkrt, 0, 0, vkrt->runtime.swapChainExtent.width, vkrt->runtime.swapChainExtent.height);
     }
 
-    vkrt->state.displayRenderTimeMs = 0.0f;
-    vkrt->state.displayFrameTimeMs = 0.0f;
-    vkrt->state.lastFrameTimestamp = 0;
-    vkrt->state.autoSPPControlMs = 0.0f;
-    vkrt->state.autoSPPFramesUntilNextAdjust = 0;
-    vkrt->runtime.autoSPPFastAdaptFrames = 8;
-    if (!vkrt->state.renderModeActive) {
+    vkrt->renderStatus.displayRenderTimeMs = 0.0f;
+    vkrt->renderStatus.displayFrameTimeMs = 0.0f;
+    vkrt->timing.lastFrameTimestamp = 0;
+    vkrt->autoSPP.controlMs = 0.0f;
+    vkrt->autoSPP.framesUntilNextAdjust = 0;
+    vkrt->runtime.autoSPPFastAdaptFrames = vkrt->sceneSettings.autoSPPEnabled ? 8u : 0u;
+    if (!vkrt->renderStatus.renderModeActive) {
         resetSceneData(vkrt);
     }
 
+    vkrt->runtime.framebufferResized = VK_FALSE;
     return VKRT_SUCCESS;
 }
 
@@ -394,23 +449,36 @@ VKRT_Result chooseSwapSurfaceFormat(const SwapChainSupportDetails* supportDetail
     return VKRT_SUCCESS;
 }
 
-VkPresentModeKHR chooseSwapPresentMode(const SwapChainSupportDetails* supportDetails, uint8_t vsync) {
-    if (vsync) {
+VkPresentModeKHR chooseSwapPresentMode(
+    const SwapChainSupportDetails* supportDetails,
+    VKRT_PresentModePreference preference
+) {
+    if (!supportDetails) return VK_PRESENT_MODE_FIFO_KHR;
+
+    switch (preference) {
+    case VKRT_PRESENT_MODE_ADAPTIVE:
+        if (hasPresentMode(supportDetails, VK_PRESENT_MODE_FIFO_RELAXED_KHR)) {
+            return VK_PRESENT_MODE_FIFO_RELAXED_KHR;
+        }
         return VK_PRESENT_MODE_FIFO_KHR;
-    }
-
-    for (uint32_t i = 0; i < supportDetails->presentModeCount; i++) {
-        if (supportDetails->presentModes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
-            return supportDetails->presentModes[i];
+    case VKRT_PRESENT_MODE_VSYNC:
+        return VK_PRESENT_MODE_FIFO_KHR;
+    case VKRT_PRESENT_MODE_MAILBOX:
+        if (hasPresentMode(supportDetails, VK_PRESENT_MODE_MAILBOX_KHR)) {
+            return VK_PRESENT_MODE_MAILBOX_KHR;
         }
-    }
-
-    for (uint32_t i = 0; i < supportDetails->presentModeCount; i++) {
-        if (supportDetails->presentModes[i] == VK_PRESENT_MODE_IMMEDIATE_KHR) {
-            return supportDetails->presentModes[i];
+        return VK_PRESENT_MODE_FIFO_KHR;
+    case VKRT_PRESENT_MODE_IMMEDIATE:
+        if (hasPresentMode(supportDetails, VK_PRESENT_MODE_IMMEDIATE_KHR)) {
+            return VK_PRESENT_MODE_IMMEDIATE_KHR;
         }
+        if (hasPresentMode(supportDetails, VK_PRESENT_MODE_MAILBOX_KHR)) {
+            return VK_PRESENT_MODE_MAILBOX_KHR;
+        }
+        return VK_PRESENT_MODE_FIFO_KHR;
+    default:
+        break;
     }
-
     return VK_PRESENT_MODE_FIFO_KHR;
 }
 
