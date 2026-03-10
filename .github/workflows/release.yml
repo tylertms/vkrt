@@ -32,6 +32,10 @@ jobs:
           version: 1.4.341.1
           cache: true
 
+      - name: Install Windows pkg-config
+        shell: pwsh
+        run: choco install pkgconfiglite -y --no-progress
+
       - name: Install Meson and Ninja
         run: python -m pip install meson ninja
 

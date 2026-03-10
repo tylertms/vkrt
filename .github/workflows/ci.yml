@@ -40,6 +40,11 @@ jobs:
           version: 1.4.341.1
           cache: true
 
+      - name: Install Windows pkg-config
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: choco install pkgconfiglite -y --no-progress
+
       - name: Install Linux Packages
         if: runner.os == 'Linux'
         run: |
