@@ -46,16 +46,16 @@ struct Material {
 };
 
 struct EmissiveMesh {
-    uvec4 indices;
-    vec4 emission;
-    vec4 stats;
-    vec4 bounds;
+    uvec4 indices; // {meshIndex, triangleOffset, triangleCount, unused}
+    vec4 emission; // {emissionColor.rgb, emissionLuminance}
+    vec4 stats; // {selectionPdf, totalArea, selectionCdf, selectionWeight}
+    vec4 bounds; // {boundsCenter.xyz, boundsRadius}
 };
 
 struct EmissiveTriangle {
-    vec4 v0Area;
-    vec4 e1Pad;
-    vec4 e2Pad;
+    vec4 v0Area; // {v0.xyz, area}
+    vec4 e1Pad; // {edge1.xyz, triangleAreaCdf}
+    vec4 e2Pad; // {edge2.xyz, unused}
 };
 
 struct SceneData {

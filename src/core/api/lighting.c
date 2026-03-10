@@ -239,6 +239,17 @@ VKRT_Result rebuildLightBuffers(VKRT* vkrt) {
     emissiveMeshCount = meshWriteIndex;
     emissiveTriangleCount = triangleWriteIndex;
 
+    if (emissiveMeshCount > 0 && totalSelectionWeight > 0.0f) {
+        float selectionCdf = 0.0f;
+        for (uint32_t meshIndex = 0; meshIndex < emissiveMeshCount; meshIndex++) {
+            float selectionPdf = emissiveMeshes[meshIndex].stats[3] / totalSelectionWeight;
+            emissiveMeshes[meshIndex].stats[0] = selectionPdf;
+            selectionCdf += selectionPdf;
+            emissiveMeshes[meshIndex].stats[2] = selectionCdf;
+        }
+        emissiveMeshes[emissiveMeshCount - 1u].stats[2] = 1.0f;
+    }
+
     uint32_t uploadMeshCount = emissiveMeshCount > 0 ? emissiveMeshCount : 1u;
     uint32_t uploadTriangleCount = emissiveTriangleCount > 0 ? emissiveTriangleCount : 1u;
 
