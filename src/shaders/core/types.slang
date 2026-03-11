@@ -1,6 +1,8 @@
 #ifndef VKRT_CORE_TYPES_SLANG
 #define VKRT_CORE_TYPES_SLANG
 
+#include "../../shared/constants.h"
+
 struct Vertex {
     float4 position;
     float4 normal;
@@ -61,14 +63,6 @@ struct SceneData {
 struct PickBuffer {
     uint pixel;
     uint hitMeshIndex;
-};
-
-struct Payload {
-    float3 radiance;
-    float3 normal;
-    uint didHit;
-    uint instanceIndex;
-    float hitDistance;
 };
 
 struct ShadowPayload {

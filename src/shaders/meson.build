@@ -1,17 +1,17 @@
 embed_spv = find_program(meson.project_source_root() / 'scripts' / 'embed_spv.py')
 
 shader_programs = [
-  ['rgen', 'rt/main/main.rgen.slang', 'rgen.spv', 'raygeneration', 'rt'],
-  ['rchit', 'rt/main/main.rchit.slang', 'rchit.spv', 'closesthit', 'rt'],
-  ['rmiss', 'rt/main/main.rmiss.slang', 'rmiss.spv', 'miss', 'rt'],
+  ['rgen', 'rt/main/rgen.slang', 'rgen.spv', 'raygeneration', 'rt'],
+  ['rchit', 'rt/main/rchit.slang', 'rchit.spv', 'closesthit', 'rt'],
+  ['rmiss', 'rt/main/rmiss.slang', 'rmiss.spv', 'miss', 'rt'],
 ]
 if selection_enabled
   shader_programs += [
-    ['comp', 'compute/select.slang', 'select.spv', 'compute', 'compute'],
-    ['select_rgen', 'rt/selection/select.rgen.slang', 'select_rgen.spv', 'raygeneration', 'rt'],
-    ['select_rchit', 'rt/selection/select.rchit.slang', 'select_rchit.spv', 'closesthit', 'rt'],
-    ['select_rmiss', 'rt/selection/select.rmiss.slang', 'select_rmiss.spv', 'miss', 'rt'],
-    ['select_rahit', 'rt/selection/select.rahit.slang', 'select_rahit.spv', 'anyhit', 'rt'],
+    ['comp', 'compute/outline.slang', 'select.spv', 'compute', 'compute'],
+    ['select_rgen', 'rt/selection/rgen.slang', 'select_rgen.spv', 'raygeneration', 'rt'],
+    ['select_rchit', 'rt/selection/rchit.slang', 'select_rchit.spv', 'closesthit', 'rt'],
+    ['select_rmiss', 'rt/selection/rmiss.slang', 'select_rmiss.spv', 'miss', 'rt'],
+    ['select_rahit', 'rt/selection/rahit.slang', 'select_rahit.spv', 'anyhit', 'rt'],
   ]
 endif
 

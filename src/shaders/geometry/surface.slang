@@ -1,5 +1,5 @@
-#ifndef VKRT_INTEGRATOR_SURFACE_SLANG
-#define VKRT_INTEGRATOR_SURFACE_SLANG
+#ifndef VKRT_GEOMETRY_SURFACE_SLANG
+#define VKRT_GEOMETRY_SURFACE_SLANG
 
 #include "../core/resources.slang"
 

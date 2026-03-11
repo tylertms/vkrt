@@ -2,12 +2,7 @@
 #define VKRT_UTILITY_TONEMAP_SLANG
 
 float3 toneMapACES(float3 color) {
-    const float a = 2.51;
-    const float b = 0.03;
-    const float c = 2.43;
-    const float d = 0.59;
-    const float e = 0.14;
-    return saturate((color * (a * color + b)) / (color * (c * color + d) + e));
+    return (color * (2.51 * color + 0.03)) / (color * (2.43 * color + 0.59) + 0.14);
 }
 
 #endif

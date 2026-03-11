@@ -1,6 +1,7 @@
 #include "../../core/resources.slang"
 #include "../../utility/ray.slang"
 #include "../../utility/viewport.slang"
+#include "payload.slang"
 
 [shader("raygeneration")]
 void main() {
@@ -10,12 +11,7 @@ void main() {
         return;
     }
 
-    Payload payload;
-    payload.radiance = float3(0.0);
-    payload.normal = float3(0.0);
-    payload.didHit = 0u;
-    payload.instanceIndex = VKRT_INVALID_INDEX;
-    payload.hitDistance = 0.0;
+    SelectionPayload payload = SelectionPayload.make();
 
     TraceRay(topLevelAS, RAY_FLAG_FORCE_NON_OPAQUE, 0xffu, 0u, 0u, 0u, makePrimaryRay(pixel, float2(0.0)), payload);
     selectionMaskImage[pixel] = payload.didHit != 0u ? 1u : 0u;
