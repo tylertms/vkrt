@@ -20,4 +20,13 @@ RayDesc makePrimaryRay(int2 pixel, float2 jitter) {
     return ray;
 }
 
+float3 safeNormalize(float3 value) {
+    float lenSq = dot(value, value);
+    if (lenSq <= 1e-12) {
+        return float3(0.0, 0.0, 1.0);
+    }
+
+    return value * rsqrt(lenSq);
+}
+
 #endif

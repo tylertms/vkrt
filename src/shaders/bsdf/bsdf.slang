@@ -4,8 +4,8 @@
 #include "common.slang"
 #include "lambertian.slang"
 
-BSDFSample sampleBSDF(BSDFInput input, inout uint state) {
-    return sampleLambertian(input, state);
+BSDFSample sampleBSDF(BSDFInput input, inout uint rng) {
+    return sampleLambertian(input, rng);
 }
 
 #endif
