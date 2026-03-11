@@ -33,6 +33,7 @@ VKRT_Result VKRT_setSamplesPerPixel(VKRT* vkrt, uint32_t samplesPerPixel);
 VKRT_Result VKRT_setPathDepth(VKRT* vkrt, uint32_t rrMinDepth, uint32_t rrMaxDepth);
 VKRT_Result VKRT_setAutoSPPEnabled(VKRT* vkrt, uint8_t enabled);
 VKRT_Result VKRT_setAutoSPPTargetFPS(VKRT* vkrt, uint32_t targetFPS);
+VKRT_Result VKRT_setRenderModeTargetFPS(VKRT* vkrt, uint32_t targetFPS);
 VKRT_Result VKRT_setToneMappingMode(VKRT* vkrt, VKRT_ToneMappingMode toneMappingMode);
 VKRT_Result VKRT_setFogDensity(VKRT* vkrt, float fogDensity);
 VKRT_Result VKRT_setDebugMode(VKRT* vkrt, uint32_t mode);

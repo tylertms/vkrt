@@ -19,6 +19,8 @@ static const float kAnimationTimeMin = 0.0f;
 static const float kAnimationTimeMax = 1000.0f;
 static const float kAnimationStepDragSpeed = 0.005f;
 static const float kAnimationStepMin = 0.001f;
+static const int kRenderModeTargetFPSMin = 1;
+static const int kRenderModeTargetFPSMax = 360;
 
 enum {
     kRenderFolderPathCapacity = 256,
@@ -95,12 +97,15 @@ void inspectorPrepareRenderState(VKRT* vkrt, Session* session) {
     updateRenderTimer(&status, timer, nowUs);
 }
 
-static void drawIdleOutputSection(Session* session) {
+static void drawIdleOutputSection(VKRT* vkrt, Session* session, const VKRT_SceneSettingsSnapshot* settings) {
+    if (!vkrt || !session || !settings) return;
+
     int outputSize[2] = {
         (int)session->editor.renderConfig.width,
         (int)session->editor.renderConfig.height
     };
     int targetSamples = (int)session->editor.renderConfig.targetSamples;
+    int renderModeTargetFPS = (int)settings->renderModeTargetFPS;
 
     if (!ImGui_CollapsingHeader("Output", ImGuiTreeNodeFlags_DefaultOpen)) return;
 
@@ -115,6 +120,14 @@ static void drawIdleOutputSection(Session* session) {
         session->editor.renderConfig.targetSamples = (uint32_t)targetSamples;
     }
     tooltipOnHover("Total samples to render. Set to 0 for manual stop.");
+
+    if (ImGui_DragIntEx("Render Target FPS", &renderModeTargetFPS, 0.25f, kRenderModeTargetFPSMin, kRenderModeTargetFPSMax, "%d", ImGuiSliderFlags_AlwaysClamp)) {
+        VKRT_Result result = VKRT_setRenderModeTargetFPS(vkrt, (uint32_t)renderModeTargetFPS);
+        if (result != VKRT_SUCCESS) {
+            LOG_ERROR("Updating render-mode target FPS failed (%d)", (int)result);
+        }
+    }
+    tooltipOnHover("Auto SPP targets this FPS only while render mode is active. Default: 15.");
     inspectorUnindentSection();
 }
 
@@ -253,10 +266,10 @@ static void drawIdleAnimationSection(Session* session) {
     inspectorUnindentSection();
 }
 
-static void drawIdleRenderState(Session* session, const SessionRenderTimer* timer) {
+static void drawIdleRenderState(VKRT* vkrt, Session* session, const SessionRenderTimer* timer, const VKRT_SceneSettingsSnapshot* settings) {
     bool animationEnabled = session->editor.renderConfig.animation.enabled != 0;
 
-    drawIdleOutputSection(session);
+    drawIdleOutputSection(vkrt, session, settings);
     drawIdleAnimationSection(session);
 
     ImGui_Spacing();
@@ -284,13 +297,15 @@ static void drawIdleRenderState(Session* session, const SessionRenderTimer* time
 static void drawRenderProgressSection(
     const VKRT_RenderStatusSnapshot* status,
     const VKRT_RuntimeSnapshot* runtime,
+    const VKRT_SceneSettingsSnapshot* settings,
     const RenderSequencer* sequencer,
     float elapsedActiveSeconds,
     float completedSeconds
 ) {
-    if (!status || !runtime || !sequencer) return;
+    if (!status || !runtime || !settings || !sequencer) return;
 
     ImGui_TextDisabled("Output %ux%u", runtime->renderWidth, runtime->renderHeight);
+    ImGui_TextDisabled("Render Target %u fps", settings->renderModeTargetFPS);
 
     if (status->renderTargetSamples > 0) {
         uint64_t shownSamples = status->totalSamples;
@@ -388,9 +403,11 @@ void inspectorDrawRenderTab(VKRT* vkrt, Session* session) {
     if (!vkrt || !session) return;
     inspectorPrepareRenderState(vkrt, session);
 
+    VKRT_SceneSettingsSnapshot settings = {0};
     VKRT_RenderStatusSnapshot status = {0};
     VKRT_RuntimeSnapshot runtime = {0};
-    if (VKRT_getRenderStatus(vkrt, &status) != VKRT_SUCCESS ||
+    if (VKRT_getSceneSettings(vkrt, &settings) != VKRT_SUCCESS ||
+        VKRT_getRenderStatus(vkrt, &status) != VKRT_SUCCESS ||
         VKRT_getRuntimeSnapshot(vkrt, &runtime) != VKRT_SUCCESS) {
         return;
     }
@@ -399,11 +416,11 @@ void inspectorDrawRenderTab(VKRT* vkrt, Session* session) {
     SessionRenderTimer* timer = &session->runtime.renderTimer;
 
     if (!status.renderModeActive) {
-        drawIdleRenderState(session, timer);
+        drawIdleRenderState(vkrt, session, timer, &settings);
         return;
     }
 
     float elapsedActiveSeconds = queryActiveRenderSeconds(timer, nowUs);
-    drawRenderProgressSection(&status, &runtime, &session->runtime.sequencer, elapsedActiveSeconds, timer->completedSeconds);
+    drawRenderProgressSection(&status, &runtime, &settings, &session->runtime.sequencer, elapsedActiveSeconds, timer->completedSeconds);
     drawRenderActionsSection(vkrt, session, &status, &session->runtime.sequencer);
 }

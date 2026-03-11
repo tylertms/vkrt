@@ -29,6 +29,21 @@ static void updateFrameTimes(VKRT* vkrt) {
     vkrt->timing.frametimeStartIndex = (vkrt->timing.frametimeStartIndex + 1) % VKRT_ARRAY_COUNT(vkrt->renderStatus.frametimes);
 }
 
+static float queryAutoSPPTargetMs(const VKRT* vkrt) {
+    if (!vkrt) return 0.0f;
+
+    if (vkrt->renderStatus.renderModeActive) {
+        uint32_t targetFPS = vkrt->sceneSettings.renderModeTargetFPS ? vkrt->sceneSettings.renderModeTargetFPS : 15u;
+        return 1000.0f / (float)targetFPS;
+    }
+
+    float targetMs = vkrt->autoSPP.targetFrameMs;
+    if (targetMs > 0.0f) return targetMs;
+
+    uint32_t targetFPS = vkrt->sceneSettings.autoSPPTargetFPS ? vkrt->sceneSettings.autoSPPTargetFPS : 60u;
+    return 1000.0f / (float)targetFPS;
+}
+
 void recordFrameTime(VKRT* vkrt, uint32_t frameIndex) {
     if (!vkrt) return;
 
@@ -69,11 +84,7 @@ void recordFrameTime(VKRT* vkrt, uint32_t frameIndex) {
 void updateAutoSPP(VKRT* vkrt) {
     if (!vkrt || !vkrt->sceneSettings.autoSPPEnabled) return;
 
-    float targetMs = vkrt->autoSPP.targetFrameMs;
-    if (targetMs <= 0.0f) {
-        uint32_t targetFPS = vkrt->sceneSettings.autoSPPTargetFPS ? vkrt->sceneSettings.autoSPPTargetFPS : 60;
-        targetMs = 1000.0f / (float)targetFPS;
-    }
+    float targetMs = queryAutoSPPTargetMs(vkrt);
 
     float controlMs = vkrt->renderStatus.displayRenderTimeMs > 0.0f ? vkrt->renderStatus.displayRenderTimeMs : vkrt->renderStatus.displayFrameTimeMs;
     if (controlMs <= 0.0f) return;

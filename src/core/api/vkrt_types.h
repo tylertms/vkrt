@@ -115,6 +115,7 @@ typedef struct VKRT_SceneSettingsSnapshot {
     VKRT_ToneMappingMode toneMappingMode;
     uint8_t autoSPPEnabled;
     uint32_t autoSPPTargetFPS;
+    uint32_t renderModeTargetFPS;
     float fogDensity;
     float timeBase;
     float timeStep;

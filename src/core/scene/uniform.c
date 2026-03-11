@@ -6,6 +6,8 @@
 #include <stdint.h>
 #include <string.h>
 
+static const uint32_t kDefaultRenderModeTargetFPS = 15u;
+
 static VKRT_SceneTimelineKeyframe makeDefaultSceneTimelineKeyframe(float time) {
     return (VKRT_SceneTimelineKeyframe){
         .time = time,
@@ -178,6 +180,7 @@ VKRT_Result createSceneUniform(VKRT* vkrt) {
     if (targetFPS < 30) targetFPS = 30;
     if (targetFPS > 360) targetFPS = 360;
     vkrt->sceneSettings.autoSPPTargetFPS = targetFPS;
+    vkrt->sceneSettings.renderModeTargetFPS = kDefaultRenderModeTargetFPS;
     vkrt->autoSPP.targetFrameMs = 1000.0f / (float)targetFPS;
     vkrt->autoSPP.controlMs = 0.0f;
     vkrt->autoSPP.framesUntilNextAdjust = 0;
