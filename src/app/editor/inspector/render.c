@@ -26,6 +26,7 @@ enum {
     kRenderFolderPathCapacity = 256,
     kRenderTimeTextCapacity = 32,
     kRenderProgressOverlayCapacity = 96,
+    kRenderTargetFPSTooltipCapacity = 96,
 };
 
 static void initializeRenderConfig(VKRT* vkrt, Session* session) {
@@ -127,7 +128,12 @@ static void drawIdleOutputSection(VKRT* vkrt, Session* session, const VKRT_Scene
             LOG_ERROR("Updating render-mode target FPS failed (%d)", (int)result);
         }
     }
-    tooltipOnHover("Auto SPP targets this FPS only while render mode is active. Default: 15.");
+    char renderTargetFPSTooltip[kRenderTargetFPSTooltipCapacity];
+    snprintf(renderTargetFPSTooltip,
+        sizeof(renderTargetFPSTooltip),
+        "Auto SPP targets this FPS only while render mode is active. Default: %u.",
+        VKRT_DEFAULT_RENDER_MODE_TARGET_FPS);
+    tooltipOnHover(renderTargetFPSTooltip);
     inspectorUnindentSection();
 }
 

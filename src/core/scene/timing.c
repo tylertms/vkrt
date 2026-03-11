@@ -33,7 +33,9 @@ static float queryAutoSPPTargetMs(const VKRT* vkrt) {
     if (!vkrt) return 0.0f;
 
     if (vkrt->renderStatus.renderModeActive) {
-        uint32_t targetFPS = vkrt->sceneSettings.renderModeTargetFPS ? vkrt->sceneSettings.renderModeTargetFPS : 15u;
+        uint32_t targetFPS = vkrt->sceneSettings.renderModeTargetFPS
+            ? vkrt->sceneSettings.renderModeTargetFPS
+            : VKRT_DEFAULT_RENDER_MODE_TARGET_FPS;
         return 1000.0f / (float)targetFPS;
     }
 
