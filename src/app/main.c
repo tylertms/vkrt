@@ -49,6 +49,7 @@ int main(int argc, char* argv[]) {
     if (launchOptions.loadDefaultScene) {
         meshControllerLoadDefaultAssets(vkrt, &session);
     }
+
     if (launchOptions.startupImportPath) {
         if (!meshControllerImportMesh(vkrt, &session, launchOptions.startupImportPath, NULL, NULL)) {
             LOG_ERROR("Startup mesh import failed. Path: %s", launchOptions.startupImportPath);
@@ -71,6 +72,7 @@ int main(int argc, char* argv[]) {
             exitCode = EXIT_FAILURE;
             break;
         }
+
         renderSequencerUpdate(vkrt, &session);
 
         char* savePath = NULL;

@@ -60,7 +60,8 @@ VKRT_Result VKRT_setSamplesPerPixel(VKRT* vkrt, uint32_t samplesPerPixel) {
     vkrt->sceneSettings.samplesPerPixel = samplesPerPixel;
 
     if (vkrt->core.sceneData) {
-        resetSceneData(vkrt);
+        syncSceneStateData(vkrt);
+        syncCurrentFrameSceneData(vkrt);
     }
     return VKRT_SUCCESS;
 }
