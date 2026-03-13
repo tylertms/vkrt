@@ -1,7 +1,7 @@
 #ifndef VKRT_BSDF_TYPES_SLANG
 #define VKRT_BSDF_TYPES_SLANG
 
-#include "../core/types.slang"
+#include "../../shared/types.h"
 
 struct BSDFInput {
     float3 normal;

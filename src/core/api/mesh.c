@@ -21,7 +21,12 @@ static Material sanitizeMaterial(Material material) {
     material.sheenTint = vkrtFiniteClampf(material.sheenTint, 0.0f, 0.0f, 1.0f);
     material.clearcoat = vkrtFiniteClampf(material.clearcoat, 0.0f, 0.0f, 1.0f);
     material.clearcoatGloss = vkrtFiniteClampf(material.clearcoatGloss, 0.0f, 0.0f, 1.0f);
+    material.ior = vkrtFiniteClampf(material.ior, 1.0f, 1.0f, 4.0f);
     material.emissionLuminance = vkrtFiniteClampf(material.emissionLuminance, 0.0f, 0.0f, INFINITY);
+    for (int c = 0; c < 3; c++) {
+        material.eta[c] = vkrtFiniteClampf(material.eta[c], 0.0f, 0.0f, INFINITY);
+        material.k[c] = vkrtFiniteClampf(material.k[c], 0.0f, 0.0f, INFINITY);
+    }
 
     return material;
 }

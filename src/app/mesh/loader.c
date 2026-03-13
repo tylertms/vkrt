@@ -109,6 +109,10 @@ static Material buildMaterial(const cgltf_material* sourceMaterial) {
         material.specular = sourceMaterial->specular.specular_factor;
     }
 
+    if (sourceMaterial->has_ior) {
+        material.ior = sourceMaterial->ior.ior;
+    }
+
     if (sourceMaterial->has_clearcoat) {
         material.clearcoat = sourceMaterial->clearcoat.clearcoat_factor;
         material.clearcoatGloss = 1.0f - sourceMaterial->clearcoat.clearcoat_roughness_factor;

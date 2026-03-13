@@ -86,6 +86,9 @@ static inline Material VKRT_materialDefault(void) {
         .sheenTint = 0.5f,
         .clearcoat = 0.0f,
         .clearcoatGloss = 1.0f,
+        .ior = 1.5f,
+        .eta = {0.0f, 0.0f, 0.0f},
+        .k = {0.0f, 0.0f, 0.0f},
     };
 }
 

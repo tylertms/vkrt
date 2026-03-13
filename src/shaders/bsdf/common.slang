@@ -2,6 +2,7 @@
 #define VKRT_BSDF_COMMON_SLANG
 
 #include "types.slang"
+#include "../utility/random.slang"
 #include "../utility/ray.slang"
 
 static const float VKRT_PI = 3.14159265358979323846;
@@ -14,10 +15,111 @@ void shadingBasis(float3 normal, out float3 tangent, out float3 bitangent) {
 }
 
 float3 localToWorld(float3 localDir, float3 normal) {
-    float3 tangent = float3(0.0);
-    float3 bitangent = float3(0.0);
+    float3 tangent, bitangent;
     shadingBasis(normal, tangent, bitangent);
     return tangent * localDir.x + bitangent * localDir.y + normal * localDir.z;
+}
+
+float3 worldToLocal(float3 worldDir, float3 normal) {
+    float3 tangent, bitangent;
+    shadingBasis(normal, tangent, bitangent);
+    return float3(
+        dot(worldDir, tangent),
+        dot(worldDir, bitangent),
+        dot(worldDir, normal)
+    );
+}
+
+// In glTF metallic-roughness, baseColor is diffuse reflectance for non-metals and fades out for metals.
+// https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html
+float3 bsdfDiffuseColor(Material material) {
+    return material.baseColor * (1.0 - material.metallic);
+}
+
+// Rec. 709 luminance coefficients, used here as a lobe-selection heuristic.
+// https://www.itu.int/rec/R-REC-BT.709
+float bsdfLuminance(float3 value) {
+    return dot(value, float3(0.2126, 0.7152, 0.0722));
+}
+
+// Normal-incidence Fresnel reflectance used here as a cheap lobe-weighting heuristic.
+// https://www.pbr-book.org/4ed/Reflection_Models/Specular_Reflection_and_Transmission
+float dielectricF0(float eta) {
+    float numerator = eta - 1.0;
+    float denominator = eta + 1.0;
+    float f0 = numerator / max(denominator, 1e-6);
+    return f0 * f0;
+}
+
+float3 conductorF0(float3 eta, float3 k) {
+    float3 etaMinusOne = eta - 1.0;
+    float3 etaPlusOne = eta + 1.0;
+    float3 numerator = etaMinusOne * etaMinusOne + k * k;
+    float3 denominator = etaPlusOne * etaPlusOne + k * k;
+    return numerator / max(denominator, float3(1e-6));
+}
+
+bool materialHasConductor(Material material) {
+    return any(material.k > 0.0);
+}
+
+float3 bsdfSpecularF0(Material material) {
+    float dielectric = dielectricF0(material.ior);
+    float3 conductor = materialHasConductor(material)
+        ? conductorF0(max(material.eta, float3(1e-3)), max(material.k, float3(0.0)))
+        : material.baseColor;
+    return lerp(dielectric.xxx, conductor, material.metallic);
+}
+
+float3 fresnelSchlick(float cosTheta, float3 f0) {
+    float m = 1.0 - saturate(cosTheta);
+    float m2 = m * m;
+    float m5 = m2 * m2 * m;
+    return f0 + (1.0 - f0) * m5;
+}
+
+// Dielectric Fresnel with the PBRT-style cosine sign handling.
+// eta is the relative IOR eta_t / eta_i for the current interface.
+// https://www.pbr-book.org/4ed/Reflection_Models/Specular_Reflection_and_Transmission
+float fresnelDielectric(float cosTheta, float eta) {
+    float cosThetaI = clamp(cosTheta, -1.0, 1.0);
+    if (cosThetaI < 0.0) {
+        eta = 1.0 / max(eta, 1e-6);
+        cosThetaI = -cosThetaI;
+    }
+
+    float sin2ThetaI = max(1.0 - cosThetaI * cosThetaI, 0.0);
+    float sin2ThetaT = sin2ThetaI / max(eta * eta, 1e-6);
+    if (sin2ThetaT >= 1.0) {
+        return 1.0;
+    }
+
+    float cosThetaT = sqrt(max(1.0 - sin2ThetaT, 0.0));
+    float rParallel = (eta * cosThetaI - cosThetaT) / max(eta * cosThetaI + cosThetaT, 1e-6);
+    float rPerpendicular = (cosThetaI - eta * cosThetaT) / max(cosThetaI + eta * cosThetaT, 1e-6);
+    return 0.5 * (rParallel * rParallel + rPerpendicular * rPerpendicular);
+}
+
+// Conductor Fresnel for complex eta + i*k, assuming eta and k are already relative to the incident medium.
+// https://www.pbr-book.org/4ed/Reflection_Models/Specular_Reflection_and_Transmission
+float3 fresnelConductor(float cosTheta, float3 eta, float3 k) {
+    float cosThetaI = saturate(cosTheta);
+    float cos2ThetaI = cosThetaI * cosThetaI;
+    float sin2ThetaI = max(1.0 - cos2ThetaI, 0.0);
+    float3 eta2 = eta * eta;
+    float3 k2 = k * k;
+
+    float3 t0 = eta2 - k2 - sin2ThetaI;
+    float3 a2PlusB2 = sqrt(max(t0 * t0 + 4.0 * eta2 * k2, float3(0.0)));
+    float3 t1 = a2PlusB2 + cos2ThetaI;
+    float3 a = sqrt(max(0.5 * (a2PlusB2 + t0), float3(0.0)));
+    float3 t2 = 2.0 * cosThetaI * a;
+    float3 rs = (t1 - t2) / max(t1 + t2, float3(1e-6));
+
+    float3 t3 = cos2ThetaI * a2PlusB2 + sin2ThetaI * sin2ThetaI;
+    float3 t4 = t2 * sin2ThetaI;
+    float3 rp = rs * ((t3 - t4) / max(t3 + t4, float3(1e-6)));
+    return 0.5 * (rp + rs);
 }
 
 #endif

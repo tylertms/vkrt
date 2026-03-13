@@ -46,6 +46,7 @@ foreach shader_program : shader_programs
       shader_capabilities,
       '-depfile', '@DEPFILE@',
       '-I', meson.current_source_dir(),
+      '-DVKRT_SHADER',
       '-o', '@OUTPUT@',
     ],
     build_by_default: true,

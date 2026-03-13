@@ -3,26 +3,30 @@
 
 #include "constants.h"
 
-#ifndef VKRT_GLSL
+#ifndef VKRT_SHADER
 #include <stddef.h>
 #include <stdint.h>
 #include "cglm.h"
 
-typedef uint32_t uvec4[4];
+typedef vec4 float4;
+typedef vec3 float3;
+typedef vec2 float2;
 typedef uint32_t uint;
+typedef uint uint4[4];
+typedef mat4 float4x4;
 #endif
 
 struct Vertex {
-    vec4 position;
-    vec4 normal;
+    float4 position;
+    float4 normal;
 };
 
 struct MeshInfo {
-    vec3 position;
+    float3 position;
     uint vertexBase;
-    vec3 rotation;
+    float3 rotation;
     uint vertexCount;
-    vec3 scale;
+    float3 scale;
     uint indexBase;
     uint indexCount;
     uint materialIndex;
@@ -31,41 +35,45 @@ struct MeshInfo {
 };
 
 struct Material {
-    vec3 baseColor;
+    float3 baseColor;
     float roughness;
-    vec3 emissionColor;
+    float3 emissionColor;
     float emissionLuminance;
+    float3 eta;
     float metallic;
+    float3 k;
+    float anisotropic;
     float specular;
     float specularTint;
-    float anisotropic;
     float sheen;
     float sheenTint;
     float clearcoat;
     float clearcoatGloss;
+    float ior;
+    float padding;
 };
 
 struct EmissiveMesh {
-    uvec4 indices; // {meshIndex, triangleOffset, triangleCount, unused}
-    vec4 emission; // {emissionColor.rgb, emissionLuminance}
-    vec4 stats; // {selectionPdf, totalArea, selectionCdf, selectionWeight}
-    vec4 bounds; // {boundsCenter.xyz, boundsRadius}
+    uint4 indices; // {meshIndex, triangleOffset, triangleCount, unused}
+    float4 emission; // {emissionColor.rgb, emissionLuminance}
+    float4 stats; // {selectionPdf, totalArea, selectionCdf, selectionWeight}
+    float4 bounds; // {boundsCenter.xyz, boundsRadius}
 };
 
 struct EmissiveTriangle {
-    vec4 v0Area; // {v0.xyz, area}
-    vec4 e1Pad; // {edge1.xyz, triangleAreaCdf}
-    vec4 e2Pad; // {edge2.xyz, unused}
+    float4 v0Area; // {v0.xyz, area}
+    float4 e1Pad; // {edge1.xyz, triangleAreaCdf}
+    float4 e2Pad; // {edge2.xyz, unused}
 };
 
 struct SceneData {
-    mat4 viewInverse;
-    mat4 projInverse;
+    float4x4 viewInverse;
+    float4x4 projInverse;
     uint frameNumber;
     uint samplesPerPixel;
     uint rrMaxDepth;
     uint rrMinDepth;
-    uvec4 viewportRect;
+    uint4 viewportRect;
     uint toneMappingMode;
     float timeBase;
     float timeStep;
@@ -78,8 +86,8 @@ struct SceneData {
     uint emissiveTriangleCount;
     uint selectionEnabled;
     uint selectedMeshIndex;
-    vec4 timelineTimeScale[VKRT_SCENE_TIMELINE_MAX_KEYFRAMES];
-    vec4 timelineTint[VKRT_SCENE_TIMELINE_MAX_KEYFRAMES];
+    float4 timelineTimeScale[VKRT_SCENE_TIMELINE_MAX_KEYFRAMES];
+    float4 timelineTint[VKRT_SCENE_TIMELINE_MAX_KEYFRAMES];
 };
 
 struct PickBuffer {
@@ -87,7 +95,7 @@ struct PickBuffer {
     uint hitMeshIndex;
 };
 
-#ifndef VKRT_GLSL
+#ifndef VKRT_SHADER
 typedef struct Vertex Vertex;
 typedef struct MeshInfo MeshInfo;
 typedef struct Material Material;
@@ -95,7 +103,6 @@ typedef struct EmissiveMesh EmissiveMesh;
 typedef struct EmissiveTriangle EmissiveTriangle;
 typedef struct SceneData SceneData;
 typedef struct PickBuffer PickBuffer;
-#undef uint
 #endif
 
 #endif

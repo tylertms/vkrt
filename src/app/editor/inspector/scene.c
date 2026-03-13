@@ -111,6 +111,11 @@ static void updateSelectedMesh(VKRT* vkrt, uint32_t meshIndex) {
     }
 }
 
+static bool materialHasConductor(const Material* material) {
+    if (!material) return false;
+    return material->k[0] > 0.0f || material->k[1] > 0.0f || material->k[2] > 0.0f;
+}
+
 static void drawMeshInfoHeader(VKRT* vkrt, uint32_t meshIndex, const VKRT_MeshSnapshot* mesh) {
     if (!vkrt || !mesh) return;
 
@@ -190,10 +195,14 @@ static void drawMeshMaterialEditor(VKRT* vkrt, uint32_t meshIndex, const VKRT_Me
 
     Material material = mesh->material;
     bool materialChanged = false;
-
+    bool conductorActive = materialHasConductor(&material);
     materialChanged |= ImGui_ColorEdit3("Base Color", material.baseColor, ImGuiColorEditFlags_Float);
+    if (conductorActive) {
+        tooltipOnHover("For conductor presets, eta/k drives the specular response. Base Color still controls the diffuse side if you lower Metallic.");
+    }
     materialChanged |= ImGui_SliderFloatEx("Metallic", &material.metallic, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     materialChanged |= ImGui_SliderFloatEx("Roughness", &material.roughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    materialChanged |= ImGui_DragFloatEx("IOR", &material.ior, 0.01f, 1.0f, 4.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     materialChanged |= ImGui_SliderFloatEx("Specular", &material.specular, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     materialChanged |= ImGui_SliderFloatEx("Specular Tint", &material.specularTint, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     materialChanged |= ImGui_SliderFloatEx("Anisotropic", &material.anisotropic, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
@@ -203,6 +212,11 @@ static void drawMeshMaterialEditor(VKRT* vkrt, uint32_t meshIndex, const VKRT_Me
     materialChanged |= ImGui_SliderFloatEx("Clearcoat Gloss", &material.clearcoatGloss, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     materialChanged |= ImGui_DragFloatEx("Emission", &material.emissionLuminance, 0.1f, 0.0f, 1000000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     materialChanged |= ImGui_ColorEdit3("Emission Color", material.emissionColor, ImGuiColorEditFlags_Float);
+
+    if (ImGui_CollapsingHeader("Advanced", ImGuiTreeNodeFlags_None)) {
+        materialChanged |= ImGui_DragFloat3Ex("Conductor Eta", material.eta, 0.01f, 0.0f, 10.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        materialChanged |= ImGui_DragFloat3Ex("Conductor K", material.k, 0.01f, 0.0f, 10.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    }
 
     if (!materialChanged) return;
 
