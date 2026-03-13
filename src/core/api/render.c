@@ -2,16 +2,13 @@
 #include "descriptor.h"
 #include "scene.h"
 #include "state.h"
+#include "swapchain.h"
 #include "view.h"
 #include "export.h"
 #include "vkrt_internal.h"
 #include "numeric.h"
 
 #include <string.h>
-
-static int presentModePreferenceUsesSync(VKRT_PresentModePreference preference) {
-    return preference != VKRT_PRESENT_MODE_IMMEDIATE;
-}
 
 VKRT_Result VKRT_saveRenderPNG(VKRT* vkrt, const char* path) {
     if (!vkrt || !path || !path[0]) return VKRT_ERROR_INVALID_ARGUMENT;
@@ -97,8 +94,6 @@ static void resetRenderSessionState(VKRT* vkrt, VkBool32 resetViewTransform) {
     vkrt->renderStatus.displayFrameTimeMs = 0.0f;
     vkrt->timing.lastFrameTimestamp = 0;
     vkrt->autoSPP.controlMs = 0.0f;
-    vkrt->autoSPP.framesUntilNextAdjust = 0;
-    vkrt->runtime.autoSPPFastAdaptFrames = vkrt->sceneSettings.autoSPPEnabled ? 8u : 0u;
 }
 
 static VKRT_Result updateRenderExtent(VKRT* vkrt, VkExtent2D extent) {
@@ -127,81 +122,38 @@ VKRT_Result VKRT_startRender(VKRT* vkrt, uint32_t width, uint32_t height, uint32
     if (height > 16384) height = 16384;
 
     VkBool32 wasRenderModeActive = vkrt->renderStatus.renderModeActive != 0;
+    VkBool32 usedRenderPresentProfile = vkrtUsesRenderPresentProfile(vkrt);
     VkBool32 extentChanged = vkrt->runtime.renderExtent.width != width || vkrt->runtime.renderExtent.height != height;
     VkExtent2D requestedExtent = {width, height};
-    VKRT_PresentModePreference previousPresentModePreference = vkrt->runtime.presentModePreference;
-    VkBool32 previousFramebufferResized = vkrt->runtime.framebufferResized;
-
-    if (!wasRenderModeActive) {
-        vkrt->runtime.savedPresentModePreference = vkrt->runtime.presentModePreference;
-        if (presentModePreferenceUsesSync(vkrt->runtime.presentModePreference)) {
-            vkrt->runtime.presentModePreference = VKRT_PRESENT_MODE_IMMEDIATE;
-            vkrt->runtime.framebufferResized = VK_TRUE;
-        }
-    }
 
     if (vkrt->sceneSettings.samplesPerPixel == 0) {
         vkrt->sceneSettings.samplesPerPixel = 1;
     }
 
-    if (updateRenderExtent(vkrt, requestedExtent) != VKRT_SUCCESS) {
-        if (!wasRenderModeActive) {
-            vkrt->runtime.presentModePreference = previousPresentModePreference;
-            vkrt->runtime.framebufferResized = previousFramebufferResized;
-        }
-        return VKRT_ERROR_OPERATION_FAILED;
-    }
+    if (updateRenderExtent(vkrt, requestedExtent) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
 
     vkrt->renderStatus.renderModeActive = 1;
     vkrt->renderStatus.renderTargetSamples = targetSamples;
     resetRenderSessionState(vkrt, !wasRenderModeActive || extentChanged);
     applySceneViewport(vkrt, 0, 0, width, height);
     resetSceneData(vkrt);
+    vkrtRefreshPresentModeIfNeeded(vkrt, usedRenderPresentProfile);
     return VKRT_SUCCESS;
 }
 
 VKRT_Result VKRT_stopRenderSampling(VKRT* vkrt) {
     if (!vkrt || !vkrt->renderStatus.renderModeActive) return VKRT_ERROR_INVALID_ARGUMENT;
+    VkBool32 usedRenderPresentProfile = vkrtUsesRenderPresentProfile(vkrt);
     vkrt->renderStatus.renderModeFinished = 1;
+    vkrtRefreshPresentModeIfNeeded(vkrt, usedRenderPresentProfile);
     return VKRT_SUCCESS;
-}
-
-VKRT_Result VKRT_setVSyncEnabled(VKRT* vkrt, uint8_t enabled) {
-    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
-
-    VKRT_PresentModePreference preference = enabled
-        ? VKRT_PRESENT_MODE_VSYNC
-        : VKRT_PRESENT_MODE_IMMEDIATE;
-
-    if (vkrt->renderStatus.renderModeActive) {
-        vkrt->runtime.savedPresentModePreference = preference;
-        return VKRT_SUCCESS;
-    }
-
-    if (vkrt->runtime.presentModePreference == preference) return VKRT_SUCCESS;
-    vkrt->runtime.presentModePreference = preference;
-    vkrt->runtime.framebufferResized = VK_TRUE;
-    return VKRT_SUCCESS;
-}
-
-static void restoreSavedPresentModePreference(VKRT* vkrt) {
-    if (vkrt->runtime.presentModePreference != vkrt->runtime.savedPresentModePreference) {
-        vkrt->runtime.presentModePreference = vkrt->runtime.savedPresentModePreference;
-        vkrt->runtime.framebufferResized = VK_TRUE;
-    }
 }
 
 VKRT_Result VKRT_stopRender(VKRT* vkrt) {
     if (!vkrt || !vkrt->renderStatus.renderModeActive) return VKRT_ERROR_INVALID_ARGUMENT;
 
-    VKRT_PresentModePreference previousPresentModePreference = vkrt->runtime.presentModePreference;
-    VkBool32 previousFramebufferResized = vkrt->runtime.framebufferResized;
-    restoreSavedPresentModePreference(vkrt);
-    if (updateRenderExtent(vkrt, vkrt->runtime.swapChainExtent) != VKRT_SUCCESS) {
-        vkrt->runtime.presentModePreference = previousPresentModePreference;
-        vkrt->runtime.framebufferResized = previousFramebufferResized;
-        return VKRT_ERROR_OPERATION_FAILED;
-    }
+    VkBool32 usedRenderPresentProfile = vkrtUsesRenderPresentProfile(vkrt);
+    if (updateRenderExtent(vkrt, vkrt->runtime.swapChainExtent) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
 
     vkrt->renderStatus.renderModeActive = 0;
     vkrt->renderStatus.renderTargetSamples = 0;
@@ -213,6 +165,7 @@ VKRT_Result VKRT_stopRender(VKRT* vkrt) {
     vkrtClampViewportRect(vkrt->runtime.swapChainExtent, &x, &y, &width, &height);
     applySceneViewport(vkrt, x, y, width, height);
     resetSceneData(vkrt);
+    vkrtRefreshPresentModeIfNeeded(vkrt, usedRenderPresentProfile);
     return VKRT_SUCCESS;
 }
 

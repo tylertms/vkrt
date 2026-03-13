@@ -46,13 +46,6 @@ typedef enum VKRT_ToneMappingMode {
     VKRT_TONE_MAPPING_ACES = VKRT_TONE_MAPPING_MODE_ACES,
 } VKRT_ToneMappingMode;
 
-typedef enum VKRT_PresentModePreference {
-    VKRT_PRESENT_MODE_ADAPTIVE = 0,
-    VKRT_PRESENT_MODE_VSYNC = 1,
-    VKRT_PRESENT_MODE_MAILBOX = 2,
-    VKRT_PRESENT_MODE_IMMEDIATE = 3,
-} VKRT_PresentModePreference;
-
 typedef struct Camera {
     vec3 pos, target, up;
     float nearZ, farZ, vfov;
@@ -73,7 +66,6 @@ typedef struct VKRT_CreateInfo {
     uint32_t width;
     uint32_t height;
     const char* title;
-    VKRT_PresentModePreference presentModePreference;
     uint8_t startMaximized;
     uint8_t startFullscreen;
     int32_t preferredDeviceIndex;
@@ -115,7 +107,6 @@ typedef struct VKRT_SceneSettingsSnapshot {
     VKRT_ToneMappingMode toneMappingMode;
     uint8_t autoSPPEnabled;
     uint32_t autoSPPTargetFPS;
-    uint32_t renderModeTargetFPS;
     float fogDensity;
     float timeBase;
     float timeStep;
@@ -149,10 +140,6 @@ typedef struct VKRT_RuntimeSnapshot {
     uint32_t renderWidth;
     uint32_t renderHeight;
     uint32_t displayViewportRect[4];
-    uint8_t vsync;
-    uint8_t savedVsync;
-    VKRT_PresentModePreference presentModePreference;
-    VKRT_PresentModePreference savedPresentModePreference;
     VkPresentModeKHR presentMode;
     float displayRefreshHz;
 } VKRT_RuntimeSnapshot;

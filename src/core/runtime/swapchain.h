@@ -11,6 +11,8 @@ typedef struct SwapChainSupportDetails {
 } SwapChainSupportDetails;
 
 void vkrtQueryDisplayMetrics(GLFWwindow* window, uint32_t* outWidth, uint32_t* outHeight, float* outRefreshHz);
+VkBool32 vkrtUsesRenderPresentProfile(const VKRT* vkrt);
+void vkrtRefreshPresentModeIfNeeded(VKRT* vkrt, VkBool32 previousUsesRenderPresentProfile);
 VKRT_Result createSwapChain(VKRT* vkrt);
 VKRT_Result recreateSwapChain(VKRT* vkrt);
 void cleanupSwapChain(VKRT* vkrt);
@@ -20,5 +22,5 @@ VKRT_Result querySwapChainSupport(VKRT* vkrt, SwapChainSupportDetails* outSuppor
 VKRT_Result chooseSwapSurfaceFormat(const SwapChainSupportDetails* supportDetails, VkSurfaceFormatKHR* outSurfaceFormat);
 VkPresentModeKHR chooseSwapPresentMode(
     const SwapChainSupportDetails* supportDetails,
-    VKRT_PresentModePreference preference);
+    VkBool32 useRenderPresentProfile);
 VkExtent2D chooseSwapExtent(VKRT* vkrt, const SwapChainSupportDetails* supportDetails);

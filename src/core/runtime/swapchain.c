@@ -53,19 +53,21 @@ static const char* presentModeName(VkPresentModeKHR presentMode) {
     }
 }
 
-static const char* presentModePreferenceName(VKRT_PresentModePreference preference) {
-    switch (preference) {
-    case VKRT_PRESENT_MODE_ADAPTIVE:
-        return "adaptive";
-    case VKRT_PRESENT_MODE_VSYNC:
-        return "vsync";
-    case VKRT_PRESENT_MODE_MAILBOX:
-        return "mailbox";
-    case VKRT_PRESENT_MODE_IMMEDIATE:
-        return "immediate";
-    default:
-        return "unknown";
-    }
+static const VkPresentModeKHR kInteractivePresentModeRanking[] = {
+    VK_PRESENT_MODE_FIFO_KHR,
+    VK_PRESENT_MODE_MAILBOX_KHR,
+    VK_PRESENT_MODE_FIFO_RELAXED_KHR,
+};
+
+static const VkPresentModeKHR kRenderPresentModeRanking[] = {
+    VK_PRESENT_MODE_IMMEDIATE_KHR,
+    VK_PRESENT_MODE_MAILBOX_KHR,
+    VK_PRESENT_MODE_FIFO_RELAXED_KHR,
+    VK_PRESENT_MODE_FIFO_KHR,
+};
+
+static const char* presentProfileName(VkBool32 useRenderPresentProfile) {
+    return useRenderPresentProfile ? "render" : "interactive";
 }
 
 static int hasPresentMode(const SwapChainSupportDetails* supportDetails, VkPresentModeKHR presentMode) {
@@ -74,6 +76,17 @@ static int hasPresentMode(const SwapChainSupportDetails* supportDetails, VkPrese
         if (supportDetails->presentModes[i] == presentMode) return 1;
     }
     return 0;
+}
+
+VkBool32 vkrtUsesRenderPresentProfile(const VKRT* vkrt) {
+    return vkrt && vkrt->renderStatus.renderModeActive && !vkrt->renderStatus.renderModeFinished;
+}
+
+void vkrtRefreshPresentModeIfNeeded(VKRT* vkrt, VkBool32 previousUsesRenderPresentProfile) {
+    if (!vkrt) return;
+    if (vkrtUsesRenderPresentProfile(vkrt) != previousUsesRenderPresentProfile) {
+        vkrt->runtime.framebufferResized = VK_TRUE;
+    }
 }
 
 void vkrtQueryDisplayMetrics(GLFWwindow* window, uint32_t* outWidth, uint32_t* outHeight, float* outRefreshHz) {
@@ -112,7 +125,8 @@ VKRT_Result createSwapChain(VKRT* vkrt) {
         return VKRT_ERROR_OPERATION_FAILED;
     }
 
-    VkPresentModeKHR presentMode = chooseSwapPresentMode(&supportDetails, vkrt->runtime.presentModePreference);
+    VkBool32 useRenderPresentProfile = vkrtUsesRenderPresentProfile(vkrt);
+    VkPresentModeKHR presentMode = chooseSwapPresentMode(&supportDetails, useRenderPresentProfile);
     VkExtent2D extent = chooseSwapExtent(vkrt, &supportDetails);
     vkrt->runtime.presentMode = presentMode;
     vkrtQueryDisplayMetrics(vkrt->runtime.window, &vkrt->runtime.displayWidth, &vkrt->runtime.displayHeight, &vkrt->runtime.displayRefreshHz);
@@ -126,9 +140,8 @@ VKRT_Result createSwapChain(VKRT* vkrt) {
         vkrt->runtime.lastLoggedSwapChainFormat = surfaceFormat.format;
         vkrt->runtime.lastLoggedSwapChainColorSpace = surfaceFormat.colorSpace;
     }
-    LOG_TRACE("Swapchain present mode selected. Preference: %s (%d), actual: %s",
-        presentModePreferenceName(vkrt->runtime.presentModePreference),
-        (int)vkrt->runtime.presentModePreference,
+    LOG_TRACE("Swapchain present mode selected. Profile: %s, actual: %s",
+        presentProfileName(useRenderPresentProfile),
         presentModeName(presentMode));
 
     uint32_t imageCount = supportDetails.capabilities.minImageCount + 1;
@@ -261,8 +274,6 @@ VKRT_Result recreateSwapChain(VKRT* vkrt) {
     vkrt->renderStatus.displayFrameTimeMs = 0.0f;
     vkrt->timing.lastFrameTimestamp = 0;
     vkrt->autoSPP.controlMs = 0.0f;
-    vkrt->autoSPP.framesUntilNextAdjust = 0;
-    vkrt->runtime.autoSPPFastAdaptFrames = vkrt->sceneSettings.autoSPPEnabled ? 8u : 0u;
     if (!vkrt->renderStatus.renderModeActive) {
         resetSceneData(vkrt);
     }
@@ -449,37 +460,33 @@ VKRT_Result chooseSwapSurfaceFormat(const SwapChainSupportDetails* supportDetail
     return VKRT_SUCCESS;
 }
 
-VkPresentModeKHR chooseSwapPresentMode(
+static VkPresentModeKHR chooseRankedPresentMode(
     const SwapChainSupportDetails* supportDetails,
-    VKRT_PresentModePreference preference
+    const VkPresentModeKHR* ranking,
+    size_t rankingCount
 ) {
     if (!supportDetails) return VK_PRESENT_MODE_FIFO_KHR;
-
-    switch (preference) {
-    case VKRT_PRESENT_MODE_ADAPTIVE:
-        if (hasPresentMode(supportDetails, VK_PRESENT_MODE_FIFO_RELAXED_KHR)) {
-            return VK_PRESENT_MODE_FIFO_RELAXED_KHR;
-        }
-        return VK_PRESENT_MODE_FIFO_KHR;
-    case VKRT_PRESENT_MODE_VSYNC:
-        return VK_PRESENT_MODE_FIFO_KHR;
-    case VKRT_PRESENT_MODE_MAILBOX:
-        if (hasPresentMode(supportDetails, VK_PRESENT_MODE_MAILBOX_KHR)) {
-            return VK_PRESENT_MODE_MAILBOX_KHR;
-        }
-        return VK_PRESENT_MODE_FIFO_KHR;
-    case VKRT_PRESENT_MODE_IMMEDIATE:
-        if (hasPresentMode(supportDetails, VK_PRESENT_MODE_IMMEDIATE_KHR)) {
-            return VK_PRESENT_MODE_IMMEDIATE_KHR;
-        }
-        if (hasPresentMode(supportDetails, VK_PRESENT_MODE_MAILBOX_KHR)) {
-            return VK_PRESENT_MODE_MAILBOX_KHR;
-        }
-        return VK_PRESENT_MODE_FIFO_KHR;
-    default:
-        break;
+    for (size_t i = 0; i < rankingCount; i++) {
+        if (hasPresentMode(supportDetails, ranking[i])) return ranking[i];
     }
     return VK_PRESENT_MODE_FIFO_KHR;
+}
+
+VkPresentModeKHR chooseSwapPresentMode(
+    const SwapChainSupportDetails* supportDetails,
+    VkBool32 useRenderPresentProfile
+) {
+    if (useRenderPresentProfile) {
+        return chooseRankedPresentMode(
+            supportDetails,
+            kRenderPresentModeRanking,
+            VKRT_ARRAY_COUNT(kRenderPresentModeRanking));
+    }
+
+    return chooseRankedPresentMode(
+        supportDetails,
+        kInteractivePresentModeRanking,
+        VKRT_ARRAY_COUNT(kInteractivePresentModeRanking));
 }
 
 VkExtent2D chooseSwapExtent(VKRT* vkrt, const SwapChainSupportDetails* supportDetails) {

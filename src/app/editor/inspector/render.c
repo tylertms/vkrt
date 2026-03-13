@@ -19,14 +19,11 @@ static const float kAnimationTimeMin = 0.0f;
 static const float kAnimationTimeMax = 1000.0f;
 static const float kAnimationStepDragSpeed = 0.005f;
 static const float kAnimationStepMin = 0.001f;
-static const int kRenderModeTargetFPSMin = 1;
-static const int kRenderModeTargetFPSMax = 360;
 
 enum {
     kRenderFolderPathCapacity = 256,
     kRenderTimeTextCapacity = 32,
     kRenderProgressOverlayCapacity = 96,
-    kRenderTargetFPSTooltipCapacity = 96,
 };
 
 static void initializeRenderConfig(VKRT* vkrt, Session* session) {
@@ -106,7 +103,6 @@ static void drawIdleOutputSection(VKRT* vkrt, Session* session, const VKRT_Scene
         (int)session->editor.renderConfig.height
     };
     int targetSamples = (int)session->editor.renderConfig.targetSamples;
-    int renderModeTargetFPS = (int)settings->renderModeTargetFPS;
 
     if (!ImGui_CollapsingHeader("Output", ImGuiTreeNodeFlags_DefaultOpen)) return;
 
@@ -121,19 +117,6 @@ static void drawIdleOutputSection(VKRT* vkrt, Session* session, const VKRT_Scene
         session->editor.renderConfig.targetSamples = (uint32_t)targetSamples;
     }
     tooltipOnHover("Total samples to render. Set to 0 for manual stop.");
-
-    if (ImGui_DragIntEx("Render Target FPS", &renderModeTargetFPS, 0.25f, kRenderModeTargetFPSMin, kRenderModeTargetFPSMax, "%d", ImGuiSliderFlags_AlwaysClamp)) {
-        VKRT_Result result = VKRT_setRenderModeTargetFPS(vkrt, (uint32_t)renderModeTargetFPS);
-        if (result != VKRT_SUCCESS) {
-            LOG_ERROR("Updating render-mode target FPS failed (%d)", (int)result);
-        }
-    }
-    char renderTargetFPSTooltip[kRenderTargetFPSTooltipCapacity];
-    snprintf(renderTargetFPSTooltip,
-        sizeof(renderTargetFPSTooltip),
-        "Auto SPP targets this FPS only while render mode is active. Default: %u.",
-        VKRT_DEFAULT_RENDER_MODE_TARGET_FPS);
-    tooltipOnHover(renderTargetFPSTooltip);
     inspectorUnindentSection();
 }
 
@@ -311,8 +294,6 @@ static void drawRenderProgressSection(
     if (!status || !runtime || !settings || !sequencer) return;
 
     ImGui_TextDisabled("Output %ux%u", runtime->renderWidth, runtime->renderHeight);
-    ImGui_TextDisabled("Render Target %u fps", settings->renderModeTargetFPS);
-
     if (status->renderTargetSamples > 0) {
         uint64_t shownSamples = status->totalSamples;
         if (shownSamples > status->renderTargetSamples) {

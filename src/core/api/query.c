@@ -25,10 +25,6 @@ VKRT_Result VKRT_getRuntimeSnapshot(const VKRT* vkrt, VKRT_RuntimeSnapshot* outR
     outRuntime->renderWidth = vkrt->runtime.renderExtent.width;
     outRuntime->renderHeight = vkrt->runtime.renderExtent.height;
     memcpy(outRuntime->displayViewportRect, vkrt->runtime.displayViewportRect, sizeof(outRuntime->displayViewportRect));
-    outRuntime->vsync = vkrt->runtime.presentModePreference != VKRT_PRESENT_MODE_IMMEDIATE;
-    outRuntime->savedVsync = vkrt->runtime.savedPresentModePreference != VKRT_PRESENT_MODE_IMMEDIATE;
-    outRuntime->presentModePreference = vkrt->runtime.presentModePreference;
-    outRuntime->savedPresentModePreference = vkrt->runtime.savedPresentModePreference;
     outRuntime->presentMode = vkrt->runtime.presentMode;
     outRuntime->displayRefreshHz = vkrt->runtime.displayRefreshHz;
     return VKRT_SUCCESS;

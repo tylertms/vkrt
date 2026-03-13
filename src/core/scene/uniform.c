@@ -23,6 +23,13 @@ static void resetTimelineDefaults(VKRT_SceneSettingsSnapshot* settings) {
     settings->sceneTimeline.keyframes[1] = makeDefaultSceneTimelineKeyframe(1.0f);
 }
 
+static void resetAutoSPPForSceneChange(VKRT* vkrt) {
+    if (!vkrt || !vkrt->sceneSettings.autoSPPEnabled) return;
+
+    vkrt->sceneSettings.samplesPerPixel = 1u;
+    vkrt->autoSPP.controlMs = 0.0f;
+}
+
 static void writeTimelineUniform(SceneData* sceneData, const VKRT_SceneSettingsSnapshot* settings) {
     if (!sceneData || !settings) return;
 
@@ -57,10 +64,11 @@ static void writeTimelineUniform(SceneData* sceneData, const VKRT_SceneSettingsS
     }
 }
 
-static void writeSceneStateUniform(SceneData* sceneData, const VKRT_SceneSettingsSnapshot* settings) {
-    if (!sceneData || !settings) return;
+static void writeSceneStateUniform(SceneData* sceneData, const VKRT* vkrt) {
+    if (!sceneData || !vkrt) return;
 
-    sceneData->samplesPerPixel = settings->samplesPerPixel;
+    const VKRT_SceneSettingsSnapshot* settings = &vkrt->sceneSettings;
+    sceneData->samplesPerPixel = settings->samplesPerPixel > 0u ? settings->samplesPerPixel : 1u;
     sceneData->rrMaxDepth = settings->rrMaxDepth;
     sceneData->rrMinDepth = settings->rrMinDepth;
     sceneData->toneMappingMode = settings->toneMappingMode;
@@ -94,7 +102,7 @@ void syncCurrentFrameSceneData(VKRT* vkrt) {
 
 void syncSceneStateData(VKRT* vkrt) {
     if (!vkrt || !vkrt->core.sceneData) return;
-    writeSceneStateUniform(vkrt->core.sceneData, &vkrt->sceneSettings);
+    writeSceneStateUniform(vkrt->core.sceneData, vkrt);
 }
 
 void markSelectionMaskDirty(VKRT* vkrt) {
@@ -178,10 +186,8 @@ VKRT_Result createSceneUniform(VKRT* vkrt) {
     if (targetFPS < 30) targetFPS = 30;
     if (targetFPS > 360) targetFPS = 360;
     vkrt->sceneSettings.autoSPPTargetFPS = targetFPS;
-    vkrt->sceneSettings.renderModeTargetFPS = VKRT_DEFAULT_RENDER_MODE_TARGET_FPS;
     vkrt->autoSPP.targetFrameMs = 1000.0f / (float)targetFPS;
     vkrt->autoSPP.controlMs = 0.0f;
-    vkrt->autoSPP.framesUntilNextAdjust = 0;
 
     vkrt->sceneSettings.camera = (Camera){
         .nearZ = 0.001f, .farZ = 10000.0f,
@@ -214,6 +220,7 @@ VKRT_Result createSceneUniform(VKRT* vkrt) {
 void resetSceneData(VKRT* vkrt) {
     if (!vkrt || !vkrt->core.sceneData) return;
 
+    resetAutoSPPForSceneChange(vkrt);
     vkrt->core.sceneData->frameNumber = 0;
     syncSceneStateData(vkrt);
     vkrt->core.sceneData->emissiveMeshCount = vkrt->core.emissiveMeshCount;

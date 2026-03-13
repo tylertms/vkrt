@@ -19,10 +19,8 @@ void inspectorDrawCameraTab(VKRT* vkrt) {
 
     VKRT_SceneSettingsSnapshot settings = {0};
     VKRT_RenderStatusSnapshot status = {0};
-    VKRT_RuntimeSnapshot runtime = {0};
     if (VKRT_getSceneSettings(vkrt, &settings) != VKRT_SUCCESS ||
-        VKRT_getRenderStatus(vkrt, &status) != VKRT_SUCCESS ||
-        VKRT_getRuntimeSnapshot(vkrt, &runtime) != VKRT_SUCCESS) {
+        VKRT_getRenderStatus(vkrt, &status) != VKRT_SUCCESS) {
         return;
     }
 
@@ -126,14 +124,6 @@ void inspectorDrawCameraTab(VKRT* vkrt) {
                 if (result != VKRT_SUCCESS) {
                     LOG_ERROR("Updating samples per pixel failed (%d)", (int)result);
                 }
-            }
-        }
-
-        bool vsync = (renderModeActive ? runtime.savedVsync : runtime.vsync) != 0;
-        if (ImGui_Checkbox("V-Sync", &vsync)) {
-            VKRT_Result result = VKRT_setVSyncEnabled(vkrt, vsync ? 1u : 0u);
-            if (result != VKRT_SUCCESS) {
-                LOG_ERROR("Updating V-Sync failed (%d)", (int)result);
             }
         }
 

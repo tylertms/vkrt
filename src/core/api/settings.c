@@ -37,12 +37,6 @@ static uint32_t sanitizeAutoSPPTargetFPS(const VKRT* vkrt, uint32_t targetFPS) {
     return targetFPS;
 }
 
-static uint32_t sanitizeRenderModeTargetFPS(uint32_t targetFPS) {
-    if (targetFPS < 1u) return 1u;
-    if (targetFPS > 360u) return 360u;
-    return targetFPS;
-}
-
 VKRT_Result VKRT_applyCameraInput(VKRT* vkrt, const VKRT_CameraInput* input) {
     if (!input) return VKRT_ERROR_INVALID_ARGUMENT;
     VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
@@ -92,8 +86,6 @@ VKRT_Result VKRT_setAutoSPPEnabled(VKRT* vkrt, uint8_t enabled) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
     vkrt->sceneSettings.autoSPPEnabled = enabled ? 1 : 0;
     vkrt->autoSPP.controlMs = 0.0f;
-    vkrt->autoSPP.framesUntilNextAdjust = 0;
-    vkrt->runtime.autoSPPFastAdaptFrames = enabled ? 8u : 0u;
     return VKRT_SUCCESS;
 }
 
@@ -103,17 +95,6 @@ VKRT_Result VKRT_setAutoSPPTargetFPS(VKRT* vkrt, uint32_t targetFPS) {
     vkrt->sceneSettings.autoSPPTargetFPS = targetFPS;
     vkrt->autoSPP.targetFrameMs = 1000.0f / (float)targetFPS;
     vkrt->autoSPP.controlMs = 0.0f;
-    vkrt->autoSPP.framesUntilNextAdjust = 0;
-    return VKRT_SUCCESS;
-}
-
-VKRT_Result VKRT_setRenderModeTargetFPS(VKRT* vkrt, uint32_t targetFPS) {
-    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
-
-    vkrt->sceneSettings.renderModeTargetFPS = sanitizeRenderModeTargetFPS(targetFPS);
-    vkrt->autoSPP.controlMs = 0.0f;
-    vkrt->autoSPP.framesUntilNextAdjust = 0;
-    vkrt->runtime.autoSPPFastAdaptFrames = vkrt->sceneSettings.autoSPPEnabled ? 8u : 0u;
     return VKRT_SUCCESS;
 }
 

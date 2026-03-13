@@ -13,13 +13,6 @@
 #define VKRT_VERSION "dev"
 #endif
 
-enum {
-    kPresentModeAdaptive = (int)VKRT_PRESENT_MODE_ADAPTIVE,
-    kPresentModeVSync = (int)VKRT_PRESENT_MODE_VSYNC,
-    kPresentModeMailbox = (int)VKRT_PRESENT_MODE_MAILBOX,
-    kPresentModeImmediate = (int)VKRT_PRESENT_MODE_IMMEDIATE,
-};
-
 static int stringsEqual(const char* lhs, const char* rhs) {
     if (!lhs || !rhs) return 0;
     return strcmp(lhs, rhs) == 0;
@@ -103,41 +96,6 @@ static int parseDeviceIndexValue(
     return 1;
 }
 
-static int parsePresentModeValue(
-    const char* text,
-    VKRT_PresentModePreference* outValue,
-    char* error,
-    size_t errorSize
-) {
-    if (!text || !outValue || !error || errorSize == 0) return 0;
-
-    errno = 0;
-    char* end = NULL;
-    long parsed = strtol(text, &end, 10);
-    if (errno != 0 || end == text || (end && end[0] != '\0')) {
-        snprintf(error, errorSize, "Invalid value for --vsync-mode: %s", text);
-        return 0;
-    }
-
-    switch ((int)parsed) {
-    case kPresentModeAdaptive:
-        *outValue = VKRT_PRESENT_MODE_ADAPTIVE;
-        return 1;
-    case kPresentModeVSync:
-        *outValue = VKRT_PRESENT_MODE_VSYNC;
-        return 1;
-    case kPresentModeMailbox:
-        *outValue = VKRT_PRESENT_MODE_MAILBOX;
-        return 1;
-    case kPresentModeImmediate:
-        *outValue = VKRT_PRESENT_MODE_IMMEDIATE;
-        return 1;
-    default:
-        snprintf(error, errorSize, "Invalid value for --vsync-mode: %s", text);
-        return 0;
-    }
-}
-
 void CLIDefaultLaunchOptions(CLILaunchOptions* options) {
     if (!options) return;
 
@@ -178,14 +136,6 @@ int CLIParseArguments(int argc, char* argv[], CLILaunchOptions* outOptions, char
             const char* value = requireOptionValue(argc, argv, &i, "--height", error, errorSize);
             if (!value) return 0;
             if (!parseUnsignedValue(value, &outOptions->createInfo.height, "--height", error, errorSize)) {
-                return 0;
-            }
-            continue;
-        }
-        if (optionMatches(arg, "--vsync-mode")) {
-            const char* value = requireOptionValue(argc, argv, &i, "--vsync-mode", error, errorSize);
-            if (!value) return 0;
-            if (!parsePresentModeValue(value, &outOptions->createInfo.presentModePreference, error, errorSize)) {
                 return 0;
             }
             continue;
@@ -274,7 +224,6 @@ void CLIPrintHelp(void) {
     printf("  --version                 Show version and exit\n");
     printf("  --width <px>              Set initial window width\n");
     printf("  --height <px>             Set initial window height\n");
-    printf("  --vsync-mode <n>          Set present mode: 0 adaptive, 1 vsync, 2 mailbox, 3 immediate\n");
     printf("  --fullscreen              Start in fullscreen mode\n");
     printf("  --device-index <index>    Force a Vulkan device by enumerated index\n");
     printf("  --device-name <text>      Force a Vulkan device if its name contains this text\n");

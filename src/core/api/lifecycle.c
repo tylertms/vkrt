@@ -205,7 +205,6 @@ void VKRT_defaultCreateInfo(VKRT_CreateInfo* createInfo) {
         .width = 0,
         .height = 0,
         .title = "VKRT",
-        .presentModePreference = VKRT_PRESENT_MODE_ADAPTIVE,
         .startMaximized = 1,
         .startFullscreen = 0,
         .preferredDeviceIndex = -1,
@@ -246,9 +245,6 @@ VKRT_Result VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInf
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
     logStepTime("GLFW setup complete", stepStartTime);
 
-    vkrt->runtime.presentModePreference = createInfo->presentModePreference;
-    vkrt->runtime.savedPresentModePreference = createInfo->presentModePreference;
-    vkrt->runtime.autoSPPFastAdaptFrames = 0;
     vkrt->runtime.swapChainFormatLogInitialized = VK_FALSE;
     vkrt->runtime.lastLoggedSwapChainFormat = VK_FORMAT_UNDEFINED;
     vkrt->runtime.lastLoggedSwapChainColorSpace = VK_COLOR_SPACE_MAX_ENUM_KHR;
@@ -262,6 +258,9 @@ VKRT_Result VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInf
     vkrt->core.materialRevision = 1;
     vkrt->core.emissiveMeshCount = 0;
     vkrt->core.emissiveTriangleCount = 0;
+    vkrt->renderStatus.renderModeActive = 0;
+    vkrt->renderStatus.renderModeFinished = 0;
+    vkrt->renderStatus.renderTargetSamples = 0;
 
     const char* title = createInfo->title ? createInfo->title : "VKRT";
     uint32_t displayWidth = VKRT_DEFAULT_WIDTH;
@@ -318,6 +317,8 @@ VKRT_Result VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInf
     stepStartTime = getMicroseconds();
     if (createQueryPool(vkrt) != VKRT_SUCCESS) goto init_failed;
     logStepTime("Query pool created", stepStartTime);
+
+    glfwPollEvents();
 
     stepStartTime = getMicroseconds();
     if (createSwapChain(vkrt) != VKRT_SUCCESS) goto init_failed;

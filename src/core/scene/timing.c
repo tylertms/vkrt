@@ -32,11 +32,8 @@ static void updateFrameTimes(VKRT* vkrt) {
 static float queryAutoSPPTargetMs(const VKRT* vkrt) {
     if (!vkrt) return 0.0f;
 
-    if (vkrt->renderStatus.renderModeActive) {
-        uint32_t targetFPS = vkrt->sceneSettings.renderModeTargetFPS
-            ? vkrt->sceneSettings.renderModeTargetFPS
-            : VKRT_DEFAULT_RENDER_MODE_TARGET_FPS;
-        return 1000.0f / (float)targetFPS;
+    if (vkrt->renderStatus.renderModeActive && !vkrt->renderStatus.renderModeFinished) {
+        return 1000.0f / (float)VKRT_RENDER_TARGET_FPS;
     }
 
     float targetMs = vkrt->autoSPP.targetFrameMs;
@@ -44,6 +41,13 @@ static float queryAutoSPPTargetMs(const VKRT* vkrt) {
 
     uint32_t targetFPS = vkrt->sceneSettings.autoSPPTargetFPS ? vkrt->sceneSettings.autoSPPTargetFPS : 60u;
     return 1000.0f / (float)targetFPS;
+}
+
+static float queryAutoSPPControlMs(const VKRT* vkrt) {
+    if (!vkrt) return 0.0f;
+    if (vkrt->renderStatus.renderTimeMs > 0.0f) return vkrt->renderStatus.renderTimeMs;
+    if (vkrt->renderStatus.displayRenderTimeMs > 0.0f) return vkrt->renderStatus.displayRenderTimeMs;
+    return vkrt->renderStatus.displayFrameTimeMs;
 }
 
 void recordFrameTime(VKRT* vkrt, uint32_t frameIndex) {
@@ -86,50 +90,55 @@ void recordFrameTime(VKRT* vkrt, uint32_t frameIndex) {
 void updateAutoSPP(VKRT* vkrt) {
     if (!vkrt || !vkrt->sceneSettings.autoSPPEnabled) return;
 
-    float targetMs = queryAutoSPPTargetMs(vkrt);
+    const float measurementSmoothing = 0.35f;
+    const float budgetScale = 0.90f;
+    const float upwardDeadbandScale = 0.18f;
+    const float downwardDeadbandScale = 0.08f;
+    const float maxUpwardScale = 1.25f;
+    const float maxDownwardScale = 0.60f;
 
-    float controlMs = vkrt->renderStatus.displayRenderTimeMs > 0.0f ? vkrt->renderStatus.displayRenderTimeMs : vkrt->renderStatus.displayFrameTimeMs;
+    float targetMs = queryAutoSPPTargetMs(vkrt);
+    if (targetMs <= 0.0f) return;
+
+    float controlMs = queryAutoSPPControlMs(vkrt);
     if (controlMs <= 0.0f) return;
 
     uint32_t spp = vkrt->sceneSettings.samplesPerPixel;
     if (spp == 0) spp = 1;
+    float sppf = (float)spp;
 
-    float measuredMsPerSPP = controlMs / (float)spp;
+    float measuredMsPerSPP = controlMs / sppf;
     if (measuredMsPerSPP <= 0.0f) return;
 
-    VkBool32 warmup = vkrt->runtime.autoSPPFastAdaptFrames > 0;
-    if (warmup) {
-        vkrt->runtime.autoSPPFastAdaptFrames--;
-    }
-
-    if (vkrt->autoSPP.controlMs <= 0.0f || warmup) {
+    if (vkrt->autoSPP.controlMs <= 0.0f) {
         vkrt->autoSPP.controlMs = measuredMsPerSPP;
     } else {
-        const float smoothing = 0.20f;
-        vkrt->autoSPP.controlMs = vkrt->autoSPP.controlMs * (1.0f - smoothing) + measuredMsPerSPP * smoothing;
+        vkrt->autoSPP.controlMs =
+            vkrt->autoSPP.controlMs * (1.0f - measurementSmoothing) + measuredMsPerSPP * measurementSmoothing;
     }
 
-    float budgetMs = targetMs * 0.95f;
-    float desired = budgetMs / vkrt->autoSPP.controlMs;
-    if (desired <= 0.0f) return;
+    float desired = (targetMs * budgetScale) / vkrt->autoSPP.controlMs;
+    if (desired < 1.0f) desired = 1.0f;
+    if (desired > 2048.0f) desired = 2048.0f;
 
-    float delta = fabsf(desired - (float)spp) / (float)spp;
-    if (!warmup && delta < 0.06f) return;
+    float delta = desired - sppf;
+    float deadband = fmaxf(sppf * (delta > 0.0f ? upwardDeadbandScale : downwardDeadbandScale), 1.0f);
+    if (fabsf(delta) <= deadband) return;
 
-    float maxStepUp = warmup ? 0.50f : 0.15f;
-    float maxStepDown = warmup ? 0.35f : 0.10f;
-    float minAllowed = (float)spp * (1.0f - maxStepDown);
-    float maxAllowed = (float)spp * (1.0f + maxStepUp);
-    float nextValue = glm_clamp(desired, minAllowed, maxAllowed);
+    float limitedDesired = desired;
+    uint32_t next = spp;
+    if (delta > 0.0f) {
+        limitedDesired = fminf(desired, ceilf(sppf * maxUpwardScale));
+        next = (uint32_t)floorf(limitedDesired);
+        if (next <= spp && spp < 2048u) next = spp + 1u;
+    } else {
+        limitedDesired = fmaxf(desired, floorf(sppf * maxDownwardScale));
+        next = (uint32_t)ceilf(limitedDesired);
+        if (next >= spp && spp > 1u) next = spp - 1u;
+    }
 
-    if (nextValue < 1.0f) nextValue = 1.0f;
-    if (nextValue > 2048.0f) nextValue = 2048.0f;
-
-    uint32_t next = (uint32_t)(nextValue + 0.5f);
-    if (next == spp && desired > (float)spp && spp < 2048) next = spp + 1;
-    if (next == spp && desired < (float)spp && spp > 1) next = spp - 1;
-
-    vkrt->autoSPP.framesUntilNextAdjust = 0;
+    if (next < 1u) next = 1u;
+    if (next > 2048u) next = 2048u;
 
     if (next != spp) {
         VKRT_setSamplesPerPixel(vkrt, next);

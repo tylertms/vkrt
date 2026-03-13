@@ -167,8 +167,6 @@ typedef struct VKRT_Runtime {
     VkQueryPool timestampPool;
     float timestampPeriod;
     VkBool32 frameTimingPending[VKRT_MAX_FRAMES_IN_FLIGHT];
-    VKRT_PresentModePreference presentModePreference;
-    VKRT_PresentModePreference savedPresentModePreference;
     uint32_t frameImageIndex;
     VkBool32 frameAcquired;
     VkBool32 frameOffscreen;
@@ -178,7 +176,6 @@ typedef struct VKRT_Runtime {
     VkBool32 frameSelectionTraced;
     VkPresentModeKHR presentMode;
     float displayRefreshHz;
-    uint32_t autoSPPFastAdaptFrames;
     VkBool32 swapChainFormatLogInitialized;
     VkFormat lastLoggedSwapChainFormat;
     VkColorSpaceKHR lastLoggedSwapChainColorSpace;
@@ -199,7 +196,6 @@ typedef struct VKRT_TimingState {
 typedef struct VKRT_AutoSPPState {
     float targetFrameMs;
     float controlMs;
-    uint32_t framesUntilNextAdjust;
 } VKRT_AutoSPPState;
 
 typedef struct VKRT {

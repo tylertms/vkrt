@@ -262,11 +262,9 @@ VKRT_Result VKRT_endFrame(VKRT* vkrt) {
             !vkrt->renderStatus.renderModeFinished &&
             vkrt->renderStatus.renderTargetSamples > 0 &&
             vkrt->renderStatus.totalSamples >= vkrt->renderStatus.renderTargetSamples) {
+            VkBool32 usedRenderPresentProfile = vkrtUsesRenderPresentProfile(vkrt);
             vkrt->renderStatus.renderModeFinished = 1;
-            if (vkrt->runtime.presentModePreference != vkrt->runtime.savedPresentModePreference) {
-                vkrt->runtime.presentModePreference = vkrt->runtime.savedPresentModePreference;
-                vkrt->runtime.framebufferResized = VK_TRUE;
-            }
+            vkrtRefreshPresentModeIfNeeded(vkrt, usedRenderPresentProfile);
         }
     }
 
