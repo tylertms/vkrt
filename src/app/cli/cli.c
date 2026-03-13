@@ -13,6 +13,10 @@
 #define VKRT_VERSION "dev"
 #endif
 
+static const uint32_t kBenchmarkWidth = 3840u;
+static const uint32_t kBenchmarkHeight = 2160u;
+static const uint32_t kBenchmarkTargetSamples = 16384u;
+
 static int stringsEqual(const char* lhs, const char* rhs) {
     if (!lhs || !rhs) return 0;
     return strcmp(lhs, rhs) == 0;
@@ -102,6 +106,9 @@ void CLIDefaultLaunchOptions(CLILaunchOptions* options) {
     memset(options, 0, sizeof(*options));
     options->mode = CLI_MODE_RUN;
     options->loadDefaultScene = 1u;
+    options->benchmark.width = kBenchmarkWidth;
+    options->benchmark.height = kBenchmarkHeight;
+    options->benchmark.targetSamples = kBenchmarkTargetSamples;
     VKRT_defaultCreateInfo(&options->createInfo);
 }
 
@@ -165,6 +172,34 @@ int CLIParseArguments(int argc, char* argv[], CLILaunchOptions* outOptions, char
             outOptions->loadDefaultScene = 0u;
             continue;
         }
+        if (stringsEqual(arg, "--benchmark")) {
+            outOptions->benchmark.enabled = 1u;
+            continue;
+        }
+        if (optionMatches(arg, "--benchmark-width")) {
+            const char* value = requireOptionValue(argc, argv, &i, "--benchmark-width", error, errorSize);
+            if (!value) return 0;
+            if (!parseUnsignedValue(value, &outOptions->benchmark.width, "--benchmark-width", error, errorSize)) {
+                return 0;
+            }
+            continue;
+        }
+        if (optionMatches(arg, "--benchmark-height")) {
+            const char* value = requireOptionValue(argc, argv, &i, "--benchmark-height", error, errorSize);
+            if (!value) return 0;
+            if (!parseUnsignedValue(value, &outOptions->benchmark.height, "--benchmark-height", error, errorSize)) {
+                return 0;
+            }
+            continue;
+        }
+        if (optionMatches(arg, "--benchmark-samples")) {
+            const char* value = requireOptionValue(argc, argv, &i, "--benchmark-samples", error, errorSize);
+            if (!value) return 0;
+            if (!parseUnsignedValue(value, &outOptions->benchmark.targetSamples, "--benchmark-samples", error, errorSize)) {
+                return 0;
+            }
+            continue;
+        }
         if (optionMatches(arg, "--import")) {
             const char* value = requireOptionValue(argc, argv, &i, "--import", error, errorSize);
             if (!value || !value[0]) {
@@ -177,6 +212,17 @@ int CLIParseArguments(int argc, char* argv[], CLILaunchOptions* outOptions, char
 
         snprintf(error, errorSize, "Unknown option: %s", arg);
         return 0;
+    }
+
+    if (outOptions->benchmark.enabled) {
+        if (!outOptions->loadDefaultScene) {
+            snprintf(error, errorSize, "--benchmark requires the default scene");
+            return 0;
+        }
+        if (outOptions->startupImportPath) {
+            snprintf(error, errorSize, "--benchmark cannot be combined with --import");
+            return 0;
+        }
     }
 
     return 1;
@@ -228,6 +274,10 @@ void CLIPrintHelp(void) {
     printf("  --device-index <index>    Force a Vulkan device by enumerated index\n");
     printf("  --device-name <text>      Force a Vulkan device if its name contains this text\n");
     printf("  --empty-scene             Skip loading the default starter scene\n");
+    printf("  --benchmark               Render the default scene at 3840x2160 / 16384 samples, print timing, then exit\n");
+    printf("  --benchmark-width <px>    Override benchmark render width (default: 3840)\n");
+    printf("  --benchmark-height <px>   Override benchmark render height (default: 2160)\n");
+    printf("  --benchmark-samples <n>   Override benchmark target samples (default: 16384)\n");
     printf("  --import <path>           Import a mesh on startup\n");
     printf("\nViewport Controls:\n");
     printf("  Middle mouse drag          Orbit camera\n");
