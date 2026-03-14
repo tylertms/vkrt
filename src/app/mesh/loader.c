@@ -175,12 +175,12 @@ static void decomposeNodeTransform(const cgltf_node* node, vec3 outPosition, vec
     outPosition[1] = translation[1];
     outPosition[2] = translation[2];
 
-    outRotation[0] = glm_deg(rotationRadians[0]) + 90.0f;
+    outRotation[0] = glm_deg(rotationRadians[0]);
     outRotation[1] = glm_deg(rotationRadians[1]);
     outRotation[2] = glm_deg(rotationRadians[2]) + 90.0f;
 
     outScale[0] = scale[0];
-    outScale[1] = -scale[1];
+    outScale[1] = scale[1];
     outScale[2] = scale[2];
 }
 

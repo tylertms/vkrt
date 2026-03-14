@@ -253,8 +253,8 @@ void meshControllerLoadDefaultAssets(VKRT* vkrt, Session* session) {
         {
             .assetPath = dragonPath,
             .importName = "dragon",
-            .position = {-0.1f, 0.32f, 0.59f},
-            .rotation = {0.0f, 0.0f, 125.0f},
+            .position = {-0.1f, 0.32f, 1.45f},
+            .rotation = {90.0f, 0.0f, 125.0f},
             .scale = {8.0f, 8.0f, 8.0f},
             .material = dragonMaterial,
         },
