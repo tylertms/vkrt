@@ -94,6 +94,7 @@ static void cleanupSceneAndAccelerationResources(VKRT* vkrt) {
         vkrtCleanupFrameSceneUpdate(vkrt, i);
     }
     vkrtDestroyAccelerationStructureResources(vkrt, &vkrt->core.sceneTopLevelAccelerationStructure);
+    vkrtDestroyAccelerationStructureResources(vkrt, &vkrt->core.selectionTopLevelAccelerationStructure);
     destroyBufferAndMemory(vkrt, &vkrt->core.sceneMeshData.buffer, &vkrt->core.sceneMeshData.memory);
     destroyBufferAndMemory(vkrt, &vkrt->core.sceneMaterialData.buffer, &vkrt->core.sceneMaterialData.memory);
     destroyBufferAndMemory(vkrt, &vkrt->core.sceneEmissiveMeshData.buffer, &vkrt->core.sceneEmissiveMeshData.memory);

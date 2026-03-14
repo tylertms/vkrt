@@ -10,14 +10,12 @@ static VkBool32 descriptorResourcesReadyForFrame(VKRT* vkrt, uint32_t frameIndex
         return VK_FALSE;
     }
 
-    const AccelerationStructure* tlas = &vkrt->core.sceneTopLevelAccelerationStructure;
     const Buffer* meshData = &vkrt->core.sceneMeshData;
     const Buffer* materialData = &vkrt->core.sceneMaterialData;
     const Buffer* emissiveMeshData = &vkrt->core.sceneEmissiveMeshData;
     const Buffer* emissiveTriangleData = &vkrt->core.sceneEmissiveTriangleData;
 
-    return tlas->structure != VK_NULL_HANDLE &&
-           vkrt->core.sceneDataBuffers[frameIndex] != VK_NULL_HANDLE &&
+    return vkrt->core.sceneDataBuffers[frameIndex] != VK_NULL_HANDLE &&
            vkrt->core.outputImageView != VK_NULL_HANDLE &&
            vkrt->core.selectionMaskImageView != VK_NULL_HANDLE &&
            vkrt->core.accumulationImageViews[vkrt->core.accumulationReadIndex] != VK_NULL_HANDLE &&
@@ -33,7 +31,8 @@ static VkBool32 descriptorResourcesReadyForFrame(VKRT* vkrt, uint32_t frameIndex
 
 static VKRT_Result updateDescriptorSetForFrame(VKRT* vkrt, uint32_t frameIndex) {
     if (!vkrt || frameIndex >= VKRT_MAX_FRAMES_IN_FLIGHT) return VKRT_ERROR_INVALID_ARGUMENT;
-    if (!descriptorResourcesReadyForFrame(vkrt, frameIndex)) {
+    if (!descriptorResourcesReadyForFrame(vkrt, frameIndex) ||
+        vkrt->core.sceneTopLevelAccelerationStructure.structure == VK_NULL_HANDLE) {
         vkrt->core.descriptorSetReady[frameIndex] = VK_FALSE;
         return VKRT_SUCCESS;
     }
@@ -42,21 +41,48 @@ static VKRT_Result updateDescriptorSetForFrame(VKRT* vkrt, uint32_t frameIndex) 
     Buffer* materialData = &vkrt->core.sceneMaterialData;
     Buffer* emissiveMeshData = &vkrt->core.sceneEmissiveMeshData;
     Buffer* emissiveTriangleData = &vkrt->core.sceneEmissiveTriangleData;
-    AccelerationStructure* tlas = &vkrt->core.sceneTopLevelAccelerationStructure;
     VkDescriptorSet descriptorSet = vkrt->core.descriptorSets[frameIndex];
+    VkAccelerationStructureKHR sceneTLAS = vkrt->core.sceneTopLevelAccelerationStructure.structure;
+    VkAccelerationStructureKHR selectionTLAS = vkrt->core.selectionTopLevelAccelerationStructure.structure;
+    if (selectionTLAS == VK_NULL_HANDLE) {
+        selectionTLAS = sceneTLAS;
+    }
 
-    VkWriteDescriptorSetAccelerationStructureKHR accelerationStructureInfo = {0};
-    accelerationStructureInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
-    accelerationStructureInfo.accelerationStructureCount = 1;
-    accelerationStructureInfo.pAccelerationStructures = &tlas->structure;
+    VkAccelerationStructureKHR accelerationStructures[] = {
+        sceneTLAS,
+        selectionTLAS,
+    };
+    VkWriteDescriptorSetAccelerationStructureKHR accelerationStructureInfos[2] = {
+        {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR,
+            .accelerationStructureCount = 1,
+            .pAccelerationStructures = &accelerationStructures[0],
+        },
+        {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR,
+            .accelerationStructureCount = 1,
+            .pAccelerationStructures = &accelerationStructures[1],
+        },
+    };
 
-    VkWriteDescriptorSet accelerationStructureWrite = {0};
-    accelerationStructureWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    accelerationStructureWrite.pNext = &accelerationStructureInfo;
-    accelerationStructureWrite.dstSet = descriptorSet;
-    accelerationStructureWrite.dstBinding = 0;
-    accelerationStructureWrite.descriptorCount = 1;
-    accelerationStructureWrite.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+    VkWriteDescriptorSet accelerationStructureWrites[2] = {
+        {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .pNext = &accelerationStructureInfos[0],
+            .dstSet = descriptorSet,
+            .dstBinding = 0,
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
+        },
+        {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .pNext = &accelerationStructureInfos[1],
+            .dstSet = descriptorSet,
+            .dstBinding = 13,
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
+        },
+    };
 
     VkDescriptorImageInfo accumulationReadInfo = {0};
     accumulationReadInfo.imageView = vkrt->core.accumulationImageViews[vkrt->core.accumulationReadIndex];
@@ -219,7 +245,8 @@ static VKRT_Result updateDescriptorSetForFrame(VKRT* vkrt, uint32_t frameIndex) 
     emissiveTriangleWrite.pBufferInfo = &emissiveTriangleInfo;
 
     VkWriteDescriptorSet writeDescriptorSets[] = {
-        accelerationStructureWrite,
+        accelerationStructureWrites[0],
+        accelerationStructureWrites[1],
         accumulationReadWrite,
         accumulationWrite,
         outputImageWrite,
@@ -250,12 +277,13 @@ VKRT_Result createDescriptorSetLayout(VKRT* vkrt) {
         {.binding = 4, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT},
         {.binding = 5, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR},
         {.binding = 6, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR},
-        {.binding = 7, .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT},
+        {.binding = 7, .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT},
         {.binding = 8, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR},
         {.binding = 9, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR},
         {.binding = 10, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR},
         {.binding = 11, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR},
         {.binding = 12, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR},
+        {.binding = 13, .descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR},
     };
 
     VkDescriptorSetLayoutCreateInfo createInfo = {0};
@@ -274,7 +302,7 @@ VKRT_Result createDescriptorPool(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
 
     VkDescriptorPoolSize poolSizes[] = {
-        {VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, VKRT_MAX_FRAMES_IN_FLIGHT},
+        {VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 2u * VKRT_MAX_FRAMES_IN_FLIGHT},
         {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 4u * VKRT_MAX_FRAMES_IN_FLIGHT},
         {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 7u * VKRT_MAX_FRAMES_IN_FLIGHT},
         {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VKRT_MAX_FRAMES_IN_FLIGHT},
@@ -322,7 +350,8 @@ VKRT_Result createDescriptorSet(VKRT* vkrt) {
 
 VkBool32 descriptorResourcesReady(VKRT* vkrt) {
     if (!vkrt) return VK_FALSE;
-    return descriptorResourcesReadyForFrame(vkrt, vkrt->runtime.currentFrame);
+    return descriptorResourcesReadyForFrame(vkrt, vkrt->runtime.currentFrame) &&
+           vkrt->core.sceneTopLevelAccelerationStructure.structure != VK_NULL_HANDLE;
 }
 
 VKRT_Result updateDescriptorSet(VKRT* vkrt) {

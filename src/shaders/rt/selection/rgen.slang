@@ -13,6 +13,14 @@ void main() {
 
     SelectionPayload payload = SelectionPayload.make();
 
-    TraceRay(topLevelAS, RAY_FLAG_FORCE_NON_OPAQUE, 0xffu, 0u, 0u, 0u, makePrimaryRay(pixel, float2(0.0)), payload);
+    TraceRay(
+        selectionTopLevelAS,
+        RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH,
+        0xffu,
+        0u,
+        0u,
+        0u,
+        makePrimaryRay(pixel, float2(0.0)),
+        payload);
     selectionMaskImage[pixel] = payload.didHit != 0u ? 1u : 0u;
 }

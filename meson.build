@@ -20,6 +20,7 @@ cmake = import('cmake')
 
 c_args = []
 cpp_args = []
+app_link_args = []
 define_prefix = cc.get_argument_syntax() == 'msvc' ? '/D' : '-D'
 
 if sys == 'linux' and cc.get_argument_syntax() == 'gcc'
@@ -32,14 +33,40 @@ cpp_args += [define_prefix + 'GLFW_INCLUDE_NONE']
 
 buildtype = get_option('buildtype')
 selection_enabled = get_option('selection')
+profiling_enabled = get_option('profiling')
+validation_enabled = (buildtype == 'debug' or buildtype == 'debugoptimized') and not profiling_enabled
+debug_utils_enabled = validation_enabled or profiling_enabled
 trace_enabled = buildtype == 'debug' or buildtype == 'debugoptimized'
 if trace_enabled
   c_args += [define_prefix + 'VKRT_TRACE_ENABLED=1']
 else
   c_args += [define_prefix + 'VKRT_TRACE_ENABLED=0']
 endif
+c_args += [define_prefix + 'VKRT_PROFILING_ENABLED=' + (profiling_enabled ? '1' : '0')]
+c_args += [define_prefix + 'VKRT_VALIDATION_ENABLED=' + (validation_enabled ? '1' : '0')]
+c_args += [define_prefix + 'VKRT_DEBUG_UTILS_ENABLED=' + (debug_utils_enabled ? '1' : '0')]
 c_args += [define_prefix + 'VKRT_SELECTION_ENABLED=' + (selection_enabled ? '1' : '0')]
+cpp_args += [define_prefix + 'VKRT_PROFILING_ENABLED=' + (profiling_enabled ? '1' : '0')]
+cpp_args += [define_prefix + 'VKRT_VALIDATION_ENABLED=' + (validation_enabled ? '1' : '0')]
+cpp_args += [define_prefix + 'VKRT_DEBUG_UTILS_ENABLED=' + (debug_utils_enabled ? '1' : '0')]
 cpp_args += [define_prefix + 'VKRT_SELECTION_ENABLED=' + (selection_enabled ? '1' : '0')]
+
+if profiling_enabled
+  if cc.get_argument_syntax() == 'msvc'
+    c_args += ['/Zi', '/Oy-']
+    cpp_args += ['/Zi', '/Oy-']
+    app_link_args += ['/DEBUG']
+  else
+    c_args += ['-g', '-fno-omit-frame-pointer']
+    cpp_args += ['-g', '-fno-omit-frame-pointer']
+    app_link_args += ['-g']
+  endif
+endif
+
+slang_compile_args = ['-O3']
+if profiling_enabled
+  slang_compile_args += ['-g']
+endif
 
 slangc = find_program('slangc', required: true)
 
@@ -292,6 +319,7 @@ app_c_args = c_args + [define_prefix + 'VKRT_FILE_DIALOGS_ENABLED=' + (file_dial
 
 executable('vkrt',
   c_args: app_c_args,
+  link_args: app_link_args,
   sources: [app_sources, app_dialog_source, embedded_shader_sources],
   dependencies: app_dependencies,
   include_directories: app_includes,

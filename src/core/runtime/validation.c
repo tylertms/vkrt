@@ -10,10 +10,16 @@ const char* validationLayers[] = {
 
 const uint32_t numValidationLayers = 1;
 
-#ifdef NODEBUG
-const VkBool32 enableValidationLayers = 0;
-#else
+#if VKRT_VALIDATION_ENABLED
 const VkBool32 enableValidationLayers = 1;
+#else
+const VkBool32 enableValidationLayers = 0;
+#endif
+
+#if VKRT_DEBUG_UTILS_ENABLED
+const VkBool32 enableDebugUtils = 1;
+#else
+const VkBool32 enableDebugUtils = 0;
 #endif
 
 int checkValidationLayerSupport(void) {
@@ -58,7 +64,7 @@ const char** getRequiredExtensions(uint32_t* extensionCount, VkBool32 requirePre
 
     uint32_t count = baseCount;
 
-    if (enableValidationLayers) {
+    if (enableDebugUtils) {
         count++;
     }
 
@@ -76,7 +82,7 @@ const char** getRequiredExtensions(uint32_t* extensionCount, VkBool32 requirePre
         extensions[i] = baseExtensions[i];
     }
 
-    if (enableValidationLayers) {
+    if (enableDebugUtils) {
         extensions[baseCount] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
     }
 

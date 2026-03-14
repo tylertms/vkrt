@@ -238,6 +238,7 @@ VKRT_Result VKRT_setSelectedMesh(VKRT* vkrt, uint32_t meshIndex) {
     vkrt->sceneSettings.selectedMeshIndex = nextSelectedMesh;
     vkrt->sceneSettings.selectionEnabled = nextSelectedMesh != VKRT_INVALID_INDEX;
 
+    vkrtMarkSceneResourcesDirty(vkrt);
     syncSelectionSceneData(vkrt);
     return VKRT_SUCCESS;
 }

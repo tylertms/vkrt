@@ -27,5 +27,9 @@ VKRT_Result loadDeviceProcs(VKRT* vkrt) {
     LOAD_DEVICE_PROC(vkrt, vkCmdBuildAccelerationStructuresKHR);
     LOAD_DEVICE_PROC(vkrt, vkGetBufferDeviceAddressKHR);
     LOAD_DEVICE_PROC(vkrt, vkCmdTraceRaysKHR);
+    vkrt->core.procs.vkCmdBeginDebugUtilsLabelEXT =
+        (PFN_vkCmdBeginDebugUtilsLabelEXT)vkGetDeviceProcAddr(vkrt->core.device, "vkCmdBeginDebugUtilsLabelEXT");
+    vkrt->core.procs.vkCmdEndDebugUtilsLabelEXT =
+        (PFN_vkCmdEndDebugUtilsLabelEXT)vkGetDeviceProcAddr(vkrt->core.device, "vkCmdEndDebugUtilsLabelEXT");
     return VKRT_SUCCESS;
 }

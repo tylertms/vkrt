@@ -137,12 +137,10 @@ VKRT_Result createSelectionRayTracingPipeline(VKRT* vkrt) {
     VkShaderModule rayGenModule = VK_NULL_HANDLE;
     VkShaderModule missModule = VK_NULL_HANDLE;
     VkShaderModule closestHitModule = VK_NULL_HANDLE;
-    VkShaderModule anyHitModule = VK_NULL_HANDLE;
 
     if (createShaderModule(vkrt, (const char*)shader_select_rgen_data, shader_select_rgen_size, &rayGenModule) != VKRT_SUCCESS ||
         createShaderModule(vkrt, (const char*)shader_select_rmiss_data, shader_select_rmiss_size, &missModule) != VKRT_SUCCESS ||
-        createShaderModule(vkrt, (const char*)shader_select_rchit_data, shader_select_rchit_size, &closestHitModule) != VKRT_SUCCESS ||
-        createShaderModule(vkrt, (const char*)shader_select_rahit_data, shader_select_rahit_size, &anyHitModule) != VKRT_SUCCESS) {
+        createShaderModule(vkrt, (const char*)shader_select_rchit_data, shader_select_rchit_size, &closestHitModule) != VKRT_SUCCESS) {
         goto cleanup;
     }
 
@@ -150,7 +148,6 @@ VKRT_Result createSelectionRayTracingPipeline(VKRT* vkrt) {
         {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .stage = VK_SHADER_STAGE_RAYGEN_BIT_KHR, .module = rayGenModule, .pName = "main"},
         {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .stage = VK_SHADER_STAGE_MISS_BIT_KHR, .module = missModule, .pName = "main"},
         {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .stage = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, .module = closestHitModule, .pName = "main"},
-        {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .stage = VK_SHADER_STAGE_ANY_HIT_BIT_KHR, .module = anyHitModule, .pName = "main"},
     };
 
     VkRayTracingShaderGroupCreateInfoKHR shaderGroups[3] = {
@@ -159,7 +156,7 @@ VKRT_Result createSelectionRayTracingPipeline(VKRT* vkrt) {
         {.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR, .type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
          .generalShader = 1, .closestHitShader = VK_SHADER_UNUSED_KHR, .anyHitShader = VK_SHADER_UNUSED_KHR, .intersectionShader = VK_SHADER_UNUSED_KHR},
         {.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR, .type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR,
-         .generalShader = VK_SHADER_UNUSED_KHR, .closestHitShader = 2, .anyHitShader = 3, .intersectionShader = VK_SHADER_UNUSED_KHR},
+         .generalShader = VK_SHADER_UNUSED_KHR, .closestHitShader = 2, .anyHitShader = VK_SHADER_UNUSED_KHR, .intersectionShader = VK_SHADER_UNUSED_KHR},
     };
 
     VkRayTracingPipelineCreateInfoKHR pipelineCreateInfo = {0};
@@ -186,7 +183,6 @@ cleanup:
     if (rayGenModule != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, rayGenModule, NULL);
     if (missModule != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, missModule, NULL);
     if (closestHitModule != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, closestHitModule, NULL);
-    if (anyHitModule != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, anyHitModule, NULL);
     return result;
 }
 

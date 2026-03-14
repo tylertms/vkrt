@@ -141,7 +141,7 @@ VKRT_Result VKRT_updateScene(VKRT* vkrt) {
         if (!materialDirty && lightDirty && vkrtSceneRebuildLightBuffers(vkrt) != VKRT_SUCCESS) {
             return VKRT_ERROR_OPERATION_FAILED;
         }
-        if (vkrtSceneRebuildTopLevelScene(vkrt) != VKRT_SUCCESS) {
+        if (vkrtSceneRebuildTopLevelAccelerationStructures(vkrt) != VKRT_SUCCESS) {
             return VKRT_ERROR_OPERATION_FAILED;
         }
     }

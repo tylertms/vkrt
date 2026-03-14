@@ -7,6 +7,9 @@
 [[vk::binding(0, 0)]]
 RaytracingAccelerationStructure topLevelAS;
 
+[[vk::binding(13, 0)]]
+RaytracingAccelerationStructure selectionTopLevelAS;
+
 [[vk::binding(1, 0)]]
 [vk::image_format("rgba32f")]
 RWTexture2D<float4> accumulationReadImage;

@@ -63,10 +63,13 @@ void vkrtCleanupFrameSceneUpdate(VKRT* vkrt, uint32_t frameIndex) {
     vkrtCleanupPendingGeometryUploads(vkrt, update);
     vkrtCleanupPendingBLASBuilds(vkrt, update);
 
-    destroyTransfer(vkrt, &update->instanceBuffer);
-    destroyTransfer(vkrt, &update->tlasScratch);
+    destroyTransfer(vkrt, &update->sceneTLASInstanceBuffer);
+    destroyTransfer(vkrt, &update->sceneTLASScratch);
+    destroyTransfer(vkrt, &update->selectionTLASInstanceBuffer);
+    destroyTransfer(vkrt, &update->selectionTLASScratch);
 
-    update->tlasBuildPending = VK_FALSE;
+    update->sceneTLASBuildPending = VK_FALSE;
+    update->selectionTLASBuildPending = VK_FALSE;
 }
 
 void vkrtDestroyMeshAccelerationStructure(VKRT* vkrt, Mesh* mesh) {
@@ -117,7 +120,7 @@ VKRT_Result vkrtSceneRebuildMaterialBuffer(VKRT* vkrt) {
     return VKRT_SUCCESS;
 }
 
-VKRT_Result vkrtSceneRebuildTopLevelScene(VKRT* vkrt) {
+VKRT_Result vkrtSceneRebuildTopLevelAccelerationStructures(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
-    return createTopLevelAccelerationStructure(vkrt);
+    return createTopLevelAccelerationStructures(vkrt);
 }

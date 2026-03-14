@@ -19,3 +19,10 @@ option(
   value: true,
   description: 'Build selection ray tracing and outline pipelines.',
 )
+
+option(
+  'profiling',
+  type: 'boolean',
+  value: false,
+  description: 'Enable CPU and GPU debug and profiling information.',
+)

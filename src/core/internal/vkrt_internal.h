@@ -13,6 +13,8 @@ typedef struct VKRT_DeviceProcedures {
     PFN_vkCmdBuildAccelerationStructuresKHR vkCmdBuildAccelerationStructuresKHR;
     PFN_vkGetBufferDeviceAddressKHR vkGetBufferDeviceAddressKHR;
     PFN_vkCmdTraceRaysKHR vkCmdTraceRaysKHR;
+    PFN_vkCmdBeginDebugUtilsLabelEXT vkCmdBeginDebugUtilsLabelEXT;
+    PFN_vkCmdEndDebugUtilsLabelEXT vkCmdEndDebugUtilsLabelEXT;
 } VKRT_DeviceProcedures;
 
 typedef enum DeviceExtensionBits {
@@ -87,6 +89,7 @@ typedef struct VKRT_Core {
     Buffer sceneEmissiveMeshData;
     Buffer sceneEmissiveTriangleData;
     AccelerationStructure sceneTopLevelAccelerationStructure;
+    AccelerationStructure selectionTopLevelAccelerationStructure;
     VkBool32 descriptorSetReady[VKRT_MAX_FRAMES_IN_FLIGHT];
     uint32_t sceneRevision;
     uint32_t materialRevision;
@@ -136,9 +139,12 @@ typedef struct FrameSceneUpdate {
     uint32_t geometryUploadCount;
     PendingBLASBuild* blasBuilds;
     uint32_t blasBuildCount;
-    FrameTransfer instanceBuffer;
-    FrameTransfer tlasScratch;
-    VkBool32 tlasBuildPending;
+    FrameTransfer sceneTLASInstanceBuffer;
+    FrameTransfer sceneTLASScratch;
+    FrameTransfer selectionTLASInstanceBuffer;
+    FrameTransfer selectionTLASScratch;
+    VkBool32 sceneTLASBuildPending;
+    VkBool32 selectionTLASBuildPending;
 } FrameSceneUpdate;
 
 typedef struct VKRT_Runtime {

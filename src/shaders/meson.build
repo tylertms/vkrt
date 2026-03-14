@@ -11,7 +11,6 @@ if selection_enabled
     ['select_rgen', 'rt/selection/rgen.slang', 'select_rgen.spv', 'raygeneration', 'rt'],
     ['select_rchit', 'rt/selection/rchit.slang', 'select_rchit.spv', 'closesthit', 'rt'],
     ['select_rmiss', 'rt/selection/rmiss.slang', 'select_rmiss.spv', 'miss', 'rt'],
-    ['select_rahit', 'rt/selection/rahit.slang', 'select_rahit.spv', 'anyhit', 'rt'],
   ]
 endif
 
@@ -42,7 +41,7 @@ foreach shader_program : shader_programs
       '-stage', shader_stage,
       '-matrix-layout-column-major',
       '-fvk-use-gl-layout',
-      '-O3',
+      slang_compile_args,
       shader_capabilities,
       '-depfile', '@DEPFILE@',
       '-I', meson.current_source_dir(),

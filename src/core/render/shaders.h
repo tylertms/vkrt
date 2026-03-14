@@ -23,7 +23,4 @@ extern const size_t shader_select_rchit_size;
 
 extern const unsigned char shader_select_rmiss_data[];
 extern const size_t shader_select_rmiss_size;
-
-extern const unsigned char shader_select_rahit_data[];
-extern const size_t shader_select_rahit_size;
 #endif
