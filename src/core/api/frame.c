@@ -165,7 +165,10 @@ VKRT_Result VKRT_trace(VKRT* vkrt) {
 
     VkSemaphore waitSemaphores[] = {vkrt->runtime.imageAvailableSemaphores[vkrt->runtime.currentFrame]};
     VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_TRANSFER_BIT};
-    VkSemaphore signalSemaphores[] = {vkrt->runtime.renderFinishedSemaphores[vkrt->runtime.frameImageIndex]};
+    VkSemaphore signalSemaphores[] = {VK_NULL_HANDLE};
+    if (!vkrt->runtime.frameOffscreen) {
+        signalSemaphores[0] = vkrt->runtime.renderFinishedSemaphores[vkrt->runtime.frameImageIndex];
+    }
 
     VkSubmitInfo submitInfo = {0};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;

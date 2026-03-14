@@ -207,6 +207,7 @@ void VKRT_defaultCreateInfo(VKRT_CreateInfo* createInfo) {
         .title = "VKRT",
         .startMaximized = 1,
         .startFullscreen = 0,
+        .headless = 0,
         .preferredDeviceIndex = -1,
         .preferredDeviceName = NULL,
     };
@@ -241,14 +242,17 @@ VKRT_Result VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInf
         LOG_ERROR("Failed to initialize GLFW");
         return VKRT_ERROR_OPERATION_FAILED;
     }
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
+    if (!createInfo->headless) {
+        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+        glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
+    }
     logStepTime("GLFW setup complete", stepStartTime);
 
     vkrt->runtime.swapChainFormatLogInitialized = VK_FALSE;
     vkrt->runtime.lastLoggedSwapChainFormat = VK_FORMAT_UNDEFINED;
     vkrt->runtime.lastLoggedSwapChainColorSpace = VK_COLOR_SPACE_MAX_ENUM_KHR;
     vkrt->runtime.appInitialized = 0;
+    vkrt->runtime.headless = createInfo->headless ? VK_TRUE : VK_FALSE;
     for (uint32_t i = 0; i < VKRT_MAX_FRAMES_IN_FLIGHT; i++) {
         vkrt->core.descriptorSetReady[i] = VK_FALSE;
     }
@@ -275,32 +279,44 @@ VKRT_Result VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInf
     if (height == 0) height = createInfo->startMaximized ? displayHeight : (displayHeight > 1u ? displayHeight * 0.8 : 1u);
     if (width == 0) width = VKRT_DEFAULT_WIDTH;
     if (height == 0) height = VKRT_DEFAULT_HEIGHT;
-
-    stepStartTime = getMicroseconds();
-    GLFWmonitor* fullscreenMonitor = createInfo->startFullscreen ? glfwGetPrimaryMonitor() : NULL;
-    glfwWindowHint(GLFW_MAXIMIZED, (!createInfo->startFullscreen && createInfo->startMaximized) ? GLFW_TRUE : GLFW_FALSE);
-    vkrt->runtime.window = glfwCreateWindow((int)width, (int)height, title, fullscreenMonitor, 0);
-    if (!vkrt->runtime.window) {
-        LOG_ERROR("Failed to create GLFW window");
-        goto init_failed;
+    if (vkrt->runtime.headless) {
+        vkrt->runtime.swapChainExtent = (VkExtent2D){width, height};
+        vkrt->runtime.renderExtent = (VkExtent2D){width, height};
+        vkrt->runtime.displayViewportRect[0] = 0u;
+        vkrt->runtime.displayViewportRect[1] = 0u;
+        vkrt->runtime.displayViewportRect[2] = width;
+        vkrt->runtime.displayViewportRect[3] = height;
     }
 
-    glfwSetWindowUserPointer(vkrt->runtime.window, vkrt);
-    glfwSetFramebufferSizeCallback(vkrt->runtime.window, VKRT_framebufferResizedCallback);
+    if (!vkrt->runtime.headless) {
+        stepStartTime = getMicroseconds();
+        GLFWmonitor* fullscreenMonitor = createInfo->startFullscreen ? glfwGetPrimaryMonitor() : NULL;
+        glfwWindowHint(GLFW_MAXIMIZED, (!createInfo->startFullscreen && createInfo->startMaximized) ? GLFW_TRUE : GLFW_FALSE);
+        vkrt->runtime.window = glfwCreateWindow((int)width, (int)height, title, fullscreenMonitor, 0);
+        if (!vkrt->runtime.window) {
+            LOG_ERROR("Failed to create GLFW window");
+            goto init_failed;
+        }
 
-    logStepTime("Window setup complete", stepStartTime);
+        glfwSetWindowUserPointer(vkrt->runtime.window, vkrt);
+        glfwSetFramebufferSizeCallback(vkrt->runtime.window, VKRT_framebufferResizedCallback);
+
+        logStepTime("Window setup complete", stepStartTime);
+    }
 
     stepStartTime = getMicroseconds();
-    if (createInstance(vkrt) != VKRT_SUCCESS) goto init_failed;
+    if (createInstance(vkrt, !vkrt->runtime.headless) != VKRT_SUCCESS) goto init_failed;
     logStepTime("Vulkan instance created", stepStartTime);
 
     stepStartTime = getMicroseconds();
     if (setupDebugMessenger(vkrt) != VKRT_SUCCESS) goto init_failed;
     logStepTime("Debug messenger setup complete", stepStartTime);
 
-    stepStartTime = getMicroseconds();
-    if (createSurface(vkrt) != VKRT_SUCCESS) goto init_failed;
-    logStepTime("Surface created", stepStartTime);
+    if (!vkrt->runtime.headless) {
+        stepStartTime = getMicroseconds();
+        if (createSurface(vkrt) != VKRT_SUCCESS) goto init_failed;
+        logStepTime("Surface created", stepStartTime);
+    }
 
     stepStartTime = getMicroseconds();
     if (pickPhysicalDevice(vkrt, createInfo) != VKRT_SUCCESS) goto init_failed;
@@ -318,14 +334,16 @@ VKRT_Result VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInf
     if (createQueryPool(vkrt) != VKRT_SUCCESS) goto init_failed;
     logStepTime("Query pool created", stepStartTime);
 
-    glfwPollEvents();
+    if (!vkrt->runtime.headless) {
+        glfwPollEvents();
 
-    stepStartTime = getMicroseconds();
-    if (createSwapChain(vkrt) != VKRT_SUCCESS) goto init_failed;
-    if (createImageViews(vkrt) != VKRT_SUCCESS) goto init_failed;
-    if (createRenderPass(vkrt) != VKRT_SUCCESS) goto init_failed;
-    if (createFramebuffers(vkrt) != VKRT_SUCCESS) goto init_failed;
-    logStepTime("Swapchain and framebuffers ready", stepStartTime);
+        stepStartTime = getMicroseconds();
+        if (createSwapChain(vkrt) != VKRT_SUCCESS) goto init_failed;
+        if (createImageViews(vkrt) != VKRT_SUCCESS) goto init_failed;
+        if (createRenderPass(vkrt) != VKRT_SUCCESS) goto init_failed;
+        if (createFramebuffers(vkrt) != VKRT_SUCCESS) goto init_failed;
+        logStepTime("Swapchain and framebuffers ready", stepStartTime);
+    }
 
     stepStartTime = getMicroseconds();
     if (createCommandPool(vkrt) != VKRT_SUCCESS) goto init_failed;
@@ -482,11 +500,13 @@ void VKRT_deinit(VKRT* vkrt) {
 }
 
 int VKRT_shouldDeinit(VKRT* vkrt) {
+    if (vkrt && vkrt->runtime.headless) return 0;
     return (vkrt && vkrt->runtime.window) ? glfwWindowShouldClose(vkrt->runtime.window) : 1;
 }
 
 void VKRT_poll(VKRT* vkrt) {
     if (!vkrt) return;
+    if (vkrt->runtime.headless) return;
     glfwPollEvents();
 }
 

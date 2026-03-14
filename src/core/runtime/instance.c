@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-VKRT_Result createInstance(VKRT* vkrt) {
+VKRT_Result createInstance(VKRT* vkrt, VkBool32 requirePresentation) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
 
     if (enableValidationLayers && !checkValidationLayerSupport()) {
@@ -26,14 +26,14 @@ VKRT_Result createInstance(VKRT* vkrt) {
     instanceCreateInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     instanceCreateInfo.pApplicationInfo = &applicationInfo;
 
-    uint32_t extensionCount;
-    const char** extensions = getRequiredExtensions(&extensionCount);
-    if (!extensions) {
+    uint32_t extensionCount = 0;
+    const char** extensions = getRequiredExtensions(&extensionCount, requirePresentation);
+    if (extensionCount > 0u && !extensions) {
         return VKRT_ERROR_OPERATION_FAILED;
     }
 
     instanceCreateInfo.enabledExtensionCount = extensionCount;
-    instanceCreateInfo.ppEnabledExtensionNames = extensions;
+    instanceCreateInfo.ppEnabledExtensionNames = extensionCount > 0u ? extensions : NULL;
 
     VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo = {0};
     if (enableValidationLayers) {

@@ -4,6 +4,7 @@ app_sources = files(
   'session/session.c',
   'mesh/loader.c',
   'mesh/controller.c',
+  'render/benchmark.c',
   'render/sequencer.c',
   'editor/theme.c',
   'editor/editor.c',

@@ -2,4 +2,4 @@
 
 #include "vkrt_internal.h"
 
-VKRT_Result createInstance(VKRT* vkrt);
+VKRT_Result createInstance(VKRT* vkrt, VkBool32 requirePresentation);

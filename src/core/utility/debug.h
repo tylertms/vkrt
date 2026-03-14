@@ -20,7 +20,10 @@
 #define LOG_TRACE(...) do { if (0) { VKRT_LOG_LINE(stdout, "[TRACE]", __VA_ARGS__); } } while (0)
 #endif
 
-#define LOG_INFO(...) VKRT_LOG_LINE(stdout, "[INFO]", __VA_ARGS__)
+int vkrtInfoLoggingEnabled(void);
+void vkrtSetInfoLoggingEnabled(int enabled);
+
+#define LOG_INFO(...) do { if (vkrtInfoLoggingEnabled()) { VKRT_LOG_LINE(stdout, "[INFO]", __VA_ARGS__); } } while (0)
 #define LOG_ERROR(...) VKRT_LOG_LINE(stderr, "[ERROR]", __VA_ARGS__)
 
 uint64_t getMicroseconds(void);

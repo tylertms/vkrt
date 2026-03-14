@@ -174,6 +174,12 @@ int CLIParseArguments(int argc, char* argv[], CLILaunchOptions* outOptions, char
         }
         if (stringsEqual(arg, "--benchmark")) {
             outOptions->benchmark.enabled = 1u;
+            outOptions->benchmark.headless = 0u;
+            continue;
+        }
+        if (stringsEqual(arg, "--benchmark-headless")) {
+            outOptions->benchmark.enabled = 1u;
+            outOptions->benchmark.headless = 1u;
             continue;
         }
         if (optionMatches(arg, "--benchmark-width")) {
@@ -274,7 +280,8 @@ void CLIPrintHelp(void) {
     printf("  --device-index <index>    Force a Vulkan device by enumerated index\n");
     printf("  --device-name <text>      Force a Vulkan device if its name contains this text\n");
     printf("  --empty-scene             Skip loading the default starter scene\n");
-    printf("  --benchmark               Render the default scene at 3840x2160 / 16384 samples, print timing, then exit\n");
+    printf("  --benchmark               Run the default benchmark with presentation enabled\n");
+    printf("  --benchmark-headless      Run the default benchmark offscreen with no window or presentation\n");
     printf("  --benchmark-width <px>    Override benchmark render width (default: 3840)\n");
     printf("  --benchmark-height <px>   Override benchmark render height (default: 2160)\n");
     printf("  --benchmark-samples <n>   Override benchmark target samples (default: 16384)\n");

@@ -44,16 +44,27 @@ int checkValidationLayerSupport(void) {
     return VK_TRUE;
 }
 
-const char** getRequiredExtensions(uint32_t* extensionCount) {
-    const char** glfwExtensions = glfwGetRequiredInstanceExtensions(extensionCount);
-    if (!glfwExtensions || !extensionCount) {
-        return NULL;
+const char** getRequiredExtensions(uint32_t* extensionCount, VkBool32 requirePresentation) {
+    if (!extensionCount) return NULL;
+
+    const char** baseExtensions = NULL;
+    uint32_t baseCount = 0;
+    if (requirePresentation) {
+        baseExtensions = glfwGetRequiredInstanceExtensions(&baseCount);
+        if (!baseExtensions) {
+            return NULL;
+        }
     }
 
-    uint32_t count = *extensionCount;
+    uint32_t count = baseCount;
 
     if (enableValidationLayers) {
         count++;
+    }
+
+    if (count == 0) {
+        *extensionCount = 0;
+        return NULL;
     }
 
     const char** extensions = (const char**)malloc(sizeof(const char*) * count);
@@ -61,12 +72,12 @@ const char** getRequiredExtensions(uint32_t* extensionCount) {
         return NULL;
     }
 
-    for (uint32_t i = 0; i < *extensionCount; ++i) {
-        extensions[i] = glfwExtensions[i];
+    for (uint32_t i = 0; i < baseCount; ++i) {
+        extensions[i] = baseExtensions[i];
     }
 
     if (enableValidationLayers) {
-        extensions[*extensionCount] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
+        extensions[baseCount] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
     }
 
     *extensionCount = count;

@@ -13,6 +13,7 @@ typedef enum CLIMode {
 
 typedef struct CLIBenchmarkOptions {
     uint8_t enabled;
+    uint8_t headless;
     uint32_t width;
     uint32_t height;
     uint32_t targetSamples;

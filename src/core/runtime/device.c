@@ -54,6 +54,14 @@ static DeviceExtensionSupport initDeviceExtensionSupport(void) {
     return support;
 }
 
+static VkBool32 vkrtRequiresPresentation(const VKRT* vkrt) {
+    return vkrt && !vkrt->runtime.headless ? VK_TRUE : VK_FALSE;
+}
+
+static uint32_t queryRequiredDeviceExtensionStartIndex(const VKRT* vkrt) {
+    return vkrtRequiresPresentation(vkrt) ? 0u : 1u;
+}
+
 static void logExtensionMaskStatus(
     const char* groupName,
     const char* const* extensionNames,
@@ -114,13 +122,13 @@ static int32_t scoreDeviceSuitability(VKRT* vkrt, DeviceExtensionSupport* outExt
     QueueFamily indices = findQueueFamilies(vkrt);
     VkBool32 queueFamilyComplete = isQueueFamilyComplete(indices);
 
-    VkBool32 requiredExtensionsSupported = extensionsSupported(vkrt->core.physicalDevice, &extensionSupport);
+    VkBool32 requiredExtensionsSupported = extensionsSupported(vkrt, vkrt->core.physicalDevice, &extensionSupport);
     if (outExtensionSupport) {
         *outExtensionSupport = extensionSupport;
     }
 
-    VkBool32 swapChainAdequate = VK_FALSE;
-    if (requiredExtensionsSupported) {
+    VkBool32 swapChainAdequate = vkrtRequiresPresentation(vkrt) ? VK_FALSE : VK_TRUE;
+    if (requiredExtensionsSupported && vkrtRequiresPresentation(vkrt)) {
         SwapChainSupportDetails supportDetails = {0};
         if (querySwapChainSupport(vkrt, &supportDetails) == VKRT_SUCCESS) {
             swapChainAdequate = supportDetails.formatCount && supportDetails.presentModeCount;
@@ -317,7 +325,7 @@ VKRT_Result pickPhysicalDevice(VKRT* vkrt, const VKRT_CreateInfo* createInfo) {
     }
 
     vkrt->core.physicalDevice = devices[bestDevice];
-    extensionsSupported(vkrt->core.physicalDevice, &vkrt->core.deviceExtensionSupport);
+    extensionsSupported(vkrt, vkrt->core.physicalDevice, &vkrt->core.deviceExtensionSupport);
 
     VkPhysicalDeviceProperties deviceProperties = {0};
     vkGetPhysicalDeviceProperties(vkrt->core.physicalDevice, &deviceProperties);
@@ -340,7 +348,7 @@ VKRT_Result createLogicalDevice(VKRT* vkrt) {
     }
     vkrt->core.indices = indices;
 
-    if (!extensionsSupported(vkrt->core.physicalDevice, &extensionSupport)) {
+    if (!extensionsSupported(vkrt, vkrt->core.physicalDevice, &extensionSupport)) {
         LOG_ERROR("Selected device is missing required device extensions");
         logDeviceExtensionSupport(vkrt->core.deviceName, &extensionSupport);
         return VKRT_ERROR_OPERATION_FAILED;
@@ -419,7 +427,8 @@ VKRT_Result createLogicalDevice(VKRT* vkrt) {
 
     const char* enabledExtensions[NUM_REQ_EXTENSIONS + NUM_OPT_EXTENSIONS] = {0};
     uint32_t enabledExtensionCount = 0;
-    for (uint32_t i = 0; i < NUM_REQ_EXTENSIONS; i++) {
+    uint32_t requiredExtensionStart = queryRequiredDeviceExtensionStartIndex(vkrt);
+    for (uint32_t i = requiredExtensionStart; i < NUM_REQ_EXTENSIONS; i++) {
         enabledExtensions[enabledExtensionCount++] = requiredDeviceExtensions[i];
         extensionSupport.enabledMask |= requiredDeviceExtensionBits[i];
     }
@@ -513,13 +522,18 @@ QueueFamily findQueueFamilies(VKRT* vkrt) {
     for (uint32_t i = 0; i < queueFamilyCount; i++) {
         if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
             indices.graphics = i;
+            if (vkrt && (vkrt->runtime.headless || vkrt->runtime.surface == VK_NULL_HANDLE)) {
+                indices.present = i;
+            }
         }
 
-        VkBool32 presentSupport = VK_FALSE;
-        vkGetPhysicalDeviceSurfaceSupportKHR(vkrt->core.physicalDevice, i, vkrt->runtime.surface, &presentSupport);
+        if (vkrt && !(vkrt->runtime.headless || vkrt->runtime.surface == VK_NULL_HANDLE)) {
+            VkBool32 presentSupport = VK_FALSE;
+            vkGetPhysicalDeviceSurfaceSupportKHR(vkrt->core.physicalDevice, i, vkrt->runtime.surface, &presentSupport);
 
-        if (presentSupport) {
-            indices.present = i;
+            if (presentSupport) {
+                indices.present = i;
+            }
         }
 
         if (isQueueFamilyComplete(indices)) {
@@ -540,9 +554,10 @@ VkBool32 isQueueFamilyComplete(QueueFamily indices) {
     return indices.graphics >= 0 && indices.present >= 0;
 }
 
-VkBool32 extensionsSupported(VkPhysicalDevice device, DeviceExtensionSupport* outSupport) {
+VkBool32 extensionsSupported(VKRT* vkrt, VkPhysicalDevice device, DeviceExtensionSupport* outSupport) {
     uint32_t extensionCount;
     DeviceExtensionSupport support = initDeviceExtensionSupport();
+    uint32_t requiredExtensionStart = queryRequiredDeviceExtensionStartIndex(vkrt);
     vkEnumerateDeviceExtensionProperties(device, NULL, &extensionCount, NULL);
 
     VkExtensionProperties* availableExtensions = (VkExtensionProperties*)malloc(extensionCount * sizeof(VkExtensionProperties));
@@ -552,7 +567,13 @@ VkBool32 extensionsSupported(VkPhysicalDevice device, DeviceExtensionSupport* ou
     }
     vkEnumerateDeviceExtensionProperties(device, NULL, &extensionCount, availableExtensions);
 
-    for (uint32_t i = 0; i < NUM_REQ_EXTENSIONS; i++) {
+    support.requiredMask = 0;
+    for (uint32_t i = requiredExtensionStart; i < NUM_REQ_EXTENSIONS; i++) {
+        support.requiredMask |= requiredDeviceExtensionBits[i];
+    }
+    support.missingRequiredMask = support.requiredMask;
+
+    for (uint32_t i = requiredExtensionStart; i < NUM_REQ_EXTENSIONS; i++) {
         for (uint32_t j = 0; j < extensionCount; j++) {
             if (!strcmp(requiredDeviceExtensions[i], availableExtensions[j].extensionName)) {
                 support.availableMask |= requiredDeviceExtensionBits[i];

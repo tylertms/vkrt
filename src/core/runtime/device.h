@@ -16,5 +16,5 @@ VKRT_Result createQueryPool(VKRT* vkrt);
 int32_t isDeviceSuitable(VKRT* vkrt);
 VkBool32 isQueueFamilyComplete(QueueFamily indices);
 QueueFamily findQueueFamilies(VKRT* vkrt);
-VkBool32 extensionsSupported(VkPhysicalDevice device, DeviceExtensionSupport* outSupport);
+VkBool32 extensionsSupported(VKRT* vkrt, VkPhysicalDevice device, DeviceExtensionSupport* outSupport);
 VKRT_Result findMemoryType(VKRT* vkrt, uint32_t typeFilter, VkMemoryPropertyFlags properties, uint32_t* outMemoryTypeIndex);

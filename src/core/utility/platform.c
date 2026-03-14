@@ -6,6 +6,16 @@
 #if defined(_WIN32)
 #include <process.h>
 
+static int g_vkrtInfoLoggingEnabled = 1;
+
+int vkrtInfoLoggingEnabled(void) {
+    return g_vkrtInfoLoggingEnabled;
+}
+
+void vkrtSetInfoLoggingEnabled(int enabled) {
+    g_vkrtInfoLoggingEnabled = enabled ? 1 : 0;
+}
+
 uint64_t getMicroseconds(void) {
     static LARGE_INTEGER frequency = {0};
     LARGE_INTEGER counter;
@@ -126,6 +136,16 @@ int vkrtThreadJoin(VKRT_Thread thread, int* result) {
 #else
 
 #include <time.h>
+
+static int g_vkrtInfoLoggingEnabled = 1;
+
+int vkrtInfoLoggingEnabled(void) {
+    return g_vkrtInfoLoggingEnabled;
+}
+
+void vkrtSetInfoLoggingEnabled(int enabled) {
+    g_vkrtInfoLoggingEnabled = enabled ? 1 : 0;
+}
 
 typedef struct ThreadStartContext {
     VKRT_ThreadFunc function;
