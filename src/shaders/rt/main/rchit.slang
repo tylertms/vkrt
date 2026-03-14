@@ -9,7 +9,7 @@ void main(inout Payload payload, in BuiltInTriangleIntersectionAttributes attr) 
     MeshInfo mesh = meshInfo[instanceIndex];
     Material material = materialBuffer[mesh.materialIndex];
     float3 normal = computeSurfaceNormal(instanceIndex, PrimitiveIndex(), attr.barycentrics);
-    float3 hitPoint = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();
+    float3 hitPoint = computeHitPoint(WorldRayOrigin(), WorldRayDirection(), RayTCurrent());
 
     payload.setSurfaceHit(instanceIndex, material.emissionColor * material.emissionLuminance, hitPoint);
 

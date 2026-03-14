@@ -3,8 +3,13 @@
 
 #include "../core/resources.slang"
 
-float3 computeSurfaceNormal(uint instanceIndex, uint primitiveIndex, float2 barycentrics) {
-    MeshInfo mesh = meshInfo[instanceIndex];
+float3 computeSurfaceNormal(
+    MeshInfo mesh,
+    uint primitiveIndex,
+    float2 barycentrics,
+    float3x4 worldToObject,
+    float3 worldRayDirection)
+{
     uint triangleBase = mesh.indexBase + primitiveIndex * 3u;
     uint vertexBase = mesh.vertexBase;
 
@@ -21,9 +26,23 @@ float3 computeSurfaceNormal(uint instanceIndex, uint primitiveIndex, float2 bary
     float3 normal2 = vertexBuffer[index2].normal.xyz;
     float3 objectNormal = normalize(normal0 * w + normal1 * u + normal2 * v);
 
-    float3x3 worldToObject = (float3x3)WorldToObject3x4();
-    float3 worldNormal = normalize(mul(transpose(worldToObject), objectNormal));
-    return faceforward(worldNormal, WorldRayDirection(), worldNormal);
+    float3x3 worldToObjectBasis = (float3x3)worldToObject;
+    float3 worldNormal = normalize(mul(transpose(worldToObjectBasis), objectNormal));
+    return faceforward(worldNormal, worldRayDirection, worldNormal);
+}
+
+float3 computeSurfaceNormal(uint instanceIndex, uint primitiveIndex, float2 barycentrics) {
+    MeshInfo mesh = meshInfo[instanceIndex];
+    return computeSurfaceNormal(
+        mesh,
+        primitiveIndex,
+        barycentrics,
+        WorldToObject3x4(),
+        WorldRayDirection());
+}
+
+float3 computeHitPoint(float3 worldRayOrigin, float3 worldRayDirection, float rayTCurrent) {
+    return worldRayOrigin + worldRayDirection * rayTCurrent;
 }
 
 #endif

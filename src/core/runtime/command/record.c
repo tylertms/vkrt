@@ -269,31 +269,6 @@ VKRT_Result recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex, VkBool32 presen
                                                renderExtent.width, renderExtent.height, 1);
             endDebugLabel(vkrt, commandBuffer);
 
-            VkImageMemoryBarrier accumulationBarrier = {0};
-            accumulationBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-            accumulationBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-            accumulationBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-            accumulationBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            accumulationBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            accumulationBarrier.image = accumulationWriteImage;
-            accumulationBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            accumulationBarrier.subresourceRange.baseMipLevel = 0;
-            accumulationBarrier.subresourceRange.levelCount = 1;
-            accumulationBarrier.subresourceRange.baseArrayLayer = 0;
-            accumulationBarrier.subresourceRange.layerCount = 1;
-            accumulationBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-            accumulationBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-            vkCmdPipelineBarrier(commandBuffer,
-                VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
-                VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
-                0,
-                0,
-                NULL,
-                0,
-                NULL,
-                1,
-                &accumulationBarrier);
-
             if (shouldSelectionTrace) {
                 beginDebugLabel(vkrt, commandBuffer, "Selection TraceRays", 0.20f, 0.80f, 0.33f);
                 vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, vkrt->core.selectionRayTracingPipeline);

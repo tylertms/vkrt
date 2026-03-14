@@ -3,6 +3,15 @@
 
 #include "../core/resources.slang"
 
+RayDesc makeRay(float3 origin, float3 direction, float tMin, float tMax) {
+    RayDesc ray;
+    ray.Origin = origin;
+    ray.Direction = direction;
+    ray.TMin = tMin;
+    ray.TMax = tMax;
+    return ray;
+}
+
 RayDesc makePrimaryRay(int2 pixel, float2 jitter) {
     int2 viewportOrigin = int2(scene.viewportRect.xy);
     float2 viewportSize = float2(scene.viewportRect.zw);
@@ -12,12 +21,11 @@ RayDesc makePrimaryRay(int2 pixel, float2 jitter) {
 
     float4 viewDir = mul(scene.projInverse, float4(ndc.x, ndc.y, 1.0, 1.0));
 
-    RayDesc ray;
-    ray.Origin = mul(scene.viewInverse, float4(0.0, 0.0, 0.0, 1.0)).xyz;
-    ray.Direction = normalize(mul(scene.viewInverse, float4(viewDir.xyz, 0.0)).xyz);
-    ray.TMin = 0.001;
-    ray.TMax = 10000.0;
-    return ray;
+    return makeRay(
+        mul(scene.viewInverse, float4(0.0, 0.0, 0.0, 1.0)).xyz,
+        normalize(mul(scene.viewInverse, float4(viewDir.xyz, 0.0)).xyz),
+        0.001,
+        10000.0);
 }
 
 float3 safeNormalize(float3 value) {
