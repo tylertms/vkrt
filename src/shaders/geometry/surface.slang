@@ -3,6 +3,11 @@
 
 #include "../core/resources.slang"
 
+// References:
+// Triangle normal interpolation: https://www.pbr-book.org/4ed/Shapes/Triangle_Meshes
+// Normal transform basis: https://www.pbr-book.org/4ed/Geometry_and_Transformations/Applying_Transformations
+// Facing-normal convention: https://learn.microsoft.com/en-us/windows/win32/direct3dhlsl/dx-graphics-hlsl-faceforward
+
 float3 computeSurfaceNormal(
     MeshInfo mesh,
     uint primitiveIndex,

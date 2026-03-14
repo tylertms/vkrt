@@ -5,6 +5,14 @@
 #include "../utility/random.slang"
 #include "../utility/ray.slang"
 
+// References:
+// Basis construction: https://graphics.pixar.com/library/OrthonormalB/paper.pdf
+// Diffuse color workflow: https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html
+// Luminance weights: https://www.itu.int/rec/R-REC-BT.709
+// Disney tint/F0 controls: https://media.disneyanimation.com/uploads/production/publication_asset/48/asset/s2012_pbs_disney_brdf_notes_v3.pdf
+// Schlick Fresnel: https://diglib.eg.org/items/581037f7-1e5c-4859-a107-6dfeeb8f3ccb
+// Dielectric/conductor Fresnel: https://www.pbr-book.org/4ed/Reflection_Models/Specular_Reflection_and_Transmission
+
 static const float VKRT_PI = 3.14159265358979323846;
 static const float VKRT_INV_PI = 0.31830988618379067154;
 
@@ -30,20 +38,23 @@ float3 worldToLocal(float3 worldDir, float3 normal) {
     );
 }
 
-// In glTF metallic-roughness, baseColor is diffuse reflectance for non-metals and fades out for metals.
-// https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html
 float3 bsdfDiffuseColor(Material material) {
     return material.baseColor * (1.0 - material.metallic);
 }
 
-// Rec. 709 luminance coefficients, used here as a lobe-selection heuristic.
-// https://www.itu.int/rec/R-REC-BT.709
 float bsdfLuminance(float3 value) {
     return dot(value, float3(0.2126, 0.7152, 0.0722));
 }
 
-// Normal-incidence Fresnel reflectance used here as a cheap lobe-weighting heuristic.
-// https://www.pbr-book.org/4ed/Reflection_Models/Specular_Reflection_and_Transmission
+float3 bsdfTintColor(float3 baseColor) {
+    float luminance = bsdfLuminance(baseColor);
+    if (luminance <= 0.0) {
+        return float3(1.0);
+    }
+
+    return baseColor / luminance;
+}
+
 float dielectricF0(float eta) {
     float numerator = eta - 1.0;
     float denominator = eta + 1.0;
@@ -63,12 +74,19 @@ bool materialHasConductor(Material material) {
     return any(material.k > 0.0);
 }
 
-float3 bsdfSpecularF0(Material material) {
+float3 bsdfDielectricSpecularF0(Material material) {
     float dielectric = dielectricF0(material.ior);
+    float specularScale = material.specular / 0.5;
+    float3 tint = lerp(float3(1.0), bsdfTintColor(material.baseColor), saturate(material.specularTint));
+    return saturate(dielectric * specularScale * tint);
+}
+
+float3 bsdfSpecularF0(Material material) {
+    float3 dielectric = bsdfDielectricSpecularF0(material);
     float3 conductor = materialHasConductor(material)
         ? conductorF0(max(material.eta, float3(1e-3)), max(material.k, float3(0.0)))
         : material.baseColor;
-    return lerp(dielectric.xxx, conductor, material.metallic);
+    return lerp(dielectric, conductor, material.metallic);
 }
 
 float3 fresnelSchlick(float cosTheta, float3 f0) {
@@ -78,9 +96,7 @@ float3 fresnelSchlick(float cosTheta, float3 f0) {
     return f0 + (1.0 - f0) * m5;
 }
 
-// Dielectric Fresnel with the PBRT-style cosine sign handling.
 // eta is the relative IOR eta_t / eta_i for the current interface.
-// https://www.pbr-book.org/4ed/Reflection_Models/Specular_Reflection_and_Transmission
 float fresnelDielectric(float cosTheta, float eta) {
     float cosThetaI = clamp(cosTheta, -1.0, 1.0);
     if (cosThetaI < 0.0) {
@@ -100,8 +116,7 @@ float fresnelDielectric(float cosTheta, float eta) {
     return 0.5 * (rParallel * rParallel + rPerpendicular * rPerpendicular);
 }
 
-// Conductor Fresnel for complex eta + i*k, assuming eta and k are already relative to the incident medium.
-// https://www.pbr-book.org/4ed/Reflection_Models/Specular_Reflection_and_Transmission
+// eta and k are already relative to the incident medium.
 float3 fresnelConductor(float cosTheta, float3 eta, float3 k) {
     float cosThetaI = saturate(cosTheta);
     float cos2ThetaI = cosThetaI * cosThetaI;

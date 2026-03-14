@@ -13,10 +13,6 @@ void main(inout Payload payload, in BuiltInTriangleIntersectionAttributes attr) 
 
     payload.setSurfaceHit(instanceIndex, material.emissionColor * material.emissionLuminance, hitPoint);
 
-    if (all(material.baseColor <= 0.0)) {
-        return;
-    }
-
     BSDFInput input = BSDFInput.make(normal, -WorldRayDirection(), material);
     BSDFSample sample = sampleBSDF(input, payload.rngState);
 

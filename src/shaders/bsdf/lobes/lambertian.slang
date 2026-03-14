@@ -3,8 +3,12 @@
 
 #include "../common.slang"
 
-// https://pema.dev/obsidian/math/light-transport/cosine-weighted-sampling.html
-// https://pbr-book.org/4ed/Reflection_Models/Diffuse_Reflection
+// Lambertian diffuse lobe:
+// Perfectly matte, cosine-weighted distribution.
+//
+// References:
+// Lambert diffuse BRDF: https://www.pbr-book.org/4ed/Reflection_Models/Diffuse_Reflection
+// Cosine hemisphere sampling: https://www.pbr-book.org/4ed/Sampling_Algorithms/Sampling_Multidimensional_Functions
 
 float pdfLambertianLocal(float3 wi) {
     return wi.z > 0.0 ? wi.z * VKRT_INV_PI : 0.0;

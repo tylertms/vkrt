@@ -5,6 +5,11 @@
 #include "lobes/lambertian.slang"
 #include "lobes/ggx.slang"
 
+// References:
+// BSDF representation: https://www.pbr-book.org/4ed/Reflection_Models/BSDF_Representation
+// Mixture sampling heuristic: https://www.pbr-book.org/4ed/Monte_Carlo_Integration/Improving_Efficiency
+// Path tracer throughput/pdf: https://www.pbr-book.org/4ed/Light_Transport_I_Surface_Reflection/A_Better_Path_Tracer
+
 struct BSDFState {
     float3 wo;
     float2 ggxAlpha;

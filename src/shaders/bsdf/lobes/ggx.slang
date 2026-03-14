@@ -3,11 +3,22 @@
 
 #include "../common.slang"
 
+// GGX specular reflection lobe:
+// Microfacet glossy lobe for metals and dielectrics.
+// Roughness widens the highlight, anisotropy stretches it, and Fresnel controls edge brightening.
+//
+// References:
+// Anisotropic roughness: https://media.disneyanimation.com/uploads/production/publication_asset/48/asset/s2012_pbs_disney_brdf_notes_v3.pdf
+// Bounded VNDF k: https://gpuopen.com/download/Bounded_VNDF_Sampling_for_Smith-GGX_Reflections.pdf
+// Bounded VNDF sampling: https://gpuopen.com/download/Bounded_VNDF_Sampling_for_Smith-GGX_Reflections_Supplementary_Document.pdf
+// GGX masking/shadowing: https://jcgt.org/published/0007/04/01/paper.pdf
+// Microfacet reflection basics: https://www.pbr-book.org/4ed/Reflection_Models/Roughness_Using_Microfacet_Theory
+// Disney metallic Fresnel: https://media.disneyanimation.com/uploads/production/publication_asset/48/asset/s2012_pbs_disney_brdf_notes_v3.pdf
+// Fresnel building blocks: https://www.pbr-book.org/4ed/Reflection_Models/Specular_Reflection_and_Transmission
+
 static const float GGX_MIN_ALPHA = 1e-3;
 static const float GGX_EPSILON = 1e-6;
 
-// Disney anisotropic roughness remapping.
-// https://media.disneyanimation.com/uploads/production/publication_asset/48/asset/s2012_pbs_disney_brdf_notes_v3.pdf
 float2 ggxAlpha(Material material) {
     float roughness = max(material.roughness, GGX_MIN_ALPHA);
     float aspect = sqrt(max(1.0 - 0.9 * material.anisotropic, GGX_MIN_ALPHA));
@@ -16,8 +27,6 @@ float2 ggxAlpha(Material material) {
 }
 
 // Bounded spherical-cap constant k from Eto and Tokuyoshi 2023, Eq. (5)-(6).
-// https://gpuopen.com/download/Bounded_VNDF_Sampling_for_Smith-GGX_Reflections.pdf
-// https://gpuopen.com/download/Bounded_VNDF_Sampling_for_Smith-GGX_Reflections_Supplementary_Document.pdf
 float ggxBoundedVNDFK(float3 wo, float2 alpha) {
     float a = saturate(min(alpha.x, alpha.y));
     float s = 1.0 + length(wo.xy);
@@ -27,8 +36,6 @@ float ggxBoundedVNDFK(float3 wo, float2 alpha) {
 }
 
 // GGX NDF and Smith masking-shadowing terms.
-// https://jcgt.org/published/0007/04/01/paper.pdf
-// https://www.pbr-book.org/4ed/Reflection_Models/Roughness_Using_Microfacet_Theory
 float ggxLambda(float3 w, float2 alpha) {
     float2 alpha2 = alpha * alpha;
     float z2 = max(w.z * w.z, GGX_EPSILON);
@@ -67,14 +74,12 @@ bool ggxHalfVector(float3 wo, float3 wi, out float3 m, out float woDotM) {
 }
 
 // Disney-style metallic workflow on top of PBRT Fresnel building blocks.
-// https://www.pbr-book.org/4ed/Reflection_Models/Specular_Reflection_and_Transmission
-// https://media.disneyanimation.com/uploads/production/publication_asset/48/asset/s2012_pbs_disney_brdf_notes_v3.pdf
 float3 ggxFresnel(BSDFInput input, float cosTheta) {
-    float dielectric = fresnelDielectric(cosTheta, input.material.ior);
+    float3 dielectric = fresnelSchlick(cosTheta, bsdfDielectricSpecularF0(input.material));
     float3 conductor = materialHasConductor(input.material)
         ? fresnelConductor(cosTheta, max(input.material.eta, float3(1e-3)), max(input.material.k, float3(0.0)))
         : fresnelSchlick(cosTheta, input.material.baseColor);
-    return lerp(dielectric.xxx, conductor, input.material.metallic);
+    return lerp(dielectric, conductor, input.material.metallic);
 }
 
 void ggxEvalPdfFromSample(
