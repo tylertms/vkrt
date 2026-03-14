@@ -16,26 +16,45 @@
 static const float VKRT_PI = 3.14159265358979323846;
 static const float VKRT_INV_PI = 0.31830988618379067154;
 
-void shadingBasis(float3 normal, out float3 tangent, out float3 bitangent) {
+struct ShadingBasis {
+    float3 tangent;
+    float3 bitangent;
+    float3 normal;
+};
+
+ShadingBasis makeShadingBasis(float3 normal) {
+    ShadingBasis basis;
     float3 up = abs(normal.z) < 0.999 ? float3(0.0, 0.0, 1.0) : float3(1.0, 0.0, 0.0);
-    tangent = safeNormalize(cross(up, normal));
-    bitangent = cross(normal, tangent);
+    basis.normal = normal;
+    basis.tangent = safeNormalize(cross(up, normal));
+    basis.bitangent = cross(normal, basis.tangent);
+    return basis;
+}
+
+void shadingBasis(float3 normal, out float3 tangent, out float3 bitangent) {
+    ShadingBasis basis = makeShadingBasis(normal);
+    tangent = basis.tangent;
+    bitangent = basis.bitangent;
+}
+
+float3 localToWorld(float3 localDir, ShadingBasis basis) {
+    return basis.tangent * localDir.x + basis.bitangent * localDir.y + basis.normal * localDir.z;
 }
 
 float3 localToWorld(float3 localDir, float3 normal) {
-    float3 tangent, bitangent;
-    shadingBasis(normal, tangent, bitangent);
-    return tangent * localDir.x + bitangent * localDir.y + normal * localDir.z;
+    return localToWorld(localDir, makeShadingBasis(normal));
+}
+
+float3 worldToLocal(float3 worldDir, ShadingBasis basis) {
+    return float3(
+        dot(worldDir, basis.tangent),
+        dot(worldDir, basis.bitangent),
+        dot(worldDir, basis.normal)
+    );
 }
 
 float3 worldToLocal(float3 worldDir, float3 normal) {
-    float3 tangent, bitangent;
-    shadingBasis(normal, tangent, bitangent);
-    return float3(
-        dot(worldDir, tangent),
-        dot(worldDir, bitangent),
-        dot(worldDir, normal)
-    );
+    return worldToLocal(worldDir, makeShadingBasis(normal));
 }
 
 float3 bsdfDiffuseColor(Material material) {

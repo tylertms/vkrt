@@ -10,15 +10,15 @@ void main(inout Payload payload, in BuiltInTriangleIntersectionAttributes attr) 
     Material material = materialBuffer[mesh.materialIndex];
     float3 normal = computeSurfaceNormal(instanceIndex, PrimitiveIndex(), attr.barycentrics);
     float3 hitPoint = computeHitPoint(WorldRayOrigin(), WorldRayDirection(), RayTCurrent());
-
-    payload.setSurfaceHit(instanceIndex, material.emissionColor * material.emissionLuminance, hitPoint);
+    float3 surfaceContribution = material.emissionColor * material.emissionLuminance;
 
     BSDFInput input = BSDFInput.make(normal, -WorldRayDirection(), material);
     BSDFSample sample = sampleBSDF(input, payload.rngState);
 
     if (!sample.isUsable()) {
+        payload.setSurfaceHit(instanceIndex, surfaceContribution, hitPoint);
         return;
     }
 
-    payload.setScatter(sample.weight, hitPoint + normal * 0.001, sample.wi);
+    payload.setSurfaceScatter(instanceIndex, surfaceContribution, sample.weight, hitPoint + normal * 0.001, sample.wi);
 }

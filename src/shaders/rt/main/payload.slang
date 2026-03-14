@@ -49,6 +49,17 @@ struct Payload {
     }
 
     [mutating]
+    void setSurfaceScatter(uint hitInstanceIndex, float3 surfaceContribution, float3 weight, float3 origin, float3 direction) {
+        didHit = 1u;
+        didScatter = 1u;
+        instanceIndex = hitInstanceIndex;
+        contribution = surfaceContribution;
+        bsdfWeight = weight;
+        nextOrigin = origin;
+        nextDirection = direction;
+    }
+
+    [mutating]
     void setScatter(float3 weight, float3 origin, float3 direction) {
         didScatter = 1u;
         bsdfWeight = weight;

@@ -19,6 +19,12 @@
 static const float GGX_MIN_ALPHA = 1e-3;
 static const float GGX_EPSILON = 1e-6;
 
+struct GGXParams {
+    float2 alpha;
+    float vndfK;
+    float projectedWoLength;
+};
+
 float2 ggxAlpha(Material material) {
     float roughness = max(material.roughness, GGX_MIN_ALPHA);
     float aspect = sqrt(max(1.0 - 0.9 * material.anisotropic, GGX_MIN_ALPHA));
@@ -26,8 +32,7 @@ float2 ggxAlpha(Material material) {
     return max(float2(a / aspect, a * aspect), float2(GGX_MIN_ALPHA));
 }
 
-// Bounded spherical-cap constant k from Eto and Tokuyoshi 2023, Eq. (5)-(6).
-float ggxBoundedVNDFK(float3 wo, float2 alpha) {
+float ggxVndfK(float3 wo, float2 alpha) {
     float a = saturate(min(alpha.x, alpha.y));
     float s = 1.0 + length(wo.xy);
     float a2 = a * a;
@@ -35,7 +40,6 @@ float ggxBoundedVNDFK(float3 wo, float2 alpha) {
     return (1.0 - a2) * s2 / max(s2 + a2 * wo.z * wo.z, GGX_EPSILON);
 }
 
-// GGX NDF and Smith masking-shadowing terms.
 float ggxLambda(float3 w, float2 alpha) {
     float2 alpha2 = alpha * alpha;
     float z2 = max(w.z * w.z, GGX_EPSILON);
@@ -43,20 +47,28 @@ float ggxLambda(float3 w, float2 alpha) {
     return 0.5 * (sqrt(1.0 + slope2) - 1.0);
 }
 
-float ggxD(float3 m, float2 alpha) {
+float ggxDistribution(float3 m, float2 alpha) {
     if (m.z <= 0.0) return 0.0;
     float c = (m.x * m.x) / (alpha.x * alpha.x) +
         (m.y * m.y) / (alpha.y * alpha.y) + m.z * m.z;
     return 1.0 / (VKRT_PI * alpha.x * alpha.y * c * c);
 }
 
-float ggxG2(float3 wo, float3 wi, float2 alpha) {
+float ggxMasking(float3 wo, float3 wi, float2 alpha) {
     return 1.0 / (1.0 + ggxLambda(wo, alpha) + ggxLambda(wi, alpha));
 }
 
 float ggxProjectedLength(float3 wo, float2 alpha) {
     float2 stretchedXY = alpha * wo.xy;
     return sqrt(dot(stretchedXY, stretchedXY) + wo.z * wo.z);
+}
+
+GGXParams makeGGXParams(Material material, float3 wo) {
+    GGXParams params;
+    params.alpha = ggxAlpha(material);
+    params.vndfK = ggxVndfK(wo, params.alpha);
+    params.projectedWoLength = ggxProjectedLength(wo, params.alpha);
+    return params;
 }
 
 bool ggxHalfVector(float3 wo, float3 wi, out float3 m, out float woDotM) {
@@ -73,60 +85,50 @@ bool ggxHalfVector(float3 wo, float3 wi, out float3 m, out float woDotM) {
     return woDotM > 0.0;
 }
 
-// Disney-style metallic workflow on top of PBRT Fresnel building blocks.
-float3 ggxFresnel(BSDFInput input, float cosTheta) {
-    float3 dielectric = fresnelSchlick(cosTheta, bsdfDielectricSpecularF0(input.material));
-    float3 conductor = materialHasConductor(input.material)
-        ? fresnelConductor(cosTheta, max(input.material.eta, float3(1e-3)), max(input.material.k, float3(0.0)))
-        : fresnelSchlick(cosTheta, input.material.baseColor);
-    return lerp(dielectric, conductor, input.material.metallic);
+float3 ggxFresnel(Material material, float cosTheta) {
+    float3 dielectric = fresnelSchlick(cosTheta, bsdfDielectricSpecularF0(material));
+    float3 conductor = materialHasConductor(material)
+        ? fresnelConductor(cosTheta, max(material.eta, float3(1e-3)), max(material.k, float3(0.0)))
+        : fresnelSchlick(cosTheta, material.baseColor);
+    return lerp(dielectric, conductor, material.metallic);
 }
 
-void ggxEvalPdfFromSample(
-    BSDFInput input, float3 wo, float3 wi, float2 alpha,
-    float3 m, float woDotM, float k, float projectedLength,
-    out float3 value, out float pdf
-) {
-    float Dm = ggxD(m, alpha);
-    float G = ggxG2(wo, wi, alpha);
-    float3 F = ggxFresnel(input, woDotM);
-    value = F * (Dm * G / max(4.0 * wo.z * wi.z, GGX_EPSILON));
-    pdf = Dm / max(2.0 * (k * wo.z + projectedLength), GGX_EPSILON);
+BSDFEval evalGGXFromHalfVector(Material material, float3 wo, float3 wi, GGXParams params, float3 m, float woDotM) {
+    float Dm = ggxDistribution(m, params.alpha);
+    float G = ggxMasking(wo, wi, params.alpha);
+    float3 F = ggxFresnel(material, woDotM);
+    BSDFEval eval;
+    eval.value = F * (Dm * G / max(4.0 * wo.z * wi.z, GGX_EPSILON));
+    eval.pdf = Dm / max(2.0 * (params.vndfK * wo.z + params.projectedWoLength), GGX_EPSILON);
+    return eval;
 }
 
-bool ggxEvalPdfLocal(
-    BSDFInput input, float3 wo, float3 wi, float2 alpha,
-    float k, float projectedLength,
-    out float3 value, out float pdf
-) {
-    value = float3(0.0);
-    pdf = 0.0;
+BSDFEval evalGGX(Material material, float3 wo, float3 wi, GGXParams params) {
+    BSDFEval eval;
+    eval.value = float3(0.0);
+    eval.pdf = 0.0;
     if (wo.z <= 0.0 || wi.z <= 0.0) {
-        return false;
+        return eval;
     }
 
     float3 m;
     float woDotM;
     if (!ggxHalfVector(wo, wi, m, woDotM)) {
-        return false;
+        return eval;
     }
 
-    ggxEvalPdfFromSample(input, wo, wi, alpha, m, woDotM, k, projectedLength, value, pdf);
-    return true;
+    return evalGGXFromHalfVector(material, wo, wi, params, m, woDotM);
 }
 
-bool sampleGGXBoundedVNDF(
-    float3 wo, float2 alpha, float k, float projectedLength,
-    float2 u, out float3 m
-) {
-    if (projectedLength <= GGX_EPSILON) {
+bool sampleGGXVNDF(float3 wo, GGXParams params, float2 u, out float3 m) {
+    if (params.projectedWoLength <= GGX_EPSILON) {
         m = float3(0.0);
         return false;
     }
 
-    float3 woStd = float3(wo.xy * alpha, wo.z) / projectedLength;
+    float3 woStd = float3(wo.xy * params.alpha, wo.z) / params.projectedWoLength;
     float phi = 2.0 * VKRT_PI * u.x;
-    float b = k * woStd.z;
+    float b = params.vndfK * woStd.z;
     float z = (1.0 - u.y) * (1.0 + b) - b;
     float sinTheta = sqrt(saturate(1.0 - z * z));
     float3 wiStd = float3(sinTheta * cos(phi), sinTheta * sin(phi), z);
@@ -138,7 +140,7 @@ bool sampleGGXBoundedVNDF(
         return false;
     }
 
-    float3 unstretchedM = float3(mStd.xy * alpha, mStd.z);
+    float3 unstretchedM = float3(mStd.xy * params.alpha, mStd.z);
     float unstretchedM2 = dot(unstretchedM, unstretchedM);
     if (unstretchedM2 <= GGX_EPSILON) {
         m = float3(0.0);
@@ -149,18 +151,15 @@ bool sampleGGXBoundedVNDF(
     return m.z > 0.0;
 }
 
-bool sampleGGXDirectionLocal(
-    float3 wo, float2 alpha, float k, float projectedLength,
-    inout uint rng, out float3 wi, out float3 m, out float woDotM
-) {
+bool sampleGGX(float3 wo, GGXParams params, inout uint rng, out float3 wi) {
     float2 u = float2(rand(rng), rand(rng));
-    if (!sampleGGXBoundedVNDF(wo, alpha, k, projectedLength, u, m)) {
+    float3 m;
+    if (!sampleGGXVNDF(wo, params, u, m)) {
         wi = float3(0.0);
-        woDotM = 0.0;
         return false;
     }
 
-    woDotM = dot(wo, m);
+    float woDotM = dot(wo, m);
     if (woDotM <= 0.0) {
         wi = float3(0.0);
         return false;

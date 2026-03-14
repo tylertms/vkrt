@@ -28,4 +28,9 @@ struct BSDFSample {
     }
 };
 
+struct BSDFEval {
+    float3 value;
+    float pdf;
+};
+
 #endif
