@@ -27,23 +27,30 @@ VKRT_Result createRayTracingPipeline(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
 
     uint64_t startTime = getMicroseconds();
+    VkBool32 useSerShaders = (vkrt->core.deviceExtensionSupport.enabledMask & DEVICE_EXTENSION_RAY_TRACING_INVOCATION_REORDER_BIT) != 0;
+    const unsigned char* rayGenData = useSerShaders ? shaderRgenSerData : shaderRgenData;
+    const unsigned char* closestHitData = useSerShaders ? shaderRchitSerData : shaderRchitData;
+    const unsigned char* missData = useSerShaders ? shaderRmissSerData : shaderRmissData;
+    size_t rayGenSize = useSerShaders ? shaderRgenSerSize : shaderRgenSize;
+    size_t closestHitSize = useSerShaders ? shaderRchitSerSize : shaderRchitSize;
+    size_t missSize = useSerShaders ? shaderRmissSerSize : shaderRmissSize;
 
     if (createRayTracingPipelineLayout(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
 
     VkShaderModule rayGenModule = VK_NULL_HANDLE;
     VkShaderModule closestHitModule = VK_NULL_HANDLE;
     VkShaderModule missModule = VK_NULL_HANDLE;
-    if (createShaderModule(vkrt, (const char*)shader_rgen_data, shader_rgen_size, &rayGenModule) != VKRT_SUCCESS ||
-        createShaderModule(vkrt, (const char*)shader_rchit_data, shader_rchit_size, &closestHitModule) != VKRT_SUCCESS ||
-        createShaderModule(vkrt, (const char*)shader_rmiss_data, shader_rmiss_size, &missModule) != VKRT_SUCCESS) {
+    if (createShaderModule(vkrt, (const char*)rayGenData, rayGenSize, &rayGenModule) != VKRT_SUCCESS ||
+        createShaderModule(vkrt, (const char*)closestHitData, closestHitSize, &closestHitModule) != VKRT_SUCCESS ||
+        createShaderModule(vkrt, (const char*)missData, missSize, &missModule) != VKRT_SUCCESS) {
         if (rayGenModule != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, rayGenModule, NULL);
         if (closestHitModule != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, closestHitModule, NULL);
         if (missModule != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, missModule, NULL);
         return VKRT_ERROR_OPERATION_FAILED;
     }
 
-    LOG_INFO("Using embedded ray tracing shaders (rgen: %zu bytes, rchit: %zu bytes, rmiss: %zu bytes)",
-        shader_rgen_size, shader_rchit_size, shader_rmiss_size);
+    LOG_INFO("Using embedded ray tracing shaders (%s variant, rgen: %zu bytes, rchit: %zu bytes, rmiss: %zu bytes)",
+        useSerShaders ? "SER" : "default", rayGenSize, closestHitSize, missSize);
 
     VkPipelineShaderStageCreateInfo rayGenStageInfo = {0};
     rayGenStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -138,9 +145,9 @@ VKRT_Result createSelectionRayTracingPipeline(VKRT* vkrt) {
     VkShaderModule missModule = VK_NULL_HANDLE;
     VkShaderModule closestHitModule = VK_NULL_HANDLE;
 
-    if (createShaderModule(vkrt, (const char*)shader_select_rgen_data, shader_select_rgen_size, &rayGenModule) != VKRT_SUCCESS ||
-        createShaderModule(vkrt, (const char*)shader_select_rmiss_data, shader_select_rmiss_size, &missModule) != VKRT_SUCCESS ||
-        createShaderModule(vkrt, (const char*)shader_select_rchit_data, shader_select_rchit_size, &closestHitModule) != VKRT_SUCCESS) {
+    if (createShaderModule(vkrt, (const char*)shaderSelectRgenData, shaderSelectRgenSize, &rayGenModule) != VKRT_SUCCESS ||
+        createShaderModule(vkrt, (const char*)shaderSelectRmissData, shaderSelectRmissSize, &missModule) != VKRT_SUCCESS ||
+        createShaderModule(vkrt, (const char*)shaderSelectRchitData, shaderSelectRchitSize, &closestHitModule) != VKRT_SUCCESS) {
         goto cleanup;
     }
 
@@ -192,7 +199,7 @@ VKRT_Result createComputePipeline(VKRT* vkrt) {
     uint64_t startTime = getMicroseconds();
 
     VkShaderModule compModule = VK_NULL_HANDLE;
-    if (createShaderModule(vkrt, (const char*)shader_comp_data, shader_comp_size, &compModule) != VKRT_SUCCESS) {
+    if (createShaderModule(vkrt, (const char*)shaderCompData, shaderCompSize, &compModule) != VKRT_SUCCESS) {
         return VKRT_ERROR_OPERATION_FAILED;
     }
 

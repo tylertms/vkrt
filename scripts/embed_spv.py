@@ -21,13 +21,13 @@ def main():
 
     with open(output_path, "w") as f:
         f.write("#include <stddef.h>\n\n")
-        f.write(f"const unsigned char {var_name}_data[] = {{\n")
+        f.write(f"const unsigned char {var_name}Data[] = {{\n")
         for i in range(0, len(data), 16):
             chunk = data[i : i + 16]
             hex_str = ", ".join(f"0x{b:02x}" for b in chunk)
             f.write(f"    {hex_str},\n")
         f.write("};\n")
-        f.write(f"const size_t {var_name}_size = sizeof({var_name}_data);\n")
+        f.write(f"const size_t {var_name}Size = sizeof({var_name}Data);\n")
 
 
 if __name__ == "__main__":
