@@ -69,6 +69,7 @@ typedef struct VKRT_CreateInfo {
     uint8_t startMaximized;
     uint8_t startFullscreen;
     uint8_t headless;
+    uint8_t disableSER;
     int32_t preferredDeviceIndex;
     const char* preferredDeviceName;
 } VKRT_CreateInfo;

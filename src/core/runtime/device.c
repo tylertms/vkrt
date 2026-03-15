@@ -433,7 +433,8 @@ VKRT_Result createLogicalDevice(VKRT* vkrt) {
         extensionSupport.enabledMask |= requiredDeviceExtensionBits[i];
     }
 
-    if ((extensionSupport.availableMask & DEVICE_EXTENSION_RAY_TRACING_INVOCATION_REORDER_BIT) &&
+    if (!vkrt->runtime.disableSER &&
+            (extensionSupport.availableMask & DEVICE_EXTENSION_RAY_TRACING_INVOCATION_REORDER_BIT) &&
             supportedReorderFeatures.rayTracingInvocationReorder) {
         enabledExtensions[enabledExtensionCount++] = optionalDeviceExtensions[0];
         extensionSupport.enabledMask |= DEVICE_EXTENSION_RAY_TRACING_INVOCATION_REORDER_BIT;
@@ -460,6 +461,11 @@ VKRT_Result createLogicalDevice(VKRT* vkrt) {
     logExtensionMaskStatus("optional",
         optionalDeviceExtensions, optionalDeviceExtensionBits, NUM_OPT_EXTENSIONS,
         extensionSupport.enabledMask, "enabled", "disabled");
+    if (vkrt->runtime.disableSER &&
+            (extensionSupport.availableMask & DEVICE_EXTENSION_RAY_TRACING_INVOCATION_REORDER_BIT)) {
+        LOG_INFO("    Optional extension %s was available but disabled by request",
+            VK_EXT_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME);
+    }
     if ((extensionSupport.availableMask & DEVICE_EXTENSION_RAY_TRACING_INVOCATION_REORDER_BIT) &&
             !supportedReorderFeatures.rayTracingInvocationReorder) {
         LOG_INFO("    Optional extension %s was loaded but its feature is unsupported, so it was not enabled",

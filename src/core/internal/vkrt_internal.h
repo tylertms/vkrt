@@ -181,6 +181,7 @@ typedef struct VKRT_Runtime {
     VkBool32 frameTraced;
     VkBool32 frameSelectionTraced;
     VkBool32 headless;
+    uint8_t disableSER;
     VkPresentModeKHR presentMode;
     float displayRefreshHz;
     VkBool32 swapChainFormatLogInitialized;

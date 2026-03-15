@@ -151,6 +151,10 @@ int CLIParseArguments(int argc, char* argv[], CLILaunchOptions* outOptions, char
             outOptions->createInfo.startFullscreen = 1u;
             continue;
         }
+        if (stringsEqual(arg, "--no-ser")) {
+            outOptions->createInfo.disableSER = 1u;
+            continue;
+        }
         if (optionMatches(arg, "--device-index")) {
             const char* value = requireOptionValue(argc, argv, &i, "--device-index", error, errorSize);
             if (!value) return 0;
@@ -277,6 +281,7 @@ void CLIPrintHelp(void) {
     printf("  --width <px>              Set initial window width\n");
     printf("  --height <px>             Set initial window height\n");
     printf("  --fullscreen              Start in fullscreen mode\n");
+    printf("  --no-ser                  Disable shader execution reordering even if supported\n");
     printf("  --device-index <index>    Force a Vulkan device by enumerated index\n");
     printf("  --device-name <text>      Force a Vulkan device if its name contains this text\n");
     printf("  --empty-scene             Skip loading the default starter scene\n");

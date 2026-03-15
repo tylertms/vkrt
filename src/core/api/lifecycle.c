@@ -209,6 +209,7 @@ void VKRT_defaultCreateInfo(VKRT_CreateInfo* createInfo) {
         .startMaximized = 1,
         .startFullscreen = 0,
         .headless = 0,
+        .disableSER = 0,
         .preferredDeviceIndex = -1,
         .preferredDeviceName = NULL,
     };
@@ -254,6 +255,7 @@ VKRT_Result VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInf
     vkrt->runtime.lastLoggedSwapChainColorSpace = VK_COLOR_SPACE_MAX_ENUM_KHR;
     vkrt->runtime.appInitialized = 0;
     vkrt->runtime.headless = createInfo->headless ? VK_TRUE : VK_FALSE;
+    vkrt->runtime.disableSER = createInfo->disableSER ? 1u : 0u;
     for (uint32_t i = 0; i < VKRT_MAX_FRAMES_IN_FLIGHT; i++) {
         vkrt->core.descriptorSetReady[i] = VK_FALSE;
     }
