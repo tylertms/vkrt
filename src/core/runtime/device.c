@@ -342,6 +342,8 @@ VKRT_Result createLogicalDevice(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
 
     DeviceExtensionSupport extensionSupport = {0};
+    vkrt->core.serReorderingHintMode = VK_RAY_TRACING_INVOCATION_REORDER_MODE_NONE_EXT;
+    vkrt->core.serMaxShaderBindingTableRecordIndex = 0u;
     QueueFamily indices = findQueueFamilies(vkrt);
     if (!isQueueFamilyComplete(indices)) {
         return VKRT_ERROR_OPERATION_FAILED;
@@ -418,6 +420,17 @@ VKRT_Result createLogicalDevice(VKRT* vkrt) {
         supportedFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
         supportedFeatures.pNext = &supportedRayTracingPipelineFeatures;
         vkGetPhysicalDeviceFeatures2(vkrt->core.physicalDevice, &supportedFeatures);
+
+        VkPhysicalDeviceRayTracingInvocationReorderPropertiesEXT reorderProperties = {0};
+        reorderProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_PROPERTIES_EXT;
+
+        VkPhysicalDeviceProperties2 supportedProperties = {0};
+        supportedProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+        supportedProperties.pNext = &reorderProperties;
+        vkGetPhysicalDeviceProperties2(vkrt->core.physicalDevice, &supportedProperties);
+
+        vkrt->core.serReorderingHintMode = reorderProperties.rayTracingInvocationReorderReorderingHint;
+        vkrt->core.serMaxShaderBindingTableRecordIndex = reorderProperties.maxShaderBindingTableRecordIndex;
     }
 
     VkPhysicalDeviceRayTracingInvocationReorderFeaturesEXT deviceReorderFeatures = {0};
@@ -470,6 +483,14 @@ VKRT_Result createLogicalDevice(VKRT* vkrt) {
             !supportedReorderFeatures.rayTracingInvocationReorder) {
         LOG_INFO("    Optional extension %s was loaded but its feature is unsupported, so it was not enabled",
             VK_EXT_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME);
+    }
+    if (extensionSupport.availableMask & DEVICE_EXTENSION_RAY_TRACING_INVOCATION_REORDER_BIT) {
+        const char* reorderHintMode =
+            vkrt->core.serReorderingHintMode == VK_RAY_TRACING_INVOCATION_REORDER_MODE_REORDER_EXT ?
+                "reorder" : "none";
+        LOG_INFO("    SER properties: hint mode=%s, max shader table record index=%u",
+            reorderHintMode,
+            vkrt->core.serMaxShaderBindingTableRecordIndex);
     }
 
     if (enableValidationLayers) {

@@ -3,6 +3,7 @@
 #include "../../utility/ray.slang"
 #include "../../utility/tonemap.slang"
 #include "../../utility/viewport.slang"
+#include "../../trace/scene.slang"
 #include "payload.slang"
 
 [shader("raygeneration")]
@@ -34,8 +35,7 @@ void main() {
 
         for (uint depth = 0u; depth < scene.rrMaxDepth; depth++) {
             Payload payload = Payload.make(rng);
-
-            TraceRay(topLevelAS, 0u, 0xffu, 0u, 0u, 0u, ray, payload);
+            traceSceneRay(payload, ray, depth);
             rng = payload.rngState;
 
             if (sampleIndex == 0u && depth == 0u) {

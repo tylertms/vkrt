@@ -27,7 +27,7 @@ VKRT_Result createRayTracingPipeline(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
 
     uint64_t startTime = getMicroseconds();
-    VkBool32 useSerShaders = (vkrt->core.deviceExtensionSupport.enabledMask & DEVICE_EXTENSION_RAY_TRACING_INVOCATION_REORDER_BIT) != 0;
+    VkBool32 useSerShaders = vkrtSerEnabled(vkrt);
     const unsigned char* rayGenData = useSerShaders ? shaderRgenSerData : shaderRgenData;
     const unsigned char* closestHitData = useSerShaders ? shaderRchitSerData : shaderRchitData;
     const unsigned char* missData = useSerShaders ? shaderRmissSerData : shaderRmissData;

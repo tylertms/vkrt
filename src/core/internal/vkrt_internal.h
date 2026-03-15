@@ -104,6 +104,8 @@ typedef struct VKRT_Core {
     char deviceName[VKRT_DEVICE_NAME_LEN];
     uint32_t vendorID;
     uint32_t driverVersion;
+    VkRayTracingInvocationReorderModeEXT serReorderingHintMode;
+    uint32_t serMaxShaderBindingTableRecordIndex;
     VKRT_DeviceProcedures procs;
 } VKRT_Core;
 
@@ -216,6 +218,11 @@ typedef struct VKRT {
     VKRT_AutoSPPState autoSPP;
     VKRT_AppHooks appHooks;
 } VKRT;
+
+static inline VkBool32 vkrtSerEnabled(const VKRT* vkrt) {
+    return vkrt &&
+        (vkrt->core.deviceExtensionSupport.enabledMask & DEVICE_EXTENSION_RAY_TRACING_INVOCATION_REORDER_BIT) != 0;
+}
 
 static inline FrameSceneUpdate* vkrtCurrentFrameSceneUpdate(VKRT* vkrt) {
     return &vkrt->runtime.frameSceneUpdates[vkrt->runtime.currentFrame];
