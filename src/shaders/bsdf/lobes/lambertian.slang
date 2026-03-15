@@ -3,20 +3,18 @@
 
 #include "../common.slang"
 
-// Lambertian diffuse lobe:
-// Perfectly matte, cosine-weighted distribution.
+// Lambertian diffuse reflection.
 //
 // References:
-// Lambert diffuse BRDF: https://www.pbr-book.org/4ed/Reflection_Models/Diffuse_Reflection
-// Cosine hemisphere sampling: https://www.pbr-book.org/4ed/Sampling_Algorithms/Sampling_Multidimensional_Functions
+// Pharr, Jakob, Humphreys, 2023 - https://www.pbr-book.org/4ed/Reflection_Models/Diffuse_Reflection
 
 float lambertianPdf(float3 wi) {
-    return wi.z > 0.0 ? wi.z * VKRT_INV_PI : 0.0;
+    return cosTheta(wi) > 0.0 ? cosTheta(wi) * VKRT_INV_PI : 0.0;
 }
 
 BSDFEval evalLambertian(float3 diffuseColor, float3 wi) {
     BSDFEval eval;
-    eval.value = wi.z > 0.0 ? diffuseColor * VKRT_INV_PI : float3(0.0);
+    eval.value = cosTheta(wi) > 0.0 ? diffuseColor * VKRT_INV_PI : float3(0.0);
     eval.pdf = lambertianPdf(wi);
     return eval;
 }

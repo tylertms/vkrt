@@ -4,4 +4,5 @@
 [shader("miss")]
 void main(inout Payload payload) {
     payload.setMiss();
+    payload.contribution = scene.environmentLight.xyz;
 }

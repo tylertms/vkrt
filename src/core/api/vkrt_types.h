@@ -77,6 +77,7 @@ static inline Material VKRT_materialDefault(void) {
     return (Material){
         .baseColor = {0.8f, 0.8f, 0.8f},
         .roughness = 0.5f,
+        .diffuseRoughness = 0.0f,
         .emissionColor = {1.0f, 1.0f, 1.0f},
         .emissionLuminance = 0.0f,
         .metallic = 0.0f,
@@ -90,6 +91,9 @@ static inline Material VKRT_materialDefault(void) {
         .ior = 1.5f,
         .eta = {0.0f, 0.0f, 0.0f},
         .k = {0.0f, 0.0f, 0.0f},
+        .transmission = 0.0f,
+        .subsurface = 0.0f,
+        .sheenRoughness = 0.5f,
     };
 }
 
@@ -111,6 +115,8 @@ typedef struct VKRT_SceneSettingsSnapshot {
     VKRT_ToneMappingMode toneMappingMode;
     uint8_t autoSPPEnabled;
     uint32_t autoSPPTargetFPS;
+    vec3 environmentColor;
+    float environmentStrength;
     float fogDensity;
     float timeBase;
     float timeStep;

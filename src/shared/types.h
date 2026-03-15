@@ -19,6 +19,7 @@ typedef mat4 float4x4;
 struct Vertex {
     float4 position;
     float4 normal;
+    float4 tangent;
 };
 
 struct MeshInfo {
@@ -50,6 +51,10 @@ struct Material {
     float clearcoat;
     float clearcoatGloss;
     float ior;
+    float diffuseRoughness;
+    float transmission;
+    float subsurface;
+    float sheenRoughness;
     float padding;
 };
 
@@ -78,6 +83,7 @@ struct SceneData {
     float timeBase;
     float timeStep;
     float fogDensity;
+    float4 environmentLight;
     uint debugMode;
     uint misNeeEnabled;
     uint timelineEnabled;

@@ -13,6 +13,9 @@ static const float kCameraFovMinDeg = 10.0f;
 static const float kCameraFovMaxDeg = 140.0f;
 static const float kFogDensityDragSpeed = 0.0005f;
 static const float kFogDensityMax = 4.0f;
+static const float kEnvironmentStrengthMax = 1000000.0f;
+static const int kPathDepthMin = 0;
+static const int kPathDepthMax = 64;
 
 void inspectorDrawCameraTab(VKRT* vkrt) {
     if (!vkrt) return;
@@ -75,6 +78,24 @@ void inspectorDrawCameraTab(VKRT* vkrt) {
             }
         }
 
+        float environmentStrength = settings.environmentStrength;
+        if (ImGui_DragFloatEx("Env Strength", &environmentStrength, 0.01f, 0.0f, kEnvironmentStrengthMax, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+            VKRT_Result result = VKRT_setEnvironmentLight(vkrt, settings.environmentColor, environmentStrength);
+            if (result != VKRT_SUCCESS) {
+                LOG_ERROR("Updating environment strength failed (%d)", (int)result);
+            } else {
+                settings.environmentStrength = environmentStrength;
+            }
+        }
+
+        vec3 environmentColor = {settings.environmentColor[0], settings.environmentColor[1], settings.environmentColor[2]};
+        if (ImGui_ColorEdit3("Env Color", environmentColor, ImGuiColorEditFlags_Float)) {
+            VKRT_Result result = VKRT_setEnvironmentLight(vkrt, environmentColor, settings.environmentStrength);
+            if (result != VKRT_SUCCESS) {
+                LOG_ERROR("Updating environment color failed (%d)", (int)result);
+            }
+        }
+
         float fogDensity = settings.fogDensity;
         if (ImGui_DragFloatEx("Fog Density", &fogDensity, kFogDensityDragSpeed, 0.0f, kFogDensityMax, "%.4f", ImGuiSliderFlags_AlwaysClamp)) {
             VKRT_Result result = VKRT_setFogDensity(vkrt, fogDensity);
@@ -124,6 +145,29 @@ void inspectorDrawCameraTab(VKRT* vkrt) {
                 if (result != VKRT_SUCCESS) {
                     LOG_ERROR("Updating samples per pixel failed (%d)", (int)result);
                 }
+            }
+        }
+
+        int minBounces = (int)settings.rrMinDepth;
+        int maxBounces = (int)settings.rrMaxDepth;
+        if (ImGui_DragIntEx("Min Bounces", &minBounces, 0.25f, kPathDepthMin, kPathDepthMax, "%d", ImGuiSliderFlags_AlwaysClamp)) {
+            VKRT_Result result = VKRT_setPathDepth(vkrt, (uint32_t)minBounces, settings.rrMaxDepth);
+            if (result != VKRT_SUCCESS) {
+                LOG_ERROR("Updating minimum path depth failed (%d)", (int)result);
+            } else {
+                settings.rrMinDepth = (uint32_t)minBounces;
+                if (settings.rrMinDepth > settings.rrMaxDepth) settings.rrMaxDepth = settings.rrMinDepth;
+            }
+        }
+
+        maxBounces = (int)settings.rrMaxDepth;
+        if (ImGui_DragIntEx("Max Bounces", &maxBounces, 0.25f, kPathDepthMin + 1, kPathDepthMax, "%d", ImGuiSliderFlags_AlwaysClamp)) {
+            VKRT_Result result = VKRT_setPathDepth(vkrt, settings.rrMinDepth, (uint32_t)maxBounces);
+            if (result != VKRT_SUCCESS) {
+                LOG_ERROR("Updating maximum path depth failed (%d)", (int)result);
+            } else {
+                settings.rrMaxDepth = (uint32_t)maxBounces;
+                if (settings.rrMinDepth > settings.rrMaxDepth) settings.rrMinDepth = settings.rrMaxDepth;
             }
         }
 

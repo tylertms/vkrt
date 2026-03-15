@@ -91,6 +91,144 @@ static float max3(float a, float b, float c) {
     return value;
 }
 
+static void copyFloat3ToFloat4(float out[4], const float in[3], float w) {
+    out[0] = in[0];
+    out[1] = in[1];
+    out[2] = in[2];
+    out[3] = w;
+}
+
+static void loadVertexPosition3(const Vertex* vertices, uint32_t index, vec3 out) {
+    out[0] = vertices[index].position[0];
+    out[1] = vertices[index].position[1];
+    out[2] = vertices[index].position[2];
+}
+
+static void loadVertexNormal3(const Vertex* vertices, uint32_t index, vec3 out) {
+    out[0] = vertices[index].normal[0];
+    out[1] = vertices[index].normal[1];
+    out[2] = vertices[index].normal[2];
+}
+
+static int loadTriangleIndices(size_t vertexCount, const uint32_t* indices, size_t indexOffset, uint32_t out[3]) {
+    uint32_t i0 = indices[indexOffset + 0];
+    uint32_t i1 = indices[indexOffset + 1];
+    uint32_t i2 = indices[indexOffset + 2];
+    if (i0 >= vertexCount || i1 >= vertexCount || i2 >= vertexCount) {
+        return 0;
+    }
+
+    out[0] = i0;
+    out[1] = i1;
+    out[2] = i2;
+    return 1;
+}
+
+static float triangleNormalAlignment(const Vertex* vertices, size_t vertexCount, const uint32_t* indices, size_t indexOffset) {
+    uint32_t triangle[3];
+    if (!loadTriangleIndices(vertexCount, indices, indexOffset, triangle)) {
+        return 0.0f;
+    }
+
+    vec3 p0, p1, p2;
+    loadVertexPosition3(vertices, triangle[0], p0);
+    loadVertexPosition3(vertices, triangle[1], p1);
+    loadVertexPosition3(vertices, triangle[2], p2);
+
+    vec3 edge1 = GLM_VEC3_ZERO_INIT;
+    vec3 edge2 = GLM_VEC3_ZERO_INIT;
+    glm_vec3_sub(p1, p0, edge1);
+    glm_vec3_sub(p2, p0, edge2);
+
+    vec3 faceNormal = GLM_VEC3_ZERO_INIT;
+    glm_vec3_cross(edge1, edge2, faceNormal);
+    if (glm_vec3_norm2(faceNormal) <= 1e-12f) {
+        return 0.0f;
+    }
+
+    vec3 averagedNormal = GLM_VEC3_ZERO_INIT;
+    averagedNormal[0] = vertices[triangle[0]].normal[0] + vertices[triangle[1]].normal[0] + vertices[triangle[2]].normal[0];
+    averagedNormal[1] = vertices[triangle[0]].normal[1] + vertices[triangle[1]].normal[1] + vertices[triangle[2]].normal[1];
+    averagedNormal[2] = vertices[triangle[0]].normal[2] + vertices[triangle[1]].normal[2] + vertices[triangle[2]].normal[2];
+    if (glm_vec3_norm2(averagedNormal) <= 1e-12f) {
+        return 0.0f;
+    }
+
+    return glm_vec3_dot(faceNormal, averagedNormal);
+}
+
+static int orthonormalizeTangentFrame(const float normal[3], const float tangentIn[3], float handedness, float outTangent[4]) {
+    vec3 n = {normal[0], normal[1], normal[2]};
+    vec3 tangent = {tangentIn[0], tangentIn[1], tangentIn[2]};
+    if (glm_vec3_norm2(n) <= 1e-12f || glm_vec3_norm2(tangent) <= 1e-12f) {
+        return 0;
+    }
+
+    glm_vec3_normalize(n);
+    float tangentDotNormal = glm_vec3_dot(tangent, n);
+    vec3 projectedNormal = {
+        n[0] * tangentDotNormal,
+        n[1] * tangentDotNormal,
+        n[2] * tangentDotNormal,
+    };
+    glm_vec3_sub(tangent, projectedNormal, tangent);
+    if (glm_vec3_norm2(tangent) <= 1e-12f) {
+        return 0;
+    }
+
+    glm_vec3_normalize(tangent);
+    outTangent[0] = tangent[0];
+    outTangent[1] = tangent[1];
+    outTangent[2] = tangent[2];
+    outTangent[3] = handedness < 0.0f ? -1.0f : 1.0f;
+    return 1;
+}
+
+static void buildFallbackTangent(const float normal[3], float outTangent[4]) {
+    vec3 n = {normal[0], normal[1], normal[2]};
+    if (glm_vec3_norm2(n) <= 1e-12f) {
+        n[2] = 1.0f;
+    } else {
+        glm_vec3_normalize(n);
+    }
+
+    vec3 up = {0.0f, 0.0f, 1.0f};
+    if (fabsf(n[2]) > 0.999f) {
+        up[0] = 1.0f;
+        up[2] = 0.0f;
+    }
+
+    vec3 tangent = {0.0f, 0.0f, 0.0f};
+    glm_vec3_cross(up, n, tangent);
+    if (glm_vec3_norm2(tangent) <= 1e-12f) {
+        tangent[0] = 1.0f;
+        tangent[1] = 0.0f;
+        tangent[2] = 0.0f;
+    } else {
+        glm_vec3_normalize(tangent);
+    }
+
+    outTangent[0] = tangent[0];
+    outTangent[1] = tangent[1];
+    outTangent[2] = tangent[2];
+    outTangent[3] = 1.0f;
+}
+
+static void finalizeTangents(Vertex* vertices, size_t vertexCount) {
+    if (!vertices) return;
+
+    for (size_t vertexIndex = 0; vertexIndex < vertexCount; vertexIndex++) {
+        float handedness = vertices[vertexIndex].tangent[3] < 0.0f ? -1.0f : 1.0f;
+        if (!orthonormalizeTangentFrame(
+                vertices[vertexIndex].normal,
+                vertices[vertexIndex].tangent,
+                handedness,
+                vertices[vertexIndex].tangent)) {
+            buildFallbackTangent(vertices[vertexIndex].normal, vertices[vertexIndex].tangent);
+        }
+    }
+}
+
 static Material buildMaterial(const cgltf_material* sourceMaterial) {
     Material material = VKRT_materialDefault();
     if (!sourceMaterial) {
@@ -103,6 +241,7 @@ static Material buildMaterial(const cgltf_material* sourceMaterial) {
         material.baseColor[2] = sourceMaterial->pbr_metallic_roughness.base_color_factor[2];
         material.metallic = sourceMaterial->pbr_metallic_roughness.metallic_factor;
         material.roughness = sourceMaterial->pbr_metallic_roughness.roughness_factor;
+        material.diffuseRoughness = material.roughness;
     }
 
     if (sourceMaterial->has_specular) {
@@ -111,6 +250,10 @@ static Material buildMaterial(const cgltf_material* sourceMaterial) {
 
     if (sourceMaterial->has_ior) {
         material.ior = sourceMaterial->ior.ior;
+    }
+
+    if (sourceMaterial->has_transmission) {
+        material.transmission = sourceMaterial->transmission.transmission_factor;
     }
 
     if (sourceMaterial->has_clearcoat) {
@@ -123,6 +266,7 @@ static Material buildMaterial(const cgltf_material* sourceMaterial) {
             sourceMaterial->sheen.sheen_color_factor[1],
             sourceMaterial->sheen.sheen_color_factor[2]);
         material.sheenTint = material.sheen > 0.0f ? 1.0f : 0.0f;
+        material.sheenRoughness = sourceMaterial->sheen.sheen_roughness_factor;
     }
 
     float emissiveScale = sourceMaterial->has_emissive_strength
@@ -195,56 +339,149 @@ static void generateNormals(Vertex* vertices, size_t vertexCount, const uint32_t
     }
 
     for (size_t indexOffset = 0; indexOffset + 2 < indexCount; indexOffset += 3) {
-        uint32_t i0 = indices[indexOffset + 0];
-        uint32_t i1 = indices[indexOffset + 1];
-        uint32_t i2 = indices[indexOffset + 2];
-        if (i0 >= vertexCount || i1 >= vertexCount || i2 >= vertexCount) continue;
+        uint32_t triangle[3];
+        if (!loadTriangleIndices(vertexCount, indices, indexOffset, triangle)) continue;
 
-        vec3 p0 = {
-            vertices[i0].position[0],
-            vertices[i0].position[1],
-            vertices[i0].position[2],
-        };
-        vec3 p1 = {
-            vertices[i1].position[0],
-            vertices[i1].position[1],
-            vertices[i1].position[2],
-        };
-        vec3 p2 = {
-            vertices[i2].position[0],
-            vertices[i2].position[1],
-            vertices[i2].position[2],
-        };
+        vec3 p0, p1, p2;
+        loadVertexPosition3(vertices, triangle[0], p0);
+        loadVertexPosition3(vertices, triangle[1], p1);
+        loadVertexPosition3(vertices, triangle[2], p2);
 
-        vec3 edge01 = {0.0f, 0.0f, 0.0f};
-        vec3 edge02 = {0.0f, 0.0f, 0.0f};
-        vec3 faceNormal = {0.0f, 0.0f, 0.0f};
+        vec3 edge01 = GLM_VEC3_ZERO_INIT;
+        vec3 edge02 = GLM_VEC3_ZERO_INIT;
+        vec3 faceNormal = GLM_VEC3_ZERO_INIT;
         glm_vec3_sub(p1, p0, edge01);
         glm_vec3_sub(p2, p0, edge02);
         glm_vec3_cross(edge01, edge02, faceNormal);
-        if (glm_vec3_norm(faceNormal) <= 0.0f) continue;
+        if (glm_vec3_norm2(faceNormal) <= 1e-12f) continue;
 
-        glm_vec3_add(vertices[i0].normal, faceNormal, vertices[i0].normal);
-        glm_vec3_add(vertices[i1].normal, faceNormal, vertices[i1].normal);
-        glm_vec3_add(vertices[i2].normal, faceNormal, vertices[i2].normal);
+        glm_vec3_add(vertices[triangle[0]].normal, faceNormal, vertices[triangle[0]].normal);
+        glm_vec3_add(vertices[triangle[1]].normal, faceNormal, vertices[triangle[1]].normal);
+        glm_vec3_add(vertices[triangle[2]].normal, faceNormal, vertices[triangle[2]].normal);
     }
 
     for (size_t vertexIndex = 0; vertexIndex < vertexCount; vertexIndex++) {
-        vec3 normal = {
-            vertices[vertexIndex].normal[0],
-            vertices[vertexIndex].normal[1],
-            vertices[vertexIndex].normal[2],
-        };
-        if (glm_vec3_norm(normal) > 0.0f) {
+        vec3 normal;
+        loadVertexNormal3(vertices, (uint32_t)vertexIndex, normal);
+        if (glm_vec3_norm2(normal) > 1e-12f) {
             glm_vec3_normalize(normal);
         } else {
             normal[2] = 1.0f;
         }
 
-        vertices[vertexIndex].normal[0] = normal[0];
-        vertices[vertexIndex].normal[1] = normal[1];
-        vertices[vertexIndex].normal[2] = normal[2];
-        vertices[vertexIndex].normal[3] = 0.0f;
+        copyFloat3ToFloat4(vertices[vertexIndex].normal, normal, 0.0f);
+    }
+}
+
+static void generateTangents(
+    Vertex* vertices,
+    size_t vertexCount,
+    const uint32_t* indices,
+    size_t indexCount,
+    const float* texcoords)
+{
+    if (!vertices || !indices || !texcoords || vertexCount == 0 || indexCount < 3) {
+        return;
+    }
+
+    vec3* tangent1 = (vec3*)calloc(vertexCount, sizeof(vec3));
+    vec3* tangent2 = (vec3*)calloc(vertexCount, sizeof(vec3));
+    if (!tangent1 || !tangent2) {
+        free(tangent1);
+        free(tangent2);
+        for (size_t vertexIndex = 0; vertexIndex < vertexCount; vertexIndex++) {
+            buildFallbackTangent(vertices[vertexIndex].normal, vertices[vertexIndex].tangent);
+        }
+        return;
+    }
+
+    for (size_t indexOffset = 0; indexOffset + 2 < indexCount; indexOffset += 3) {
+        uint32_t triangle[3];
+        if (!loadTriangleIndices(vertexCount, indices, indexOffset, triangle)) continue;
+
+        vec3 p0, p1, p2;
+        loadVertexPosition3(vertices, triangle[0], p0);
+        loadVertexPosition3(vertices, triangle[1], p1);
+        loadVertexPosition3(vertices, triangle[2], p2);
+
+        uint32_t i0 = triangle[0];
+        uint32_t i1 = triangle[1];
+        uint32_t i2 = triangle[2];
+        vec2 uv0 = {texcoords[i0 * 2u + 0u], texcoords[i0 * 2u + 1u]};
+        vec2 uv1 = {texcoords[i1 * 2u + 0u], texcoords[i1 * 2u + 1u]};
+        vec2 uv2 = {texcoords[i2 * 2u + 0u], texcoords[i2 * 2u + 1u]};
+
+        vec3 edge1 = GLM_VEC3_ZERO_INIT;
+        vec3 edge2 = GLM_VEC3_ZERO_INIT;
+        glm_vec3_sub(p1, p0, edge1);
+        glm_vec3_sub(p2, p0, edge2);
+
+        float du1 = uv1[0] - uv0[0];
+        float dv1 = uv1[1] - uv0[1];
+        float du2 = uv2[0] - uv0[0];
+        float dv2 = uv2[1] - uv0[1];
+        float det = du1 * dv2 - dv1 * du2;
+        if (fabsf(det) <= 1e-12f) continue;
+
+        float invDet = 1.0f / det;
+        vec3 sdir = {
+            (dv2 * edge1[0] - dv1 * edge2[0]) * invDet,
+            (dv2 * edge1[1] - dv1 * edge2[1]) * invDet,
+            (dv2 * edge1[2] - dv1 * edge2[2]) * invDet,
+        };
+        vec3 tdir = {
+            (du1 * edge2[0] - du2 * edge1[0]) * invDet,
+            (du1 * edge2[1] - du2 * edge1[1]) * invDet,
+            (du1 * edge2[2] - du2 * edge1[2]) * invDet,
+        };
+
+        glm_vec3_add(tangent1[i0], sdir, tangent1[i0]);
+        glm_vec3_add(tangent1[i1], sdir, tangent1[i1]);
+        glm_vec3_add(tangent1[i2], sdir, tangent1[i2]);
+        glm_vec3_add(tangent2[i0], tdir, tangent2[i0]);
+        glm_vec3_add(tangent2[i1], tdir, tangent2[i1]);
+        glm_vec3_add(tangent2[i2], tdir, tangent2[i2]);
+    }
+
+    for (size_t vertexIndex = 0; vertexIndex < vertexCount; vertexIndex++) {
+        vec3 tangent;
+        glm_vec3_copy(tangent1[vertexIndex], tangent);
+        vec3 normal;
+        loadVertexNormal3(vertices, (uint32_t)vertexIndex, normal);
+        if (glm_vec3_norm2(normal) <= 1e-12f || glm_vec3_norm2(tangent) <= 1e-12f) {
+            buildFallbackTangent(vertices[vertexIndex].normal, vertices[vertexIndex].tangent);
+            continue;
+        }
+
+        glm_vec3_normalize(normal);
+        vec3 crossValue = GLM_VEC3_ZERO_INIT;
+        glm_vec3_cross(normal, tangent, crossValue);
+        float handedness = glm_vec3_dot(crossValue, tangent2[vertexIndex]) < 0.0f ? -1.0f : 1.0f;
+        if (!orthonormalizeTangentFrame(
+                vertices[vertexIndex].normal,
+                tangent,
+                handedness,
+                vertices[vertexIndex].tangent)) {
+            buildFallbackTangent(vertices[vertexIndex].normal, vertices[vertexIndex].tangent);
+        }
+    }
+
+    free(tangent1);
+    free(tangent2);
+}
+
+static void alignPrimitiveWindingToNormals(Vertex* vertices, size_t vertexCount, uint32_t* indices, size_t indexCount) {
+    if (!vertices || !indices || vertexCount == 0 || indexCount < 3) {
+        return;
+    }
+
+    for (size_t indexOffset = 0; indexOffset + 2 < indexCount; indexOffset += 3) {
+        if (triangleNormalAlignment(vertices, vertexCount, indices, indexOffset) >= 0.0f) {
+            continue;
+        }
+        uint32_t tmp = indices[indexOffset + 1];
+        indices[indexOffset + 1] = indices[indexOffset + 2];
+        indices[indexOffset + 2] = tmp;
     }
 }
 
@@ -261,6 +498,9 @@ static int buildPrimitiveEntry(
 
     const cgltf_accessor* positionAccessor = findAttributeAccessor(primitive, cgltf_attribute_type_position);
     const cgltf_accessor* normalAccessor = findAttributeAccessor(primitive, cgltf_attribute_type_normal);
+    const cgltf_accessor* tangentAccessor = findAttributeAccessor(primitive, cgltf_attribute_type_tangent);
+    const cgltf_accessor* texcoordAccessor = findAttributeAccessor(primitive, cgltf_attribute_type_texcoord);
+    int useImportedTangents = normalAccessor && tangentAccessor;
     if (!positionAccessor || positionAccessor->count == 0) return 0;
 
     MeshImportEntry entry = {0};
@@ -281,25 +521,49 @@ static int buildPrimitiveEntry(
         return -1;
     }
 
+    float* texcoords = NULL;
+    if (!useImportedTangents && texcoordAccessor) {
+        texcoords = (float*)calloc(entry.vertexCount * 2u, sizeof(float));
+        if (!texcoords) {
+            releaseImportEntry(&entry);
+            return -1;
+        }
+    }
+
     for (size_t vertexIndex = 0; vertexIndex < entry.vertexCount; vertexIndex++) {
         float position[3] = {0.0f, 0.0f, 0.0f};
         float normal[3] = {0.0f, 0.0f, 1.0f};
+        float tangent[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+        float texcoord[2] = {0.0f, 0.0f};
 
         if (!cgltf_accessor_read_float(positionAccessor, (cgltf_size)vertexIndex, position, 3)) {
+            free(texcoords);
             releaseImportEntry(&entry);
             return -1;
         }
 
-        entry.vertices[vertexIndex].position[0] = position[0];
-        entry.vertices[vertexIndex].position[1] = position[1];
-        entry.vertices[vertexIndex].position[2] = position[2];
-        entry.vertices[vertexIndex].position[3] = 1.0f;
+        copyFloat3ToFloat4(entry.vertices[vertexIndex].position, position, 1.0f);
 
         if (normalAccessor && cgltf_accessor_read_float(normalAccessor, (cgltf_size)vertexIndex, normal, 3)) {
-            entry.vertices[vertexIndex].normal[0] = normal[0];
-            entry.vertices[vertexIndex].normal[1] = normal[1];
-            entry.vertices[vertexIndex].normal[2] = normal[2];
-            entry.vertices[vertexIndex].normal[3] = 0.0f;
+            copyFloat3ToFloat4(entry.vertices[vertexIndex].normal, normal, 0.0f);
+        }
+
+        if (useImportedTangents && cgltf_accessor_read_float(tangentAccessor, (cgltf_size)vertexIndex, tangent, 4)) {
+            entry.vertices[vertexIndex].tangent[0] = tangent[0];
+            entry.vertices[vertexIndex].tangent[1] = tangent[1];
+            entry.vertices[vertexIndex].tangent[2] = tangent[2];
+            entry.vertices[vertexIndex].tangent[3] = tangent[3];
+        }
+
+        if (texcoords && texcoordAccessor) {
+            if (!cgltf_accessor_read_float(texcoordAccessor, (cgltf_size)vertexIndex, texcoord, 2)) {
+                free(texcoords);
+                releaseImportEntry(&entry);
+                return -1;
+            }
+
+            texcoords[vertexIndex * 2u + 0u] = texcoord[0];
+            texcoords[vertexIndex * 2u + 1u] = texcoord[1];
         }
     }
 
@@ -307,6 +571,7 @@ static int buildPrimitiveEntry(
         for (size_t indexOffset = 0; indexOffset < entry.indexCount; indexOffset++) {
             cgltf_size indexValue = cgltf_accessor_read_index(primitive->indices, (cgltf_size)indexOffset);
             if (indexValue >= entry.vertexCount) {
+                free(texcoords);
                 releaseImportEntry(&entry);
                 return -1;
             }
@@ -321,6 +586,22 @@ static int buildPrimitiveEntry(
     if (!normalAccessor) {
         generateNormals(entry.vertices, entry.vertexCount, entry.indices, entry.indexCount);
     }
+
+    if (normalAccessor) {
+        alignPrimitiveWindingToNormals(entry.vertices, entry.vertexCount, entry.indices, entry.indexCount);
+    }
+
+    if (useImportedTangents) {
+        finalizeTangents(entry.vertices, entry.vertexCount);
+    } else if (texcoords) {
+        generateTangents(entry.vertices, entry.vertexCount, entry.indices, entry.indexCount, texcoords);
+    } else {
+        for (size_t vertexIndex = 0; vertexIndex < entry.vertexCount; vertexIndex++) {
+            buildFallbackTangent(entry.vertices[vertexIndex].normal, entry.vertices[vertexIndex].tangent);
+        }
+    }
+
+    free(texcoords);
 
     decomposeNodeTransform(node, entry.position, entry.rotation, entry.scale);
 

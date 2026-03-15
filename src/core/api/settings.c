@@ -108,6 +108,28 @@ VKRT_Result VKRT_setToneMappingMode(VKRT* vkrt, VKRT_ToneMappingMode toneMapping
     return VKRT_SUCCESS;
 }
 
+VKRT_Result VKRT_setEnvironmentLight(VKRT* vkrt, vec3 color, float strength) {
+    VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
+    if (stateReady != VKRT_SUCCESS) return stateReady;
+    if (!color) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    vec3 sanitizedColor;
+    for (int channel = 0; channel < 3; channel++) {
+        sanitizedColor[channel] = vkrtFiniteClampf(color[channel], 1.0f, 0.0f, INFINITY);
+    }
+    strength = vkrtFiniteClampf(strength, 0.0f, 0.0f, INFINITY);
+
+    if (memcmp(vkrt->sceneSettings.environmentColor, sanitizedColor, sizeof(sanitizedColor)) == 0 &&
+        vkrt->sceneSettings.environmentStrength == strength) {
+        return VKRT_SUCCESS;
+    }
+
+    memcpy(vkrt->sceneSettings.environmentColor, sanitizedColor, sizeof(sanitizedColor));
+    vkrt->sceneSettings.environmentStrength = strength;
+    resetSceneData(vkrt);
+    return VKRT_SUCCESS;
+}
+
 VKRT_Result VKRT_setFogDensity(VKRT* vkrt, float fogDensity) {
     VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
     if (stateReady != VKRT_SUCCESS) return stateReady;

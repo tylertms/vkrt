@@ -6,12 +6,12 @@
 #include "../utility/ray.slang"
 
 // References:
-// Basis construction: https://graphics.pixar.com/library/OrthonormalB/paper.pdf
-// Diffuse color workflow: https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html
-// Luminance weights: https://www.itu.int/rec/R-REC-BT.709
-// Disney tint/F0 controls: https://media.disneyanimation.com/uploads/production/publication_asset/48/asset/s2012_pbs_disney_brdf_notes_v3.pdf
-// Schlick Fresnel: https://diglib.eg.org/items/581037f7-1e5c-4859-a107-6dfeeb8f3ccb
-// Dielectric/conductor Fresnel: https://www.pbr-book.org/4ed/Reflection_Models/Specular_Reflection_and_Transmission
+// Basis construction: Duff et al., 2017 - https://graphics.pixar.com/library/OrthonormalB/paper.pdf
+// Diffuse color workflow: Khronos Group, 2017 - https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html
+// Luminance weights: ITU-R BT.709, 2015 - https://www.itu.int/rec/R-REC-BT.709
+// Disney BRDF: Burley, 2012 - https://media.disneyanimation.com/uploads/production/publication_asset/48/asset/s2012_pbs_disney_brdf_notes_v3.pdf
+// Schlick Fresnel: Schlick, 1994 - https://diglib.eg.org/items/581037f7-1e5c-4859-a107-6dfeeb8f3ccb
+// Dielectric/conductor Fresnel: Pharr, Jakob, Humphreys, 2023 - https://www.pbr-book.org/4ed/Reflection_Models/Specular_Reflection_and_Transmission
 
 static const float VKRT_PI = 3.14159265358979323846;
 static const float VKRT_INV_PI = 0.31830988618379067154;
@@ -22,27 +22,61 @@ struct ShadingBasis {
     float3 normal;
 };
 
-ShadingBasis makeShadingBasis(float3 normal) {
-    ShadingBasis basis;
-    float3 up = abs(normal.z) < 0.999 ? float3(0.0, 0.0, 1.0) : float3(1.0, 0.0, 0.0);
-    basis.normal = normal;
-    basis.tangent = safeNormalize(cross(up, normal));
-    basis.bitangent = cross(normal, basis.tangent);
-    return basis;
+float pow5(float value) {
+    float value2 = value * value;
+    return value2 * value2 * value;
 }
 
-void shadingBasis(float3 normal, out float3 tangent, out float3 bitangent) {
-    ShadingBasis basis = makeShadingBasis(normal);
-    tangent = basis.tangent;
-    bitangent = basis.bitangent;
+float schlickWeight(float cosTheta) {
+    return pow5(1.0 - saturate(cosTheta));
+}
+
+float cosTheta(float3 w) {
+    return w.z;
+}
+
+float absCosTheta(float3 w) {
+    return abs(w.z);
+}
+
+float sinTheta(float3 w) {
+    return sqrt(saturate(1.0 - cosTheta(w) * cosTheta(w)));
+}
+
+float sinPhi(float3 w) {
+    float sinThetaValue = sinTheta(w);
+    return sinThetaValue > 0.0 ? clamp(w.y / sinThetaValue, -1.0, 1.0) : 0.0;
+}
+
+float cosPhi(float3 w) {
+    float sinThetaValue = sinTheta(w);
+    return sinThetaValue > 0.0 ? clamp(w.x / sinThetaValue, -1.0, 1.0) : 1.0;
+}
+
+float3 makeFallbackTangent(float3 normal) {
+    float3 up = abs(normal.z) < 0.999 ? float3(0.0, 0.0, 1.0) : float3(1.0, 0.0, 0.0);
+    return safeNormalize(cross(up, normal));
+}
+
+ShadingBasis makeShadingBasis(float3 normal, float4 tangentData) {
+    ShadingBasis basis;
+    basis.normal = safeNormalize(normal);
+
+    float3 tangent = tangentData.xyz - basis.normal * dot(tangentData.xyz, basis.normal);
+    if (dot(tangent, tangent) <= 1e-12) {
+        tangent = makeFallbackTangent(basis.normal);
+    } else {
+        tangent = safeNormalize(tangent);
+    }
+
+    float handedness = tangentData.w < 0.0 ? -1.0 : 1.0;
+    basis.tangent = tangent;
+    basis.bitangent = cross(basis.normal, basis.tangent) * handedness;
+    return basis;
 }
 
 float3 localToWorld(float3 localDir, ShadingBasis basis) {
     return basis.tangent * localDir.x + basis.bitangent * localDir.y + basis.normal * localDir.z;
-}
-
-float3 localToWorld(float3 localDir, float3 normal) {
-    return localToWorld(localDir, makeShadingBasis(normal));
 }
 
 float3 worldToLocal(float3 worldDir, ShadingBasis basis) {
@@ -51,10 +85,6 @@ float3 worldToLocal(float3 worldDir, ShadingBasis basis) {
         dot(worldDir, basis.bitangent),
         dot(worldDir, basis.normal)
     );
-}
-
-float3 worldToLocal(float3 worldDir, float3 normal) {
-    return worldToLocal(worldDir, makeShadingBasis(normal));
 }
 
 float3 bsdfDiffuseColor(Material material) {
@@ -74,19 +104,44 @@ float3 bsdfTintColor(float3 baseColor) {
     return baseColor / luminance;
 }
 
+float3 bsdfSheenTintColor(float3 baseColor) {
+    float maxComponent = max(baseColor.x, max(baseColor.y, baseColor.z));
+    if (maxComponent <= 0.0) {
+        return float3(1.0);
+    }
+
+    float tintWeight = smoothstep(0.02, 0.1, maxComponent);
+    return lerp(float3(1.0), bsdfTintColor(baseColor), tintWeight);
+}
+
+float3 bsdfSheenColor(Material material) {
+    float3 tint = lerp(float3(1.0), bsdfSheenTintColor(material.baseColor), saturate(material.sheenTint));
+    return tint * material.sheen * (1.0 - material.metallic) * (1.0 - material.transmission);
+}
+
+float3 bsdfTransmissionColor(Material material) {
+    return material.baseColor;
+}
+
+float interfaceIor(Material material) {
+    return max(material.ior, 1.0);
+}
+
+float interfaceEta(Material material, uint frontFace) {
+    float ior = interfaceIor(material);
+    return frontFace != 0u ? ior : (1.0 / ior);
+}
+
+float interfaceRefractionEta(Material material, uint frontFace) {
+    float ior = interfaceIor(material);
+    return frontFace != 0u ? (1.0 / ior) : ior;
+}
+
 float dielectricF0(float eta) {
     float numerator = eta - 1.0;
     float denominator = eta + 1.0;
     float f0 = numerator / max(denominator, 1e-6);
     return f0 * f0;
-}
-
-float3 conductorF0(float3 eta, float3 k) {
-    float3 etaMinusOne = eta - 1.0;
-    float3 etaPlusOne = eta + 1.0;
-    float3 numerator = etaMinusOne * etaMinusOne + k * k;
-    float3 denominator = etaPlusOne * etaPlusOne + k * k;
-    return numerator / max(denominator, float3(1e-6));
 }
 
 bool materialHasConductor(Material material) {
@@ -100,22 +155,15 @@ float3 bsdfDielectricSpecularF0(Material material) {
     return saturate(dielectric * specularScale * tint);
 }
 
-float3 bsdfSpecularF0(Material material) {
-    float3 dielectric = bsdfDielectricSpecularF0(material);
-    float3 conductor = materialHasConductor(material)
-        ? conductorF0(max(material.eta, float3(1e-3)), max(material.k, float3(0.0)))
-        : material.baseColor;
-    return lerp(dielectric, conductor, material.metallic);
+float bsdfDielectricSpecularF0Luminance(Material material) {
+    return saturate(bsdfLuminance(bsdfDielectricSpecularF0(material)));
 }
 
 float3 fresnelSchlick(float cosTheta, float3 f0) {
-    float m = 1.0 - saturate(cosTheta);
-    float m2 = m * m;
-    float m5 = m2 * m2 * m;
-    return f0 + (1.0 - f0) * m5;
+    float weight = schlickWeight(cosTheta);
+    return f0 + (1.0 - f0) * weight;
 }
 
-// eta is the relative IOR eta_t / eta_i for the current interface.
 float fresnelDielectric(float cosTheta, float eta) {
     float cosThetaI = clamp(cosTheta, -1.0, 1.0);
     if (cosThetaI < 0.0) {
@@ -135,7 +183,6 @@ float fresnelDielectric(float cosTheta, float eta) {
     return 0.5 * (rParallel * rParallel + rPerpendicular * rPerpendicular);
 }
 
-// eta and k are already relative to the incident medium.
 float3 fresnelConductor(float cosTheta, float3 eta, float3 k) {
     float cosThetaI = saturate(cosTheta);
     float cos2ThetaI = cosThetaI * cosThetaI;

@@ -3,18 +3,15 @@
 
 #include "../common.slang"
 
-// GGX specular reflection lobe:
-// Microfacet glossy lobe for metals and dielectrics.
-// Roughness widens the highlight, anisotropy stretches it, and Fresnel controls edge brightening.
+// GGX microfacet specular reflection (conductor/metallic lobe).
+// Sampled using spherical-cap VNDF sampling with Smith height-correlated masking.
 //
 // References:
-// Anisotropic roughness: https://media.disneyanimation.com/uploads/production/publication_asset/48/asset/s2012_pbs_disney_brdf_notes_v3.pdf
-// Bounded VNDF k: https://gpuopen.com/download/Bounded_VNDF_Sampling_for_Smith-GGX_Reflections.pdf
-// Bounded VNDF sampling: https://gpuopen.com/download/Bounded_VNDF_Sampling_for_Smith-GGX_Reflections_Supplementary_Document.pdf
-// GGX masking/shadowing: https://jcgt.org/published/0007/04/01/paper.pdf
-// Microfacet reflection basics: https://www.pbr-book.org/4ed/Reflection_Models/Roughness_Using_Microfacet_Theory
-// Disney metallic Fresnel: https://media.disneyanimation.com/uploads/production/publication_asset/48/asset/s2012_pbs_disney_brdf_notes_v3.pdf
-// Fresnel building blocks: https://www.pbr-book.org/4ed/Reflection_Models/Specular_Reflection_and_Transmission
+// Anisotropic roughness mapping: Burley, 2012 - https://blog.selfshadow.com/publications/s2012-shading-course/burley/s2012_pbs_disney_brdf_notes_v3.pdf
+// Visible GGX normal sampling: Dupuy, Benyoub, 2023 - https://arxiv.org/abs/2306.05044
+// GGX masking/shadowing: Heitz, 2018 - https://jcgt.org/published/0007/04/01/paper.pdf
+// Microfacet theory: Pharr, Jakob, Humphreys, 2023 - https://www.pbr-book.org/4ed/Reflection_Models/Roughness_Using_Microfacet_Theory
+// Conductor Fresnel: Pharr, Jakob, Humphreys, 2023 - https://www.pbr-book.org/4ed/Reflection_Models/Specular_Reflection_and_Transmission
 
 static const float GGX_MIN_ALPHA = 1e-3;
 static const float GGX_EPSILON = 1e-6;
@@ -32,7 +29,7 @@ float2 ggxAlpha(Material material) {
     return max(float2(a / aspect, a * aspect), float2(GGX_MIN_ALPHA));
 }
 
-float ggxVndfK(float3 wo, float2 alpha) {
+float ggxVNDFK(float3 wo, float2 alpha) {
     float a = saturate(min(alpha.x, alpha.y));
     float s = 1.0 + length(wo.xy);
     float a2 = a * a;
@@ -58,6 +55,10 @@ float ggxMasking(float3 wo, float3 wi, float2 alpha) {
     return 1.0 / (1.0 + ggxLambda(wo, alpha) + ggxLambda(wi, alpha));
 }
 
+float ggxMasking1(float3 w, float2 alpha) {
+    return 1.0 / (1.0 + ggxLambda(w, alpha));
+}
+
 float ggxProjectedLength(float3 wo, float2 alpha) {
     float2 stretchedXY = alpha * wo.xy;
     return sqrt(dot(stretchedXY, stretchedXY) + wo.z * wo.z);
@@ -66,7 +67,7 @@ float ggxProjectedLength(float3 wo, float2 alpha) {
 GGXParams makeGGXParams(Material material, float3 wo) {
     GGXParams params;
     params.alpha = ggxAlpha(material);
-    params.vndfK = ggxVndfK(wo, params.alpha);
+    params.vndfK = ggxVNDFK(wo, params.alpha);
     params.projectedWoLength = ggxProjectedLength(wo, params.alpha);
     return params;
 }
@@ -85,21 +86,35 @@ bool ggxHalfVector(float3 wo, float3 wi, out float3 m, out float woDotM) {
     return woDotM > 0.0;
 }
 
-float3 ggxFresnel(Material material, float cosTheta) {
-    float3 dielectric = fresnelSchlick(cosTheta, bsdfDielectricSpecularF0(material));
-    float3 conductor = materialHasConductor(material)
+float ggxVisibleNormalPdf(float3 wo, float3 m, GGXParams params) {
+    float woDotM = dot(wo, m);
+    if (cosTheta(wo) <= 0.0 || m.z <= 0.0 || woDotM <= 0.0) {
+        return 0.0;
+    }
+
+    float Dm = ggxDistribution(m, params.alpha);
+    float G1 = ggxMasking1(wo, params.alpha);
+    return Dm * G1 * woDotM / max(cosTheta(wo), GGX_EPSILON);
+}
+
+float ggxReflectionPdf(float3 wo, float3 m, GGXParams params) {
+    float visiblePdf = ggxVisibleNormalPdf(wo, m, params);
+    return visiblePdf / max(4.0 * abs(dot(wo, m)), GGX_EPSILON);
+}
+
+float3 ggxConductorFresnel(Material material, float cosTheta) {
+    return materialHasConductor(material)
         ? fresnelConductor(cosTheta, max(material.eta, float3(1e-3)), max(material.k, float3(0.0)))
         : fresnelSchlick(cosTheta, material.baseColor);
-    return lerp(dielectric, conductor, material.metallic);
 }
 
 BSDFEval evalGGXFromHalfVector(Material material, float3 wo, float3 wi, GGXParams params, float3 m, float woDotM) {
     float Dm = ggxDistribution(m, params.alpha);
     float G = ggxMasking(wo, wi, params.alpha);
-    float3 F = ggxFresnel(material, woDotM);
+    float3 F = ggxConductorFresnel(material, woDotM);
     BSDFEval eval;
-    eval.value = F * (Dm * G / max(4.0 * wo.z * wi.z, GGX_EPSILON));
-    eval.pdf = Dm / max(2.0 * (params.vndfK * wo.z + params.projectedWoLength), GGX_EPSILON);
+    eval.value = F * (Dm * G / max(4.0 * cosTheta(wo) * cosTheta(wi), GGX_EPSILON));
+    eval.pdf = ggxReflectionPdf(wo, m, params);
     return eval;
 }
 
@@ -107,7 +122,7 @@ BSDFEval evalGGX(Material material, float3 wo, float3 wi, GGXParams params) {
     BSDFEval eval;
     eval.value = float3(0.0);
     eval.pdf = 0.0;
-    if (wo.z <= 0.0 || wi.z <= 0.0) {
+    if (cosTheta(wo) <= 0.0 || cosTheta(wi) <= 0.0) {
         return eval;
     }
 
@@ -166,7 +181,7 @@ bool sampleGGX(float3 wo, GGXParams params, inout uint rng, out float3 wi) {
     }
 
     wi = 2.0f * woDotM * m - wo;
-    return wi.z > 0.0;
+    return cosTheta(wi) > 0.0;
 }
 
 #endif

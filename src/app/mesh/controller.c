@@ -170,6 +170,7 @@ void meshControllerLoadDefaultAssets(VKRT* vkrt, Session* session) {
 
     Material neutralWhite = VKRT_materialDefault();
     neutralWhite.roughness = 1.0f;
+    neutralWhite.diffuseRoughness = 0.0f;
 
     Material leftWallMaterial = neutralWhite;
     leftWallMaterial.baseColor[0] = 0.80f;

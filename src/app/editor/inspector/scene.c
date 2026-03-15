@@ -202,12 +202,16 @@ static void drawMeshMaterialEditor(VKRT* vkrt, uint32_t meshIndex, const VKRT_Me
     }
     materialChanged |= ImGui_SliderFloatEx("Metallic", &material.metallic, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     materialChanged |= ImGui_SliderFloatEx("Roughness", &material.roughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    materialChanged |= ImGui_SliderFloatEx("Diffuse Roughness", &material.diffuseRoughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     materialChanged |= ImGui_DragFloatEx("IOR", &material.ior, 0.01f, 1.0f, 4.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     materialChanged |= ImGui_SliderFloatEx("Specular", &material.specular, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     materialChanged |= ImGui_SliderFloatEx("Specular Tint", &material.specularTint, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     materialChanged |= ImGui_SliderFloatEx("Anisotropic", &material.anisotropic, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    materialChanged |= ImGui_SliderFloatEx("Transmission", &material.transmission, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    materialChanged |= ImGui_SliderFloatEx("Subsurface", &material.subsurface, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     materialChanged |= ImGui_SliderFloatEx("Sheen", &material.sheen, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     materialChanged |= ImGui_SliderFloatEx("Sheen Tint", &material.sheenTint, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    materialChanged |= ImGui_SliderFloatEx("Sheen Roughness", &material.sheenRoughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     materialChanged |= ImGui_SliderFloatEx("Clearcoat", &material.clearcoat, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     materialChanged |= ImGui_SliderFloatEx("Clearcoat Gloss", &material.clearcoatGloss, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     materialChanged |= ImGui_DragFloatEx("Emission", &material.emissionLuminance, 0.1f, 0.0f, 1000000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);

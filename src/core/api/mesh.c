@@ -14,6 +14,7 @@ static Material sanitizeMaterial(Material material) {
 
     material.metallic = vkrtFiniteClampf(material.metallic, 0.0f, 0.0f, 1.0f);
     material.roughness = vkrtFiniteClampf(material.roughness, 0.0f, 0.0f, 1.0f);
+    material.diffuseRoughness = vkrtFiniteClampf(material.diffuseRoughness, 0.0f, 0.0f, 1.0f);
     material.specular = vkrtFiniteClampf(material.specular, 0.0f, 0.0f, 1.0f);
     material.specularTint = vkrtFiniteClampf(material.specularTint, 0.0f, 0.0f, 1.0f);
     material.anisotropic = vkrtFiniteClampf(material.anisotropic, 0.0f, 0.0f, 1.0f);
@@ -22,6 +23,9 @@ static Material sanitizeMaterial(Material material) {
     material.clearcoat = vkrtFiniteClampf(material.clearcoat, 0.0f, 0.0f, 1.0f);
     material.clearcoatGloss = vkrtFiniteClampf(material.clearcoatGloss, 0.0f, 0.0f, 1.0f);
     material.ior = vkrtFiniteClampf(material.ior, 1.0f, 1.0f, 4.0f);
+    material.transmission = vkrtFiniteClampf(material.transmission, 0.0f, 0.0f, 1.0f);
+    material.subsurface = vkrtFiniteClampf(material.subsurface, 0.0f, 0.0f, 1.0f);
+    material.sheenRoughness = vkrtFiniteClampf(material.sheenRoughness, 0.0f, 0.0f, 1.0f);
     material.emissionLuminance = vkrtFiniteClampf(material.emissionLuminance, 0.0f, 0.0f, INFINITY);
     for (int c = 0; c < 3; c++) {
         material.eta[c] = vkrtFiniteClampf(material.eta[c], 0.0f, 0.0f, INFINITY);
