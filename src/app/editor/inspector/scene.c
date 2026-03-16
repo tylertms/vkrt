@@ -57,10 +57,12 @@ static bool drawSceneBrowserEntry(uint32_t meshIndex, const VKRT_MeshSnapshot* m
     snprintf(id, sizeof(id), "##mesh_%u", meshIndex);
 
     const char* meshName = mesh->name[0] ? mesh->name : "(unknown)";
-    formatPrefixedText(nameText,
+    formatPrefixedText(
+        nameText,
         sizeof(nameText),
         mesh->ownsGeometry ? ICON_FA_CUBE : ICON_FA_CLONE,
-        meshName);
+        meshName
+    );
 
     const ImVec4 transparent = {0.0f, 0.0f, 0.0f, 0.0f};
     ImGui_PushStyleColorImVec4(ImGuiCol_Header, transparent);
@@ -87,11 +89,13 @@ static bool drawSceneBrowserEntry(uint32_t meshIndex, const VKRT_MeshSnapshot* m
         ImDrawList_AddRectFilledEx(ImGui_GetWindowDrawList(), min, max, bgColor, 4.0f, 0);
     }
 
-    ImDrawList_AddTextEx(ImGui_GetWindowDrawList(),
+    ImDrawList_AddTextEx(
+        ImGui_GetWindowDrawList(),
         (ImVec2){textX, textY},
         ImGui_GetColorU32(ImGuiCol_Text),
         nameText,
-        NULL);
+        NULL
+    );
     return clicked;
 }
 

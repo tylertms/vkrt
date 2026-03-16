@@ -133,16 +133,22 @@ VKRT_Result createSwapChain(VKRT* vkrt) {
     if (!vkrt->runtime.swapChainFormatLogInitialized ||
         vkrt->runtime.lastLoggedSwapChainFormat != surfaceFormat.format ||
         vkrt->runtime.lastLoggedSwapChainColorSpace != surfaceFormat.colorSpace) {
-        LOG_INFO("Swapchain format selected: %s (%d), color space: %s (%d)",
-            swapChainFormatName(surfaceFormat.format), (int)surfaceFormat.format,
-            swapChainColorSpaceName(surfaceFormat.colorSpace), (int)surfaceFormat.colorSpace);
+        LOG_INFO(
+            "Swapchain format selected: %s (%d), color space: %s (%d)",
+            swapChainFormatName(surfaceFormat.format),
+            (int)surfaceFormat.format,
+            swapChainColorSpaceName(surfaceFormat.colorSpace),
+            (int)surfaceFormat.colorSpace
+        );
         vkrt->runtime.swapChainFormatLogInitialized = VK_TRUE;
         vkrt->runtime.lastLoggedSwapChainFormat = surfaceFormat.format;
         vkrt->runtime.lastLoggedSwapChainColorSpace = surfaceFormat.colorSpace;
     }
-    LOG_TRACE("Swapchain present mode selected. Profile: %s, actual: %s",
+    LOG_TRACE(
+        "Swapchain present mode selected. Profile: %s, actual: %s",
         presentProfileName(useRenderPresentProfile),
-        presentModeName(presentMode));
+        presentModeName(presentMode)
+    );
 
     uint32_t imageCount = supportDetails.capabilities.minImageCount + 1;
     if (supportDetails.capabilities.maxImageCount && imageCount > supportDetails.capabilities.maxImageCount) {
@@ -251,9 +257,10 @@ VKRT_Result recreateSwapChain(VKRT* vkrt) {
     }
 
     if (resetRenderFinishedSemaphores(
-            vkrt,
-            0,
-            vkrt->runtime.swapChainImageCount) != VKRT_SUCCESS) {
+        vkrt,
+        0,
+        vkrt->runtime.swapChainImageCount
+    ) != VKRT_SUCCESS) {
         return VKRT_ERROR_OPERATION_FAILED;
     }
 
@@ -261,11 +268,13 @@ VKRT_Result recreateSwapChain(VKRT* vkrt) {
     if (createFramebuffers(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
 
     if (vkrt->renderStatus.renderModeActive) {
-        VKRT_setRenderViewport(vkrt,
+        VKRT_setRenderViewport(
+            vkrt,
             preservedViewportX,
             preservedViewportY,
             preservedViewportWidth,
-            preservedViewportHeight);
+            preservedViewportHeight
+        );
     } else {
         VKRT_setRenderViewport(vkrt, 0, 0, vkrt->runtime.swapChainExtent.width, vkrt->runtime.swapChainExtent.height);
     }
@@ -406,7 +415,8 @@ VKRT_Result querySwapChainSupport(VKRT* vkrt, SwapChainSupportDetails* outSuppor
             vkrt->core.physicalDevice,
             vkrt->runtime.surface,
             &presentModeCount,
-            supportDetails.presentModes);
+            supportDetails.presentModes
+        );
         supportDetails.presentModeCount = presentModeCount;
     }
 
@@ -446,17 +456,25 @@ VKRT_Result chooseSwapSurfaceFormat(const SwapChainSupportDetails* supportDetail
         VkSurfaceFormatKHR candidate = supportDetails->formats[formatIndex];
         if (candidate.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
             *outSurfaceFormat = candidate;
-            LOG_INFO("Falling back to non-preferred swapchain format: %s (%d), color space: %s (%d)",
-                swapChainFormatName(candidate.format), (int)candidate.format,
-                swapChainColorSpaceName(candidate.colorSpace), (int)candidate.colorSpace);
+            LOG_INFO(
+                "Falling back to non-preferred swapchain format: %s (%d), color space: %s (%d)",
+                swapChainFormatName(candidate.format),
+                (int)candidate.format,
+                swapChainColorSpaceName(candidate.colorSpace),
+                (int)candidate.colorSpace
+            );
             return VKRT_SUCCESS;
         }
     }
 
     *outSurfaceFormat = supportDetails->formats[0];
-    LOG_INFO("Falling back to first available swapchain format: %s (%d), color space: %s (%d)",
-        swapChainFormatName(outSurfaceFormat->format), (int)outSurfaceFormat->format,
-        swapChainColorSpaceName(outSurfaceFormat->colorSpace), (int)outSurfaceFormat->colorSpace);
+    LOG_INFO(
+        "Falling back to first available swapchain format: %s (%d), color space: %s (%d)",
+        swapChainFormatName(outSurfaceFormat->format),
+        (int)outSurfaceFormat->format,
+        swapChainColorSpaceName(outSurfaceFormat->colorSpace),
+        (int)outSurfaceFormat->colorSpace
+    );
     return VKRT_SUCCESS;
 }
 
@@ -480,13 +498,15 @@ VkPresentModeKHR chooseSwapPresentMode(
         return chooseRankedPresentMode(
             supportDetails,
             kRenderPresentModeRanking,
-            VKRT_ARRAY_COUNT(kRenderPresentModeRanking));
+            VKRT_ARRAY_COUNT(kRenderPresentModeRanking)
+        );
     }
 
     return chooseRankedPresentMode(
         supportDetails,
         kInteractivePresentModeRanking,
-        VKRT_ARRAY_COUNT(kInteractivePresentModeRanking));
+        VKRT_ARRAY_COUNT(kInteractivePresentModeRanking)
+    );
 }
 
 VkExtent2D chooseSwapExtent(VKRT* vkrt, const SwapChainSupportDetails* supportDetails) {

@@ -8,7 +8,6 @@ static const uint kSceneRayMask = 0xffu;
 static const uint kSceneRayFlags = RAY_FLAG_NONE;
 
 void traceSceneRay(inout Payload payload, RayDesc ray, uint depth) {
-/*
 #ifdef VKRT_SER_ENABLED
     if (depth > 0u) {
         HitObject hitObject = HitObject::TraceRay(topLevelAS, kSceneRayFlags, kSceneRayMask, 0u, 0u, 0u, ray, payload);
@@ -17,7 +16,6 @@ void traceSceneRay(inout Payload payload, RayDesc ray, uint depth) {
         return;
     }
 #endif
-*/
     TraceRay(topLevelAS, kSceneRayFlags, kSceneRayMask, 0u, 0u, 0u, ray, payload);
 }
 

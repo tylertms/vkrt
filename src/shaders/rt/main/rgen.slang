@@ -1,6 +1,9 @@
 #include "../../core/resources.slang"
+#include "../../bsdf/bsdf.slang"
+#include "../../lighting/direct.slang"
 #include "../../utility/random.slang"
 #include "../../utility/ray.slang"
+#include "../../utility/packing.slang"
 #include "../../utility/tonemap.slang"
 #include "../../utility/viewport.slang"
 #include "../../trace/scene.slang"
@@ -19,13 +22,32 @@ void main() {
     float4 previous = accumulationReadImage[pixel];
     uint previousSamples = (uint)(previous.w + 0.5);
 
-    int2 requestPixel = int2(int(pickBuffer[0].pixel & 0xffffu), int((pickBuffer[0].pixel >> 16) & 0xffffu));
-    bool capturePick = all(pixel == requestPixel);
+    int2 selectionPixel = int2(int(selection[0].pixel & 0xffffu), int((selection[0].pixel >> 16) & 0xffffu));
+    bool captureSelection = all(pixel == selectionPixel);
     uint firstHitInstance = VKRT_INVALID_INDEX;
 
-    float3 frameRadiance = float3(0.0);
+    uint debugMode = scene.debugMode;
+    bool bsdfOnlyDebug = debugMode == VKRT_DEBUG_MODE_BSDF_ONLY;
+    bool neeOnlyDebug = debugMode == VKRT_DEBUG_MODE_NEE_ONLY;
+    bool bounceCountDebug = debugMode == VKRT_DEBUG_MODE_BOUNCE_COUNT;
+    bool neeEnabled = scene.misNeeEnabled != 0u && scene.emissiveMeshCount > 0u;
 
-    for (uint sampleIndex = 0u; sampleIndex < spp; sampleIndex++) {
+    float3 frameRadiance = float3(0.0);
+    bool debugEarlyOut = false;
+
+    if (debugMode == VKRT_DEBUG_MODE_SELECTION_MASK) {
+        uint mask = selectionMaskImage[pixel];
+        frameRadiance = mask != 0u ? float3(0.0, 0.6, 1.0) : float3(0.05);
+        debugEarlyOut = true;
+
+        if (captureSelection) {
+            Payload pickPayload = Payload.make();
+            traceSceneRay(pickPayload, makePrimaryRay(pixel, float2(0.0)), 0u);
+            firstHitInstance = pickPayload.instanceIndex;
+        }
+    }
+
+    for (uint sampleIndex = 0u; sampleIndex < spp && !debugEarlyOut; sampleIndex++) {
         float3 radiance = float3(0.0);
         float3 throughput = float3(1.0);
 
@@ -33,22 +55,79 @@ void main() {
         float2 jitter = float2(rand(rng), rand(rng)) - float2(0.5);
         RayDesc ray = makePrimaryRay(pixel, jitter);
 
+        float prevBsdfPdf = 0.0;
+        uint bounceCount = 0u;
+
         for (uint depth = 0u; depth < scene.rrMaxDepth; depth++) {
-            Payload payload = Payload.make(rng);
+            Payload payload = Payload.make();
             traceSceneRay(payload, ray, depth);
-            rng = payload.rngState;
 
             if (sampleIndex == 0u && depth == 0u) {
                 firstHitInstance = payload.instanceIndex;
+
+                if (payload.didHit != 0u) {
+                    if (debugMode == VKRT_DEBUG_MODE_NORMALS) {
+                        float3 shadingNormal = unpackOctNormal(payload.packedShadingNormal);
+                        frameRadiance = shadingNormal * 0.5 + 0.5;
+                        debugEarlyOut = true;
+                        break;
+                    }
+
+                    if (debugMode == VKRT_DEBUG_MODE_DEPTH) {
+                        frameRadiance = float3(1.0 / (1.0 + payload.hitDistance));
+                        debugEarlyOut = true;
+                        break;
+                    }
+                }
             }
 
-            radiance += throughput * payload.contribution;
-
-            if (payload.didScatter == 0u) {
+            if (payload.didHit == 0u) {
+                if (!neeOnlyDebug) {
+                    radiance += throughput * scene.environmentLight.xyz;
+                }
                 break;
             }
 
-            throughput *= payload.bsdfWeight;
+            float3 hitPoint = ray.Origin + ray.Direction * payload.hitDistance;
+            float3 shadingNormal = unpackOctNormal(payload.packedShadingNormal);
+            float3 geometricNormal = unpackOctNormal(payload.packedGeometricNormal);
+            Material material = materials[payload.materialIndex];
+            ShadingBasis basis = makeShadingBasis(shadingNormal, payload.tangent);
+            float3 wo = worldToLocal(-ray.Direction, basis);
+            BSDFState state = makeBSDFState(material, wo, payload.frontFace);
+
+            float3 contribution = float3(0.0);
+            if (!bsdfOnlyDebug && neeEnabled) {
+                contribution += evaluateDirectLight(hitPoint, geometricNormal, basis, state, rng);
+            }
+
+            if (!neeOnlyDebug) {
+                float3 emission = material.emissionColor * material.emissionLuminance;
+                if (any(emission > 0.0)) {
+                    float misWeight = 1.0;
+                    if (neeEnabled && depth > 0u && prevBsdfPdf > 0.0) {
+                        misWeight = computeBSDFEmitterMISWeight(
+                            prevBsdfPdf,
+                            meshInfos[payload.instanceIndex].lightPdfArea,
+                            geometricNormal,
+                            ray.Direction,
+                            payload.hitDistance
+                        );
+                    }
+                    contribution += emission * misWeight;
+                }
+            }
+
+            radiance += throughput * contribution;
+            bounceCount = depth + 1u;
+
+            BSDFSample sample = sampleBSDF(state, basis, rng);
+            if (!sample.isUsable()) {
+                break;
+            }
+
+            throughput *= sample.weight;
+            prevBsdfPdf = sample.pdf;
             if (!any(throughput > 0.0)) {
                 break;
             }
@@ -61,27 +140,43 @@ void main() {
                 throughput /= continueProbability;
             }
 
-            ray.Origin = payload.nextOrigin;
-            ray.Direction = payload.nextDirection;
+            float3 offsetDir = sample.isTransmission != 0u ? -geometricNormal : geometricNormal;
+            ray.Origin = hitPoint + offsetDir * 0.001;
+            ray.Direction = sample.wi;
             ray.TMin = 0.001;
             ray.TMax = 10000.0;
         }
 
-        frameRadiance += radiance;
+        if (bounceCountDebug && sampleIndex == 0u) {
+            float t = clamp(float(bounceCount) / max(float(scene.rrMaxDepth), 1.0), 0.0, 1.0);
+            frameRadiance = float3(t, 1.0 - t, 0.0);
+            debugEarlyOut = true;
+        }
+
+        if (!debugEarlyOut) {
+            frameRadiance += radiance;
+        }
     }
 
-    if (capturePick) {
-        pickBuffer[0].hitMeshIndex = firstHitInstance;
+    if (!debugEarlyOut) {
+        frameRadiance /= float(spp);
     }
 
-    frameRadiance /= float(spp);
+    if (captureSelection) {
+        selection[0].hitMeshIndex = firstHitInstance;
+    }
 
-    float previousWeight = float(previousSamples);
-    float newWeight = float(spp);
-    float totalWeight = previousWeight + newWeight;
-    float3 accumulated = (previous.xyz * previousWeight + frameRadiance * newWeight) / max(totalWeight, 1.0);
-    float3 mapped = scene.toneMappingMode == VKRT_TONE_MAPPING_MODE_ACES ? toneMapACES(accumulated) : accumulated;
+    if (debugEarlyOut) {
+        accumulationWriteImage[pixel] = float4(frameRadiance, 0.0);
+        outputImage[pixel] = float4(frameRadiance, 1.0);
+    } else {
+        float previousWeight = float(previousSamples);
+        float newWeight = float(spp);
+        float totalWeight = previousWeight + newWeight;
+        float3 accumulated = (previous.xyz * previousWeight + frameRadiance * newWeight) / max(totalWeight, 1.0);
+        float3 mapped = toneMap(accumulated);
 
-    accumulationWriteImage[pixel] = float4(accumulated, totalWeight);
-    outputImage[pixel] = float4(mapped, 1.0);
+        accumulationWriteImage[pixel] = float4(accumulated, totalWeight);
+        outputImage[pixel] = float4(mapped, 1.0);
+    }
 }

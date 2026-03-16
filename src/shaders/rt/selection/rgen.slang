@@ -1,7 +1,7 @@
 #include "../../core/resources.slang"
+#include "../../trace/selection.slang"
 #include "../../utility/ray.slang"
 #include "../../utility/viewport.slang"
-#include "payload.slang"
 
 [shader("raygeneration")]
 void main() {
@@ -12,15 +12,6 @@ void main() {
     }
 
     SelectionPayload payload = SelectionPayload.make();
-
-    TraceRay(
-        selectionTopLevelAS,
-        RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH,
-        0xffu,
-        0u,
-        0u,
-        0u,
-        makePrimaryRay(pixel, float2(0.0)),
-        payload);
+    traceSelectionRay(payload, makePrimaryRay(pixel, float2(0.0)));
     selectionMaskImage[pixel] = payload.didHit != 0u ? 1u : 0u;
 }

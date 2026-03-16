@@ -81,12 +81,26 @@ static void logDeviceExtensionSupport(const char* deviceName, const DeviceExtens
     if (!deviceName || !support) return;
 
     LOG_INFO("  Extension support for %s:", deviceName);
-    logExtensionMaskStatus("required",
-        requiredDeviceExtensions, requiredDeviceExtensionBits, NUM_REQ_EXTENSIONS,
-        support->availableMask, "loaded", "missing");
-    logExtensionMaskStatus("optional",
-        optionalDeviceExtensions, optionalDeviceExtensionBits, NUM_OPT_EXTENSIONS,
-        support->availableMask, "loaded", "not loaded");
+
+    logExtensionMaskStatus(
+        "required",
+        requiredDeviceExtensions,
+        requiredDeviceExtensionBits,
+        NUM_REQ_EXTENSIONS,
+        support->availableMask,
+        "loaded",
+        "missing"
+    );
+
+    logExtensionMaskStatus(
+        "optional",
+        optionalDeviceExtensions,
+        optionalDeviceExtensionBits,
+        NUM_OPT_EXTENSIONS,
+        support->availableMask,
+        "loaded",
+        "not loaded"
+    );
 
     if (support->missingRequiredMask) {
         LOG_INFO("    Missing required device extensions:");
@@ -203,9 +217,11 @@ static void logRequestedDevicePreference(const VKRT_CreateInfo* createInfo) {
     }
 
     if (createInfo->preferredDeviceIndex >= 0 && createInfo->preferredDeviceName && createInfo->preferredDeviceName[0]) {
-        LOG_INFO("Requested device: index %d, name contains \"%s\"",
+        LOG_INFO(
+            "Requested device: index %d, name contains \"%s\"",
             createInfo->preferredDeviceIndex,
-            createInfo->preferredDeviceName);
+            createInfo->preferredDeviceName
+        );
         return;
     }
     if (createInfo->preferredDeviceIndex >= 0) {
@@ -228,15 +244,21 @@ static void formatDevicePreferenceText(const VKRT_CreateInfo* createInfo, char* 
     if (createInfo->preferredDeviceIndex >= 0 &&
         createInfo->preferredDeviceName &&
         createInfo->preferredDeviceName[0]) {
-        snprintf(out, outSize, "index %d, name contains \"%s\"",
+        snprintf(
+            out,
+            outSize,
+            "index %d, name contains \"%s\"",
             createInfo->preferredDeviceIndex,
-            createInfo->preferredDeviceName);
+            createInfo->preferredDeviceName
+        );
         return;
     }
+
     if (createInfo->preferredDeviceIndex >= 0) {
         snprintf(out, outSize, "index %d", createInfo->preferredDeviceIndex);
         return;
     }
+
     if (createInfo->preferredDeviceName && createInfo->preferredDeviceName[0]) {
         snprintf(out, outSize, "name contains \"%s\"", createInfo->preferredDeviceName);
         return;
@@ -290,12 +312,14 @@ VKRT_Result pickPhysicalDevice(VKRT* vkrt, const VKRT_CreateInfo* createInfo) {
             case VK_PHYSICAL_DEVICE_TYPE_CPU:            typeName = "CPU";            break;
             default: break;
         }
-        LOG_INFO("  [%u] %s (%s)%s%s",
+        LOG_INFO(
+            "  [%u] %s (%s)%s%s",
             i,
             props.deviceName,
             typeName,
             score < 0 ? " - not suitable" : "",
-            preferenceMatch ? " [preferred match]" : "");
+            preferenceMatch ? " [preferred match]" : ""
+        );
         logDeviceExtensionSupport(props.deviceName, &extensionSupport);
 
         if (score > highestScore && (!preferenceRequested || preferenceMatch)) {
@@ -468,29 +492,52 @@ VKRT_Result createLogicalDevice(VKRT* vkrt) {
     createInfo.ppEnabledExtensionNames = enabledExtensions;
 
     LOG_INFO("Enabling device extensions for %s:", vkrt->core.deviceName);
-    logExtensionMaskStatus("required",
-        requiredDeviceExtensions, requiredDeviceExtensionBits, NUM_REQ_EXTENSIONS,
-        extensionSupport.enabledMask, "enabled", "disabled");
-    logExtensionMaskStatus("optional",
-        optionalDeviceExtensions, optionalDeviceExtensionBits, NUM_OPT_EXTENSIONS,
-        extensionSupport.enabledMask, "enabled", "disabled");
+
+    logExtensionMaskStatus(
+        "required",
+        requiredDeviceExtensions,
+        requiredDeviceExtensionBits,
+        NUM_REQ_EXTENSIONS,
+        extensionSupport.enabledMask,
+        "enabled",
+        "disabled"
+    );
+
+    logExtensionMaskStatus(
+        "optional",
+        optionalDeviceExtensions,
+        optionalDeviceExtensionBits,
+        NUM_OPT_EXTENSIONS,
+        extensionSupport.enabledMask,
+        "enabled",
+        "disabled"
+    );
+
     if (vkrt->runtime.disableSER &&
             (extensionSupport.availableMask & DEVICE_EXTENSION_RAY_TRACING_INVOCATION_REORDER_BIT)) {
-        LOG_INFO("    Optional extension %s was available but disabled by request",
-            VK_EXT_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME);
+        LOG_INFO(
+            "    Optional extension %s was available but disabled by request",
+            VK_EXT_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME
+        );
     }
+
     if ((extensionSupport.availableMask & DEVICE_EXTENSION_RAY_TRACING_INVOCATION_REORDER_BIT) &&
             !supportedReorderFeatures.rayTracingInvocationReorder) {
-        LOG_INFO("    Optional extension %s was loaded but its feature is unsupported, so it was not enabled",
-            VK_EXT_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME);
+        LOG_INFO(
+            "    Optional extension %s was loaded but its feature is unsupported, so it was not enabled",
+            VK_EXT_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME
+        );
     }
+
     if (extensionSupport.availableMask & DEVICE_EXTENSION_RAY_TRACING_INVOCATION_REORDER_BIT) {
         const char* reorderHintMode =
             vkrt->core.serReorderingHintMode == VK_RAY_TRACING_INVOCATION_REORDER_MODE_REORDER_EXT ?
                 "reorder" : "none";
-        LOG_INFO("    SER properties: hint mode=%s, max shader table record index=%u",
+        LOG_INFO(
+            "    SER properties: hint mode=%s, max shader table record index=%u",
             reorderHintMode,
-            vkrt->core.serMaxShaderBindingTableRecordIndex);
+            vkrt->core.serMaxShaderBindingTableRecordIndex
+        );
     }
 
     if (enableValidationLayers) {

@@ -2,12 +2,12 @@
 
 #include "buffer.h"
 #include "device.h"
+#include "geometry.h"
 #include "scene.h"
 #include "state.h"
 #include "debug.h"
 
 #include <stdlib.h>
-#include <string.h>
 
 typedef struct TLASBuildResources {
     AccelerationStructure* accelerationStructure;
@@ -59,7 +59,8 @@ static VKRT_Result prepareTLASBuild(
         VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
         &resources->instanceBuffer->buffer,
         &resources->instanceBuffer->memory,
-        NULL);
+        NULL
+    );
     if (result != VKRT_SUCCESS) {
         return result;
     }
@@ -95,7 +96,8 @@ static VKRT_Result prepareTLASBuild(
         VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
         &buildInfo,
         &instanceCount,
-        &buildSizesInfo);
+        &buildSizesInfo
+    );
 
     VkBufferCreateInfo tlasBufferCreateInfo = {0};
     tlasBufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -107,10 +109,11 @@ static VKRT_Result prepareTLASBuild(
     tlasBufferCreateInfo.pQueueFamilyIndices = &graphicsFamily;
 
     if (vkCreateBuffer(
-            vkrt->core.device,
-            &tlasBufferCreateInfo,
-            NULL,
-            &resources->accelerationStructure->buffer) != VK_SUCCESS) {
+        vkrt->core.device,
+        &tlasBufferCreateInfo,
+        NULL,
+        &resources->accelerationStructure->buffer
+    ) != VK_SUCCESS) {
         resetTLASBuildResources(vkrt, resources);
         return VKRT_ERROR_OPERATION_FAILED;
     }
@@ -126,28 +129,32 @@ static VKRT_Result prepareTLASBuild(
     tlasAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     tlasAllocateInfo.pNext = &allocateFlags;
     tlasAllocateInfo.allocationSize = tlasMemoryRequirements.size;
-    if (findMemoryType(vkrt,
-            tlasMemoryRequirements.memoryTypeBits,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            &tlasAllocateInfo.memoryTypeIndex) != VKRT_SUCCESS) {
+    if (findMemoryType(
+        vkrt,
+        tlasMemoryRequirements.memoryTypeBits,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        &tlasAllocateInfo.memoryTypeIndex
+    ) != VKRT_SUCCESS) {
         resetTLASBuildResources(vkrt, resources);
         return VKRT_ERROR_OPERATION_FAILED;
     }
 
     if (vkAllocateMemory(
-            vkrt->core.device,
-            &tlasAllocateInfo,
-            NULL,
-            &resources->accelerationStructure->memory) != VK_SUCCESS) {
+        vkrt->core.device,
+        &tlasAllocateInfo,
+        NULL,
+        &resources->accelerationStructure->memory
+    ) != VK_SUCCESS) {
         resetTLASBuildResources(vkrt, resources);
         return VKRT_ERROR_OPERATION_FAILED;
     }
 
     if (vkBindBufferMemory(
-            vkrt->core.device,
-            resources->accelerationStructure->buffer,
-            resources->accelerationStructure->memory,
-            0) != VK_SUCCESS) {
+        vkrt->core.device,
+        resources->accelerationStructure->buffer,
+        resources->accelerationStructure->memory,
+        0
+    ) != VK_SUCCESS) {
         resetTLASBuildResources(vkrt, resources);
         return VKRT_ERROR_OPERATION_FAILED;
     }
@@ -159,10 +166,11 @@ static VKRT_Result prepareTLASBuild(
     createInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
 
     if (vkrt->core.procs.vkCreateAccelerationStructureKHR(
-            vkrt->core.device,
-            &createInfo,
-            NULL,
-            &resources->accelerationStructure->structure) != VK_SUCCESS) {
+        vkrt->core.device,
+        &createInfo,
+        NULL,
+        &resources->accelerationStructure->structure
+    ) != VK_SUCCESS) {
         resetTLASBuildResources(vkrt, resources);
         return VKRT_ERROR_OPERATION_FAILED;
     }
@@ -179,7 +187,8 @@ static VKRT_Result prepareTLASBuild(
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
         &resources->scratchBuffer->buffer,
-        &resources->scratchBuffer->memory);
+        &resources->scratchBuffer->memory
+    );
     if (result != VKRT_SUCCESS) {
         resetTLASBuildResources(vkrt, resources);
         return result;
@@ -275,13 +284,10 @@ VKRT_Result createTopLevelAccelerationStructures(VKRT* vkrt) {
     VKRT_Result result = VKRT_SUCCESS;
     VkAccelerationStructureInstanceKHR* instances = NULL;
     VkAccelerationStructureInstanceKHR selectionInstance = {0};
-    MeshInfo* meshInfos = NULL;
-    Buffer* meshData = &vkrt->core.sceneMeshData;
     VkBool32 selectionInstanceValid = VK_FALSE;
 
     instances = (VkAccelerationStructureInstanceKHR*)malloc(sizeof(*instances) * instanceCount);
-    meshInfos = (MeshInfo*)malloc(sizeof(*meshInfos) * instanceCount);
-    if (!instances || !meshInfos) {
+    if (!instances) {
         result = VKRT_ERROR_OPERATION_FAILED;
         goto cleanup;
     }
@@ -298,22 +304,12 @@ VKRT_Result createTopLevelAccelerationStructures(VKRT* vkrt) {
         instance.accelerationStructureReference = vkrt->core.meshes[i].bottomLevelAccelerationStructure.deviceAddress;
 
         instances[i] = instance;
-        meshInfos[i] = meshInfo;
     }
 
-    VkDeviceSize meshInfoSize = sizeof(*meshInfos) * instanceCount;
-    result = createDeviceBufferFromData(
-        vkrt,
-        meshInfos,
-        meshInfoSize,
-        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-        &meshData->buffer,
-        &meshData->memory,
-        &meshData->deviceAddress);
+    result = vkrtSceneRebuildMeshInfoBuffer(vkrt);
     if (result != VKRT_SUCCESS) {
         goto cleanup;
     }
-    meshData->count = instanceCount;
 
     result = prepareTLASBuild(vkrt, &sceneTLASResources, instances, instanceCount);
     if (result != VKRT_SUCCESS) {
@@ -344,7 +340,6 @@ VKRT_Result createTopLevelAccelerationStructures(VKRT* vkrt) {
 
 cleanup:
     free(instances);
-    free(meshInfos);
 
     if (result != VKRT_SUCCESS) {
         destroySceneBuffers(vkrt);
@@ -353,10 +348,12 @@ cleanup:
         return result;
     }
 
-    LOG_TRACE("TLAS prepared. Instances: %u, Selection Instances: %u, in %.3f ms",
+    LOG_TRACE(
+        "TLAS prepared. Instances: %u, Selection Instances: %u, in %.3f ms",
         instanceCount,
         selectionInstanceValid ? 1u : 0u,
-        (double)(getMicroseconds() - startTime) / 1e3);
+        (double)(getMicroseconds() - startTime) / 1e3
+    );
     return VKRT_SUCCESS;
 }
 
@@ -381,14 +378,16 @@ VKRT_Result recordTopLevelAccelerationStructureBuilds(VKRT* vkrt, VkCommandBuffe
         vkrt,
         commandBuffer,
         &sceneTLASResources,
-        vkrt->core.sceneMeshData.count);
+        vkrt->core.sceneMeshData.count
+    );
     if (result != VKRT_SUCCESS) return result;
 
     result = recordTLASBuild(
         vkrt,
         commandBuffer,
         &selectionTLASResources,
-        update->selectionTLASBuildPending ? 1u : 0u);
+        update->selectionTLASBuildPending ? 1u : 0u
+    );
     if (result != VKRT_SUCCESS) return result;
 
     return VKRT_SUCCESS;

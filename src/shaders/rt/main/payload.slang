@@ -5,66 +5,52 @@
 
 struct Payload {
     uint didHit;
-    uint didScatter;
     uint instanceIndex;
-    float3 contribution;
-    float3 bsdfWeight;
-    float3 nextOrigin;
-    float3 nextDirection;
-    uint rngState;
+    uint materialIndex;
+    uint frontFace;
+    float hitDistance;
+    uint packedShadingNormal;
+    uint packedGeometricNormal;
+    float4 tangent;
 
-    static Payload make(uint rngState) {
+    static Payload make() {
         Payload payload;
         payload.didHit = 0u;
-        payload.didScatter = 0u;
         payload.instanceIndex = VKRT_INVALID_INDEX;
-        payload.contribution = float3(0.0);
-        payload.bsdfWeight = float3(0.0);
-        payload.nextOrigin = float3(0.0);
-        payload.nextDirection = float3(0.0);
-        payload.rngState = rngState;
+        payload.materialIndex = VKRT_INVALID_INDEX;
+        payload.frontFace = 0u;
+        payload.hitDistance = 0.0;
+        payload.packedShadingNormal = 0u;
+        payload.packedGeometricNormal = 0u;
+        payload.tangent = float4(0.0);
         return payload;
     }
 
     [mutating]
     void setMiss() {
         didHit = 0u;
-        didScatter = 0u;
         instanceIndex = VKRT_INVALID_INDEX;
-        contribution = float3(0.0);
-        bsdfWeight = float3(0.0);
-        nextOrigin = float3(0.0);
-        nextDirection = float3(0.0);
+        materialIndex = VKRT_INVALID_INDEX;
+        frontFace = 0u;
+        hitDistance = 0.0;
+        packedShadingNormal = 0u;
+        packedGeometricNormal = 0u;
+        tangent = float4(0.0);
     }
 
     [mutating]
-    void setSurfaceHit(uint hitInstanceIndex, float3 surfaceContribution, float3 hitPoint) {
+    void setSurfaceHit(
+        uint hitInstanceIndex, uint hitMaterialIndex, uint hitFrontFace, float distance,
+        uint shadingNormal, uint geometricNormal, float4 hitTangent
+    ) {
         didHit = 1u;
-        didScatter = 0u;
         instanceIndex = hitInstanceIndex;
-        contribution = surfaceContribution;
-        bsdfWeight = float3(0.0);
-        nextOrigin = hitPoint;
-        nextDirection = float3(0.0);
-    }
-
-    [mutating]
-    void setSurfaceScatter(uint hitInstanceIndex, float3 surfaceContribution, float3 weight, float3 origin, float3 direction) {
-        didHit = 1u;
-        didScatter = 1u;
-        instanceIndex = hitInstanceIndex;
-        contribution = surfaceContribution;
-        bsdfWeight = weight;
-        nextOrigin = origin;
-        nextDirection = direction;
-    }
-
-    [mutating]
-    void setScatter(float3 weight, float3 origin, float3 direction) {
-        didScatter = 1u;
-        bsdfWeight = weight;
-        nextOrigin = origin;
-        nextDirection = direction;
+        materialIndex = hitMaterialIndex;
+        frontFace = hitFrontFace;
+        hitDistance = distance;
+        packedShadingNormal = shadingNormal;
+        packedGeometricNormal = geometricNormal;
+        tangent = hitTangent;
     }
 };
 

@@ -22,5 +22,6 @@ VKRT_Result querySwapChainSupport(VKRT* vkrt, SwapChainSupportDetails* outSuppor
 VKRT_Result chooseSwapSurfaceFormat(const SwapChainSupportDetails* supportDetails, VkSurfaceFormatKHR* outSurfaceFormat);
 VkPresentModeKHR chooseSwapPresentMode(
     const SwapChainSupportDetails* supportDetails,
-    VkBool32 useRenderPresentProfile);
+    VkBool32 useRenderPresentProfile
+);
 VkExtent2D chooseSwapExtent(VKRT* vkrt, const SwapChainSupportDetails* supportDetails);

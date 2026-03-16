@@ -69,13 +69,18 @@ static void recordImageAccessBarrier(
     barrier.srcAccessMask = srcAccessMask;
     barrier.dstAccessMask = dstAccessMask;
 
-    vkCmdPipelineBarrier(commandBuffer,
+    vkCmdPipelineBarrier(
+        commandBuffer,
         srcStageMask,
         dstStageMask,
         0,
-        0, NULL,
-        0, NULL,
-        1, &barrier);
+        0,
+        NULL,
+        0,
+        NULL,
+        1,
+        &barrier
+    );
 }
 
 static void recordSceneUpdateCommands(VKRT* vkrt, VkCommandBuffer commandBuffer) {
@@ -119,7 +124,8 @@ static void recordSceneUpdateCommands(VKRT* vkrt, VkCommandBuffer commandBuffer)
         transferBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
         transferBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
         transferBarrier.dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR | VK_ACCESS_SHADER_READ_BIT;
-        vkCmdPipelineBarrier(commandBuffer,
+        vkCmdPipelineBarrier(
+            commandBuffer,
             VK_PIPELINE_STAGE_TRANSFER_BIT,
             VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR | VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
             0,
@@ -128,7 +134,8 @@ static void recordSceneUpdateCommands(VKRT* vkrt, VkCommandBuffer commandBuffer)
             0,
             NULL,
             0,
-            NULL);
+            NULL
+        );
     }
 
     if (hasBLASBuilds) {
@@ -138,7 +145,8 @@ static void recordSceneUpdateCommands(VKRT* vkrt, VkCommandBuffer commandBuffer)
         blasBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
         blasBarrier.srcAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
         blasBarrier.dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR;
-        vkCmdPipelineBarrier(commandBuffer,
+        vkCmdPipelineBarrier(
+            commandBuffer,
             VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
             VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR | VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
             0,
@@ -147,7 +155,8 @@ static void recordSceneUpdateCommands(VKRT* vkrt, VkCommandBuffer commandBuffer)
             0,
             NULL,
             0,
-            NULL);
+            NULL
+        );
     }
 
     if (hasTLASBuild) {
@@ -159,7 +168,8 @@ static void recordSceneUpdateCommands(VKRT* vkrt, VkCommandBuffer commandBuffer)
         sceneReadyBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
         sceneReadyBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
         sceneReadyBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR;
-        vkCmdPipelineBarrier(commandBuffer,
+        vkCmdPipelineBarrier(
+            commandBuffer,
             VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
             VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
             0,
@@ -168,7 +178,8 @@ static void recordSceneUpdateCommands(VKRT* vkrt, VkCommandBuffer commandBuffer)
             0,
             NULL,
             0,
-            NULL);
+            NULL
+        );
     }
 }
 
@@ -262,21 +273,51 @@ VKRT_Result recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex, VkBool32 presen
         if (shouldTrace) {
             beginDebugLabel(vkrt, commandBuffer, "Main TraceRays", 0.91f, 0.47f, 0.20f);
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, vkrt->core.rayTracingPipeline);
-            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, vkrt->core.pipelineLayout, 0, 1,
-                                   &vkrt->core.descriptorSets[vkrt->runtime.currentFrame], 0, NULL);
-            vkrt->core.procs.vkCmdTraceRaysKHR(commandBuffer, &vkrt->core.shaderBindingTables[0], &vkrt->core.shaderBindingTables[1],
-                                               &vkrt->core.shaderBindingTables[2], &vkrt->core.shaderBindingTables[3],
-                                               renderExtent.width, renderExtent.height, 1);
+            vkCmdBindDescriptorSets(
+                commandBuffer,
+                VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
+                vkrt->core.pipelineLayout,
+                0,
+                1,
+                &vkrt->core.descriptorSets[vkrt->runtime.currentFrame],
+                0,
+                NULL
+            );
+            vkrt->core.procs.vkCmdTraceRaysKHR(
+                commandBuffer,
+                &vkrt->core.shaderBindingTables[0],
+                &vkrt->core.shaderBindingTables[1],
+                &vkrt->core.shaderBindingTables[2],
+                &vkrt->core.shaderBindingTables[3],
+                renderExtent.width,
+                renderExtent.height,
+                1
+            );
             endDebugLabel(vkrt, commandBuffer);
 
             if (shouldSelectionTrace) {
                 beginDebugLabel(vkrt, commandBuffer, "Selection TraceRays", 0.20f, 0.80f, 0.33f);
                 vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, vkrt->core.selectionRayTracingPipeline);
-                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, vkrt->core.pipelineLayout, 0, 1,
-                                       &vkrt->core.descriptorSets[vkrt->runtime.currentFrame], 0, NULL);
-                vkrt->core.procs.vkCmdTraceRaysKHR(commandBuffer, &vkrt->core.selectionShaderBindingTables[0], &vkrt->core.selectionShaderBindingTables[1],
-                                                   &vkrt->core.selectionShaderBindingTables[2], &vkrt->core.selectionShaderBindingTables[3],
-                                                   renderExtent.width, renderExtent.height, 1);
+                vkCmdBindDescriptorSets(
+                    commandBuffer,
+                    VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
+                    vkrt->core.pipelineLayout,
+                    0,
+                    1,
+                    &vkrt->core.descriptorSets[vkrt->runtime.currentFrame],
+                    0,
+                    NULL
+                );
+                vkrt->core.procs.vkCmdTraceRaysKHR(
+                    commandBuffer,
+                    &vkrt->core.selectionShaderBindingTables[0],
+                    &vkrt->core.selectionShaderBindingTables[1],
+                    &vkrt->core.selectionShaderBindingTables[2],
+                    &vkrt->core.selectionShaderBindingTables[3],
+                    renderExtent.width,
+                    renderExtent.height,
+                    1
+                );
                 endDebugLabel(vkrt, commandBuffer);
                 vkrt->runtime.frameSelectionTraced = VK_TRUE;
             }
@@ -289,7 +330,8 @@ VKRT_Result recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex, VkBool32 presen
                         VK_ACCESS_SHADER_WRITE_BIT,
                         VK_ACCESS_SHADER_READ_BIT,
                         VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
-                        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+                        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
+                    );
                 }
                 recordImageAccessBarrier(
                     commandBuffer,
@@ -297,12 +339,21 @@ VKRT_Result recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex, VkBool32 presen
                     VK_ACCESS_SHADER_WRITE_BIT,
                     VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
                     VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
-                    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+                    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
+                );
 
                 beginDebugLabel(vkrt, commandBuffer, "Selection Post", 0.56f, 0.30f, 0.84f);
                 vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, vkrt->core.computePipeline);
-                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, vkrt->core.pipelineLayout, 0, 1,
-                    &vkrt->core.descriptorSets[vkrt->runtime.currentFrame], 0, NULL);
+                vkCmdBindDescriptorSets(
+                    commandBuffer,
+                    VK_PIPELINE_BIND_POINT_COMPUTE,
+                    vkrt->core.pipelineLayout,
+                    0,
+                    1,
+                    &vkrt->core.descriptorSets[vkrt->runtime.currentFrame],
+                    0,
+                    NULL
+                );
 
                 const uint32_t localSizeX = 16u;
                 const uint32_t localSizeY = 16u;
@@ -316,7 +367,8 @@ VKRT_Result recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex, VkBool32 presen
                     VK_ACCESS_SHADER_WRITE_BIT,
                     VK_ACCESS_TRANSFER_READ_BIT,
                     VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                    VK_PIPELINE_STAGE_TRANSFER_BIT);
+                    VK_PIPELINE_STAGE_TRANSFER_BIT
+                );
                 endDebugLabel(vkrt, commandBuffer);
             }
         }
@@ -390,8 +442,16 @@ VKRT_Result recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex, VkBool32 presen
                 blit.dstOffsets[1] = (VkOffset3D){(int32_t)swapchainExtent.width, (int32_t)swapchainExtent.height, 1};
             }
 
-            vkCmdBlitImage(commandBuffer, outputImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, destImage,
-                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
+            vkCmdBlitImage(
+                commandBuffer,
+                outputImage,
+                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                destImage,
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                1,
+                &blit,
+                VK_FILTER_LINEAR
+            );
             endDebugLabel(vkrt, commandBuffer);
         }
     } else {

@@ -99,6 +99,10 @@ static void cleanupSceneAndAccelerationResources(VKRT* vkrt) {
     destroyBufferAndMemory(vkrt, &vkrt->core.sceneMaterialData.buffer, &vkrt->core.sceneMaterialData.memory);
     destroyBufferAndMemory(vkrt, &vkrt->core.sceneEmissiveMeshData.buffer, &vkrt->core.sceneEmissiveMeshData.memory);
     destroyBufferAndMemory(vkrt, &vkrt->core.sceneEmissiveTriangleData.buffer, &vkrt->core.sceneEmissiveTriangleData.memory);
+    destroyBufferAndMemory(vkrt, &vkrt->core.sceneMeshAliasQ.buffer, &vkrt->core.sceneMeshAliasQ.memory);
+    destroyBufferAndMemory(vkrt, &vkrt->core.sceneMeshAliasIdx.buffer, &vkrt->core.sceneMeshAliasIdx.memory);
+    destroyBufferAndMemory(vkrt, &vkrt->core.sceneTriAliasQ.buffer, &vkrt->core.sceneTriAliasQ.memory);
+    destroyBufferAndMemory(vkrt, &vkrt->core.sceneTriAliasIdx.buffer, &vkrt->core.sceneTriAliasIdx.memory);
 
     for (uint32_t i = 0; i < vkrt->core.meshCount; i++) {
         if (!vkrt->core.meshes[i].ownsGeometry) continue;
@@ -110,11 +114,11 @@ static void cleanupSceneAndAccelerationResources(VKRT* vkrt) {
     destroyBufferAndMemory(vkrt, &vkrt->core.vertexData.buffer, &vkrt->core.vertexData.memory);
     destroyBufferAndMemory(vkrt, &vkrt->core.indexData.buffer, &vkrt->core.indexData.memory);
 
-    if (vkrt->core.pickData && vkrt->core.pickBuffer.memory != VK_NULL_HANDLE) {
-        vkUnmapMemory(vkrt->core.device, vkrt->core.pickBuffer.memory);
-        vkrt->core.pickData = NULL;
+    if (vkrt->core.selectionData && vkrt->core.selection.memory != VK_NULL_HANDLE) {
+        vkUnmapMemory(vkrt->core.device, vkrt->core.selection.memory);
+        vkrt->core.selectionData = NULL;
     }
-    destroyBufferAndMemory(vkrt, &vkrt->core.pickBuffer.buffer, &vkrt->core.pickBuffer.memory);
+    destroyBufferAndMemory(vkrt, &vkrt->core.selection.buffer, &vkrt->core.selection.memory);
 
     for (uint32_t i = 0; i < VKRT_MAX_FRAMES_IN_FLIGHT; i++) {
         if (vkrt->core.sceneFrameData[i] && vkrt->core.sceneDataMemories[i] != VK_NULL_HANDLE) {
@@ -182,7 +186,8 @@ static void cleanupCommandAndQueryResources(VKRT* vkrt) {
             vkrt->core.device,
             vkrt->runtime.commandPool,
             VKRT_ARRAY_COUNT(vkrt->runtime.commandBuffers),
-            vkrt->runtime.commandBuffers);
+            vkrt->runtime.commandBuffers
+        );
         vkDestroyCommandPool(vkrt->core.device, vkrt->runtime.commandPool, NULL);
         vkrt->runtime.commandPool = VK_NULL_HANDLE;
     }

@@ -32,7 +32,7 @@ struct MeshInfo {
     uint indexCount;
     uint materialIndex;
     uint renderBackfaces;
-    uint padding;
+    float lightPdfArea;
 };
 
 struct Material {
@@ -59,16 +59,18 @@ struct Material {
 };
 
 struct EmissiveMesh {
-    uint4 indices; // {meshIndex, triangleOffset, triangleCount, unused}
-    float4 emission; // {emissionColor.rgb, emissionLuminance}
-    float4 stats; // {selectionPdf, totalArea, selectionCdf, selectionWeight}
-    float4 bounds; // {boundsCenter.xyz, boundsRadius}
+    uint triOffset;
+    uint triCount;
+    float pmfMesh;
+    float invTotalArea;
+    float3 emission;
+    float _pad0;
 };
 
 struct EmissiveTriangle {
-    float4 v0Area; // {v0.xyz, area}
-    float4 e1Pad; // {edge1.xyz, triangleAreaCdf}
-    float4 e2Pad; // {edge2.xyz, unused}
+    float4 v0Area;
+    float4 e1Pad;
+    float4 e2Pad;
 };
 
 struct SceneData {
@@ -96,7 +98,7 @@ struct SceneData {
     float4 timelineTint[VKRT_SCENE_TIMELINE_MAX_KEYFRAMES];
 };
 
-struct PickBuffer {
+struct Selection {
     uint pixel;
     uint hitMeshIndex;
 };
@@ -108,7 +110,7 @@ typedef struct Material Material;
 typedef struct EmissiveMesh EmissiveMesh;
 typedef struct EmissiveTriangle EmissiveTriangle;
 typedef struct SceneData SceneData;
-typedef struct PickBuffer PickBuffer;
+typedef struct Selection Selection;
 #endif
 
 #endif

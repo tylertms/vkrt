@@ -252,8 +252,12 @@ static bool drawViewportWindow(
     const char* viewportWindowLabel = status->renderModeActive
         ? "Render###ViewWindow"
         : "Viewport###ViewWindow";
-    ImGui_Begin(viewportWindowLabel, NULL, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar |
-                                             ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoBackground);
+    ImGui_Begin(
+        viewportWindowLabel,
+        NULL,
+        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar |
+        ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoBackground
+    );
 
     bool viewportHovered = ImGui_IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows);
 
@@ -306,9 +310,9 @@ static void applyCompletedViewportSelection(VKRT* vkrt) {
 
     uint32_t meshIndex = VKRT_INVALID_INDEX;
     uint8_t ready = 0;
-    VKRT_Result result = VKRT_consumePickedMesh(vkrt, &meshIndex, &ready);
+    VKRT_Result result = VKRT_consumeSelectedMesh(vkrt, &meshIndex, &ready);
     if (result != VKRT_SUCCESS) {
-        LOG_ERROR("Consuming viewport pick failed (%d)", (int)result);
+        LOG_ERROR("Consuming viewport selection failed (%d)", (int)result);
         return;
     }
     if (!ready) return;
@@ -366,13 +370,13 @@ static void requestViewportSelection(
 
     if (!ImGui_IsMouseClicked(ImGuiMouseButton_Left)) return;
 
-    uint32_t pickX = 0;
-    uint32_t pickY = 0;
-    if (!queryViewportClickPixel(runtime, &pickX, &pickY)) return;
+    uint32_t selectionX = 0;
+    uint32_t selectionY = 0;
+    if (!queryViewportClickPixel(runtime, &selectionX, &selectionY)) return;
 
-    VKRT_Result result = VKRT_requestPickAtPixel(vkrt, pickX, pickY);
+    VKRT_Result result = VKRT_requestSelectionAtPixel(vkrt, selectionX, selectionY);
     if (result != VKRT_SUCCESS) {
-        LOG_ERROR("Requesting viewport pick failed (%d)", (int)result);
+        LOG_ERROR("Requesting viewport selection failed (%d)", (int)result);
     }
 }
 

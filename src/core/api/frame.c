@@ -33,15 +33,15 @@ static void invalidateDescriptorSets(VKRT* vkrt) {
     }
 }
 
-static void resolveCompletedPick(VKRT* vkrt) {
-    if (!vkrt || !vkrt->core.pickPending || !vkrt->core.pickData) return;
-    if (!vkrt->core.pickSubmitted) return;
-    if (vkrt->core.pickPendingFrame != vkrt->runtime.currentFrame) return;
+static void resolveCompletedSelection(VKRT* vkrt) {
+    if (!vkrt || !vkrt->core.selectionPending || !vkrt->core.selectionData) return;
+    if (!vkrt->core.selectionSubmitted) return;
+    if (vkrt->core.selectionPendingFrame != vkrt->runtime.currentFrame) return;
 
-    vkrt->core.pickResultMeshIndex = vkrt->core.pickData->hitMeshIndex;
-    vkrt->core.pickResultReady = 1;
-    vkrt->core.pickPending = 0;
-    vkrt->core.pickSubmitted = 0;
+    vkrt->core.selectionResultMeshIndex = vkrt->core.selectionData->hitMeshIndex;
+    vkrt->core.selectionResultReady = 1;
+    vkrt->core.selectionPending = 0;
+    vkrt->core.selectionSubmitted = 0;
 }
 
 static uint32_t queryRenderedSamplesPerPixel(const VKRT* vkrt) {
@@ -73,7 +73,7 @@ VKRT_Result VKRT_beginFrame(VKRT* vkrt) {
     vkrt->runtime.frameSelectionTraced = VK_FALSE;
 
     vkWaitForFences(vkrt->core.device, 1, &vkrt->runtime.inFlightFences[vkrt->runtime.currentFrame], VK_TRUE, UINT64_MAX);
-    resolveCompletedPick(vkrt);
+    resolveCompletedSelection(vkrt);
     vkrtCleanupFrameSceneUpdate(vkrt, vkrt->runtime.currentFrame);
     recordFrameTime(vkrt, vkrt->runtime.currentFrame);
 
@@ -196,8 +196,8 @@ VKRT_Result VKRT_trace(VKRT* vkrt) {
 
     vkrt->runtime.frameTimingPending[vkrt->runtime.currentFrame] = VK_TRUE;
 
-    if (vkrt->core.pickPending && vkrt->core.pickPendingFrame == vkrt->runtime.currentFrame) {
-        vkrt->core.pickSubmitted = 1;
+    if (vkrt->core.selectionPending && vkrt->core.selectionPendingFrame == vkrt->runtime.currentFrame) {
+        vkrt->core.selectionSubmitted = 1;
     }
 
     if (vkrt->runtime.frameSelectionTraced) {

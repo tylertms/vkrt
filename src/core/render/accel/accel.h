@@ -10,7 +10,8 @@ VKRT_Result createBottomLevelAccelerationStructureForGeometry(
     const MeshInfo* meshInfo,
     VkDeviceAddress vertexDataAddress,
     VkDeviceAddress indexDataAddress,
-    AccelerationStructure* outAccelerationStructure);
+    AccelerationStructure* outAccelerationStructure
+);
 VKRT_Result prepareBottomLevelAccelerationStructureBuilds(VKRT* vkrt);
 VKRT_Result recordBottomLevelAccelerationStructureBuilds(VKRT* vkrt, VkCommandBuffer commandBuffer);
 VKRT_Result createTopLevelAccelerationStructures(VKRT* vkrt);

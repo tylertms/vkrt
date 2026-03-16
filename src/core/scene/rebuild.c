@@ -107,7 +107,9 @@ VKRT_Result vkrtSceneRebuildMaterialBuffer(VKRT* vkrt) {
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
         &materialData->buffer,
         &materialData->memory,
-        &materialData->deviceAddress);
+        &materialData->deviceAddress
+    );
+
     free(materials);
     if (result != VKRT_SUCCESS) {
         return result;

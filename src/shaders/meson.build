@@ -1,20 +1,22 @@
 embed_spv = find_program(meson.project_source_root() / 'scripts' / 'embed_spv.py')
 
 shader_programs = [
-  ['rgen',        'rt/main/rgen.slang',   'rgen.spv',         'raygeneration',    ['rt'],        'shaderRgen'],
-  ['rchit',       'rt/main/rchit.slang',  'rchit.spv',        'closesthit',       ['rt'],        'shaderRchit'],
-  ['rmiss',       'rt/main/rmiss.slang',  'rmiss.spv',        'miss',             ['rt'],        'shaderRmiss'],
-  ['rgenSer',     'rt/main/rgen.slang',   'rgenSer.spv',      'raygeneration',    ['rt', 'ser'], 'shaderRgenSer'],
-  ['rchitSer',    'rt/main/rchit.slang',  'rchitSer.spv',     'closesthit',       ['rt', 'ser'], 'shaderRchitSer'],
-  ['rmissSer',    'rt/main/rmiss.slang',  'rmissSer.spv',     'miss',             ['rt', 'ser'], 'shaderRmissSer'],
+  ['rgen',          'rt/main/rgen.slang',   'rgen.spv',          'raygeneration', ['rt'],        'shaderRgen'         ],
+  ['rchit',         'rt/main/rchit.slang',  'rchit.spv',         'closesthit',    ['rt'],        'shaderRchit'        ],
+  ['rmiss',         'rt/main/rmiss.slang',  'rmiss.spv',         'miss',          ['rt'],        'shaderRmiss'        ],
+  ['shadowMiss',    'rt/main/shadow.slang', 'shadowMiss.spv',    'miss',          ['rt'],        'shaderShadowMiss'   ],
+  ['rgenSer',       'rt/main/rgen.slang',   'rgenSer.spv',       'raygeneration', ['rt', 'ser'], 'shaderRgenSer'      ],
+  ['rchitSer',      'rt/main/rchit.slang',  'rchitSer.spv',      'closesthit',    ['rt', 'ser'], 'shaderRchitSer'     ],
+  ['rmissSer',      'rt/main/rmiss.slang',  'rmissSer.spv',      'miss',          ['rt', 'ser'], 'shaderRmissSer'     ],
+  ['shadowMissSer', 'rt/main/shadow.slang', 'shadowMissSer.spv', 'miss',          ['rt', 'ser'], 'shaderShadowMissSer'],
 ]
 
 if selection_enabled
   shader_programs += [
-    ['comp',          'compute/outline.slang',    'select.spv',       'compute',          [],     'shaderComp'],
-    ['selectRgen',    'rt/selection/rgen.slang',  'selectRgen.spv',   'raygeneration',    ['rt'], 'shaderSelectRgen'],
-    ['selectRchit',   'rt/selection/rchit.slang', 'selectRchit.spv',  'closesthit',       ['rt'], 'shaderSelectRchit'],
-    ['selectRmiss',   'rt/selection/rmiss.slang', 'selectRmiss.spv',  'miss',             ['rt'], 'shaderSelectRmiss'],
+    ['comp',        'compute/outline.slang',    'select.spv',      'compute',       [],     'shaderComp'       ],
+    ['selectRgen',  'rt/selection/rgen.slang',  'selectRgen.spv',  'raygeneration', ['rt'], 'shaderSelectRgen' ],
+    ['selectRchit', 'rt/selection/rchit.slang', 'selectRchit.spv', 'closesthit',    ['rt'], 'shaderSelectRchit'],
+    ['selectRmiss', 'rt/selection/rmiss.slang', 'selectRmiss.spv', 'miss',          ['rt'], 'shaderSelectRmiss'],
   ]
 endif
 
