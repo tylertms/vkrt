@@ -230,10 +230,12 @@ static void sessionSanitizeTimelineSettings(SessionSceneTimelineSettings* timeli
         }
     }
 
-    qsort(timeline->keyframes,
+    qsort(
+        timeline->keyframes,
         timeline->keyframeCount,
         sizeof(timeline->keyframes[0]),
-        vkrtCompareSceneTimelineKeyframesByTime);
+        vkrtCompareSceneTimelineKeyframesByTime
+    );
 }
 
 void sessionSanitizeAnimationSettings(SessionRenderAnimationSettings* animation) {

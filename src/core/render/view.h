@@ -9,10 +9,12 @@ void vkrtQueryRenderViewCropExtent(
     float zoom,
     uint32_t* outWidth,
     uint32_t* outHeight,
-    VkBool32* outFillViewport);
+    VkBool32* outFillViewport
+);
 void vkrtClampRenderViewPanOffset(
     VkExtent2D renderExtent,
     VkExtent2D viewportExtent,
     float zoom,
     float* panX,
-    float* panY);
+    float* panY
+);

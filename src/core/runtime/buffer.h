@@ -11,7 +11,8 @@ VKRT_Result createHostBufferFromData(
     VkBufferUsageFlags usage,
     VkBuffer* outBuffer,
     VkDeviceMemory* outMemory,
-    VkDeviceAddress* outDeviceAddress);
+    VkDeviceAddress* outDeviceAddress
+);
 VKRT_Result createDeviceBufferFromData(
     VKRT* vkrt,
     const void* hostData,
@@ -19,7 +20,8 @@ VKRT_Result createDeviceBufferFromData(
     VkBufferUsageFlags usage,
     VkBuffer* outBuffer,
     VkDeviceMemory* outMemory,
-    VkDeviceAddress* outDeviceAddress);
+    VkDeviceAddress* outDeviceAddress
+);
 VkDeviceAddress queryBufferDeviceAddress(VKRT* vkrt, VkBuffer buffer);
 void destroyBufferResources(VKRT* vkrt, Buffer* buffer);
 void destroyTransfer(VKRT* vkrt, FrameTransfer* transfer);

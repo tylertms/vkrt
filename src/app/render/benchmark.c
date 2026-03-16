@@ -91,12 +91,14 @@ int benchmarkRun(VKRT* vkrt, const CLIBenchmarkOptions* options) {
         deviceName = systemInfo.deviceName;
     }
 
-    printf("Benchmark %s: %s, %ux%u, target %u samples\n",
+    printf(
+        "Benchmark %s: %s, %ux%u, target %u samples\n",
         queryBenchmarkModeName(options),
         deviceName,
         options->width,
         options->height,
-        options->targetSamples);
+        options->targetSamples
+    );
 
     for (;;) {
         VKRT_poll(vkrt);
@@ -156,7 +158,8 @@ int benchmarkRun(VKRT* vkrt, const CLIBenchmarkOptions* options) {
             double normalizedSeconds = normalizeBenchmarkSeconds(
                 elapsedSeconds,
                 measuredSamples,
-                options->targetSamples);
+                options->targetSamples
+            );
             double samplesPerSecond = elapsedSeconds > 0.0
                 ? (double)measuredSamples / elapsedSeconds
                 : 0.0;
@@ -164,12 +167,14 @@ int benchmarkRun(VKRT* vkrt, const CLIBenchmarkOptions* options) {
                 ? (elapsedSeconds * 1000.0) / (double)measuredSamples
                 : 0.0;
 
-            printf("Benchmark complete: %.3f s, %.2f samples/s, %.3f ms/sample, %u spp/frame, actual %" PRIu64 " samples\n",
+            printf(
+                "Benchmark complete: %.3f s, %.2f samples/s, %.3f ms/sample, %u spp/frame, actual %" PRIu64 " samples\n",
                 normalizedSeconds,
                 samplesPerSecond,
                 millisecondsPerSample,
                 state.lockedSamplesPerFrame,
-                measuredSamples);
+                measuredSamples
+            );
             return EXIT_SUCCESS;
         }
 

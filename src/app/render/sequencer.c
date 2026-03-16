@@ -135,8 +135,14 @@ static int buildFramePath(char* outPath, size_t outPathSize, const RenderSequenc
         if (tail != '/' && tail != '\\') separator = "/";
     }
 
-    int written = snprintf(outPath, outPathSize, "%s%s%04u.png",
-        sequencer->outputFolder, separator, sequencer->frameIndex);
+    int written = snprintf(
+        outPath,
+        outPathSize,
+        "%s%s%04u.png",
+        sequencer->outputFolder,
+        separator,
+        sequencer->frameIndex
+    );
     if (written <= 0 || (size_t)written >= outPathSize) return -1;
     return 0;
 }
@@ -169,12 +175,12 @@ static void noteCompletedFrameTime(RenderSequencer* sequencer, uint64_t frameEnd
 }
 
 static int startSequenceRender(VKRT* vkrt, const RenderSequencer* sequencer) {
-    return VKRT_startRender(vkrt,
+    return VKRT_startRender(
+        vkrt,
         sequencer->renderSettings.width,
         sequencer->renderSettings.height,
-        sequencer->renderSettings.targetSamples) == VKRT_SUCCESS
-        ? 0
-        : -1;
+        sequencer->renderSettings.targetSamples
+    ) == VKRT_SUCCESS ? 0 : -1;
 }
 
 static int applyTimelineTrack(VKRT* vkrt, const SessionSceneTimelineSettings* timeline) {
@@ -283,15 +289,15 @@ static int beginSequence(VKRT* vkrt, Session* session, const SessionRenderSettin
         return -1;
     }
 
-    LOG_INFO("Render sequence started. Frames: %u, Time: %.3f -> %.3f (step %.3f), Keyframes: %s, Folder: %s",
+    LOG_INFO(
+        "Render sequence started. Frames: %u, Time: %.3f -> %.3f (step %.3f), Keyframes: %s, Folder: %s",
         frameCount,
         minTime,
         maxTime,
         step,
-        sanitizedSettings.animation.sceneTimeline.enabled
-            ? "On"
-            : "Off",
-        sequencer->outputFolder);
+        sanitizedSettings.animation.sceneTimeline.enabled ? "On" : "Off",
+        sequencer->outputFolder
+    );
     return 0;
 }
 
@@ -344,9 +350,11 @@ void renderSequencerUpdate(VKRT* vkrt, Session* session) {
     char framePath[kRenderSequenceFramePathCapacity];
     if (buildFramePath(framePath, sizeof(framePath), sequencer) != 0 ||
         VKRT_saveRenderPNG(vkrt, framePath) != VKRT_SUCCESS) {
-        LOG_ERROR("Saving render sequence frame failed. Frame: %u, Path: %s",
+        LOG_ERROR(
+            "Saving render sequence frame failed. Frame: %u, Path: %s",
             sequencer->frameIndex,
-            framePath);
+            framePath
+        );
         stopSequence(sequencer, vkrt);
         return;
     }

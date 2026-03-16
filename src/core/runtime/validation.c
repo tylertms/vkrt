@@ -94,7 +94,8 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
     VkDebugUtilsMessageTypeFlagsEXT messageType,
     const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-    void* pUserData) {
+    void* pUserData
+) {
 
     (void)pUserData;
     printf("%s - %s: %s\n", severityString(messageSeverity), typeString(messageType), pCallbackData->pMessage);

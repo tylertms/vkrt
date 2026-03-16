@@ -22,7 +22,8 @@ static VKRT_Result appendPendingSceneTransfer(
     uint32_t nextCount = update->sceneTransferCount + 1u;
     PendingBufferCopy* resized = (PendingBufferCopy*)realloc(
         update->sceneTransfers,
-        (size_t)nextCount * sizeof(PendingBufferCopy));
+        (size_t)nextCount * sizeof(PendingBufferCopy)
+    );
     if (!resized) {
         return VKRT_ERROR_OPERATION_FAILED;
     }
@@ -139,7 +140,8 @@ VKRT_Result createHostBufferFromData(
         usage,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
         outBuffer,
-        outMemory);
+        outMemory
+    );
     if (result != VKRT_SUCCESS) return result;
 
     void* mapped = NULL;
@@ -179,7 +181,8 @@ VKRT_Result createDeviceBufferFromData(
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
         &stagingBuffer,
-        &stagingMemory);
+        &stagingMemory
+    );
     if (result != VKRT_SUCCESS) return result;
 
     void* mapped = NULL;
@@ -198,7 +201,8 @@ VKRT_Result createDeviceBufferFromData(
         VK_BUFFER_USAGE_TRANSFER_DST_BIT | usage,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
         outBuffer,
-        outMemory);
+        outMemory
+    );
     if (result != VKRT_SUCCESS) {
         vkDestroyBuffer(vkrt->core.device, stagingBuffer, NULL);
         vkFreeMemory(vkrt->core.device, stagingMemory, NULL);

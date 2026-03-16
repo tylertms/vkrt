@@ -82,7 +82,8 @@ void formatDriverVersionText(uint32_t vendorID, uint32_t driverVersion, char* ou
     snprintf(out, outSize, "%u.%u.%u", // AMD / UNKNOWN
         VK_API_VERSION_MAJOR(driverVersion),
         VK_API_VERSION_MINOR(driverVersion),
-        VK_API_VERSION_PATCH(driverVersion));
+        VK_API_VERSION_PATCH(driverVersion)
+    );
 }
 
 void formatByteSize(uint64_t bytes, char* out, size_t outSize) {
@@ -166,11 +167,18 @@ void formatTime(float seconds, char* out, size_t outSize) {
     }
 
     if (secondUnit >= 0) {
-        snprintf(out, outSize, "%" PRIu64 "%s %" PRIu64 "%s",
-            firstValue, unitLabels[firstUnit],
-            secondValue, unitLabels[secondUnit]);
+        snprintf(out, outSize,
+            "%" PRIu64 "%s %" PRIu64 "%s",
+            firstValue,
+            unitLabels[firstUnit],
+            secondValue,
+            unitLabels[secondUnit]
+        );
     } else {
-        snprintf(out, outSize, "%" PRIu64 "%s",
-            firstValue, unitLabels[firstUnit]);
+        snprintf(out, outSize,
+            "%" PRIu64 "%s",
+            firstValue,
+            unitLabels[firstUnit]
+        );
     }
 }

@@ -100,9 +100,11 @@ static void drawPropertiesPanelSelector(Session* session) {
     for (uint32_t i = 0; i < tabCount; i++) {
         const InspectorPropertiesTab* tab = &kInspectorPropertiesTabs[i];
         if (i > 0) ImGui_SameLine();
-        if (drawInspectorTabButton(tab->label,
-                activeTab->index == tab->index,
-                (ImVec2){buttonWidth, 0.0f})) {
+        if (drawInspectorTabButton(
+            tab->label,
+            activeTab->index == tab->index,
+            (ImVec2){buttonWidth, 0.0f}
+        )) {
             session->editor.propertiesPanelIndex = tab->index;
             activeTab = tab;
         }

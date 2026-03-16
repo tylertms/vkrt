@@ -166,19 +166,27 @@ static void drawTimelineEditor(SessionRenderAnimationSettings* animation) {
         ImGui_PushIDInt((int)keyIndex);
         ImGui_SeparatorText("Marker");
 
-        ImGui_DragFloatEx("Time", &key->time, 0.01f,
+        ImGui_DragFloatEx(
+            "Time",
+            &key->time,
+            0.01f,
             SESSION_SCENE_TIMELINE_TIME_MIN,
             SESSION_SCENE_TIMELINE_TIME_MAX,
             "%.3f",
-            ImGuiSliderFlags_AlwaysClamp);
+            ImGuiSliderFlags_AlwaysClamp
+        );
         timelineEdited |= ImGui_IsItemDeactivatedAfterEdit();
         timeActivelyEditing |= ImGui_IsItemActive();
 
-        timelineEdited |= ImGui_DragFloatEx("Emission Scale", &key->emissionScale, 0.01f,
+        timelineEdited |= ImGui_DragFloatEx(
+            "Emission Scale",
+            &key->emissionScale,
+            0.01f,
             SESSION_SCENE_TIMELINE_EMISSION_SCALE_MIN,
             SESSION_SCENE_TIMELINE_EMISSION_SCALE_MAX,
             "%.3f",
-            ImGuiSliderFlags_AlwaysClamp);
+            ImGuiSliderFlags_AlwaysClamp
+        );
 
         timelineEdited |= ImGui_ColorEdit3("Emission Tint", key->emissionTint, ImGuiColorEditFlags_Float);
         ImGui_PopID();
@@ -269,11 +277,13 @@ static void drawIdleRenderState(VKRT* vkrt, Session* session, const SessionRende
     if (inspectorPaddedButton(startLabel)) {
         uint32_t startSamples = session->editor.renderConfig.targetSamples;
         if (animationEnabled && startSamples == 0) startSamples = 1;
-        sessionQueueRenderStart(session,
+        sessionQueueRenderStart(
+            session,
             session->editor.renderConfig.width,
             session->editor.renderConfig.height,
             startSamples,
-            &session->editor.renderConfig.animation);
+            &session->editor.renderConfig.animation
+        );
     }
 
     if (timer->completedSeconds > 0.0f) {
@@ -303,13 +313,22 @@ static void drawRenderProgressSection(
         if (progress < 0.0f) progress = 0.0f;
         if (progress > 1.0f) progress = 1.0f;
         char overlay[kRenderProgressOverlayCapacity];
-        snprintf(overlay, sizeof(overlay), "%" PRIu64 " / %u samples",
-            shownSamples, status->renderTargetSamples);
+        snprintf(
+            overlay,
+            sizeof(overlay),
+            "%" PRIu64 " / %u samples",
+            shownSamples,
+            status->renderTargetSamples
+        );
         ImGui_ProgressBar(progress, (ImVec2){-1.0f, 0.0f}, overlay);
     } else {
         char overlay[kRenderProgressOverlayCapacity];
-        snprintf(overlay, sizeof(overlay), "%" PRIu64 " samples",
-            status->totalSamples);
+        snprintf(
+            overlay,
+            sizeof(overlay),
+            "%" PRIu64 " samples",
+            status->totalSamples
+        );
         ImGui_ProgressBar(0.0f, (ImVec2){-1.0f, 0.0f}, overlay);
     }
 
@@ -324,8 +343,13 @@ static void drawRenderProgressSection(
         if (sequenceProgress > 1.0f) sequenceProgress = 1.0f;
 
         char sequenceOverlay[kRenderProgressOverlayCapacity];
-        snprintf(sequenceOverlay, sizeof(sequenceOverlay), "Frame %u / %u",
-            sequencer->frameIndex + 1u, sequencer->frameCount);
+        snprintf(
+            sequenceOverlay,
+            sizeof(sequenceOverlay),
+            "Frame %u / %u",
+            sequencer->frameIndex + 1u,
+            sequencer->frameCount
+        );
         ImGui_ProgressBar(sequenceProgress, (ImVec2){-1.0f, 0.0f}, sequenceOverlay);
     }
 

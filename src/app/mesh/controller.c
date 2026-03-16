@@ -135,11 +135,13 @@ int meshControllerImportMesh(VKRT* vkrt, Session* session, const char* path, con
         return 0;
     }
 
-    LOG_INFO("Mesh import complete. File: %s, Imported Meshes: %u, Total Meshes: %u, in %.3f ms",
+    LOG_INFO(
+        "Mesh import complete. File: %s, Imported Meshes: %u, Total Meshes: %u, in %.3f ms",
         path,
         meshCountAfterImport - meshCountBeforeImport,
         meshCountAfterImport,
-        (double)(getMicroseconds() - startTime) / 1e3);
+        (double)(getMicroseconds() - startTime) / 1e3
+    );
     return 1;
 }
 

@@ -36,8 +36,10 @@ void meshReleaseImportData(MeshImportData* importData) {
 static int appendImportEntry(MeshImportData* importData, MeshImportEntry* entry) {
     if (!importData || !entry) return -1;
 
-    MeshImportEntry* resized = (MeshImportEntry*)realloc(importData->entries,
-        (size_t)(importData->count + 1u) * sizeof(MeshImportEntry));
+    MeshImportEntry* resized = (MeshImportEntry*)realloc(
+        importData->entries,
+        (size_t)(importData->count + 1u) * sizeof(MeshImportEntry)
+    );
     if (!resized) {
         return -1;
     }
@@ -220,10 +222,11 @@ static void finalizeTangents(Vertex* vertices, size_t vertexCount) {
     for (size_t vertexIndex = 0; vertexIndex < vertexCount; vertexIndex++) {
         float handedness = vertices[vertexIndex].tangent[3] < 0.0f ? -1.0f : 1.0f;
         if (!orthonormalizeTangentFrame(
-                vertices[vertexIndex].normal,
-                vertices[vertexIndex].tangent,
-                handedness,
-                vertices[vertexIndex].tangent)) {
+            vertices[vertexIndex].normal,
+            vertices[vertexIndex].tangent,
+            handedness,
+            vertices[vertexIndex].tangent
+        )) {
             buildFallbackTangent(vertices[vertexIndex].normal, vertices[vertexIndex].tangent);
         }
     }
@@ -262,9 +265,11 @@ static Material buildMaterial(const cgltf_material* sourceMaterial) {
     }
 
     if (sourceMaterial->has_sheen) {
-        material.sheen = max3(sourceMaterial->sheen.sheen_color_factor[0],
+        material.sheen = max3(
+            sourceMaterial->sheen.sheen_color_factor[0],
             sourceMaterial->sheen.sheen_color_factor[1],
-            sourceMaterial->sheen.sheen_color_factor[2]);
+            sourceMaterial->sheen.sheen_color_factor[2]
+        );
         material.sheenTint = material.sheen > 0.0f ? 1.0f : 0.0f;
         material.sheenRoughness = sourceMaterial->sheen.sheen_roughness_factor;
     }
@@ -378,7 +383,8 @@ static void generateTangents(
     size_t vertexCount,
     const uint32_t* indices,
     size_t indexCount,
-    const float* texcoords)
+    const float* texcoords
+)
 {
     if (!vertices || !indices || !texcoords || vertexCount == 0 || indexCount < 3) {
         return;
@@ -458,10 +464,11 @@ static void generateTangents(
         glm_vec3_cross(normal, tangent, crossValue);
         float handedness = glm_vec3_dot(crossValue, tangent2[vertexIndex]) < 0.0f ? -1.0f : 1.0f;
         if (!orthonormalizeTangentFrame(
-                vertices[vertexIndex].normal,
-                tangent,
-                handedness,
-                vertices[vertexIndex].tangent)) {
+            vertices[vertexIndex].normal,
+            tangent,
+            handedness,
+            vertices[vertexIndex].tangent
+        )) {
             buildFallbackTangent(vertices[vertexIndex].normal, vertices[vertexIndex].tangent);
         }
     }
