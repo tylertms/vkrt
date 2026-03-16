@@ -58,7 +58,8 @@ static VKRT_Result prepareBLAS(
         VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
         &buildInfo,
         &primitiveCount,
-        &sizesInfo);
+        &sizesInfo
+    );
 
     VkMemoryAllocateFlagsInfo allocFlags = {0};
     allocFlags.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
@@ -96,10 +97,12 @@ static VKRT_Result prepareBLAS(
         return VKRT_ERROR_OPERATION_FAILED;
     }
 
-    if (vkBindBufferMemory(vkrt->core.device,
-            outAccelerationStructure->buffer,
-            outAccelerationStructure->memory,
-            0) != VK_SUCCESS) {
+    if (vkBindBufferMemory(
+        vkrt->core.device,
+        outAccelerationStructure->buffer,
+        outAccelerationStructure->memory,
+        0
+    ) != VK_SUCCESS) {
         vkDestroyBuffer(vkrt->core.device, outAccelerationStructure->buffer, NULL);
         vkFreeMemory(vkrt->core.device, outAccelerationStructure->memory, NULL);
         outAccelerationStructure->buffer = VK_NULL_HANDLE;
@@ -114,10 +117,11 @@ static VKRT_Result prepareBLAS(
     asCreateInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
 
     if (vkrt->core.procs.vkCreateAccelerationStructureKHR(
-            vkrt->core.device,
-            &asCreateInfo,
-            NULL,
-            &outAccelerationStructure->structure) != VK_SUCCESS) {
+        vkrt->core.device,
+        &asCreateInfo,
+        NULL,
+        &outAccelerationStructure->structure
+    ) != VK_SUCCESS) {
         vkDestroyBuffer(vkrt->core.device, outAccelerationStructure->buffer, NULL);
         vkFreeMemory(vkrt->core.device, outAccelerationStructure->memory, NULL);
         outAccelerationStructure->buffer = VK_NULL_HANDLE;
@@ -176,8 +180,13 @@ VKRT_Result prepareBottomLevelAccelerationStructureBuilds(VKRT* vkrt) {
         uint32_t primitiveCount = mesh->info.indexCount / 3u;
         VkAccelerationStructureGeometryKHR geometry;
         VkAccelerationStructureBuildGeometryInfoKHR buildInfo;
-        buildBLASGeometryInfo(&mesh->info, vkrt->core.vertexData.deviceAddress,
-            vkrt->core.indexData.deviceAddress, &geometry, &buildInfo);
+        buildBLASGeometryInfo(
+            &mesh->info,
+            vkrt->core.vertexData.deviceAddress,
+            vkrt->core.indexData.deviceAddress,
+            &geometry,
+            &buildInfo
+        );
 
         VkAccelerationStructureBuildSizesInfoKHR sizesInfo = {0};
         sizesInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
@@ -186,17 +195,19 @@ VKRT_Result prepareBottomLevelAccelerationStructureBuilds(VKRT* vkrt) {
             VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
             &buildInfo,
             &primitiveCount,
-            &sizesInfo);
+            &sizesInfo
+        );
 
         PendingBLASBuild* build = &update->blasBuilds[writeIndex];
         build->meshIndex = i;
         if (createBuffer(
-                vkrt,
-                sizesInfo.buildScratchSize,
-                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                &build->scratchBuffer,
-                &build->scratchMemory) != VKRT_SUCCESS) {
+            vkrt,
+            sizesInfo.buildScratchSize,
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+            &build->scratchBuffer,
+            &build->scratchMemory
+        ) != VKRT_SUCCESS) {
             update->blasBuildCount = writeIndex + 1u;
             return VKRT_ERROR_OPERATION_FAILED;
         }
@@ -220,8 +231,13 @@ VKRT_Result recordBottomLevelAccelerationStructureBuilds(VKRT* vkrt, VkCommandBu
 
         VkAccelerationStructureGeometryKHR geometry;
         VkAccelerationStructureBuildGeometryInfoKHR buildInfo;
-        buildBLASGeometryInfo(&mesh->info, vkrt->core.vertexData.deviceAddress,
-            vkrt->core.indexData.deviceAddress, &geometry, &buildInfo);
+        buildBLASGeometryInfo(
+            &mesh->info,
+            vkrt->core.vertexData.deviceAddress,
+            vkrt->core.indexData.deviceAddress,
+            &geometry,
+            &buildInfo
+        );
         buildInfo.dstAccelerationStructure = mesh->bottomLevelAccelerationStructure.structure;
 
         VkBufferDeviceAddressInfo scratchAddressInfo = {0};

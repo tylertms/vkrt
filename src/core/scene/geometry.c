@@ -12,14 +12,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-static VkBufferUsageFlags vertexBufferUsage(void) {
+static VkBufferUsageFlags verticesUsage(void) {
     return VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
            VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT |
            VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR |
            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 }
 
-static VkBufferUsageFlags indexBufferUsage(void) {
+static VkBufferUsageFlags indicesUsage(void) {
     return VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
            VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT |
            VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR |
@@ -37,6 +37,39 @@ typedef struct GeometryOwnerState {
     uint32_t indexBase;
     AccelerationStructure accelerationStructure;
 } GeometryOwnerState;
+
+VKRT_Result vkrtSceneRebuildMeshInfoBuffer(VKRT* vkrt) {
+    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    Buffer* meshData = &vkrt->core.sceneMeshData;
+    destroyBufferResources(vkrt, meshData);
+
+    uint32_t instanceCount = vkrt->core.meshCount;
+    meshData->count = instanceCount;
+    if (instanceCount == 0) {
+        return VKRT_SUCCESS;
+    }
+
+    MeshInfo* meshInfos = (MeshInfo*)malloc(sizeof(*meshInfos) * instanceCount);
+    if (!meshInfos) {
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+
+    for (uint32_t i = 0; i < instanceCount; i++) {
+        meshInfos[i] = vkrt->core.meshes[i].info;
+    }
+
+    VKRT_Result result = createDeviceBufferFromData(
+        vkrt,
+        meshInfos,
+        sizeof(*meshInfos) * instanceCount,
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+        &meshData->buffer,
+        &meshData->memory,
+        &meshData->deviceAddress);
+    free(meshInfos);
+    return result;
+}
 
 static void syncDuplicateMeshFromSource(Mesh* mesh, const Mesh* source) {
     if (!mesh || !source) return;
@@ -118,8 +151,7 @@ static void restoreMeshState(
     const Mesh* meshes,
     uint32_t meshCount,
     uint32_t selectedMeshIndex,
-    uint32_t selectionEnabled
-) {
+    uint32_t selectionEnabled) {
     if (!vkrt) return;
 
     if (meshCount > 0 && meshes && vkrt->core.meshes) {
@@ -134,8 +166,7 @@ static VKRT_Result createGeometryBuffers(
     VKRT* vkrt,
     uint32_t vertexCapacity,
     uint32_t indexCapacity,
-    GeometryBufferState* outState
-) {
+    GeometryBufferState* outState) {
     if (!vkrt || !outState) return VKRT_ERROR_INVALID_ARGUMENT;
 
     *outState = (GeometryBufferState){0};
@@ -143,10 +174,11 @@ static VKRT_Result createGeometryBuffers(
         VKRT_Result result = createBuffer(
             vkrt,
             (VkDeviceSize)vertexCapacity * sizeof(Vertex),
-            VK_BUFFER_USAGE_TRANSFER_DST_BIT | vertexBufferUsage(),
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT | verticesUsage(),
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
             &outState->vertexData.buffer,
-            &outState->vertexData.memory);
+            &outState->vertexData.memory
+        );
         if (result != VKRT_SUCCESS) {
             destroyGeometryBufferState(vkrt, outState);
             return result;
@@ -159,7 +191,7 @@ static VKRT_Result createGeometryBuffers(
         VKRT_Result result = createBuffer(
             vkrt,
             (VkDeviceSize)indexCapacity * sizeof(uint32_t),
-            VK_BUFFER_USAGE_TRANSFER_DST_BIT | indexBufferUsage(),
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT | indicesUsage(),
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
             &outState->indexData.buffer,
             &outState->indexData.memory);
@@ -319,12 +351,12 @@ VKRT_Result vkrtScenePreparePendingGeometryUploads(VKRT* vkrt) {
         upload->meshIndex = i;
         upload->indexOffset = vertexBytes;
         if (createBuffer(
-                vkrt,
-                stagingSize,
-                VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                &upload->stagingBuffer,
-                &upload->stagingMemory) != VKRT_SUCCESS) {
+            vkrt,
+            stagingSize,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            &upload->stagingBuffer,
+            &upload->stagingMemory) != VKRT_SUCCESS) {
             update->geometryUploadCount = writeIndex + 1u;
             return VKRT_ERROR_OPERATION_FAILED;
         }
@@ -431,12 +463,14 @@ VKRT_Result vkrtSceneUploadMeshData(
 
     markSceneMutation(vkrt);
 
-    LOG_TRACE("Mesh upload complete. Total Meshes: %u, Vertices: %zu, Indices: %zu, Reused Geometry: %s, in %.3f ms",
+    LOG_TRACE(
+        "Mesh upload complete. Total Meshes: %u, Vertices: %zu, Indices: %zu, Reused Geometry: %s, in %.3f ms",
         vkrt->core.meshCount,
         vertexCount,
         indexCount,
         duplicateIndex == VKRT_INVALID_INDEX ? "No" : "Yes",
-        (double)(getMicroseconds() - startTime) / 1e3);
+        (double)(getMicroseconds() - startTime) / 1e3
+    );
     return VKRT_SUCCESS;
 }
 
@@ -449,12 +483,7 @@ VKRT_Result vkrtSceneRemoveMesh(VKRT* vkrt, uint32_t meshIndex) {
     uint32_t meshCountBackup = 0;
     uint32_t selectedMeshIndexBackup = VKRT_INVALID_INDEX;
     uint32_t selectionEnabledBackup = 0;
-    if (!backupMeshState(
-            vkrt,
-            &meshBackup,
-            &meshCountBackup,
-            &selectedMeshIndexBackup,
-            &selectionEnabledBackup)) {
+    if (!backupMeshState(vkrt, &meshBackup, &meshCountBackup, &selectedMeshIndexBackup, &selectionEnabledBackup)) {
         LOG_ERROR("Failed to back up mesh state before removal");
         return VKRT_ERROR_OPERATION_FAILED;
     }
@@ -484,7 +513,8 @@ VKRT_Result vkrtSceneRemoveMesh(VKRT* vkrt, uint32_t meshIndex) {
     }
 
     if (meshIndex != lastIndex) {
-        memmove(&vkrt->core.meshes[meshIndex],
+        memmove(
+            &vkrt->core.meshes[meshIndex],
             &vkrt->core.meshes[meshIndex + 1u],
             (size_t)(lastIndex - meshIndex) * sizeof(Mesh));
     }
@@ -516,12 +546,7 @@ VKRT_Result vkrtSceneRemoveMesh(VKRT* vkrt, uint32_t meshIndex) {
     vkrt->sceneSettings.selectionEnabled = vkrt->sceneSettings.selectedMeshIndex != VKRT_INVALID_INDEX;
 
     if (rebuildGeometryLayout(vkrt) != VKRT_SUCCESS) {
-        restoreMeshState(
-            vkrt,
-            meshBackup,
-            meshCountBackup,
-            selectedMeshIndexBackup,
-            selectionEnabledBackup);
+        restoreMeshState(vkrt, meshBackup, meshCountBackup, selectedMeshIndexBackup, selectionEnabledBackup);
         free(meshBackup);
         LOG_ERROR("Geometry layout rebuild failed after mesh removal");
         return VKRT_ERROR_OPERATION_FAILED;
@@ -537,9 +562,11 @@ VKRT_Result vkrtSceneRemoveMesh(VKRT* vkrt, uint32_t meshIndex) {
     free(meshBackup);
     markSceneMutation(vkrt);
 
-    LOG_TRACE("Mesh removal complete. Removed Index: %u, Remaining Meshes: %u, in %.3f ms",
+    LOG_TRACE(
+        "Mesh removal complete. Removed Index: %u, Remaining Meshes: %u, in %.3f ms",
         meshIndex,
         vkrt->core.meshCount,
-        (double)(getMicroseconds() - startTime) / 1e3);
+        (double)(getMicroseconds() - startTime) / 1e3
+    );
     return VKRT_SUCCESS;
 }

@@ -288,12 +288,14 @@ int saveCurrentRenderPNG(VKRT* vkrt, const char* path) {
     void* mapped = NULL;
     int result = -1;
 
-    if (createBuffer(vkrt,
+    if (createBuffer(
+        vkrt,
         readbackBytes,
         VK_BUFFER_USAGE_TRANSFER_DST_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
         &stagingBuffer,
-        &stagingMemory) != VKRT_SUCCESS) {
+        &stagingMemory
+    ) != VKRT_SUCCESS) {
         return -1;
     }
 
@@ -316,12 +318,14 @@ int saveCurrentRenderPNG(VKRT* vkrt, const char* path) {
     copyRegion.imageOffset = (VkOffset3D){(int32_t)offsetX, (int32_t)offsetY, 0};
     copyRegion.imageExtent = (VkExtent3D){width, height, 1};
 
-    vkCmdCopyImageToBuffer(commandBuffer,
+    vkCmdCopyImageToBuffer(
+        commandBuffer,
         vkrt->core.outputImage,
         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
         stagingBuffer,
         1,
-        &copyRegion);
+        &copyRegion
+    );
 
     transitionImageLayout(commandBuffer, vkrt->core.outputImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
     if (endSingleTimeCommands(vkrt, commandBuffer) != VKRT_SUCCESS) {

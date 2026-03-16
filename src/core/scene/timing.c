@@ -69,14 +69,17 @@ void recordFrameTime(VKRT* vkrt, uint32_t frameIndex) {
     }
 
     uint64_t ts[2] = {0};
-    VkResult queryResult = vkGetQueryPoolResults(vkrt->core.device,
+    VkResult queryResult = vkGetQueryPoolResults(
+        vkrt->core.device,
         vkrt->runtime.timestampPool,
         frameIndex * 2,
         2,
         sizeof(ts),
         ts,
         sizeof(uint64_t),
-        VK_QUERY_RESULT_64_BIT);
+        VK_QUERY_RESULT_64_BIT
+    );
+
     if (queryResult != VK_SUCCESS) {
         LOG_ERROR("Failed to collect frame timing query (%d)", (int)queryResult);
         return;

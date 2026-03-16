@@ -60,12 +60,12 @@ typedef struct VKRT_Core {
     VkBuffer sceneDataBuffers[VKRT_MAX_FRAMES_IN_FLIGHT];
     VkDeviceMemory sceneDataMemories[VKRT_MAX_FRAMES_IN_FLIGHT];
     SceneData* sceneFrameData[VKRT_MAX_FRAMES_IN_FLIGHT];
-    PickBuffer* pickData;
-    uint32_t pickPendingFrame;
-    uint32_t pickResultMeshIndex;
-    uint8_t pickPending;
-    uint8_t pickSubmitted;
-    uint8_t pickResultReady;
+    Selection* selectionData;
+    uint32_t selectionPendingFrame;
+    uint32_t selectionResultMeshIndex;
+    uint8_t selectionPending;
+    uint8_t selectionSubmitted;
+    uint8_t selectionResultReady;
     VkImage outputImage;
     VkImageView outputImageView;
     VkDeviceMemory outputImageMemory;
@@ -80,7 +80,7 @@ typedef struct VKRT_Core {
     VkImageView selectionMaskImageView;
     VkDeviceMemory selectionMaskImageMemory;
     Mesh* meshes;
-    Buffer pickBuffer;
+    Buffer selection;
     Buffer vertexData;
     Buffer indexData;
     uint32_t meshCount;
@@ -88,6 +88,10 @@ typedef struct VKRT_Core {
     Buffer sceneMaterialData;
     Buffer sceneEmissiveMeshData;
     Buffer sceneEmissiveTriangleData;
+    Buffer sceneMeshAliasQ;
+    Buffer sceneMeshAliasIdx;
+    Buffer sceneTriAliasQ;
+    Buffer sceneTriAliasIdx;
     AccelerationStructure sceneTopLevelAccelerationStructure;
     AccelerationStructure selectionTopLevelAccelerationStructure;
     VkBool32 descriptorSetReady[VKRT_MAX_FRAMES_IN_FLIGHT];

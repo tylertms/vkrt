@@ -122,21 +122,25 @@ VKRT_Result createSceneUniform(VKRT* vkrt) {
     memset(vkrt->core.sceneData, 0, sizeof(*vkrt->core.sceneData));
 
     for (uint32_t frameIndex = 0; frameIndex < VKRT_MAX_FRAMES_IN_FLIGHT; frameIndex++) {
-        if (createBuffer(vkrt,
+        if (createBuffer(
+            vkrt,
             uniformBufferSize,
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             &vkrt->core.sceneDataBuffers[frameIndex],
-            &vkrt->core.sceneDataMemories[frameIndex]) != VKRT_SUCCESS) {
+            &vkrt->core.sceneDataMemories[frameIndex]
+        ) != VKRT_SUCCESS) {
             return VKRT_ERROR_OPERATION_FAILED;
         }
 
-        if (vkMapMemory(vkrt->core.device,
-                vkrt->core.sceneDataMemories[frameIndex],
-                0,
-                uniformBufferSize,
-                0,
-                (void**)&vkrt->core.sceneFrameData[frameIndex]) != VK_SUCCESS ||
+        if (vkMapMemory(
+            vkrt->core.device,
+            vkrt->core.sceneDataMemories[frameIndex],
+            0,
+            uniformBufferSize,
+            0,
+            (void**)&vkrt->core.sceneFrameData[frameIndex]
+        ) != VK_SUCCESS ||
             !vkrt->core.sceneFrameData[frameIndex]) {
             return VKRT_ERROR_OPERATION_FAILED;
         }
@@ -144,26 +148,29 @@ VKRT_Result createSceneUniform(VKRT* vkrt) {
         memset(vkrt->core.sceneFrameData[frameIndex], 0, uniformBufferSize);
     }
 
-    VkDeviceSize pickBufferSize = sizeof(PickBuffer);
-    if (createBuffer(vkrt,
-        pickBufferSize,
+    VkDeviceSize selectionSize = sizeof(Selection);
+    if (createBuffer(
+        vkrt,
+        selectionSize,
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        &vkrt->core.pickBuffer.buffer,
-        &vkrt->core.pickBuffer.memory) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+        &vkrt->core.selection.buffer,
+        &vkrt->core.selection.memory
+    ) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
 
-    if (vkMapMemory(vkrt->core.device, vkrt->core.pickBuffer.memory, 0, pickBufferSize, 0, (void**)&vkrt->core.pickData) !=
-        VK_SUCCESS || !vkrt->core.pickData) return VKRT_ERROR_OPERATION_FAILED;
-    memset(vkrt->core.pickData, 0, sizeof(*vkrt->core.pickData));
-    vkrt->core.pickData->hitMeshIndex = VKRT_INVALID_INDEX;
-    vkrt->core.pickPendingFrame = 0;
-    vkrt->core.pickResultMeshIndex = VKRT_INVALID_INDEX;
-    vkrt->core.pickPending = 0;
-    vkrt->core.pickSubmitted = 0;
-    vkrt->core.pickResultReady = 0;
+    if (vkMapMemory(vkrt->core.device, vkrt->core.selection.memory, 0, selectionSize, 0, (void**)&vkrt->core.selectionData) !=
+        VK_SUCCESS || !vkrt->core.selectionData) return VKRT_ERROR_OPERATION_FAILED;
+
+    memset(vkrt->core.selectionData, 0, sizeof(*vkrt->core.selectionData));
+    vkrt->core.selectionData->hitMeshIndex = VKRT_INVALID_INDEX;
+    vkrt->core.selectionPendingFrame = 0;
+    vkrt->core.selectionResultMeshIndex = VKRT_INVALID_INDEX;
+    vkrt->core.selectionPending = 0;
+    vkrt->core.selectionSubmitted = 0;
+    vkrt->core.selectionResultReady = 0;
     markSelectionMaskDirty(vkrt);
-    vkrt->core.pickBuffer.deviceAddress = 0;
-    vkrt->core.pickBuffer.count = 1;
+    vkrt->core.selection.deviceAddress = 0;
+    vkrt->core.selection.count = 1;
 
     uint32_t initialWidth = vkrt->runtime.swapChainExtent.width ? vkrt->runtime.swapChainExtent.width : VKRT_DEFAULT_WIDTH;
     uint32_t initialHeight = vkrt->runtime.swapChainExtent.height ? vkrt->runtime.swapChainExtent.height : VKRT_DEFAULT_HEIGHT;

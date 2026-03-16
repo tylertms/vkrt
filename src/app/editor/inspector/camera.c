@@ -71,7 +71,7 @@ void inspectorDrawCameraTab(VKRT* vkrt) {
 
         const char* toneMappingLabels[] = {"None", "ACES"};
         int toneMappingMode = (int)settings.toneMappingMode;
-        if (ImGui_ComboCharEx("Tone Mapping", &toneMappingMode, toneMappingLabels, 2, 2)) {
+        if (ImGui_ComboCharEx("Tone Mapping", &toneMappingMode, toneMappingLabels, VKRT_TONE_MAPPING_MODE_COUNT, VKRT_TONE_MAPPING_MODE_COUNT)) {
             VKRT_Result result = VKRT_setToneMappingMode(vkrt, (VKRT_ToneMappingMode)toneMappingMode);
             if (result != VKRT_SUCCESS) {
                 LOG_ERROR("Updating tone mapping mode failed (%d)", (int)result);
@@ -115,6 +115,36 @@ void inspectorDrawCameraTab(VKRT* vkrt) {
             }
         }
 
+        inspectorUnindentSection();
+    }
+
+    if (ImGui_CollapsingHeader("Debug", ImGuiTreeNodeFlags_DefaultOpen)) {
+        inspectorIndentSection();
+        ImGui_BeginDisabled(renderModeActive);
+
+        const char* debugModeLabels[] = {
+            "None", "Normals", "Depth", "Bounce Count",
+            "NEE Only", "BSDF Only", "Selection Mask"
+        };
+        int debugModeValue = (int)settings.debugMode;
+        if (debugModeValue < 0 || debugModeValue >= (int)VKRT_DEBUG_MODE_COUNT) debugModeValue = 0;
+        if (ImGui_ComboCharEx("View Mode", &debugModeValue, debugModeLabels, VKRT_DEBUG_MODE_COUNT, VKRT_DEBUG_MODE_COUNT)) {
+            VKRT_Result result = VKRT_setDebugMode(vkrt, (uint32_t)debugModeValue);
+            if (result != VKRT_SUCCESS) {
+                LOG_ERROR("Updating debug mode failed (%d)", (int)result);
+            }
+        }
+
+        bool neeEnabled = settings.misNeeEnabled != 0;
+        if (ImGui_Checkbox("NEE (Direct Light)", &neeEnabled)) {
+            VKRT_Result result = VKRT_setMISNEEEnabled(vkrt, neeEnabled ? 1u : 0u);
+            if (result != VKRT_SUCCESS) {
+                LOG_ERROR("Updating NEE toggle failed (%d)", (int)result);
+            }
+        }
+        tooltipOnHover("Next Event Estimation with MIS. Samples emissive geometry directly for lower variance.");
+
+        ImGui_EndDisabled();
         inspectorUnindentSection();
     }
 

@@ -10,11 +10,13 @@ VKRT_Result vkrtRequireSceneStateReady(const VKRT* vkrt) {
 
 VKRT_Result vkrtWaitForAllInFlightFrames(const VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
-    if (vkWaitForFences(vkrt->core.device,
-            VKRT_MAX_FRAMES_IN_FLIGHT,
-            vkrt->runtime.inFlightFences,
-            VK_TRUE,
-            UINT64_MAX) != VK_SUCCESS) {
+    if (vkWaitForFences(
+        vkrt->core.device,
+        VKRT_MAX_FRAMES_IN_FLIGHT,
+        vkrt->runtime.inFlightFences,
+        VK_TRUE,
+        UINT64_MAX
+    ) != VK_SUCCESS) {
         return VKRT_ERROR_OPERATION_FAILED;
     }
     return VKRT_SUCCESS;
@@ -36,7 +38,8 @@ void vkrtDestroyAccelerationStructureResources(VKRT* vkrt, AccelerationStructure
         vkrt->core.procs.vkDestroyAccelerationStructureKHR(
             vkrt->core.device,
             accelerationStructure->structure,
-            NULL);
+            NULL
+        );
     }
     accelerationStructure->structure = VK_NULL_HANDLE;
 
