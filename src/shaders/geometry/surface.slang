@@ -7,135 +7,63 @@
 // References:
 // Triangle normal interpolation: Pharr, Jakob, Humphreys, 2023 - https://www.pbr-book.org/4ed/Shapes/Triangle_Meshes
 // Normal transform basis: Pharr, Jakob, Humphreys, 2023 - https://www.pbr-book.org/4ed/Geometry_and_Transformations/Applying_Transformations
-// Facing-normal convention: Microsoft, 2024 - https://learn.microsoft.com/en-us/windows/win32/direct3dhlsl/dx-graphics-hlsl-faceforward
 
-float3 computeSurfaceNormalUnoriented(
-    MeshInfo mesh,
-    uint primitiveIndex,
-    float2 barycentrics,
-    float3x4 worldToObject)
-{
+struct SurfaceHit {
+    uint materialIndex;
+    uint frontFace;
+    float3 shadingNormal;
+    float3 geometricNormal;
+    float4 tangent;
+};
+
+SurfaceHit evaluateSurfaceHit(
+    MeshInfo mesh, uint primitiveIndex, float2 barycentrics, float3x4 objectToWorld,
+    float3x4 worldToObject, float3 worldRayDirection
+) {
     uint triangleBase = mesh.indexBase + primitiveIndex * 3u;
     uint vertexBase = mesh.vertexBase;
 
-    uint index0 = indexBuffer[triangleBase + 0u] + vertexBase;
-    uint index1 = indexBuffer[triangleBase + 1u] + vertexBase;
-    uint index2 = indexBuffer[triangleBase + 2u] + vertexBase;
+    uint index0 = indices[triangleBase + 0u] + vertexBase;
+    uint index1 = indices[triangleBase + 1u] + vertexBase;
+    uint index2 = indices[triangleBase + 2u] + vertexBase;
+
+    Vertex vertex0 = vertices[index0];
+    Vertex vertex1 = vertices[index1];
+    Vertex vertex2 = vertices[index2];
 
     float u = barycentrics.x;
     float v = barycentrics.y;
     float w = 1.0 - u - v;
 
-    float3 normal0 = vertexBuffer[index0].normal.xyz;
-    float3 normal1 = vertexBuffer[index1].normal.xyz;
-    float3 normal2 = vertexBuffer[index2].normal.xyz;
-    float3 objectNormal = safeNormalize(normal0 * w + normal1 * u + normal2 * v);
+    float3 objectNormal = safeNormalize(
+        vertex0.normal.xyz * w +
+        vertex1.normal.xyz * u +
+        vertex2.normal.xyz * v);
 
-    float3x3 worldToObjectBasis = (float3x3)worldToObject;
-    return safeNormalize(mul(transpose(worldToObjectBasis), objectNormal));
-}
-
-float3 computeSurfaceNormal(
-    MeshInfo mesh,
-    uint primitiveIndex,
-    float2 barycentrics,
-    float3x4 worldToObject,
-    float3 worldRayDirection)
-{
-    float3 worldNormal = computeSurfaceNormalUnoriented(mesh, primitiveIndex, barycentrics, worldToObject);
-    return faceforward(worldNormal, worldRayDirection, worldNormal);
-}
-
-float4 computeSurfaceTangent(
-    MeshInfo mesh,
-    uint primitiveIndex,
-    float2 barycentrics,
-    float3x4 objectToWorld,
-    float3x4 worldToObject,
-    float3 worldRayDirection)
-{
-    uint triangleBase = mesh.indexBase + primitiveIndex * 3u;
-    uint vertexBase = mesh.vertexBase;
-
-    uint index0 = indexBuffer[triangleBase + 0u] + vertexBase;
-    uint index1 = indexBuffer[triangleBase + 1u] + vertexBase;
-    uint index2 = indexBuffer[triangleBase + 2u] + vertexBase;
-
-    float u = barycentrics.x;
-    float v = barycentrics.y;
-    float w = 1.0 - u - v;
-
-    float4 tangent0 = vertexBuffer[index0].tangent;
-    float4 tangent1 = vertexBuffer[index1].tangent;
-    float4 tangent2 = vertexBuffer[index2].tangent;
-    float4 objectTangent = tangent0 * w + tangent1 * u + tangent2 * v;
+    float4 objectTangent = vertex0.tangent * w + vertex1.tangent * u + vertex2.tangent * v;
     float handedness = objectTangent.w < 0.0 ? -1.0 : 1.0;
 
-    float3 normal0 = vertexBuffer[index0].normal.xyz;
-    float3 normal1 = vertexBuffer[index1].normal.xyz;
-    float3 normal2 = vertexBuffer[index2].normal.xyz;
-    float3 objectNormal = safeNormalize(normal0 * w + normal1 * u + normal2 * v);
-
     float3x3 objectToWorldBasis = (float3x3)objectToWorld;
     float3x3 worldToObjectBasis = (float3x3)worldToObject;
-    float3 worldNormal = safeNormalize(mul(transpose(worldToObjectBasis), objectNormal));
-    float3 worldTangent = safeNormalize(mul(objectToWorldBasis, objectTangent.xyz));
-    float facing = dot(worldNormal, worldRayDirection) > 0.0 ? -1.0 : 1.0;
-    return float4(worldTangent * facing, handedness);
-}
 
-float3 computeGeometricNormalUnoriented(
-    MeshInfo mesh,
-    uint primitiveIndex,
-    float3x4 objectToWorld)
-{
-    uint triangleBase = mesh.indexBase + primitiveIndex * 3u;
-    uint vertexBase = mesh.vertexBase;
+    float3 shadingNormalUnoriented = safeNormalize(mul(transpose(worldToObjectBasis), objectNormal));
+    float facing = dot(shadingNormalUnoriented, worldRayDirection) > 0.0 ? -1.0 : 1.0;
 
-    uint index0 = indexBuffer[triangleBase + 0u] + vertexBase;
-    uint index1 = indexBuffer[triangleBase + 1u] + vertexBase;
-    uint index2 = indexBuffer[triangleBase + 2u] + vertexBase;
+    float3 worldEdge1 = mul(objectToWorldBasis, vertex1.position.xyz - vertex0.position.xyz);
+    float3 worldEdge2 = mul(objectToWorldBasis, vertex2.position.xyz - vertex0.position.xyz);
+    float3 geometricNormal = safeNormalize(cross(worldEdge1, worldEdge2));
+    if (determinant(objectToWorldBasis) < 0.0) {
+        geometricNormal = -geometricNormal;
+    }
 
-    float3 p0 = vertexBuffer[index0].position.xyz;
-    float3 p1 = vertexBuffer[index1].position.xyz;
-    float3 p2 = vertexBuffer[index2].position.xyz;
+    SurfaceHit hit;
+    hit.materialIndex = mesh.materialIndex;
+    hit.frontFace = dot(geometricNormal, worldRayDirection) < 0.0 ? 1u : 0u;
+    hit.shadingNormal = shadingNormalUnoriented * facing;
+    hit.geometricNormal = hit.frontFace != 0u ? geometricNormal : -geometricNormal;
+    hit.tangent = float4(safeNormalize(mul(objectToWorldBasis, objectTangent.xyz)) * facing, handedness);
 
-    float3x3 objectToWorldBasis = (float3x3)objectToWorld;
-    float3 worldEdge1 = mul(objectToWorldBasis, p1 - p0);
-    float3 worldEdge2 = mul(objectToWorldBasis, p2 - p0);
-    float3 normal = safeNormalize(cross(worldEdge1, worldEdge2));
-    if (determinant(objectToWorldBasis) < 0.0) normal = -normal;
-    return normal;
-}
-
-float3 computeSurfaceNormal(uint instanceIndex, uint primitiveIndex, float2 barycentrics) {
-    MeshInfo mesh = meshInfo[instanceIndex];
-    return computeSurfaceNormal(
-        mesh,
-        primitiveIndex,
-        barycentrics,
-        WorldToObject3x4(),
-        WorldRayDirection());
-}
-
-float4 computeSurfaceTangent(uint instanceIndex, uint primitiveIndex, float2 barycentrics) {
-    MeshInfo mesh = meshInfo[instanceIndex];
-    return computeSurfaceTangent(
-        mesh,
-        primitiveIndex,
-        barycentrics,
-        ObjectToWorld3x4(),
-        WorldToObject3x4(),
-        WorldRayDirection());
-}
-
-float3 computeGeometricNormalUnoriented(uint instanceIndex, uint primitiveIndex) {
-    MeshInfo mesh = meshInfo[instanceIndex];
-    return computeGeometricNormalUnoriented(mesh, primitiveIndex, ObjectToWorld3x4());
-}
-
-float3 computeHitPoint(float3 worldRayOrigin, float3 worldRayDirection, float rayTCurrent) {
-    return worldRayOrigin + worldRayDirection * rayTCurrent;
+    return hit;
 }
 
 #endif

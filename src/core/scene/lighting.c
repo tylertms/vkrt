@@ -26,22 +26,81 @@ static void transformPosition(const VkTransformMatrixKHR* transform, const vec4 
     outWorld[2] = transform->matrix[2][0] * position[0] + transform->matrix[2][1] * position[1] + transform->matrix[2][2] * position[2] + transform->matrix[2][3];
 }
 
-static Buffer* getEmissiveMeshData(VKRT* vkrt) {
-    return &vkrt->core.sceneEmissiveMeshData;
-}
-
-static Buffer* getEmissiveTriangleData(VKRT* vkrt) {
-    return &vkrt->core.sceneEmissiveTriangleData;
-}
-
 static void destroyLightBuffers(VKRT* vkrt) {
     if (!vkrt) return;
 
-    destroyBufferResources(vkrt, getEmissiveMeshData(vkrt));
-    destroyBufferResources(vkrt, getEmissiveTriangleData(vkrt));
+    destroyBufferResources(vkrt, &vkrt->core.sceneEmissiveMeshData);
+    destroyBufferResources(vkrt, &vkrt->core.sceneEmissiveTriangleData);
+    destroyBufferResources(vkrt, &vkrt->core.sceneMeshAliasQ);
+    destroyBufferResources(vkrt, &vkrt->core.sceneMeshAliasIdx);
+    destroyBufferResources(vkrt, &vkrt->core.sceneTriAliasQ);
+    destroyBufferResources(vkrt, &vkrt->core.sceneTriAliasIdx);
 
     vkrt->core.emissiveMeshCount = 0;
     vkrt->core.emissiveTriangleCount = 0;
+}
+
+static int buildAliasTable(const float* pmf, uint32_t count, float* outQ, uint32_t* outIdx) {
+    if (count == 0) return 1;
+
+    float* scaled = (float*)malloc(sizeof(float) * count);
+    uint32_t* small = (uint32_t*)malloc(sizeof(uint32_t) * count);
+    uint32_t* large = (uint32_t*)malloc(sizeof(uint32_t) * count);
+    if (!scaled || !small || !large) {
+        free(scaled);
+        free(small);
+        free(large);
+        return 0;
+    }
+
+    uint32_t smallCount = 0, largeCount = 0;
+
+    for (uint32_t i = 0; i < count; ++i) {
+        scaled[i] = pmf[i] * (float)count;
+        if (scaled[i] < 1.0f) small[smallCount++] = i;
+        else large[largeCount++] = i;
+    }
+
+    while (smallCount > 0 && largeCount > 0) {
+        uint32_t s = small[--smallCount];
+        uint32_t l = large[--largeCount];
+
+        outQ[s] = scaled[s];
+        outIdx[s] = l;
+
+        scaled[l] = scaled[l] + scaled[s] - 1.0f;
+        if (scaled[l] < 1.0f) small[smallCount++] = l;
+        else large[largeCount++] = l;
+    }
+
+    while (largeCount > 0) {
+        uint32_t l = large[--largeCount];
+        outQ[l] = 1.0f;
+        outIdx[l] = l;
+    }
+
+    while (smallCount > 0) {
+        uint32_t s = small[--smallCount];
+        outQ[s] = 1.0f;
+        outIdx[s] = s;
+    }
+
+    free(scaled);
+    free(small);
+    free(large);
+    return 1;
+}
+
+static VKRT_Result uploadLightBuffer(VKRT* vkrt, const void* data, VkDeviceSize size, Buffer* outBuffer) {
+    return createDeviceBufferFromData(
+        vkrt,
+        data,
+        size,
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+        &outBuffer->buffer,
+        &outBuffer->memory,
+        &outBuffer->deviceAddress
+    );
 }
 
 VKRT_Result vkrtSceneRebuildLightBuffers(VKRT* vkrt) {
@@ -62,14 +121,31 @@ VKRT_Result vkrtSceneRebuildLightBuffers(VKRT* vkrt) {
         emissiveTriangleCount += triangleCount;
     }
 
+    for (uint32_t i = 0; i < meshCount; i++) {
+        vkrt->core.meshes[i].info.lightPdfArea = 0.0f;
+    }
+
     uint32_t allocMeshCount = emissiveMeshCount > 0 ? emissiveMeshCount : 1u;
     uint32_t allocTriangleCount = emissiveTriangleCount > 0 ? emissiveTriangleCount : 1u;
 
     EmissiveMesh* emissiveMeshes = (EmissiveMesh*)calloc(allocMeshCount, sizeof(EmissiveMesh));
     EmissiveTriangle* emissiveTriangles = (EmissiveTriangle*)calloc(allocTriangleCount, sizeof(EmissiveTriangle));
-    if (!emissiveMeshes || !emissiveTriangles) {
-        free(emissiveMeshes);
-        free(emissiveTriangles);
+    float* meshAliasQ = (float*)calloc(allocMeshCount, sizeof(float));
+    uint32_t* meshAliasIdx = (uint32_t*)calloc(allocMeshCount, sizeof(uint32_t));
+    float* triAliasQ = (float*)calloc(allocTriangleCount, sizeof(float));
+    uint32_t* triAliasIdx = (uint32_t*)calloc(allocTriangleCount, sizeof(uint32_t));
+    float* meshWeights = (float*)calloc(allocMeshCount, sizeof(float));
+    float* triPmfScratch = (float*)calloc(allocTriangleCount, sizeof(float));
+    uint32_t* sourceMeshIndices = (uint32_t*)calloc(allocMeshCount, sizeof(uint32_t));
+
+    if (!emissiveMeshes || !emissiveTriangles || !meshAliasQ || !meshAliasIdx ||
+        !triAliasQ || !triAliasIdx || !meshWeights || !triPmfScratch || !sourceMeshIndices
+    ) {
+        free(emissiveMeshes); free(emissiveTriangles);
+        free(meshAliasQ); free(meshAliasIdx);
+        free(triAliasQ); free(triAliasIdx);
+        free(meshWeights); free(triPmfScratch);
+        free(sourceMeshIndices);
         LOG_ERROR("Failed to allocate emissive light staging buffers");
         return VKRT_ERROR_OPERATION_FAILED;
     }
@@ -77,11 +153,13 @@ VKRT_Result vkrtSceneRebuildLightBuffers(VKRT* vkrt) {
     float totalSelectionWeight = 0.0f;
     uint32_t meshWriteIndex = 0;
     uint32_t triangleWriteIndex = 0;
+    VKRT_Result result = VKRT_SUCCESS;
 
     for (uint32_t meshIndex = 0; meshIndex < meshCount; meshIndex++) {
         Mesh* mesh = &vkrt->core.meshes[meshIndex];
         float emissionWeight = materialEmissionWeight(&mesh->material);
         if (emissionWeight <= 0.0f) continue;
+        if (!mesh->vertices || !mesh->indices) continue;
 
         uint32_t triangleCount = mesh->info.indexCount / 3u;
         if (triangleCount == 0) continue;
@@ -89,203 +167,143 @@ VKRT_Result vkrtSceneRebuildLightBuffers(VKRT* vkrt) {
         VkTransformMatrixKHR transform = getMeshTransform(&mesh->info);
         float totalArea = 0.0f;
         uint32_t triangleOffset = triangleWriteIndex;
-        vec3 boundsMin = {INFINITY, INFINITY, INFINITY};
-        vec3 boundsMax = {-INFINITY, -INFINITY, -INFINITY};
 
         for (uint32_t tri = 0; tri < triangleCount; tri++) {
             uint32_t i0 = mesh->indices[tri * 3u + 0u];
             uint32_t i1 = mesh->indices[tri * 3u + 1u];
             uint32_t i2 = mesh->indices[tri * 3u + 2u];
-            vec3 p0 = {0.0f, 0.0f, 0.0f};
-            vec3 p1 = {0.0f, 0.0f, 0.0f};
-            vec3 p2 = {0.0f, 0.0f, 0.0f};
-            vec3 e1World = {0.0f, 0.0f, 0.0f};
-            vec3 e2World = {0.0f, 0.0f, 0.0f};
-            float area = 0.0f;
-
-            if (i0 < mesh->info.vertexCount && i1 < mesh->info.vertexCount && i2 < mesh->info.vertexCount) {
-                transformPosition(&transform, mesh->vertices[i0].position, p0);
-                transformPosition(&transform, mesh->vertices[i1].position, p1);
-                transformPosition(&transform, mesh->vertices[i2].position, p2);
-
-                glm_vec3_sub(p1, p0, e1World);
-                glm_vec3_sub(p2, p0, e2World);
-
-                vec3 crossE;
-                glm_vec3_cross(e1World, e2World, crossE);
-                area = 0.5f * glm_vec3_norm(crossE);
-                if (!isfinite(area) || area < 0.0f) area = 0.0f;
-                totalArea += area;
-
-                for (int c = 0; c < 3; c++) {
-                    if (p0[c] < boundsMin[c]) boundsMin[c] = p0[c];
-                    if (p1[c] < boundsMin[c]) boundsMin[c] = p1[c];
-                    if (p2[c] < boundsMin[c]) boundsMin[c] = p2[c];
-                    if (p0[c] > boundsMax[c]) boundsMax[c] = p0[c];
-                    if (p1[c] > boundsMax[c]) boundsMax[c] = p1[c];
-                    if (p2[c] > boundsMax[c]) boundsMax[c] = p2[c];
-                }
-
-                float* v0p = mesh->vertices[i0].position;
-                float* v1p = mesh->vertices[i1].position;
-                float* v2p = mesh->vertices[i2].position;
-                vec3 e1Obj, e2Obj, objFace;
-                glm_vec3_sub(v1p, v0p, e1Obj);
-                glm_vec3_sub(v2p, v0p, e2Obj);
-                glm_vec3_cross(e1Obj, e2Obj, objFace);
-
-                float* n0 = mesh->vertices[i0].normal;
-                float* n1 = mesh->vertices[i1].normal;
-                float* n2 = mesh->vertices[i2].normal;
-                vec3 avgNormal = {n0[0] + n1[0] + n2[0], n0[1] + n1[1] + n2[1], n0[2] + n1[2] + n2[2]};
-
-                if (glm_vec3_norm2(objFace) > 1e-12f && glm_vec3_norm2(avgNormal) > 1e-12f) {
-                    if (glm_vec3_dot(objFace, avgNormal) < 0.0f) {
-                        glm_vec3_sub(p2, p0, e1World);
-                        glm_vec3_sub(p1, p0, e2World);
-                    }
-                }
+            if (i0 >= mesh->info.vertexCount || i1 >= mesh->info.vertexCount || i2 >= mesh->info.vertexCount) {
+                continue;
             }
+
+            vec3 p0, p1, p2;
+            transformPosition(&transform, mesh->vertices[i0].position, p0);
+            transformPosition(&transform, mesh->vertices[i1].position, p1);
+            transformPosition(&transform, mesh->vertices[i2].position, p2);
+
+            vec3 e1, e2, cross;
+            glm_vec3_sub(p1, p0, e1);
+            glm_vec3_sub(p2, p0, e2);
+            glm_vec3_cross(e1, e2, cross);
+            float crossLen = glm_vec3_norm(cross);
+            float area = 0.5f * crossLen;
+            if (area <= 0.0f) continue;
 
             EmissiveTriangle triGPU = {0};
             triGPU.v0Area[0] = p0[0];
             triGPU.v0Area[1] = p0[1];
             triGPU.v0Area[2] = p0[2];
             triGPU.v0Area[3] = area;
-
-            triGPU.e1Pad[0] = e1World[0];
-            triGPU.e1Pad[1] = e1World[1];
-            triGPU.e1Pad[2] = e1World[2];
+            triGPU.e1Pad[0] = e1[0];
+            triGPU.e1Pad[1] = e1[1];
+            triGPU.e1Pad[2] = e1[2];
             triGPU.e1Pad[3] = 0.0f;
-
-            triGPU.e2Pad[0] = e2World[0];
-            triGPU.e2Pad[1] = e2World[1];
-            triGPU.e2Pad[2] = e2World[2];
+            triGPU.e2Pad[0] = e2[0];
+            triGPU.e2Pad[1] = e2[1];
+            triGPU.e2Pad[2] = e2[2];
             triGPU.e2Pad[3] = 0.0f;
 
             emissiveTriangles[triangleWriteIndex++] = triGPU;
+            totalArea += area;
         }
 
+        uint32_t validTriCount = triangleWriteIndex - triangleOffset;
         float selectionWeight = totalArea * emissionWeight;
-        if (selectionWeight <= 0.0f) {
+        if (selectionWeight <= 0.0f || validTriCount == 0) {
             triangleWriteIndex = triangleOffset;
             continue;
         }
 
-        vec3 boundsCenter = {
-            0.5f * (boundsMin[0] + boundsMax[0]),
-            0.5f * (boundsMin[1] + boundsMax[1]),
-            0.5f * (boundsMin[2] + boundsMax[2]),
-        };
-        float boundsRadius = 0.0f;
-        for (uint32_t tri = triangleOffset; tri < triangleWriteIndex; tri++) {
-            vec3 p0 = {
-                emissiveTriangles[tri].v0Area[0],
-                emissiveTriangles[tri].v0Area[1],
-                emissiveTriangles[tri].v0Area[2],
-            };
-            vec3 p1 = {
-                p0[0] + emissiveTriangles[tri].e1Pad[0],
-                p0[1] + emissiveTriangles[tri].e1Pad[1],
-                p0[2] + emissiveTriangles[tri].e1Pad[2],
-            };
-            vec3 p2 = {
-                p0[0] + emissiveTriangles[tri].e2Pad[0],
-                p0[1] + emissiveTriangles[tri].e2Pad[1],
-                p0[2] + emissiveTriangles[tri].e2Pad[2],
-            };
-            vec3 offset = {0.0f, 0.0f, 0.0f};
-
-            glm_vec3_sub(p0, boundsCenter, offset);
-            boundsRadius = fmaxf(boundsRadius, glm_vec3_norm(offset));
-            glm_vec3_sub(p1, boundsCenter, offset);
-            boundsRadius = fmaxf(boundsRadius, glm_vec3_norm(offset));
-            glm_vec3_sub(p2, boundsCenter, offset);
-            boundsRadius = fmaxf(boundsRadius, glm_vec3_norm(offset));
+        float invTotalArea = 1.0f / totalArea;
+        for (uint32_t i = 0; i < validTriCount; i++) {
+            triPmfScratch[i] = emissiveTriangles[triangleOffset + i].v0Area[3] * invTotalArea;
         }
-
-        float areaCdf = 0.0f;
-        for (uint32_t tri = triangleOffset; tri < triangleWriteIndex; tri++) {
-            areaCdf += emissiveTriangles[tri].v0Area[3];
-            emissiveTriangles[tri].e1Pad[3] = areaCdf;
-        }
-        if (triangleWriteIndex > triangleOffset) {
-            emissiveTriangles[triangleWriteIndex - 1u].e1Pad[3] = totalArea;
+        if (!buildAliasTable(triPmfScratch, validTriCount, &triAliasQ[triangleOffset], &triAliasIdx[triangleOffset])) {
+            LOG_ERROR("Failed to build emissive triangle alias table");
+            result = VKRT_ERROR_OPERATION_FAILED;
+            goto cleanup;
         }
 
         EmissiveMesh meshGPU = {0};
-        meshGPU.indices[0] = meshIndex;
-        meshGPU.indices[1] = triangleOffset;
-        meshGPU.indices[2] = triangleCount;
-        meshGPU.indices[3] = 0;
+        meshGPU.triOffset = triangleOffset;
+        meshGPU.triCount = validTriCount;
+        meshGPU.pmfMesh = 0.0f;
+        meshGPU.invTotalArea = invTotalArea;
+        meshGPU.emission[0] = mesh->material.emissionColor[0] * mesh->material.emissionLuminance;
+        meshGPU.emission[1] = mesh->material.emissionColor[1] * mesh->material.emissionLuminance;
+        meshGPU.emission[2] = mesh->material.emissionColor[2] * mesh->material.emissionLuminance;
+        meshGPU._pad0 = 0.0f;
 
-        meshGPU.emission[0] = mesh->material.emissionColor[0];
-        meshGPU.emission[1] = mesh->material.emissionColor[1];
-        meshGPU.emission[2] = mesh->material.emissionColor[2];
-        meshGPU.emission[3] = mesh->material.emissionLuminance;
-
-        meshGPU.stats[0] = 0.0f;
-        meshGPU.stats[1] = totalArea;
-        meshGPU.stats[2] = 0.0f;
-        meshGPU.stats[3] = selectionWeight;
-        meshGPU.bounds[0] = boundsCenter[0];
-        meshGPU.bounds[1] = boundsCenter[1];
-        meshGPU.bounds[2] = boundsCenter[2];
-        meshGPU.bounds[3] = boundsRadius;
-
-        emissiveMeshes[meshWriteIndex++] = meshGPU;
+        meshWeights[meshWriteIndex] = selectionWeight;
         totalSelectionWeight += selectionWeight;
+        sourceMeshIndices[meshWriteIndex] = meshIndex;
+        emissiveMeshes[meshWriteIndex++] = meshGPU;
     }
 
     emissiveMeshCount = meshWriteIndex;
     emissiveTriangleCount = triangleWriteIndex;
 
     if (emissiveMeshCount > 0 && totalSelectionWeight > 0.0f) {
-        float selectionCdf = 0.0f;
-        for (uint32_t meshIndex = 0; meshIndex < emissiveMeshCount; meshIndex++) {
-            float selectionPdf = emissiveMeshes[meshIndex].stats[3] / totalSelectionWeight;
-            emissiveMeshes[meshIndex].stats[0] = selectionPdf;
-            selectionCdf += selectionPdf;
-            emissiveMeshes[meshIndex].stats[2] = selectionCdf;
+        float invTotalWeight = 1.0f / totalSelectionWeight;
+        for (uint32_t i = 0; i < emissiveMeshCount; i++) {
+            float pmf = meshWeights[i] * invTotalWeight;
+            emissiveMeshes[i].pmfMesh = pmf;
+            triPmfScratch[i] = pmf;
+            vkrt->core.meshes[sourceMeshIndices[i]].info.lightPdfArea = pmf * emissiveMeshes[i].invTotalArea;
         }
-        emissiveMeshes[emissiveMeshCount - 1u].stats[2] = 1.0f;
+        if (!buildAliasTable(triPmfScratch, emissiveMeshCount, meshAliasQ, meshAliasIdx)) {
+            LOG_ERROR("Failed to build emissive mesh alias table");
+            result = VKRT_ERROR_OPERATION_FAILED;
+            goto cleanup;
+        }
     }
 
     uint32_t uploadMeshCount = emissiveMeshCount > 0 ? emissiveMeshCount : 1u;
     uint32_t uploadTriangleCount = emissiveTriangleCount > 0 ? emissiveTriangleCount : 1u;
 
-    VKRT_Result result = VKRT_SUCCESS;
-    Buffer* emissiveMeshData = getEmissiveMeshData(vkrt);
-    Buffer* emissiveTriangleData = getEmissiveTriangleData(vkrt);
-    if ((result = createDeviceBufferFromData(
+    if ((result = uploadLightBuffer(
         vkrt,
         emissiveMeshes,
         (VkDeviceSize)uploadMeshCount * sizeof(EmissiveMesh),
-        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-        &emissiveMeshData->buffer,
-        &emissiveMeshData->memory,
-        &emissiveMeshData->deviceAddress)) != VKRT_SUCCESS) {
-        free(emissiveMeshes);
-        free(emissiveTriangles);
-        destroyLightBuffers(vkrt);
-        return result;
-    }
-    emissiveMeshData->count = emissiveMeshCount;
+        &vkrt->core.sceneEmissiveMeshData
+    )) != VKRT_SUCCESS) goto cleanup;
+    vkrt->core.sceneEmissiveMeshData.count = emissiveMeshCount;
 
-    if ((result = createDeviceBufferFromData(
+    if ((result = uploadLightBuffer(
         vkrt,
         emissiveTriangles,
         (VkDeviceSize)uploadTriangleCount * sizeof(EmissiveTriangle),
-        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-        &emissiveTriangleData->buffer,
-        &emissiveTriangleData->memory,
-        &emissiveTriangleData->deviceAddress)) != VKRT_SUCCESS) {
-        free(emissiveMeshes);
-        free(emissiveTriangles);
-        destroyLightBuffers(vkrt);
-        return result;
-    }
-    emissiveTriangleData->count = emissiveTriangleCount;
+        &vkrt->core.sceneEmissiveTriangleData
+    )) != VKRT_SUCCESS) goto cleanup;
+    vkrt->core.sceneEmissiveTriangleData.count = emissiveTriangleCount;
+
+    if ((result = uploadLightBuffer(
+        vkrt,
+        meshAliasQ,
+        (VkDeviceSize)uploadMeshCount * sizeof(float),
+        &vkrt->core.sceneMeshAliasQ
+    )) != VKRT_SUCCESS) goto cleanup;
+
+    if ((result = uploadLightBuffer(
+        vkrt,
+        meshAliasIdx,
+        (VkDeviceSize)uploadMeshCount * sizeof(uint32_t),
+        &vkrt->core.sceneMeshAliasIdx
+    )) != VKRT_SUCCESS) goto cleanup;
+
+    if ((result = uploadLightBuffer(
+        vkrt,
+        triAliasQ,
+        (VkDeviceSize)uploadTriangleCount * sizeof(float),
+        &vkrt->core.sceneTriAliasQ
+    )) != VKRT_SUCCESS) goto cleanup;
+
+    if ((result = uploadLightBuffer(
+        vkrt,
+        triAliasIdx,
+        (VkDeviceSize)uploadTriangleCount * sizeof(uint32_t),
+        &vkrt->core.sceneTriAliasIdx
+    )) != VKRT_SUCCESS) goto cleanup;
 
     vkrt->core.emissiveMeshCount = emissiveMeshCount;
     vkrt->core.emissiveTriangleCount = emissiveTriangleCount;
@@ -294,7 +312,16 @@ VKRT_Result vkrtSceneRebuildLightBuffers(VKRT* vkrt) {
         vkrt->core.sceneData->emissiveTriangleCount = emissiveTriangleCount;
     }
 
+cleanup:
     free(emissiveMeshes);
     free(emissiveTriangles);
-    return VKRT_SUCCESS;
+    free(meshAliasQ);
+    free(meshAliasIdx);
+    free(triAliasQ);
+    free(triAliasIdx);
+    free(meshWeights);
+    free(triPmfScratch);
+    free(sourceMeshIndices);
+    if (result != VKRT_SUCCESS) destroyLightBuffers(vkrt);
+    return result;
 }

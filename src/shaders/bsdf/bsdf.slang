@@ -3,12 +3,8 @@
 
 #include "model.slang"
 
-BSDFSample sampleBSDF(BSDFInput input, inout uint rng) {
+BSDFSample sampleBSDF(BSDFState state, ShadingBasis basis, inout uint rng) {
     BSDFSample sample = BSDFSample();
-
-    ShadingBasis basis = makeShadingBasis(input.normal, input.tangent);
-    float3 wo = worldToLocal(input.wo, basis);
-    BSDFState state = makeBSDFState(input.material, wo, input.frontFace);
     if (absCosTheta(state.wo) <= 0.0) return sample;
 
     BSDFDirectionSample directionSample;
@@ -27,6 +23,7 @@ BSDFSample sampleBSDF(BSDFInput input, inout uint rng) {
     sample.value = eval.value;
     sample.pdf = eval.pdf;
     sample.weight = sample.value * absCosTheta(directionSample.wi) / sample.pdf;
+
     return sample;
 }
 

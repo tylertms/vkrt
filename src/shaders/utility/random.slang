@@ -3,6 +3,9 @@
 
 #include "ray.slang"
 
+// References:
+// Integer hash function: Wellons, 2018 - https://nullprogram.com/blog/2018/07/31/
+
 uint hash(uint value) {
     value ^= value >> 16;
     value *= 0x7feb352du;
