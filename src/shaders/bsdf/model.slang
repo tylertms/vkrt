@@ -14,10 +14,8 @@
 // Sheen on top, then clearcoat, then the base dielectric/metal/substrate stack.
 //
 // References:
-// BSDF representation: Pharr, Jakob, Humphreys, 2023 - https://www.pbr-book.org/4ed/Reflection_Models/BSDF_Representation
-// Mixture sampling: Pharr, Jakob, Humphreys, 2023 - https://www.pbr-book.org/4ed/Monte_Carlo_Integration/Improving_Efficiency
-// Disney BSDF layering: Burley, 2015 - https://blog.selfshadow.com/publications/s2015-shading-course/burley/s2015_pbs_disney_bsdf_notes.pdf
-// OpenPBR surface model: ASWF, 2024 - https://academysoftwarefoundation.github.io/OpenPBR/index.html
+// Blender Principled node definition - https://github.com/blender/blender/blob/main/source/blender/nodes/shader/nodes/node_shader_bsdf_principled.cc
+// Blender Cycles closure layering - https://github.com/blender/blender/blob/main/intern/cycles/kernel/svm/closure.h
 
 struct BSDFDirectionSample {
     float3 wi;
@@ -185,11 +183,14 @@ BSDFEval evalReflectionStack(BSDFState state, float3 wi) {
     }
 
     float coatAttenuation = coatLayerReflectionAttenuation(state, wi);
-
-    eval.value = sheen.value + coat.value + coatAttenuation * (
+    float maxSheen = max(state.sheenColor.x, max(state.sheenColor.y, state.sheenColor.z));
+    float sheenAttenuation = sheenLayerAttenuation(maxSheen, cosTheta(state.wo), state.material.sheenRoughness);
+    float3 baseValue = coat.value + coatAttenuation * (
         state.material.metallic * metal.value +
         (1.0 - state.material.metallic) * (dielectric.value + diffuse.value + subsurface.value)
     );
+
+    eval.value = sheen.value + sheenAttenuation * baseValue;
 
     eval.pdf = state.sampleWeights.sheen * sheen.pdf +
         state.sampleWeights.coat * coat.pdf +
@@ -206,13 +207,18 @@ BSDFEval evalBSDF(BSDFState state, float3 wi) {
         return evalReflectionStack(state, wi);
     }
 
+
     BSDFEval transmission = evalDielectricTransmission(
         state.material,
         state.wo,
         wi,
         state.frontFace,
         state.ggx,
-        useInteriorDielectricInterface(state) ? 1.0 : coatLayerTransmissionAttenuation(state)
+        useInteriorDielectricInterface(state) ? 1.0 : coatLayerTransmissionAttenuation(state) * sheenLayerAttenuation(
+            max(state.sheenColor.x, max(state.sheenColor.y, state.sheenColor.z)),
+            cosTheta(state.wo),
+            state.material.sheenRoughness
+        )
     );
 
     transmission.pdf *= state.sampleWeights.dielectric;

@@ -457,12 +457,23 @@ static Material buildMaterial(const cgltf_material* sourceMaterial) {
     }
 
     if (sourceMaterial->has_sheen) {
-        material.sheen = max3(
+        vec3 sheenColor = {
             sourceMaterial->sheen.sheen_color_factor[0],
             sourceMaterial->sheen.sheen_color_factor[1],
             sourceMaterial->sheen.sheen_color_factor[2]
-        );
-        material.sheenTint = material.sheen > 0.0f ? 1.0f : 0.0f;
+        };
+        float sheenWeight = max3(sheenColor[0], sheenColor[1], sheenColor[2]);
+        if (sheenWeight > 0.0f) {
+            material.sheenTintWeight[0] = sheenColor[0] / sheenWeight;
+            material.sheenTintWeight[1] = sheenColor[1] / sheenWeight;
+            material.sheenTintWeight[2] = sheenColor[2] / sheenWeight;
+            material.sheenTintWeight[3] = sheenWeight;
+        } else {
+            material.sheenTintWeight[0] = 1.0f;
+            material.sheenTintWeight[1] = 1.0f;
+            material.sheenTintWeight[2] = 1.0f;
+            material.sheenTintWeight[3] = 0.0f;
+        }
         material.sheenRoughness = sourceMaterial->sheen.sheen_roughness_factor;
     }
 

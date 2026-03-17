@@ -120,19 +120,16 @@ float3 bsdfTintColor(float3 baseColor) {
     return baseColor / luminance;
 }
 
-float3 bsdfSheenTintColor(float3 baseColor) {
-    float maxComponent = max(baseColor.x, max(baseColor.y, baseColor.z));
-    if (maxComponent <= 0.0) {
-        return float3(1.0);
-    }
+float sheenWeight(Material material) {
+    return saturate(material.sheenTintWeight.w);
+}
 
-    float tintWeight = smoothstep(0.02, 0.1, maxComponent);
-    return lerp(float3(1.0), bsdfTintColor(baseColor), tintWeight);
+float3 sheenTint(Material material) {
+    return saturate(material.sheenTintWeight.xyz);
 }
 
 float3 bsdfSheenColor(Material material) {
-    float3 tint = lerp(float3(1.0), bsdfSheenTintColor(material.baseColor), saturate(material.sheenTint));
-    return tint * material.sheen * (1.0 - material.metallic) * (1.0 - material.transmission);
+    return sheenTint(material) * sheenWeight(material);
 }
 
 float3 bsdfTransmissionColor(Material material) {

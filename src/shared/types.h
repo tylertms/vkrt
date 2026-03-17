@@ -46,8 +46,7 @@ struct Material {
     float anisotropic;
     float specular;
     float specularTint;
-    float sheen;
-    float sheenTint;
+    float4 sheenTintWeight;
     float clearcoat;
     float clearcoatGloss;
     float ior;

@@ -10,6 +10,7 @@ static Material sanitizeMaterial(Material material) {
     for (int c = 0; c < 3; c++) {
         material.baseColor[c] = vkrtFiniteClampf(material.baseColor[c], 0.0f, 0.0f, 1.0f);
         material.emissionColor[c] = vkrtFiniteClampf(material.emissionColor[c], 0.0f, 0.0f, INFINITY);
+        material.sheenTintWeight[c] = vkrtFiniteClampf(material.sheenTintWeight[c], 0.0f, 0.0f, 1.0f);
     }
 
     material.metallic = vkrtFiniteClampf(material.metallic, 0.0f, 0.0f, 1.0f);
@@ -18,8 +19,7 @@ static Material sanitizeMaterial(Material material) {
     material.specular = vkrtFiniteClampf(material.specular, 0.0f, 0.0f, 1.0f);
     material.specularTint = vkrtFiniteClampf(material.specularTint, 0.0f, 0.0f, 1.0f);
     material.anisotropic = vkrtFiniteClampf(material.anisotropic, 0.0f, 0.0f, 1.0f);
-    material.sheen = vkrtFiniteClampf(material.sheen, 0.0f, 0.0f, 1.0f);
-    material.sheenTint = vkrtFiniteClampf(material.sheenTint, 0.0f, 0.0f, 1.0f);
+    material.sheenTintWeight[3] = vkrtFiniteClampf(material.sheenTintWeight[3], 0.0f, 0.0f, 1.0f);
     material.clearcoat = vkrtFiniteClampf(material.clearcoat, 0.0f, 0.0f, 1.0f);
     material.clearcoatGloss = vkrtFiniteClampf(material.clearcoatGloss, 0.0f, 0.0f, 1.0f);
     material.ior = vkrtFiniteClampf(material.ior, 1.0f, 1.0f, 4.0f);
@@ -53,8 +53,7 @@ static int materialsEqual(const Material* a, const Material* b) {
         a->anisotropic == b->anisotropic &&
         a->specular == b->specular &&
         a->specularTint == b->specularTint &&
-        a->sheen == b->sheen &&
-        a->sheenTint == b->sheenTint &&
+        materialComponentEqual(a->sheenTintWeight, b->sheenTintWeight, 4) &&
         a->clearcoat == b->clearcoat &&
         a->clearcoatGloss == b->clearcoatGloss &&
         a->ior == b->ior &&
