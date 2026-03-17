@@ -27,6 +27,10 @@ if sys == 'linux' and cc.get_argument_syntax() == 'gcc'
   c_args += [define_prefix + '_GNU_SOURCE']
 endif
 
+if cc.get_argument_syntax() == 'msvc'
+  c_args += ['/experimental:c11atomics']
+endif
+
 c_args += [define_prefix + 'VKRT_VERSION="' + meson.project_version() + '"']
 c_args += [define_prefix + 'GLFW_INCLUDE_NONE']
 cpp_args += [define_prefix + 'GLFW_INCLUDE_NONE']
