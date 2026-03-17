@@ -91,8 +91,8 @@ float3 evaluateDirectLight(float3 hitPoint, float3 geometricNormal, ShadingBasis
     float pdfSolidAngle = ls.pdf * distSq / cosLight;
     if (pdfSolidAngle <= 0.0) return float3(0.0);
 
-    float3 shadowOrigin = hitPoint + geometricNormal * 0.001;
-    float shadowDist = dist - 0.002;
+    float3 shadowOrigin = hitPoint + geometricNormal * VKRT_SHADOW_ORIGIN_OFFSET;
+    float shadowDist = dist - VKRT_SHADOW_DISTANCE_OFFSET;
     if (shadowDist <= 0.0) return float3(0.0);
 
     if (!traceShadowRay(shadowOrigin, wi, shadowDist)) return float3(0.0);

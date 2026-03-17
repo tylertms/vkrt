@@ -8,7 +8,7 @@ groupshared uint sharedSelectionMask[kSharedMaskSpan * kSharedMaskSpan];
 
 int outlineRadius(int2 size) {
     int minDimension = min(size.x, size.y);
-    return clamp((int)round((float)minDimension * (2.0 / 1080.0)), 1, kMaxOutlineRadius);
+    return clamp((int)round((float)minDimension * (2.0 / VKRT_OUTLINE_REFERENCE_HEIGHT)), 1, kMaxOutlineRadius);
 }
 
 uint sharedMaskIndex(int2 pixel) {
@@ -47,7 +47,7 @@ void main(
     int2 sharedPixel = int2(groupThreadId.xy) + int2(kMaxOutlineRadius, kMaxOutlineRadius);
     if (sharedSelectionMask[sharedMaskIndex(sharedPixel)] != 0u) return;
 
-    float3 outlineColor = float3(1.0, 0.55, 0.1);
+    float3 outlineColor = VKRT_OUTLINE_COLOR;
     for (int dy = -radius; dy <= radius; dy++) {
         for (int dx = -radius; dx <= radius; dx++) {
             if (dx == 0 && dy == 0) continue;

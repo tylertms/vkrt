@@ -19,7 +19,7 @@ bool traceShadowRay(float3 origin, float3 direction, float tMax) {
     RayDesc ray;
     ray.Origin = origin;
     ray.Direction = direction;
-    ray.TMin = 0.001;
+    ray.TMin = VKRT_RAY_T_MIN;
     ray.TMax = tMax;
 
     TraceRay(

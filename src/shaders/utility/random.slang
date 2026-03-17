@@ -25,7 +25,10 @@ float3 rand3(inout uint rng) {
 }
 
 float3 randUnit(inout uint rng) {
-    return safeNormalize(tan(rand3(rng)));
+    float z = 2.0 * rand(rng) - 1.0;
+    float phi = 2.0 * 3.14159265358979323846 * rand(rng);
+    float r = sqrt(max(1.0 - z * z, 0.0));
+    return float3(r * cos(phi), r * sin(phi), z);
 }
 
 uint initPixelSeed(int2 pixel, uint frameNumber, uint sampleIndex) {

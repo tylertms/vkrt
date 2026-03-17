@@ -27,9 +27,11 @@ BSDFEval evalOrenNayar(float3 diffuseColor, float roughness, float3 wo, float3 w
     float A = 1.0 - sigma2 / (2.0 * (sigma2 + 0.33));
     float B = 0.45 * sigma2 / (sigma2 + 0.09);
 
-    float sinThetaI = sinTheta(wi);
-    float sinThetaO = sinTheta(wo);
-    float maxCos = max(0.0, cosPhi(wi) * cosPhi(wo) + sinPhi(wi) * sinPhi(wo));
+    float sin2ThetaI = sin2Theta(wi);
+    float sin2ThetaO = sin2Theta(wo);
+    float sinThetaI = sqrt(sin2ThetaI);
+    float sinThetaO = sqrt(sin2ThetaO);
+    float maxCos = max(0.0, cosPhiDifference(wi, wo));
 
     float sinAlpha;
     float tanBeta;

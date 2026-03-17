@@ -39,22 +39,38 @@ float absCosTheta(float3 w) {
     return abs(w.z);
 }
 
+float cos2Theta(float3 w) {
+    return w.z * w.z;
+}
+
+float sin2Theta(float3 w) {
+    return saturate(1.0 - cos2Theta(w));
+}
+
 float sinTheta(float3 w) {
-    return sqrt(saturate(1.0 - cosTheta(w) * cosTheta(w)));
+    return sqrt(sin2Theta(w));
 }
 
 float sinPhi(float3 w) {
-    float sinThetaValue = sinTheta(w);
-    return sinThetaValue > 0.0 ? clamp(w.y / sinThetaValue, -1.0, 1.0) : 0.0;
+    float s2t = sin2Theta(w);
+    return s2t > 0.0 ? clamp(w.y * rsqrt(s2t), -1.0, 1.0) : 0.0;
 }
 
 float cosPhi(float3 w) {
-    float sinThetaValue = sinTheta(w);
-    return sinThetaValue > 0.0 ? clamp(w.x / sinThetaValue, -1.0, 1.0) : 1.0;
+    float s2t = sin2Theta(w);
+    return s2t > 0.0 ? clamp(w.x * rsqrt(s2t), -1.0, 1.0) : 1.0;
+}
+
+float cosPhiDifference(float3 wi, float3 wo) {
+    float s2tI = sin2Theta(wi);
+    float s2tO = sin2Theta(wo);
+    if (s2tI <= 0.0 || s2tO <= 0.0) return 0.0;
+    float invSinProduct = rsqrt(s2tI * s2tO);
+    return clamp((wi.x * wo.x + wi.y * wo.y) * invSinProduct, -1.0, 1.0);
 }
 
 float3 makeFallbackTangent(float3 normal) {
-    float3 up = abs(normal.z) < 0.999 ? float3(0.0, 0.0, 1.0) : float3(1.0, 0.0, 0.0);
+    float3 up = abs(normal.z) < VKRT_TANGENT_PARALLEL_THRESHOLD ? float3(0.0, 0.0, 1.0) : float3(1.0, 0.0, 0.0);
     return safeNormalize(cross(up, normal));
 }
 
@@ -63,7 +79,7 @@ ShadingBasis makeShadingBasis(float3 normal, float4 tangentData) {
     basis.normal = safeNormalize(normal);
 
     float3 tangent = tangentData.xyz - basis.normal * dot(tangentData.xyz, basis.normal);
-    if (dot(tangent, tangent) <= 1e-12) {
+    if (dot(tangent, tangent) <= VKRT_SAFE_NORMALIZE_EPS) {
         tangent = makeFallbackTangent(basis.normal);
     } else {
         tangent = safeNormalize(tangent);

@@ -133,7 +133,7 @@ void main() {
             }
 
             if (depth + 1u >= scene.rrMinDepth) {
-                float continueProbability = clamp(max(throughput.x, max(throughput.y, throughput.z)), 0.05, 0.95);
+                float continueProbability = clamp(max(throughput.x, max(throughput.y, throughput.z)), VKRT_RR_MIN_CONTINUE_PROB, VKRT_RR_MAX_CONTINUE_PROB);
                 if (rand(rng) > continueProbability) {
                     break;
                 }
@@ -141,10 +141,10 @@ void main() {
             }
 
             float3 offsetDir = sample.isTransmission != 0u ? -geometricNormal : geometricNormal;
-            ray.Origin = hitPoint + offsetDir * 0.001;
+            ray.Origin = hitPoint + offsetDir * VKRT_SHADOW_ORIGIN_OFFSET;
             ray.Direction = sample.wi;
-            ray.TMin = 0.001;
-            ray.TMax = 10000.0;
+            ray.TMin = VKRT_RAY_T_MIN;
+            ray.TMax = VKRT_RAY_T_MAX;
         }
 
         if (bounceCountDebug && sampleIndex == 0u) {

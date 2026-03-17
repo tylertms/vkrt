@@ -24,13 +24,13 @@ RayDesc makePrimaryRay(int2 pixel, float2 jitter) {
     return makeRay(
         mul(scene.viewInverse, float4(0.0, 0.0, 0.0, 1.0)).xyz,
         normalize(mul(scene.viewInverse, float4(viewDir.xyz, 0.0)).xyz),
-        0.001,
-        10000.0);
+        VKRT_RAY_T_MIN,
+        VKRT_RAY_T_MAX);
 }
 
 float3 safeNormalize(float3 value) {
     float lenSq = dot(value, value);
-    if (lenSq <= 1e-12) {
+    if (lenSq <= VKRT_SAFE_NORMALIZE_EPS) {
         return float3(0.0, 0.0, 1.0);
     }
 
