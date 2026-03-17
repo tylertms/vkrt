@@ -7,6 +7,7 @@
 
 VKRT_Result vkrtScenePreparePendingGeometryUploads(VKRT* vkrt);
 VKRT_Result vkrtSceneRebuildMeshInfoBuffer(VKRT* vkrt);
+VKRT_Result vkrtSceneBuildMeshInfoBuffer(VKRT* vkrt, Buffer* outBuffer);
 VKRT_Result vkrtSceneUploadMeshData(
     VKRT* vkrt,
     const Vertex* vertices,

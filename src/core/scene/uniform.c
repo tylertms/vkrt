@@ -183,7 +183,7 @@ VKRT_Result createSceneUniform(VKRT* vkrt) {
     vkrt->sceneSettings.samplesPerPixel = 8;
     vkrt->sceneSettings.rrMaxDepth = 8;
     vkrt->sceneSettings.rrMinDepth = 4;
-    vkrt->sceneSettings.toneMappingMode = VKRT_TONE_MAPPING_ACES;
+    vkrt->sceneSettings.toneMappingMode = VKRT_TONE_MAPPING_MODE_ACES;
     vkrt->sceneSettings.environmentColor[0] = 0.25f;
     vkrt->sceneSettings.environmentColor[1] = 0.25f;
     vkrt->sceneSettings.environmentColor[2] = 0.25f;

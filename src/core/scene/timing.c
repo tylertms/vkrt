@@ -32,10 +32,6 @@ static void updateFrameTimes(VKRT* vkrt) {
 static float queryAutoSPPTargetMs(const VKRT* vkrt) {
     if (!vkrt) return 0.0f;
 
-    if (vkrt->renderStatus.renderModeActive && !vkrt->renderStatus.renderModeFinished) {
-        return 1000.0f / (float)VKRT_RENDER_TARGET_FPS;
-    }
-
     float targetMs = vkrt->autoSPP.targetFrameMs;
     if (targetMs > 0.0f) return targetMs;
 
@@ -144,6 +140,7 @@ void updateAutoSPP(VKRT* vkrt) {
     if (next > 2048u) next = 2048u;
 
     if (next != spp) {
-        VKRT_setSamplesPerPixel(vkrt, next);
+        vkrt->sceneSettings.samplesPerPixel = next;
+        syncSceneStateData(vkrt);
     }
 }

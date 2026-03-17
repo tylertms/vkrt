@@ -68,6 +68,8 @@ void vkrtCleanupFrameSceneUpdate(VKRT* vkrt, uint32_t frameIndex) {
     destroyTransfer(vkrt, &update->selectionTLASInstanceBuffer);
     destroyTransfer(vkrt, &update->selectionTLASScratch);
 
+    update->sceneTLASInstanceCount = 0u;
+    update->selectionTLASInstanceCount = 0u;
     update->sceneTLASBuildPending = VK_FALSE;
     update->selectionTLASBuildPending = VK_FALSE;
 }
@@ -81,12 +83,29 @@ VKRT_Result vkrtSceneRebuildMaterialBuffer(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
 
     Buffer* materialData = getMaterialData(vkrt);
-    destroyBufferResources(vkrt, materialData);
+    Buffer previousMaterialData = *materialData;
+    Buffer nextMaterialData = {0};
 
     uint32_t materialCount = vkrt->core.meshCount;
-    materialData->count = materialCount;
     if (materialCount == 0) {
-        return vkrtSceneRebuildLightBuffers(vkrt);
+        VKRT_Result result = createZeroInitializedDeviceBuffer(
+            vkrt,
+            sizeof(Material),
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+            &nextMaterialData
+        );
+        if (result != VKRT_SUCCESS) {
+            return result;
+        }
+
+        result = vkrtSceneRebuildLightBuffers(vkrt);
+        if (result != VKRT_SUCCESS) {
+            destroyBufferResources(vkrt, &nextMaterialData);
+            return result;
+        }
+        *materialData = nextMaterialData;
+        destroyBufferResources(vkrt, &previousMaterialData);
+        return VKRT_SUCCESS;
     }
 
     Material* materials = (Material*)malloc((size_t)materialCount * sizeof(Material));
@@ -105,10 +124,11 @@ VKRT_Result vkrtSceneRebuildMaterialBuffer(VKRT* vkrt) {
         materials,
         (VkDeviceSize)materialCount * sizeof(Material),
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-        &materialData->buffer,
-        &materialData->memory,
-        &materialData->deviceAddress
+        &nextMaterialData.buffer,
+        &nextMaterialData.memory,
+        &nextMaterialData.deviceAddress
     );
+    nextMaterialData.count = materialCount;
 
     free(materials);
     if (result != VKRT_SUCCESS) {
@@ -116,9 +136,12 @@ VKRT_Result vkrtSceneRebuildMaterialBuffer(VKRT* vkrt) {
     }
 
     if ((result = vkrtSceneRebuildLightBuffers(vkrt)) != VKRT_SUCCESS) {
+        destroyBufferResources(vkrt, &nextMaterialData);
         return result;
     }
 
+    *materialData = nextMaterialData;
+    destroyBufferResources(vkrt, &previousMaterialData);
     return VKRT_SUCCESS;
 }
 

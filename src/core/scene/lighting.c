@@ -5,8 +5,21 @@
 #include "debug.h"
 
 #include <math.h>
+#include <limits.h>
 #include <stdint.h>
+#include <stddef.h>
 #include <stdlib.h>
+
+typedef struct LightBufferState {
+    Buffer sceneEmissiveMeshData;
+    Buffer sceneEmissiveTriangleData;
+    Buffer sceneMeshAliasQ;
+    Buffer sceneMeshAliasIdx;
+    Buffer sceneTriAliasQ;
+    Buffer sceneTriAliasIdx;
+    uint32_t emissiveMeshCount;
+    uint32_t emissiveTriangleCount;
+} LightBufferState;
 
 static float luminance3(const vec3 value) {
     return value[0] * 0.2126f + value[1] * 0.7152f + value[2] * 0.0722f;
@@ -26,18 +39,39 @@ static void transformPosition(const VkTransformMatrixKHR* transform, const vec4 
     outWorld[2] = transform->matrix[2][0] * position[0] + transform->matrix[2][1] * position[1] + transform->matrix[2][2] * position[2] + transform->matrix[2][3];
 }
 
-static void destroyLightBuffers(VKRT* vkrt) {
+static void destroyLightBufferState(VKRT* vkrt, LightBufferState* state) {
     if (!vkrt) return;
+    if (!state) return;
 
-    destroyBufferResources(vkrt, &vkrt->core.sceneEmissiveMeshData);
-    destroyBufferResources(vkrt, &vkrt->core.sceneEmissiveTriangleData);
-    destroyBufferResources(vkrt, &vkrt->core.sceneMeshAliasQ);
-    destroyBufferResources(vkrt, &vkrt->core.sceneMeshAliasIdx);
-    destroyBufferResources(vkrt, &vkrt->core.sceneTriAliasQ);
-    destroyBufferResources(vkrt, &vkrt->core.sceneTriAliasIdx);
+    destroyBufferResources(vkrt, &state->sceneEmissiveMeshData);
+    destroyBufferResources(vkrt, &state->sceneEmissiveTriangleData);
+    destroyBufferResources(vkrt, &state->sceneMeshAliasQ);
+    destroyBufferResources(vkrt, &state->sceneMeshAliasIdx);
+    destroyBufferResources(vkrt, &state->sceneTriAliasQ);
+    destroyBufferResources(vkrt, &state->sceneTriAliasIdx);
+    state->emissiveMeshCount = 0;
+    state->emissiveTriangleCount = 0;
+}
 
-    vkrt->core.emissiveMeshCount = 0;
-    vkrt->core.emissiveTriangleCount = 0;
+static void applyLightBufferState(VKRT* vkrt, const LightBufferState* state) {
+    if (!vkrt || !state) return;
+
+    vkrt->core.sceneEmissiveMeshData = state->sceneEmissiveMeshData;
+    vkrt->core.sceneEmissiveTriangleData = state->sceneEmissiveTriangleData;
+    vkrt->core.sceneMeshAliasQ = state->sceneMeshAliasQ;
+    vkrt->core.sceneMeshAliasIdx = state->sceneMeshAliasIdx;
+    vkrt->core.sceneTriAliasQ = state->sceneTriAliasQ;
+    vkrt->core.sceneTriAliasIdx = state->sceneTriAliasIdx;
+    vkrt->core.emissiveMeshCount = state->emissiveMeshCount;
+    vkrt->core.emissiveTriangleCount = state->emissiveTriangleCount;
+    if (vkrt->core.sceneData) {
+        vkrt->core.sceneData->emissiveMeshCount = state->emissiveMeshCount;
+        vkrt->core.sceneData->emissiveTriangleCount = state->emissiveTriangleCount;
+    }
+}
+
+static int canAllocateArray(uint32_t count, size_t elementSize) {
+    return elementSize == 0 || (size_t)count <= (SIZE_MAX / elementSize);
 }
 
 static int buildAliasTable(const float* pmf, uint32_t count, float* outQ, uint32_t* outIdx) {
@@ -106,20 +140,27 @@ static VKRT_Result uploadLightBuffer(VKRT* vkrt, const void* data, VkDeviceSize 
 VKRT_Result vkrtSceneRebuildLightBuffers(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
 
-    destroyLightBuffers(vkrt);
-
     const uint32_t meshCount = vkrt->core.meshCount;
     uint32_t emissiveMeshCount = 0;
     uint32_t emissiveTriangleCount = 0;
+    uint64_t emissiveMeshCount64 = 0;
+    uint64_t emissiveTriangleCount64 = 0;
 
     for (uint32_t meshIndex = 0; meshIndex < meshCount; meshIndex++) {
         Mesh* mesh = &vkrt->core.meshes[meshIndex];
         if (materialEmissionWeight(&mesh->material) <= 0.0f) continue;
         uint32_t triangleCount = mesh->info.indexCount / 3u;
         if (triangleCount == 0) continue;
-        emissiveMeshCount++;
-        emissiveTriangleCount += triangleCount;
+        emissiveMeshCount64++;
+        emissiveTriangleCount64 += triangleCount;
+        if (emissiveMeshCount64 > UINT32_MAX || emissiveTriangleCount64 > UINT32_MAX) {
+            LOG_ERROR("Emissive light staging exceeds 32-bit count limits");
+            return VKRT_ERROR_OPERATION_FAILED;
+        }
     }
+
+    emissiveMeshCount = (uint32_t)emissiveMeshCount64;
+    emissiveTriangleCount = (uint32_t)emissiveTriangleCount64;
 
     for (uint32_t i = 0; i < meshCount; i++) {
         vkrt->core.meshes[i].info.lightPdfArea = 0.0f;
@@ -127,6 +168,15 @@ VKRT_Result vkrtSceneRebuildLightBuffers(VKRT* vkrt) {
 
     uint32_t allocMeshCount = emissiveMeshCount > 0 ? emissiveMeshCount : 1u;
     uint32_t allocTriangleCount = emissiveTriangleCount > 0 ? emissiveTriangleCount : 1u;
+    if (!canAllocateArray(allocMeshCount, sizeof(EmissiveMesh)) ||
+        !canAllocateArray(allocTriangleCount, sizeof(EmissiveTriangle)) ||
+        !canAllocateArray(allocMeshCount, sizeof(float)) ||
+        !canAllocateArray(allocTriangleCount, sizeof(float)) ||
+        !canAllocateArray(allocMeshCount, sizeof(uint32_t)) ||
+        !canAllocateArray(allocTriangleCount, sizeof(uint32_t))) {
+        LOG_ERROR("Emissive light staging allocation exceeds host address space limits");
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
 
     EmissiveMesh* emissiveMeshes = (EmissiveMesh*)calloc(allocMeshCount, sizeof(EmissiveMesh));
     EmissiveTriangle* emissiveTriangles = (EmissiveTriangle*)calloc(allocTriangleCount, sizeof(EmissiveTriangle));
@@ -154,6 +204,7 @@ VKRT_Result vkrtSceneRebuildLightBuffers(VKRT* vkrt) {
     uint32_t meshWriteIndex = 0;
     uint32_t triangleWriteIndex = 0;
     VKRT_Result result = VKRT_SUCCESS;
+    LightBufferState nextState = {0};
 
     for (uint32_t meshIndex = 0; meshIndex < meshCount; meshIndex++) {
         Mesh* mesh = &vkrt->core.meshes[meshIndex];
@@ -265,52 +316,62 @@ VKRT_Result vkrtSceneRebuildLightBuffers(VKRT* vkrt) {
         vkrt,
         emissiveMeshes,
         (VkDeviceSize)uploadMeshCount * sizeof(EmissiveMesh),
-        &vkrt->core.sceneEmissiveMeshData
+        &nextState.sceneEmissiveMeshData
     )) != VKRT_SUCCESS) goto cleanup;
-    vkrt->core.sceneEmissiveMeshData.count = emissiveMeshCount;
+    nextState.sceneEmissiveMeshData.count = emissiveMeshCount;
 
     if ((result = uploadLightBuffer(
         vkrt,
         emissiveTriangles,
         (VkDeviceSize)uploadTriangleCount * sizeof(EmissiveTriangle),
-        &vkrt->core.sceneEmissiveTriangleData
+        &nextState.sceneEmissiveTriangleData
     )) != VKRT_SUCCESS) goto cleanup;
-    vkrt->core.sceneEmissiveTriangleData.count = emissiveTriangleCount;
+    nextState.sceneEmissiveTriangleData.count = emissiveTriangleCount;
 
     if ((result = uploadLightBuffer(
         vkrt,
         meshAliasQ,
         (VkDeviceSize)uploadMeshCount * sizeof(float),
-        &vkrt->core.sceneMeshAliasQ
+        &nextState.sceneMeshAliasQ
     )) != VKRT_SUCCESS) goto cleanup;
 
     if ((result = uploadLightBuffer(
         vkrt,
         meshAliasIdx,
         (VkDeviceSize)uploadMeshCount * sizeof(uint32_t),
-        &vkrt->core.sceneMeshAliasIdx
+        &nextState.sceneMeshAliasIdx
     )) != VKRT_SUCCESS) goto cleanup;
 
     if ((result = uploadLightBuffer(
         vkrt,
         triAliasQ,
         (VkDeviceSize)uploadTriangleCount * sizeof(float),
-        &vkrt->core.sceneTriAliasQ
+        &nextState.sceneTriAliasQ
     )) != VKRT_SUCCESS) goto cleanup;
 
     if ((result = uploadLightBuffer(
         vkrt,
         triAliasIdx,
         (VkDeviceSize)uploadTriangleCount * sizeof(uint32_t),
-        &vkrt->core.sceneTriAliasIdx
+        &nextState.sceneTriAliasIdx
     )) != VKRT_SUCCESS) goto cleanup;
 
-    vkrt->core.emissiveMeshCount = emissiveMeshCount;
-    vkrt->core.emissiveTriangleCount = emissiveTriangleCount;
-    if (vkrt->core.sceneData) {
-        vkrt->core.sceneData->emissiveMeshCount = emissiveMeshCount;
-        vkrt->core.sceneData->emissiveTriangleCount = emissiveTriangleCount;
-    }
+    nextState.emissiveMeshCount = emissiveMeshCount;
+    nextState.emissiveTriangleCount = emissiveTriangleCount;
+
+    LightBufferState previousState = {
+        .sceneEmissiveMeshData = vkrt->core.sceneEmissiveMeshData,
+        .sceneEmissiveTriangleData = vkrt->core.sceneEmissiveTriangleData,
+        .sceneMeshAliasQ = vkrt->core.sceneMeshAliasQ,
+        .sceneMeshAliasIdx = vkrt->core.sceneMeshAliasIdx,
+        .sceneTriAliasQ = vkrt->core.sceneTriAliasQ,
+        .sceneTriAliasIdx = vkrt->core.sceneTriAliasIdx,
+        .emissiveMeshCount = vkrt->core.emissiveMeshCount,
+        .emissiveTriangleCount = vkrt->core.emissiveTriangleCount,
+    };
+    applyLightBufferState(vkrt, &nextState);
+    destroyLightBufferState(vkrt, &previousState);
+    nextState = (LightBufferState){0};
 
 cleanup:
     free(emissiveMeshes);
@@ -322,6 +383,8 @@ cleanup:
     free(meshWeights);
     free(triPmfScratch);
     free(sourceMeshIndices);
-    if (result != VKRT_SUCCESS) destroyLightBuffers(vkrt);
+    if (result != VKRT_SUCCESS) {
+        destroyLightBufferState(vkrt, &nextState);
+    }
     return result;
 }
