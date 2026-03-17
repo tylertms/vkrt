@@ -250,11 +250,6 @@ static int beginSequence(VKRT* vkrt, Session* session, const SessionRenderSettin
     float minTime = sanitizedSettings.animation.minTime;
     float maxTime = sanitizedSettings.animation.maxTime;
     float step = sanitizedSettings.animation.timeStep;
-    minTime = vkrtFiniteClampf(minTime, 0.0f, 0.0f, INFINITY);
-    maxTime = vkrtFiniteOrf(maxTime, minTime);
-    if (maxTime < minTime) maxTime = minTime;
-    step = vkrtFiniteOrf(step, kRenderSequenceDefaultStep);
-    if (step < kRenderSequenceMinStep) step = kRenderSequenceDefaultStep;
 
     uint32_t frameCount = sessionComputeAnimationFrameCount(&sanitizedSettings.animation);
     if (frameCount == 0) {

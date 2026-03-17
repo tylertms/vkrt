@@ -177,10 +177,6 @@ VKRT_Result VKRT_startRender(VKRT* vkrt, uint32_t width, uint32_t height, uint32
     VkBool32 extentChanged = vkrt->runtime.renderExtent.width != width || vkrt->runtime.renderExtent.height != height;
     VkExtent2D requestedExtent = {width, height};
 
-    if (vkrt->sceneSettings.samplesPerPixel == 0) {
-        vkrt->sceneSettings.samplesPerPixel = 1;
-    }
-
     if (updateRenderExtent(vkrt, requestedExtent) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
 
     vkrt->renderStatus.renderModeActive = 1;

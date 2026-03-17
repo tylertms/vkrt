@@ -104,7 +104,6 @@ static void syncDuplicateMeshFromSource(Mesh* mesh, const Mesh* source) {
 }
 
 static void resetGeometryLayout(GeometryLayout* layout) {
-    if (!layout) return;
     layout->vertexCapacity = 0;
     layout->indexCapacity = 0;
 }
@@ -117,7 +116,6 @@ static void destroyGeometryBufferState(VKRT* vkrt, GeometryBufferState* state) {
 }
 
 static void markSceneMutation(VKRT* vkrt) {
-    if (!vkrt) return;
     vkrtMarkMaterialResourcesDirty(vkrt);
     vkrtMarkSceneResourcesDirty(vkrt);
     vkrtMarkLightResourcesDirty(vkrt);
@@ -126,7 +124,6 @@ static void markSceneMutation(VKRT* vkrt) {
 }
 
 static void shrinkMeshList(VKRT* vkrt, uint32_t meshCount) {
-    if (!vkrt) return;
 
     if (meshCount == 0) {
         free(vkrt->core.meshes);

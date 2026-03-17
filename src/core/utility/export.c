@@ -368,7 +368,7 @@ int saveCurrentRenderPNG(VKRT* vkrt, const char* path) {
         LOG_ERROR("Failed to map PNG readback buffer");
     }
 
-    if (stagingBuffer != VK_NULL_HANDLE) vkDestroyBuffer(vkrt->core.device, stagingBuffer, NULL);
-    if (stagingMemory != VK_NULL_HANDLE) vkFreeMemory(vkrt->core.device, stagingMemory, NULL);
+    vkDestroyBuffer(vkrt->core.device, stagingBuffer, NULL);
+    vkFreeMemory(vkrt->core.device, stagingMemory, NULL);
     return result;
 }

@@ -26,10 +26,9 @@ static float luminance3(const vec3 value) {
 }
 
 static float materialEmissionWeight(const Material* material) {
-    if (!material) return 0.0f;
     if (!isfinite(material->emissionLuminance) || material->emissionLuminance <= 0.0f) return 0.0f;
     float lum = luminance3(material->emissionColor);
-    if (!isfinite(lum) || lum <= 0.0f) return 0.0f;
+    if (lum <= 0.0f) return 0.0f;
     return lum * material->emissionLuminance;
 }
 
@@ -40,9 +39,6 @@ static void transformPosition(const VkTransformMatrixKHR* transform, const vec4 
 }
 
 static void destroyLightBufferState(VKRT* vkrt, LightBufferState* state) {
-    if (!vkrt) return;
-    if (!state) return;
-
     destroyBufferResources(vkrt, &state->sceneEmissiveMeshData);
     destroyBufferResources(vkrt, &state->sceneEmissiveTriangleData);
     destroyBufferResources(vkrt, &state->sceneMeshAliasQ);
@@ -54,8 +50,6 @@ static void destroyLightBufferState(VKRT* vkrt, LightBufferState* state) {
 }
 
 static void applyLightBufferState(VKRT* vkrt, const LightBufferState* state) {
-    if (!vkrt || !state) return;
-
     vkrt->core.sceneEmissiveMeshData = state->sceneEmissiveMeshData;
     vkrt->core.sceneEmissiveTriangleData = state->sceneEmissiveTriangleData;
     vkrt->core.sceneMeshAliasQ = state->sceneMeshAliasQ;

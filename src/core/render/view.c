@@ -20,7 +20,7 @@ void vkrtClampViewportRect(VkExtent2D extent, uint32_t* x, uint32_t* y, uint32_t
         return;
     }
 
-    if (*width == 0 || *height == 0 || *width <= 1 || *height <= 1) {
+    if (*width <= 1 || *height <= 1) {
         *x = 0;
         *y = 0;
         *width = extent.width;
@@ -32,12 +32,6 @@ void vkrtClampViewportRect(VkExtent2D extent, uint32_t* x, uint32_t* y, uint32_t
     if (*x + *width > extent.width) *width = extent.width - *x;
     if (*y + *height > extent.height) *height = extent.height - *y;
 
-    if (*width == 0 || *height == 0) {
-        *x = 0;
-        *y = 0;
-        *width = extent.width;
-        *height = extent.height;
-    }
 }
 
 void vkrtQueryRenderViewCropExtent(
@@ -83,8 +77,6 @@ void vkrtQueryRenderViewCropExtent(
         cropHeight = (uint32_t)(cropHeightFloat + 0.5f);
     }
 
-    if (cropWidth < 1u) cropWidth = 1u;
-    if (cropHeight < 1u) cropHeight = 1u;
     if (cropWidth > renderExtent.width) cropWidth = renderExtent.width;
     if (cropHeight > renderExtent.height) cropHeight = renderExtent.height;
 

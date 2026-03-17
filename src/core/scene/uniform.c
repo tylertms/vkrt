@@ -2,7 +2,6 @@
 
 #include "buffer.h"
 
-#include <math.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -15,8 +14,6 @@ static VKRT_SceneTimelineKeyframe makeDefaultSceneTimelineKeyframe(float time) {
 }
 
 static void resetTimelineDefaults(VKRT_SceneSettingsSnapshot* settings) {
-    if (!settings) return;
-
     settings->sceneTimeline.enabled = 0;
     settings->sceneTimeline.keyframeCount = 2;
     settings->sceneTimeline.keyframes[0] = makeDefaultSceneTimelineKeyframe(0.0f);
@@ -24,15 +21,13 @@ static void resetTimelineDefaults(VKRT_SceneSettingsSnapshot* settings) {
 }
 
 static void resetAutoSPPForSceneChange(VKRT* vkrt) {
-    if (!vkrt || !vkrt->sceneSettings.autoSPPEnabled) return;
+    if (!vkrt->sceneSettings.autoSPPEnabled) return;
 
     vkrt->sceneSettings.samplesPerPixel = 1u;
     vkrt->autoSPP.controlMs = 0.0f;
 }
 
 static void writeTimelineUniform(SceneData* sceneData, const VKRT_SceneSettingsSnapshot* settings) {
-    if (!sceneData || !settings) return;
-
     sceneData->timelineEnabled = settings->sceneTimeline.enabled ? 1u : 0u;
     uint32_t keyCount = settings->sceneTimeline.keyframeCount;
     if (keyCount > VKRT_SCENE_TIMELINE_MAX_KEYFRAMES) keyCount = VKRT_SCENE_TIMELINE_MAX_KEYFRAMES;
@@ -45,10 +40,10 @@ static void writeTimelineUniform(SceneData* sceneData, const VKRT_SceneSettingsS
 
         if (i < keyCount) {
             VKRT_SceneTimelineKeyframe key = settings->sceneTimeline.keyframes[i];
-            if (isfinite(key.time)) time = key.time;
-            if (isfinite(key.emissionScale)) scale = key.emissionScale;
+            time = key.time;
+            scale = key.emissionScale;
             for (int c = 0; c < 3; c++) {
-                if (isfinite(key.emissionTint[c])) tint[c] = key.emissionTint[c];
+                tint[c] = key.emissionTint[c];
             }
         }
 
@@ -65,7 +60,6 @@ static void writeTimelineUniform(SceneData* sceneData, const VKRT_SceneSettingsS
 }
 
 static void writeSceneStateUniform(SceneData* sceneData, const VKRT* vkrt) {
-    if (!sceneData || !vkrt) return;
 
     const VKRT_SceneSettingsSnapshot* settings = &vkrt->sceneSettings;
     sceneData->samplesPerPixel = settings->samplesPerPixel > 0u ? settings->samplesPerPixel : 1u;
@@ -87,13 +81,12 @@ static void writeSceneStateUniform(SceneData* sceneData, const VKRT* vkrt) {
 }
 
 static void syncSceneDataToFrame(VKRT* vkrt, uint32_t frameIndex) {
-    if (!vkrt || !vkrt->core.sceneData || frameIndex >= VKRT_MAX_FRAMES_IN_FLIGHT) return;
+    if (!vkrt->core.sceneData || frameIndex >= VKRT_MAX_FRAMES_IN_FLIGHT) return;
     if (!vkrt->core.sceneFrameData[frameIndex]) return;
     memcpy(vkrt->core.sceneFrameData[frameIndex], vkrt->core.sceneData, sizeof(*vkrt->core.sceneData));
 }
 
 static void syncAllSceneDataFrames(VKRT* vkrt) {
-    if (!vkrt) return;
     for (uint32_t frameIndex = 0; frameIndex < VKRT_MAX_FRAMES_IN_FLIGHT; frameIndex++) {
         syncSceneDataToFrame(vkrt, frameIndex);
     }
