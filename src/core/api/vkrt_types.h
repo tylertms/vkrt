@@ -3,9 +3,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <vulkan/vulkan.h>
-#include <GLFW/glfw3.h>
-
 #include "config.h"
 #include "constants.h"
 #include "types.h"
@@ -19,6 +16,12 @@ typedef enum VKRT_Result {
     VKRT_SUCCESS = 0,
     VKRT_ERROR_INVALID_ARGUMENT = -1,
     VKRT_ERROR_OPERATION_FAILED = -2,
+    VKRT_ERROR_OUT_OF_MEMORY = -3,
+    VKRT_ERROR_DEVICE_LOST = -4,
+    VKRT_ERROR_INITIALIZATION_FAILED = -5,
+    VKRT_ERROR_SWAPCHAIN_OUT_OF_DATE = -6,
+    VKRT_ERROR_PIPELINE_CREATION_FAILED = -7,
+    VKRT_ERROR_SHADER_COMPILATION_FAILED = -8,
 } VKRT_Result;
 
 typedef struct VKRT_SceneTimelineKeyframe {
@@ -41,10 +44,7 @@ static inline int vkrtCompareSceneTimelineKeyframesByTime(const void* lhs, const
     return 0;
 }
 
-typedef enum VKRT_ToneMappingMode {
-    VKRT_TONE_MAPPING_NONE = VKRT_TONE_MAPPING_MODE_NONE,
-    VKRT_TONE_MAPPING_ACES = VKRT_TONE_MAPPING_MODE_ACES,
-} VKRT_ToneMappingMode;
+typedef uint32_t VKRT_ToneMappingMode;
 
 typedef struct Camera {
     vec3 pos, target, up;
@@ -101,13 +101,6 @@ static inline Material VKRT_materialDefault(void) {
 struct VKRT;
 typedef struct VKRT VKRT;
 
-typedef struct VKRT_AppHooks {
-    void (*init)(struct VKRT* vkrt, void* userData);
-    void (*deinit)(struct VKRT* vkrt, void* userData);
-    void (*drawOverlay)(struct VKRT* vkrt, VkCommandBuffer commandBuffer, void* userData);
-    void* userData;
-} VKRT_AppHooks;
-
 typedef struct VKRT_SceneSettingsSnapshot {
     Camera camera;
     uint32_t samplesPerPixel;
@@ -131,7 +124,7 @@ typedef struct VKRT_SceneSettingsSnapshot {
 typedef struct VKRT_RenderStatusSnapshot {
     uint32_t framesPerSecond;
     float averageFrametime;
-    float frametimes[128];
+    float frametimes[VKRT_FRAMETIME_HISTORY_SIZE];
     float displayTimeMs;
     float renderTimeMs;
     uint32_t accumulationFrame;
@@ -151,7 +144,7 @@ typedef struct VKRT_RuntimeSnapshot {
     uint32_t renderWidth;
     uint32_t renderHeight;
     uint32_t displayViewportRect[4];
-    VkPresentModeKHR presentMode;
+    uint32_t presentMode;
     float displayRefreshHz;
 } VKRT_RuntimeSnapshot;
 
@@ -160,19 +153,6 @@ typedef struct VKRT_SystemInfo {
     uint32_t vendorID;
     uint32_t driverVersion;
 } VKRT_SystemInfo;
-
-typedef struct VKRT_OverlayInfo {
-    GLFWwindow* window;
-    VkInstance instance;
-    VkPhysicalDevice physicalDevice;
-    VkDevice device;
-    uint32_t graphicsQueueFamily;
-    VkQueue graphicsQueue;
-    VkDescriptorPool descriptorPool;
-    VkRenderPass renderPass;
-    uint32_t swapchainImageCount;
-    uint32_t swapchainMinImageCount;
-} VKRT_OverlayInfo;
 
 typedef struct VKRT_MeshSnapshot {
     MeshInfo info;

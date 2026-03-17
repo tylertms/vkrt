@@ -12,7 +12,6 @@ VKRT_Result VKRT_create(VKRT** outVkrt);
 void VKRT_destroy(VKRT* vkrt);
 VKRT_Result VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInfo);
 VKRT_Result VKRT_init(VKRT* vkrt);
-void VKRT_registerAppHooks(VKRT* vkrt, VKRT_AppHooks hooks);
 void VKRT_deinit(VKRT* vkrt);
 int VKRT_shouldDeinit(VKRT* vkrt);
 void VKRT_poll(VKRT* vkrt);
@@ -48,7 +47,6 @@ VKRT_Result VKRT_getSceneSettings(const VKRT* vkrt, VKRT_SceneSettingsSnapshot* 
 VKRT_Result VKRT_getRenderStatus(const VKRT* vkrt, VKRT_RenderStatusSnapshot* outStatus);
 VKRT_Result VKRT_getRuntimeSnapshot(const VKRT* vkrt, VKRT_RuntimeSnapshot* outRuntime);
 VKRT_Result VKRT_getSystemInfo(const VKRT* vkrt, VKRT_SystemInfo* outSystemInfo);
-VKRT_Result VKRT_getOverlayInfo(const VKRT* vkrt, VKRT_OverlayInfo* outOverlayInfo);
 VKRT_Result VKRT_getRenderSourceExtent(const VKRT* vkrt, float* outWidth, float* outHeight);
 VKRT_Result VKRT_getDisplayViewportExtent(const VKRT* vkrt, float* outWidth, float* outHeight);
 VKRT_Result VKRT_getRenderViewCrop(const VKRT* vkrt, float zoom, float* outWidth, float* outHeight);
@@ -68,7 +66,6 @@ VKRT_Result VKRT_getSelectedMesh(const VKRT* vkrt, uint32_t* outMeshIndex);
 VKRT_Result VKRT_setRenderViewport(VKRT* vkrt, uint32_t x, uint32_t y, uint32_t width, uint32_t height);
 VKRT_Result VKRT_cameraSetPose(VKRT* vkrt, vec3 position, vec3 target, vec3 up, float vfov);
 VKRT_Result VKRT_cameraGetPose(const VKRT* vkrt, vec3 position, vec3 target, vec3 up, float* vfov);
-void VKRT_framebufferResizedCallback(GLFWwindow* window, int width, int height);
 
 #ifdef __cplusplus
 }
