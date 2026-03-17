@@ -1,5 +1,13 @@
-.vscode/
-.cache/
+build/
+debug/
+profile/
+captures/
+
 /subprojects/*
 !/subprojects/*.wrap
-captures/
+
+bench.txt
+todo.txt
+
+.vscode/
+.cache/
