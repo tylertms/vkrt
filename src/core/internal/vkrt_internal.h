@@ -1,6 +1,7 @@
 #pragma once
 
 #include "vkrt.h"
+#include "vkrt_overlay.h"
 #include "vkrt_engine_types.h"
 
 typedef struct VKRT_DeviceProcedures {
@@ -44,6 +45,7 @@ typedef struct VKRT_Core {
     QueueFamily indices;
     VkDescriptorSetLayout descriptorSetLayout;
     VkDescriptorPool descriptorPool;
+    VkDescriptorPool overlayDescriptorPool;
     VkDescriptorSet descriptorSets[VKRT_MAX_FRAMES_IN_FLIGHT];
     VkPipelineLayout pipelineLayout;
     VkPipeline rayTracingPipeline;
@@ -96,9 +98,11 @@ typedef struct VKRT_Core {
     AccelerationStructure selectionTopLevelAccelerationStructure;
     VkBool32 descriptorSetReady[VKRT_MAX_FRAMES_IN_FLIGHT];
     uint32_t sceneRevision;
+    uint32_t selectionRevision;
     uint32_t materialRevision;
     uint32_t lightRevision;
     uint32_t sceneResourceRevision;
+    uint32_t selectionResourceRevision;
     uint32_t materialResourceRevision;
     uint32_t lightResourceRevision;
     GeometryLayout geometryLayout;
@@ -108,6 +112,7 @@ typedef struct VKRT_Core {
     char deviceName[VKRT_DEVICE_NAME_LEN];
     uint32_t vendorID;
     uint32_t driverVersion;
+    uint32_t apiVersion;
     VkRayTracingInvocationReorderModeEXT serReorderingHintMode;
     uint32_t serMaxShaderBindingTableRecordIndex;
     VKRT_DeviceProcedures procs;
@@ -149,6 +154,8 @@ typedef struct FrameSceneUpdate {
     FrameTransfer sceneTLASScratch;
     FrameTransfer selectionTLASInstanceBuffer;
     FrameTransfer selectionTLASScratch;
+    uint32_t sceneTLASInstanceCount;
+    uint32_t selectionTLASInstanceCount;
     VkBool32 sceneTLASBuildPending;
     VkBool32 selectionTLASBuildPending;
 } FrameSceneUpdate;
@@ -160,6 +167,7 @@ typedef struct VKRT_Runtime {
     VkImage* swapChainImages;
     VkImageView* swapChainImageViews;
     size_t swapChainImageCount;
+    uint32_t swapChainMinImageCount;
     VkFormat swapChainImageFormat;
     VkExtent2D swapChainExtent;
     VkExtent2D renderExtent;
@@ -188,6 +196,7 @@ typedef struct VKRT_Runtime {
     VkBool32 frameSelectionTraced;
     VkBool32 headless;
     uint8_t disableSER;
+    uint8_t glfwInitialized;
     VkPresentModeKHR presentMode;
     float displayRefreshHz;
     VkBool32 swapChainFormatLogInitialized;
@@ -221,6 +230,7 @@ typedef struct VKRT {
     VKRT_TimingState timing;
     VKRT_AutoSPPState autoSPP;
     VKRT_AppHooks appHooks;
+    PNGExporter pngExporter;
 } VKRT;
 
 static inline VkBool32 vkrtSerEnabled(const VKRT* vkrt) {

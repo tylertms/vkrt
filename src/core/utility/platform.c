@@ -172,6 +172,7 @@ int vkrtMutexInit(VKRT_Mutex* mutex, int type) {
 }
 
 void vkrtMutexDestroy(VKRT_Mutex* mutex) {
+    if (!mutex) return;
     pthread_mutex_destroy(mutex);
 }
 
@@ -188,6 +189,7 @@ int vkrtCondInit(VKRT_Cond* condition) {
 }
 
 void vkrtCondDestroy(VKRT_Cond* condition) {
+    if (!condition) return;
     pthread_cond_destroy(condition);
 }
 
@@ -204,6 +206,8 @@ int vkrtCondBroadcast(VKRT_Cond* condition) {
 }
 
 int vkrtThreadCreate(VKRT_Thread* thread, VKRT_ThreadFunc function, void* argument) {
+    if (!thread || !function) return VKRT_THREAD_ERROR;
+
     ThreadStartContext* context = (ThreadStartContext*)malloc(sizeof(*context));
     if (!context) return VKRT_THREAD_ERROR;
 

@@ -1,6 +1,9 @@
 #pragma once
 
+#include <vulkan/vulkan.h>
+
 #include "vkrt_types.h"
+#include "platform.h"
 
 typedef struct AccelerationStructure {
     VkAccelerationStructureKHR structure;
@@ -39,3 +42,19 @@ typedef struct QueueFamily {
     int32_t graphics;
     int32_t present;
 } QueueFamily;
+
+struct PNGEncodeJob;
+
+typedef struct PNGExporter {
+    VKRT_Mutex stateLock;
+    VKRT_Mutex workerLock;
+    VKRT_Cond workerCondition;
+    VKRT_Thread workerThread;
+    struct PNGEncodeJob* head;
+    struct PNGEncodeJob* tail;
+    uint32_t pendingJobCount;
+    int stop;
+    int primitivesInitialized;
+    int threadRunning;
+    int stateLockInitialized;
+} PNGExporter;

@@ -126,6 +126,11 @@ static int canonicalizePath(const char* path, char* outPath, size_t outPathSize)
 #if defined(_WIN32)
     return _fullpath(outPath, path, outPathSize) ? 0 : -1;
 #else
+    if (outPathSize < VKRT_PATH_MAX) {
+        char resolved[VKRT_PATH_MAX];
+        if (!realpath(path, resolved)) return -1;
+        return copyPathString(outPath, outPathSize, resolved);
+    }
     return realpath(path, outPath) ? 0 : -1;
 #endif
 }
@@ -228,7 +233,13 @@ const char* readFile(const char* filename, size_t* fileSize) {
         return NULL;
     }
     fseek(file, 0, SEEK_END);
-    *fileSize = (size_t)ftell(file);
+    long fileLength = ftell(file);
+    if (fileLength < 0) {
+        LOG_ERROR("Failed to determine file size: %s", filename);
+        fclose(file);
+        return NULL;
+    }
+    *fileSize = (size_t)fileLength;
     fseek(file, 0, SEEK_SET);
 
     size_t allocSize = *fileSize > 0 ? *fileSize : 1;
