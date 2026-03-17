@@ -19,12 +19,52 @@
 #include "vkrt_internal.h"
 
 #include <stdio.h>
+#include <stdatomic.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
 static inline void logStepTime(const char* stepName, uint64_t startTime) {
     LOG_TRACE("%s in %.3f ms", stepName, (double)(getMicroseconds() - startTime) / 1e3);
+}
+
+static uint32_t g_glfwInitRefCount = 0u;
+static atomic_flag g_glfwInitLock = ATOMIC_FLAG_INIT;
+
+static void lockGLFWInitState(void) {
+    while (atomic_flag_test_and_set_explicit(&g_glfwInitLock, memory_order_acquire)) {
+    }
+}
+
+static void unlockGLFWInitState(void) {
+    atomic_flag_clear_explicit(&g_glfwInitLock, memory_order_release);
+}
+
+static VKRT_Result acquireGLFW(void) {
+    lockGLFWInitState();
+    if (g_glfwInitRefCount == 0u && !glfwInit()) {
+        unlockGLFWInitState();
+        LOG_ERROR("Failed to initialize GLFW");
+        return VKRT_ERROR_INITIALIZATION_FAILED;
+    }
+
+    g_glfwInitRefCount++;
+    unlockGLFWInitState();
+    return VKRT_SUCCESS;
+}
+
+static void releaseGLFW(void) {
+    lockGLFWInitState();
+    if (g_glfwInitRefCount == 0u) {
+        unlockGLFWInitState();
+        return;
+    }
+
+    g_glfwInitRefCount--;
+    if (g_glfwInitRefCount == 0u) {
+        glfwTerminate();
+    }
+    unlockGLFWInitState();
 }
 
 static void destroyBufferAndMemory(VKRT* vkrt, VkBuffer* buffer, VkDeviceMemory* memory) {
@@ -133,6 +173,10 @@ static void cleanupSceneAndAccelerationResources(VKRT* vkrt) {
 static void cleanupDescriptorAndPipelineResources(VKRT* vkrt) {
     if (!vkrt || vkrt->core.device == VK_NULL_HANDLE) return;
 
+    if (vkrt->core.overlayDescriptorPool != VK_NULL_HANDLE) {
+        vkDestroyDescriptorPool(vkrt->core.device, vkrt->core.overlayDescriptorPool, NULL);
+        vkrt->core.overlayDescriptorPool = VK_NULL_HANDLE;
+    }
     if (vkrt->core.descriptorPool != VK_NULL_HANDLE) {
         vkDestroyDescriptorPool(vkrt->core.device, vkrt->core.descriptorPool, NULL);
         vkrt->core.descriptorPool = VK_NULL_HANDLE;
@@ -224,7 +268,7 @@ VKRT_Result VKRT_create(VKRT** outVkrt) {
     if (!outVkrt) return VKRT_ERROR_INVALID_ARGUMENT;
 
     VKRT* vkrt = (VKRT*)calloc(1, sizeof(VKRT));
-    if (!vkrt) return VKRT_ERROR_OPERATION_FAILED;
+    if (!vkrt) return VKRT_ERROR_OUT_OF_MEMORY;
 
     *outVkrt = vkrt;
     return VKRT_SUCCESS;
@@ -232,6 +276,7 @@ VKRT_Result VKRT_create(VKRT** outVkrt) {
 
 void VKRT_destroy(VKRT* vkrt) {
     if (!vkrt) return;
+    VKRT_deinit(vkrt);
     free(vkrt);
 }
 
@@ -245,10 +290,8 @@ VKRT_Result VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInf
     uint64_t initStartTime = getMicroseconds();
     uint64_t stepStartTime = initStartTime;
 
-    if (!glfwInit()) {
-        LOG_ERROR("Failed to initialize GLFW");
-        return VKRT_ERROR_OPERATION_FAILED;
-    }
+    if (acquireGLFW() != VKRT_SUCCESS) return VKRT_ERROR_INITIALIZATION_FAILED;
+    vkrt->runtime.glfwInitialized = 1u;
     if (!createInfo->headless) {
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
         glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
@@ -348,7 +391,7 @@ VKRT_Result VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInf
         stepStartTime = getMicroseconds();
         if (createSwapChain(vkrt) != VKRT_SUCCESS) goto init_failed;
         if (createImageViews(vkrt) != VKRT_SUCCESS) goto init_failed;
-        if (createRenderPass(vkrt) != VKRT_SUCCESS) goto init_failed;
+        if (createRenderPass(vkrt, &vkrt->runtime.renderPass) != VKRT_SUCCESS) goto init_failed;
         if (createFramebuffers(vkrt) != VKRT_SUCCESS) goto init_failed;
         logStepTime("Swapchain and framebuffers ready", stepStartTime);
     }
@@ -431,7 +474,7 @@ void VKRT_deinit(VKRT* vkrt) {
         logStepTime("Device idle wait complete", stepStartTime);
 
         stepStartTime = getMicroseconds();
-        shutdownRenderPNGExporter();
+        shutdownRenderPNGExporter(vkrt);
         logStepTime("PNG export worker shutdown complete", stepStartTime);
 
         stepStartTime = getMicroseconds();
@@ -491,7 +534,9 @@ void VKRT_deinit(VKRT* vkrt) {
         glfwDestroyWindow(vkrt->runtime.window);
         vkrt->runtime.window = NULL;
     }
-    glfwTerminate();
+    if (vkrt->runtime.glfwInitialized) {
+        releaseGLFW();
+    }
     logStepTime("GLFW shutdown complete", stepStartTime);
 
     VKRT_AppHooks hooks = vkrt->appHooks;

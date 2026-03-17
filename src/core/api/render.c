@@ -8,6 +8,7 @@
 #include "vkrt_internal.h"
 #include "numeric.h"
 
+#include <math.h>
 #include <string.h>
 
 VKRT_Result VKRT_saveRenderPNG(VKRT* vkrt, const char* path) {
@@ -54,6 +55,43 @@ static VkExtent2D queryEffectiveDisplayViewportExtent(const VKRT* vkrt) {
     return extent;
 }
 
+static int vector3Finite(const vec3 value) {
+    return value &&
+        isfinite(value[0]) &&
+        isfinite(value[1]) &&
+        isfinite(value[2]);
+}
+
+static int cameraPoseValid(const Camera* camera) {
+    if (!camera) return 0;
+    if (!vector3Finite(camera->pos) || !vector3Finite(camera->target) || !vector3Finite(camera->up)) {
+        return 0;
+    }
+    if (!isfinite(camera->vfov) || camera->vfov <= 0.0f || camera->vfov >= 179.0f) {
+        return 0;
+    }
+
+    vec3 viewDirection = {
+        camera->target[0] - camera->pos[0],
+        camera->target[1] - camera->pos[1],
+        camera->target[2] - camera->pos[2],
+    };
+    float viewLengthSquared = glm_vec3_norm2(viewDirection);
+    vec3 upDirection = {
+        camera->up[0],
+        camera->up[1],
+        camera->up[2],
+    };
+    float upLengthSquared = glm_vec3_norm2(upDirection);
+    if (viewLengthSquared <= 1e-12f || upLengthSquared <= 1e-12f) {
+        return 0;
+    }
+
+    vec3 viewCrossUp = {0.0f, 0.0f, 0.0f};
+    glm_vec3_cross(viewDirection, upDirection, viewCrossUp);
+    return glm_vec3_norm2(viewCrossUp) > 1e-12f;
+}
+
 static void applySceneViewport(VKRT* vkrt, uint32_t x, uint32_t y, uint32_t width, uint32_t height) {
     if (!vkrt || !vkrt->core.sceneData) return;
 
@@ -75,9 +113,24 @@ static VKRT_Result recreateRenderTargets(VKRT* vkrt) {
     if (vkrtWaitForAllInFlightFrames(vkrt) != VKRT_SUCCESS) {
         return VKRT_ERROR_OPERATION_FAILED;
     }
-    destroyGPUImages(vkrt);
-    if (createGPUImages(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
-    if (updateAllDescriptorSets(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+
+    GPUImageState previousState = {0};
+    GPUImageState nextState = {0};
+    captureGPUImageState(vkrt, &previousState);
+
+    if (createGPUImageState(vkrt, vkrt->runtime.renderExtent, &nextState) != VKRT_SUCCESS) {
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+
+    applyGPUImageState(vkrt, &nextState);
+    if (updateAllDescriptorSets(vkrt) != VKRT_SUCCESS) {
+        applyGPUImageState(vkrt, &previousState);
+        updateAllDescriptorSets(vkrt);
+        destroyGPUImageState(vkrt, &nextState);
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+
+    destroyGPUImageState(vkrt, &previousState);
     return VKRT_SUCCESS;
 }
 
@@ -90,8 +143,6 @@ static void resetRenderSessionState(VKRT* vkrt, VkBool32 resetViewTransform) {
         vkrt->renderView.panY = 0.0f;
     }
 
-    vkrt->renderStatus.displayRenderTimeMs = 0.0f;
-    vkrt->renderStatus.displayFrameTimeMs = 0.0f;
     vkrt->timing.lastFrameTimestamp = 0;
     vkrt->autoSPP.controlMs = 0.0f;
 }
@@ -254,10 +305,33 @@ VKRT_Result VKRT_cameraSetPose(VKRT* vkrt, vec3 position, vec3 target, vec3 up, 
     VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
     if (stateReady != VKRT_SUCCESS) return stateReady;
 
-    if (position) glm_vec3_copy(position, vkrt->sceneSettings.camera.pos);
-    if (target) glm_vec3_copy(target, vkrt->sceneSettings.camera.target);
-    if (up) glm_vec3_copy(up, vkrt->sceneSettings.camera.up);
-    if (vfov > 0.0f) vkrt->sceneSettings.camera.vfov = vfov;
+    Camera nextCamera = vkrt->sceneSettings.camera;
+    if (position) {
+        if (!vector3Finite(position)) return VKRT_ERROR_INVALID_ARGUMENT;
+        glm_vec3_copy(position, nextCamera.pos);
+    }
+    if (target) {
+        if (!vector3Finite(target)) return VKRT_ERROR_INVALID_ARGUMENT;
+        glm_vec3_copy(target, nextCamera.target);
+    }
+    if (up) {
+        if (!vector3Finite(up)) return VKRT_ERROR_INVALID_ARGUMENT;
+        glm_vec3_copy(up, nextCamera.up);
+    }
+    if (vfov != 0.0f) {
+        if (!isfinite(vfov) || vfov <= 0.0f || vfov >= 179.0f) {
+            return VKRT_ERROR_INVALID_ARGUMENT;
+        }
+        nextCamera.vfov = vfov;
+    }
+
+    if (!cameraPoseValid(&nextCamera)) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    if (memcmp(&vkrt->sceneSettings.camera, &nextCamera, sizeof(nextCamera)) == 0) {
+        return VKRT_SUCCESS;
+    }
+
+    vkrt->sceneSettings.camera = nextCamera;
 
     updateCamera(vkrt);
     return VKRT_SUCCESS;

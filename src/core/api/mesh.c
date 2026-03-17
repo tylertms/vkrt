@@ -35,11 +35,54 @@ static Material sanitizeMaterial(Material material) {
     return material;
 }
 
+static int materialComponentEqual(const float* a, const float* b, size_t count) {
+    if (!a || !b) return 0;
+    return memcmp(a, b, count * sizeof(float)) == 0;
+}
+
+static int materialsEqual(const Material* a, const Material* b) {
+    if (!a || !b) return 0;
+
+    return materialComponentEqual(a->baseColor, b->baseColor, 3) &&
+        a->roughness == b->roughness &&
+        materialComponentEqual(a->emissionColor, b->emissionColor, 3) &&
+        a->emissionLuminance == b->emissionLuminance &&
+        materialComponentEqual(a->eta, b->eta, 3) &&
+        a->metallic == b->metallic &&
+        materialComponentEqual(a->k, b->k, 3) &&
+        a->anisotropic == b->anisotropic &&
+        a->specular == b->specular &&
+        a->specularTint == b->specularTint &&
+        a->sheen == b->sheen &&
+        a->sheenTint == b->sheenTint &&
+        a->clearcoat == b->clearcoat &&
+        a->clearcoatGloss == b->clearcoatGloss &&
+        a->ior == b->ior &&
+        a->diffuseRoughness == b->diffuseRoughness &&
+        a->transmission == b->transmission &&
+        a->subsurface == b->subsurface &&
+        a->sheenRoughness == b->sheenRoughness;
+}
+
 static int updateMeshVector(vec3 destination, vec3 source) {
     if (!source) return 0;
     if (memcmp(destination, source, sizeof(vec3)) == 0) return 0;
     glm_vec3_copy(source, destination);
     return 1;
+}
+
+static int meshVectorFinite(const vec3 value) {
+    return value &&
+        isfinite(value[0]) &&
+        isfinite(value[1]) &&
+        isfinite(value[2]);
+}
+
+static int meshScaleValid(const vec3 scale) {
+    if (!meshVectorFinite(scale)) return 0;
+    return fabsf(scale[0]) >= 1e-6f &&
+        fabsf(scale[1]) >= 1e-6f &&
+        fabsf(scale[2]) >= 1e-6f;
 }
 
 VKRT_Result VKRT_getMeshCount(const VKRT* vkrt, uint32_t* outMeshCount) {
@@ -65,6 +108,9 @@ VKRT_Result VKRT_setMeshTransform(VKRT* vkrt, uint32_t meshIndex, vec3 position,
     VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
     if (stateReady != VKRT_SUCCESS) return stateReady;
     if (meshIndex >= vkrt->core.meshCount) return VKRT_ERROR_INVALID_ARGUMENT;
+    if (position && !meshVectorFinite(position)) return VKRT_ERROR_INVALID_ARGUMENT;
+    if (rotation && !meshVectorFinite(rotation)) return VKRT_ERROR_INVALID_ARGUMENT;
+    if (scale && !meshScaleValid(scale)) return VKRT_ERROR_INVALID_ARGUMENT;
 
     MeshInfo* info = &vkrt->core.meshes[meshIndex].info;
     int changed = 0;
@@ -90,7 +136,7 @@ VKRT_Result VKRT_setMeshMaterial(VKRT* vkrt, uint32_t meshIndex, const Material*
 
     Mesh* mesh = &vkrt->core.meshes[meshIndex];
     Material sanitized = sanitizeMaterial(*material);
-    if (memcmp(&mesh->material, &sanitized, sizeof(sanitized)) == 0) return VKRT_SUCCESS;
+    if (materialsEqual(&mesh->material, &sanitized)) return VKRT_SUCCESS;
     mesh->material = sanitized;
     vkrtMarkMaterialResourcesDirty(vkrt);
     resetSceneData(vkrt);

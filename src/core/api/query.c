@@ -52,12 +52,10 @@ VKRT_Result VKRT_getOverlayInfo(const VKRT* vkrt, VKRT_OverlayInfo* outOverlayIn
         ? (uint32_t)vkrt->core.indices.graphics
         : 0u;
     outOverlayInfo->graphicsQueue = vkrt->core.graphicsQueue;
-    outOverlayInfo->descriptorPool = vkrt->core.descriptorPool;
+    outOverlayInfo->descriptorPool = vkrt->core.overlayDescriptorPool;
     outOverlayInfo->renderPass = vkrt->runtime.renderPass;
     outOverlayInfo->swapchainImageCount = (uint32_t)vkrt->runtime.swapChainImageCount;
-    outOverlayInfo->swapchainMinImageCount = outOverlayInfo->swapchainImageCount > 1u
-        ? outOverlayInfo->swapchainImageCount - 1u
-        : outOverlayInfo->swapchainImageCount;
+    outOverlayInfo->swapchainMinImageCount = vkrt->runtime.swapChainMinImageCount;
 
     return VKRT_SUCCESS;
 }

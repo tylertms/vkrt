@@ -72,7 +72,15 @@ VKRT_Result VKRT_beginFrame(VKRT* vkrt) {
     vkrt->runtime.frameTraced = VK_FALSE;
     vkrt->runtime.frameSelectionTraced = VK_FALSE;
 
-    vkWaitForFences(vkrt->core.device, 1, &vkrt->runtime.inFlightFences[vkrt->runtime.currentFrame], VK_TRUE, UINT64_MAX);
+    VkResult fenceResult = vkWaitForFences(vkrt->core.device, 1, &vkrt->runtime.inFlightFences[vkrt->runtime.currentFrame], VK_TRUE, UINT64_MAX);
+    if (fenceResult == VK_ERROR_DEVICE_LOST) {
+        LOG_ERROR("Device lost while waiting for fence");
+        return VKRT_ERROR_DEVICE_LOST;
+    }
+    if (fenceResult != VK_SUCCESS) {
+        LOG_ERROR("Failed to wait for in-flight fence (%d)", (int)fenceResult);
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
     resolveCompletedSelection(vkrt);
     vkrtCleanupFrameSceneUpdate(vkrt, vkrt->runtime.currentFrame);
     recordFrameTime(vkrt, vkrt->runtime.currentFrame);
@@ -99,6 +107,11 @@ VKRT_Result VKRT_beginFrame(VKRT* vkrt) {
         return recreateSwapChain(vkrt);
     }
 
+    if (result == VK_ERROR_DEVICE_LOST) {
+        LOG_ERROR("Device lost while acquiring swapchain image");
+        return VKRT_ERROR_DEVICE_LOST;
+    }
+
     if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
         LOG_ERROR("Failed to acquire next swapchain image");
         return VKRT_ERROR_OPERATION_FAILED;
@@ -114,41 +127,58 @@ VKRT_Result VKRT_updateScene(VKRT* vkrt) {
 
     VkBool32 materialDirty = vkrt->core.materialResourceRevision != vkrt->core.materialRevision;
     VkBool32 sceneDirty = vkrt->core.sceneResourceRevision != vkrt->core.sceneRevision;
+    VkBool32 selectionDirty = vkrt->core.selectionResourceRevision != vkrt->core.selectionRevision;
     VkBool32 lightDirty = vkrt->core.lightResourceRevision != vkrt->core.lightRevision;
-    if ((materialDirty || sceneDirty) && vkrtWaitForAllInFlightFrames(vkrt) != VKRT_SUCCESS) {
-        return VKRT_ERROR_OPERATION_FAILED;
+    if (materialDirty || sceneDirty || selectionDirty || lightDirty) {
+        VKRT_Result result = vkrtWaitForAllInFlightFrames(vkrt);
+        if (result != VKRT_SUCCESS) {
+            return result;
+        }
     }
 
-    if (materialDirty || sceneDirty) {
+    if (materialDirty || sceneDirty || selectionDirty || lightDirty) {
         invalidateDescriptorSets(vkrt);
     }
 
     if (materialDirty) {
-        if (vkrtSceneRebuildMaterialBuffer(vkrt) != VKRT_SUCCESS) {
-            return VKRT_ERROR_OPERATION_FAILED;
+        VKRT_Result result = vkrtSceneRebuildMaterialBuffer(vkrt);
+        if (result != VKRT_SUCCESS) {
+            return result;
         }
     }
 
-    if (vkrtScenePreparePendingGeometryUploads(vkrt) != VKRT_SUCCESS) {
-        return VKRT_ERROR_OPERATION_FAILED;
+    VKRT_Result result = vkrtScenePreparePendingGeometryUploads(vkrt);
+    if (result != VKRT_SUCCESS) {
+        return result;
     }
 
-    if (prepareBottomLevelAccelerationStructureBuilds(vkrt) != VKRT_SUCCESS) {
-        return VKRT_ERROR_OPERATION_FAILED;
+    result = prepareBottomLevelAccelerationStructureBuilds(vkrt);
+    if (result != VKRT_SUCCESS) {
+        return result;
     }
 
     if (sceneDirty) {
-        if (!materialDirty && lightDirty && vkrtSceneRebuildLightBuffers(vkrt) != VKRT_SUCCESS) {
-            return VKRT_ERROR_OPERATION_FAILED;
+        if (!materialDirty && lightDirty) {
+            result = vkrtSceneRebuildLightBuffers(vkrt);
+            if (result != VKRT_SUCCESS) {
+                return result;
+            }
         }
-        if (vkrtSceneRebuildTopLevelAccelerationStructures(vkrt) != VKRT_SUCCESS) {
-            return VKRT_ERROR_OPERATION_FAILED;
+        result = vkrtSceneRebuildTopLevelAccelerationStructures(vkrt);
+        if (result != VKRT_SUCCESS) {
+            return result;
+        }
+    } else if (selectionDirty) {
+        result = createSelectionTopLevelAccelerationStructure(vkrt);
+        if (result != VKRT_SUCCESS) {
+            return result;
         }
     }
 
     syncCurrentFrameSceneData(vkrt);
-    if (updateDescriptorSet(vkrt) != VKRT_SUCCESS) {
-        return VKRT_ERROR_OPERATION_FAILED;
+    result = updateDescriptorSet(vkrt);
+    if (result != VKRT_SUCCESS) {
+        return result;
     }
     return VKRT_SUCCESS;
 }
@@ -156,11 +186,26 @@ VKRT_Result VKRT_updateScene(VKRT* vkrt) {
 VKRT_Result VKRT_trace(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
     if (!vkrt->runtime.frameAcquired && !vkrt->runtime.frameOffscreen) return VKRT_SUCCESS;
-    vkResetFences(vkrt->core.device, 1, &vkrt->runtime.inFlightFences[vkrt->runtime.currentFrame]);
+    VKRT_Result result = vkrtConvertVkResult(vkResetFences(
+        vkrt->core.device,
+        1,
+        &vkrt->runtime.inFlightFences[vkrt->runtime.currentFrame]
+    ));
+    if (result != VKRT_SUCCESS) {
+        return result;
+    }
 
-    vkResetCommandBuffer(vkrt->runtime.commandBuffers[vkrt->runtime.currentFrame], 0);
-    if (recordCommandBuffer(vkrt, vkrt->runtime.frameImageIndex, !vkrt->runtime.frameOffscreen) != VKRT_SUCCESS) {
-        return VKRT_ERROR_OPERATION_FAILED;
+    result = vkrtConvertVkResult(vkResetCommandBuffer(
+        vkrt->runtime.commandBuffers[vkrt->runtime.currentFrame],
+        0
+    ));
+    if (result != VKRT_SUCCESS) {
+        return result;
+    }
+
+    result = recordCommandBuffer(vkrt, vkrt->runtime.frameImageIndex, !vkrt->runtime.frameOffscreen);
+    if (result != VKRT_SUCCESS) {
+        return result;
     }
 
     VkSemaphore waitSemaphores[] = {vkrt->runtime.imageAvailableSemaphores[vkrt->runtime.currentFrame]};
@@ -180,13 +225,20 @@ VKRT_Result VKRT_trace(VKRT* vkrt) {
     submitInfo.signalSemaphoreCount = vkrt->runtime.frameOffscreen ? 0u : 1u;
     submitInfo.pSignalSemaphores = vkrt->runtime.frameOffscreen ? NULL : signalSemaphores;
 
-    if (vkQueueSubmit(vkrt->core.graphicsQueue, 1, &submitInfo, vkrt->runtime.inFlightFences[vkrt->runtime.currentFrame]) != VK_SUCCESS) {
+    result = vkrtConvertVkResult(vkQueueSubmit(
+        vkrt->core.graphicsQueue,
+        1,
+        &submitInfo,
+        vkrt->runtime.inFlightFences[vkrt->runtime.currentFrame]
+    ));
+    if (result != VKRT_SUCCESS) {
         LOG_ERROR("Failed to submit draw queue");
-        return VKRT_ERROR_OPERATION_FAILED;
+        return result;
     }
 
     vkrt->core.materialResourceRevision = vkrt->core.materialRevision;
     vkrt->core.sceneResourceRevision = vkrt->core.sceneRevision;
+    vkrt->core.selectionResourceRevision = vkrt->core.selectionRevision;
     vkrt->core.lightResourceRevision = vkrt->core.lightRevision;
 
     for (uint32_t i = 0; i < vkrt->core.meshCount; i++) {
@@ -281,10 +333,17 @@ VKRT_Result VKRT_endFrame(VKRT* vkrt) {
 VKRT_Result VKRT_draw(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
 
-    if (VKRT_beginFrame(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
-    if (VKRT_updateScene(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
-    if (VKRT_trace(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
-    if (VKRT_present(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    VKRT_Result result = VKRT_beginFrame(vkrt);
+    if (result != VKRT_SUCCESS) return result;
+
+    result = VKRT_updateScene(vkrt);
+    if (result != VKRT_SUCCESS) return result;
+
+    result = VKRT_trace(vkrt);
+    if (result != VKRT_SUCCESS) return result;
+
+    result = VKRT_present(vkrt);
+    if (result != VKRT_SUCCESS) return result;
 
     return VKRT_endFrame(vkrt);
 }

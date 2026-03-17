@@ -53,16 +53,13 @@ VKRT_Result VKRT_invalidateAccumulation(VKRT* vkrt) {
 }
 
 VKRT_Result VKRT_setSamplesPerPixel(VKRT* vkrt, uint32_t samplesPerPixel) {
-    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+    VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
+    if (stateReady != VKRT_SUCCESS) return stateReady;
     if (samplesPerPixel == 0) samplesPerPixel = 1;
 
     if (vkrt->sceneSettings.samplesPerPixel == samplesPerPixel) return VKRT_SUCCESS;
     vkrt->sceneSettings.samplesPerPixel = samplesPerPixel;
-
-    if (vkrt->core.sceneData) {
-        syncSceneStateData(vkrt);
-        syncCurrentFrameSceneData(vkrt);
-    }
+    resetSceneData(vkrt);
     return VKRT_SUCCESS;
 }
 
@@ -148,6 +145,7 @@ VKRT_Result VKRT_setFogDensity(VKRT* vkrt, float fogDensity) {
 VKRT_Result VKRT_setDebugMode(VKRT* vkrt, uint32_t mode) {
     VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
     if (stateReady != VKRT_SUCCESS) return stateReady;
+    if (mode >= VKRT_DEBUG_MODE_COUNT) return VKRT_ERROR_INVALID_ARGUMENT;
     if (vkrt->sceneSettings.debugMode == mode) return VKRT_SUCCESS;
     vkrt->sceneSettings.debugMode = mode;
     resetSceneData(vkrt);
@@ -266,7 +264,7 @@ VKRT_Result VKRT_setSelectedMesh(VKRT* vkrt, uint32_t meshIndex) {
     vkrt->sceneSettings.selectedMeshIndex = nextSelectedMesh;
     vkrt->sceneSettings.selectionEnabled = nextSelectedMesh != VKRT_INVALID_INDEX;
 
-    vkrtMarkSceneResourcesDirty(vkrt);
+    vkrtMarkSelectionResourcesDirty(vkrt);
     syncSelectionSceneData(vkrt);
     resetSceneData(vkrt);
     return VKRT_SUCCESS;
