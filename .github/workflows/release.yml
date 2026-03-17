@@ -9,6 +9,13 @@ on:
 permissions:
   contents: write
 
+env:
+  VULKAN_SDK_VERSION: 1.4.341.1
+  VULKAN_SDK_WINDOWS_SHA256: bcf2d75aa9556889ab974858666e20b3655b6055a0db704ccb47279ff33b5bfe
+  VULKAN_SDK_LINUX_SHA256: 17c8b7e872d8038fbd4e1239aa8483b495f862ad16b1c58644f7ecd8041d20cc
+  APPIMAGETOOL_VERSION: 1.9.0
+  APPIMAGETOOL_SHA256: 46fdd785094c7f6e545b61afcfb0f3d98d8eab243f644b4b17698c01d06083d1
+
 jobs:
   build-windows:
     name: Windows Release
@@ -26,28 +33,26 @@ jobs:
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
 
-      - name: Resolve Vulkan SDK Version
-        id: vulkan-windows
-        shell: pwsh
-        run: |
-          $version = (Invoke-WebRequest -Uri 'https://vulkan.lunarg.com/sdk/latest/windows.txt').Content.Trim()
-          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-
       - name: Cache Vulkan SDK
         id: vulkan-cache-windows
         uses: actions/cache@v4
         with:
           path: VULKAN_SDK
-          key: ${{ runner.os }}-vulkan-${{ steps.vulkan-windows.outputs.version }}
+          key: ${{ runner.os }}-vulkan-${{ env.VULKAN_SDK_VERSION }}
 
       - name: Install Vulkan SDK
         if: steps.vulkan-cache-windows.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
-          $version = '${{ steps.vulkan-windows.outputs.version }}'
+          $version = '${{ env.VULKAN_SDK_VERSION }}'
+          $expectedHash = '${{ env.VULKAN_SDK_WINDOWS_SHA256 }}'
           $sdkDir = Join-Path $PWD 'VULKAN_SDK'
           $installer = Join-Path $PWD 'vulkan_sdk.exe'
           Invoke-WebRequest -Uri "https://sdk.lunarg.com/sdk/download/$version/windows/vulkan_sdk.exe?Human=true" -OutFile $installer
+          $actualHash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToLower()
+          if ($actualHash -ne $expectedHash) {
+            throw "Vulkan SDK hash mismatch: expected $expectedHash, got $actualHash"
+          }
           Start-Process -FilePath $installer -ArgumentList @('--root', $sdkDir, '--accept-licenses', '--default-answer', '--confirm-command', 'install', 'copy_only=1') -Wait -NoNewWindow
 
       - name: Set Vulkan SDK Environment
@@ -68,7 +73,7 @@ jobs:
         run: meson compile -C build
 
       - name: Test
-        run: ./build/vkrt --help && ./build/vkrt --version
+        run: ./build/vkrt.exe --help && ./build/vkrt.exe --version
         shell: bash
 
       - name: Stage Release
@@ -105,26 +110,22 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Resolve Vulkan SDK Version
-        id: vulkan-linux
-        shell: bash
-        run: echo "version=$(curl -fsSL https://vulkan.lunarg.com/sdk/latest/linux.txt)" >> "$GITHUB_OUTPUT"
-
       - name: Cache Vulkan SDK
         id: vulkan-cache-linux
         uses: actions/cache@v4
         with:
           path: VULKAN_SDK
-          key: ${{ runner.os }}-vulkan-${{ steps.vulkan-linux.outputs.version }}
+          key: ${{ runner.os }}-vulkan-${{ env.VULKAN_SDK_VERSION }}
 
       - name: Install Vulkan SDK
         if: steps.vulkan-cache-linux.outputs.cache-hit != 'true'
         shell: bash
         run: |
-          curl -fsSL "https://sdk.lunarg.com/sdk/download/${{ steps.vulkan-linux.outputs.version }}/linux/vulkan_sdk.tar.xz?Human=true" -o vulkan_sdk.tar.xz
+          curl -fsSL "https://sdk.lunarg.com/sdk/download/${{ env.VULKAN_SDK_VERSION }}/linux/vulkan_sdk.tar.xz?Human=true" -o vulkan_sdk.tar.xz
+          echo "${{ env.VULKAN_SDK_LINUX_SHA256 }}  vulkan_sdk.tar.xz" | sha256sum -c -
           tar -xJf vulkan_sdk.tar.xz
           mkdir -p VULKAN_SDK
-          cp -a "${{ steps.vulkan-linux.outputs.version }}/x86_64/." VULKAN_SDK/
+          cp -a "${{ env.VULKAN_SDK_VERSION }}/x86_64/." VULKAN_SDK/
 
       - name: Set Vulkan SDK Environment
         shell: bash
@@ -161,12 +162,21 @@ jobs:
           [ -n "$DBUS_LIB" ] && cp "$DBUS_LIB" AppDir/usr/lib/
 
           printf '[Desktop Entry]\nType=Application\nName=vkrt\nExec=vkrt\nIcon=vkrt\nCategories=Graphics;\nTerminal=false\n' > AppDir/vkrt.desktop
-          printf '\x89PNG\r\n\x1a\n' > AppDir/vkrt.png
+          python3 -c "
+          import struct, zlib
+          def png(w,h,rgb):
+              def chunk(ty,data):
+                  return struct.pack('>I',len(data))+ty+data+struct.pack('>I',zlib.crc32(ty+data)&0xffffffff)
+              raw=b''.join(b'\x00'+bytes(rgb)*w for _ in range(h))
+              return b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',w,h,8,2,0,0,0))+chunk(b'IDAT',zlib.compress(raw))+chunk(b'IEND',b'')
+          open('AppDir/vkrt.png','wb').write(png(64,64,(42,42,42)))
+          "
 
           printf '#!/bin/bash\nHERE="$(dirname "$(readlink -f "$0")")"\nexport LD_LIBRARY_PATH="${HERE}/usr/lib:${LD_LIBRARY_PATH}"\ncd "${HERE}/usr/bin"\nexec "./vkrt" "$@"\n' > AppDir/AppRun
           chmod +x AppDir/AppRun
 
-          wget -q "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage" -O appimagetool
+          wget -q "https://github.com/AppImage/appimagetool/releases/download/${{ env.APPIMAGETOOL_VERSION }}/appimagetool-x86_64.AppImage" -O appimagetool
+          echo "${{ env.APPIMAGETOOL_SHA256 }}  appimagetool" | sha256sum -c -
           chmod +x appimagetool
 
           ARCH=x86_64 ./appimagetool AppDir vkrt-linux-x86_64.AppImage
