@@ -131,17 +131,6 @@ VKRT_Result VKRT_setEnvironmentLight(VKRT* vkrt, vec3 color, float strength) {
     return VKRT_SUCCESS;
 }
 
-VKRT_Result VKRT_setFogDensity(VKRT* vkrt, float fogDensity) {
-    VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
-    if (stateReady != VKRT_SUCCESS) return stateReady;
-    fogDensity = vkrtFiniteClampf(fogDensity, 0.0f, 0.0f, INFINITY);
-
-    if (vkrt->sceneSettings.fogDensity == fogDensity) return VKRT_SUCCESS;
-    vkrt->sceneSettings.fogDensity = fogDensity;
-    resetSceneData(vkrt);
-    return VKRT_SUCCESS;
-}
-
 VKRT_Result VKRT_setDebugMode(VKRT* vkrt, uint32_t mode) {
     VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
     if (stateReady != VKRT_SUCCESS) return stateReady;

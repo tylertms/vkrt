@@ -280,7 +280,4 @@ void meshControllerLoadDefaultAssets(VKRT* vkrt, Session* session) {
     vec3 cameraUp = {0.0f, 0.0f, 1.0f};
     VKRT_Result result = VKRT_cameraSetPose(vkrt, cameraPosition, cameraTarget, cameraUp, 26.9f);
     if (result != VKRT_SUCCESS) LOG_ERROR("Setting default camera pose failed (%d)", (int)result);
-
-    result = VKRT_setFogDensity(vkrt, 0.0f);
-    if (result != VKRT_SUCCESS) LOG_ERROR("Setting default fog density failed (%d)", (int)result);
 }

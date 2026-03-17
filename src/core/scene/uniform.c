@@ -60,7 +60,6 @@ static void writeTimelineUniform(SceneData* sceneData, const VKRT_SceneSettingsS
 }
 
 static void writeSceneStateUniform(SceneData* sceneData, const VKRT* vkrt) {
-
     const VKRT_SceneSettingsSnapshot* settings = &vkrt->sceneSettings;
     sceneData->samplesPerPixel = settings->samplesPerPixel > 0u ? settings->samplesPerPixel : 1u;
     sceneData->rrMaxDepth = settings->rrMaxDepth;
@@ -68,7 +67,6 @@ static void writeSceneStateUniform(SceneData* sceneData, const VKRT* vkrt) {
     sceneData->toneMappingMode = settings->toneMappingMode;
     sceneData->timeBase = settings->timeBase;
     sceneData->timeStep = settings->timeStep;
-    sceneData->fogDensity = settings->fogDensity;
     sceneData->environmentLight[0] = settings->environmentColor[0] * settings->environmentStrength;
     sceneData->environmentLight[1] = settings->environmentColor[1] * settings->environmentStrength;
     sceneData->environmentLight[2] = settings->environmentColor[2] * settings->environmentStrength;
@@ -212,7 +210,6 @@ VKRT_Result createSceneUniform(VKRT* vkrt) {
 
     vkrt->sceneSettings.timeBase = -1.0f;
     vkrt->sceneSettings.timeStep = 0.5f;
-    vkrt->sceneSettings.fogDensity = 0.0f;
     vkrt->sceneSettings.debugMode = VKRT_DEBUG_MODE_NONE;
     vkrt->sceneSettings.misNeeEnabled = 1u;
     vkrt->sceneSettings.selectionEnabled = 0;
@@ -230,16 +227,15 @@ void resetSceneData(VKRT* vkrt) {
 
     resetAutoSPPForSceneChange(vkrt);
     vkrt->core.sceneData->frameNumber = 0;
-    syncSceneStateData(vkrt);
-    vkrt->core.sceneData->emissiveMeshCount = vkrt->core.emissiveMeshCount;
-    vkrt->core.sceneData->emissiveTriangleCount = vkrt->core.emissiveTriangleCount;
-
     vkrt->renderStatus.renderModeFinished = 0;
     vkrt->renderStatus.accumulationFrame = 0;
     vkrt->renderStatus.totalSamples = 0;
     vkrt->renderStatus.averageFrametime = 0.0f;
     vkrt->timing.frametimeStartIndex = 0;
     vkrt->core.accumulationNeedsReset = VK_TRUE;
+    syncSceneStateData(vkrt);
+    vkrt->core.sceneData->emissiveMeshCount = vkrt->core.emissiveMeshCount;
+    vkrt->core.sceneData->emissiveTriangleCount = vkrt->core.emissiveTriangleCount;
     memset(vkrt->renderStatus.frametimes, 0, sizeof(vkrt->renderStatus.frametimes));
 }
 

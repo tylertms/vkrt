@@ -477,28 +477,6 @@ VKRT_Result createLogicalDevice(VKRT* vkrt) {
         extensionSupport.enabledMask |= requiredDeviceExtensionBits[i];
     }
 
-#ifdef __APPLE__
-    {
-        uint32_t devExtCount = 0;
-        vkEnumerateDeviceExtensionProperties(vkrt->core.physicalDevice, NULL, &devExtCount, NULL);
-        VkExtensionProperties* devExts = NULL;
-        if (devExtCount > 0) {
-            devExts = (VkExtensionProperties*)malloc(devExtCount * sizeof(VkExtensionProperties));
-        }
-        if (devExts) {
-            vkEnumerateDeviceExtensionProperties(vkrt->core.physicalDevice, NULL, &devExtCount, devExts);
-            for (uint32_t i = 0; i < devExtCount; i++) {
-                if (!strcmp(devExts[i].extensionName, "VK_KHR_portability_subset")) {
-                    enabledExtensions[enabledExtensionCount++] = "VK_KHR_portability_subset";
-                    LOG_INFO("    Enabling VK_KHR_portability_subset for MoltenVK compatibility");
-                    break;
-                }
-            }
-            free(devExts);
-        }
-    }
-#endif
-
     if (!vkrt->runtime.disableSER &&
             (extensionSupport.availableMask & DEVICE_EXTENSION_RAY_TRACING_INVOCATION_REORDER_BIT) &&
             supportedReorderFeatures.rayTracingInvocationReorder) {
@@ -647,10 +625,6 @@ QueueFamily findQueueFamilies(VKRT* vkrt) {
     free(queueFamilies);
 
     return indices;
-}
-
-int32_t isDeviceSuitable(VKRT* vkrt) {
-    return scoreDeviceSuitability(vkrt, NULL);
 }
 
 VkBool32 isQueueFamilyComplete(QueueFamily indices) {

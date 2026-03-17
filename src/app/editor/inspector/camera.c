@@ -11,8 +11,6 @@ static const float kCameraPoseDegenerateThreshold = 1e-8f;
 static const float kCameraPoseNudgeDistance = 0.001f;
 static const float kCameraFovMinDeg = 10.0f;
 static const float kCameraFovMaxDeg = 140.0f;
-static const float kFogDensityDragSpeed = 0.0005f;
-static const float kFogDensityMax = 4.0f;
 static const float kEnvironmentStrengthMax = 1000000.0f;
 static const int kPathDepthMin = 0;
 static const int kPathDepthMax = 64;
@@ -95,15 +93,6 @@ void inspectorDrawCameraTab(VKRT* vkrt) {
                 LOG_ERROR("Updating environment color failed (%d)", (int)result);
             }
         }
-
-        float fogDensity = settings.fogDensity;
-        if (ImGui_DragFloatEx("Fog Density", &fogDensity, kFogDensityDragSpeed, 0.0f, kFogDensityMax, "%.4f", ImGuiSliderFlags_AlwaysClamp)) {
-            VKRT_Result result = VKRT_setFogDensity(vkrt, fogDensity);
-            if (result != VKRT_SUCCESS) {
-                LOG_ERROR("Updating fog density failed (%d)", (int)result);
-            }
-        }
-        tooltipOnHover("Global homogeneous fog density.");
 
         ImGui_EndDisabled();
 

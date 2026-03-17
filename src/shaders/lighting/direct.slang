@@ -57,14 +57,10 @@ LightSample sampleEmissiveLight(inout uint rng) {
 
 float computeBSDFEmitterMISWeight(float bsdfPdf, float lightPdfArea, float3 geometricNormal, float3 rayDirection, float hitDistance) {
     if (lightPdfArea <= 0.0) return 1.0;
-
-    float dirLenSq = dot(rayDirection, rayDirection);
-    if (dirLenSq <= 0.0) return 1.0;
-
-    float distSq = hitDistance * hitDistance * dirLenSq;
+    float distSq = hitDistance * hitDistance;
     if (distSq <= 0.0) return 1.0;
 
-    float cosLight = abs(dot(rayDirection * rsqrt(dirLenSq), geometricNormal));
+    float cosLight = abs(dot(rayDirection, geometricNormal));
     if (cosLight <= 0.0) return 0.0;
 
     float lightPdfSolidAngle = lightPdfArea * distSq / cosLight;
@@ -91,7 +87,8 @@ float3 evaluateDirectLight(float3 hitPoint, float3 geometricNormal, ShadingBasis
     float pdfSolidAngle = ls.pdf * distSq / cosLight;
     if (pdfSolidAngle <= 0.0) return float3(0.0);
 
-    float3 shadowOrigin = hitPoint + geometricNormal * VKRT_SHADOW_ORIGIN_OFFSET;
+    float3 shadowOffset = dot(wi, geometricNormal) >= 0.0 ? geometricNormal : -geometricNormal;
+    float3 shadowOrigin = hitPoint + shadowOffset * VKRT_SHADOW_ORIGIN_OFFSET;
     float shadowDist = dist - VKRT_SHADOW_DISTANCE_OFFSET;
     if (shadowDist <= 0.0) return float3(0.0);
 

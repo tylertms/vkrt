@@ -28,10 +28,10 @@ VKRT_Result createRayTracingPipeline(VKRT* vkrt) {
 
     uint64_t startTime = getMicroseconds();
     VkBool32 useSerShaders = vkrtSerEnabled(vkrt);
-    const unsigned char* rayGenData = useSerShaders ? shaderRgenSerData : shaderRgenData;
-    const unsigned char* closestHitData = useSerShaders ? shaderRchitSerData : shaderRchitData;
-    const unsigned char* missData = useSerShaders ? shaderRmissSerData : shaderRmissData;
-    const unsigned char* shadowMissData = useSerShaders ? shaderShadowMissSerData : shaderShadowMissData;
+    const uint32_t* rayGenData = useSerShaders ? shaderRgenSerData : shaderRgenData;
+    const uint32_t* closestHitData = useSerShaders ? shaderRchitSerData : shaderRchitData;
+    const uint32_t* missData = useSerShaders ? shaderRmissSerData : shaderRmissData;
+    const uint32_t* shadowMissData = useSerShaders ? shaderShadowMissSerData : shaderShadowMissData;
     size_t rayGenSize = useSerShaders ? shaderRgenSerSize : shaderRgenSize;
     size_t closestHitSize = useSerShaders ? shaderRchitSerSize : shaderRchitSize;
     size_t missSize = useSerShaders ? shaderRmissSerSize : shaderRmissSize;
@@ -43,10 +43,10 @@ VKRT_Result createRayTracingPipeline(VKRT* vkrt) {
     VkShaderModule closestHitModule = VK_NULL_HANDLE;
     VkShaderModule missModule = VK_NULL_HANDLE;
     VkShaderModule shadowMissModule = VK_NULL_HANDLE;
-    if (createShaderModule(vkrt, (const char*)rayGenData, rayGenSize, &rayGenModule) != VKRT_SUCCESS ||
-        createShaderModule(vkrt, (const char*)closestHitData, closestHitSize, &closestHitModule) != VKRT_SUCCESS ||
-        createShaderModule(vkrt, (const char*)missData, missSize, &missModule) != VKRT_SUCCESS ||
-        createShaderModule(vkrt, (const char*)shadowMissData, shadowMissSize, &shadowMissModule) != VKRT_SUCCESS) {
+    if (createShaderModule(vkrt, rayGenData, rayGenSize, &rayGenModule) != VKRT_SUCCESS ||
+        createShaderModule(vkrt, closestHitData, closestHitSize, &closestHitModule) != VKRT_SUCCESS ||
+        createShaderModule(vkrt, missData, missSize, &missModule) != VKRT_SUCCESS ||
+        createShaderModule(vkrt, shadowMissData, shadowMissSize, &shadowMissModule) != VKRT_SUCCESS) {
         if (rayGenModule != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, rayGenModule, NULL);
         if (closestHitModule != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, closestHitModule, NULL);
         if (missModule != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, missModule, NULL);
@@ -176,9 +176,9 @@ VKRT_Result createSelectionRayTracingPipeline(VKRT* vkrt) {
     VkShaderModule missModule = VK_NULL_HANDLE;
     VkShaderModule closestHitModule = VK_NULL_HANDLE;
 
-    if (createShaderModule(vkrt, (const char*)shaderSelectRgenData, shaderSelectRgenSize, &rayGenModule) != VKRT_SUCCESS ||
-        createShaderModule(vkrt, (const char*)shaderSelectRmissData, shaderSelectRmissSize, &missModule) != VKRT_SUCCESS ||
-        createShaderModule(vkrt, (const char*)shaderSelectRchitData, shaderSelectRchitSize, &closestHitModule) != VKRT_SUCCESS) {
+    if (createShaderModule(vkrt, shaderSelectRgenData, shaderSelectRgenSize, &rayGenModule) != VKRT_SUCCESS ||
+        createShaderModule(vkrt, shaderSelectRmissData, shaderSelectRmissSize, &missModule) != VKRT_SUCCESS ||
+        createShaderModule(vkrt, shaderSelectRchitData, shaderSelectRchitSize, &closestHitModule) != VKRT_SUCCESS) {
         goto cleanup;
     }
 
@@ -238,7 +238,7 @@ VKRT_Result createComputePipeline(VKRT* vkrt) {
     uint64_t startTime = getMicroseconds();
 
     VkShaderModule compModule = VK_NULL_HANDLE;
-    if (createShaderModule(vkrt, (const char*)shaderCompData, shaderCompSize, &compModule) != VKRT_SUCCESS) {
+    if (createShaderModule(vkrt, shaderCompData, shaderCompSize, &compModule) != VKRT_SUCCESS) {
         return VKRT_ERROR_OPERATION_FAILED;
     }
 
@@ -332,13 +332,14 @@ create_sync_objects_failed:
     return VKRT_ERROR_OPERATION_FAILED;
 }
 
-VKRT_Result createShaderModule(VKRT* vkrt, const char* spirv, size_t length, VkShaderModule* outShaderModule) {
+VKRT_Result createShaderModule(VKRT* vkrt, const uint32_t* spirv, size_t length, VkShaderModule* outShaderModule) {
     if (!vkrt || !spirv || !outShaderModule) return VKRT_ERROR_INVALID_ARGUMENT;
+    if (length == 0 || (length % sizeof(uint32_t)) != 0) return VKRT_ERROR_INVALID_ARGUMENT;
 
     VkShaderModuleCreateInfo shaderModuleCreateInfo = {0};
     shaderModuleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     shaderModuleCreateInfo.codeSize = length;
-    shaderModuleCreateInfo.pCode = (const uint32_t*)spirv;
+    shaderModuleCreateInfo.pCode = spirv;
 
     VkShaderModule shaderModule;
     if (vkCreateShaderModule(vkrt->core.device, &shaderModuleCreateInfo, NULL, &shaderModule) != VK_SUCCESS) {

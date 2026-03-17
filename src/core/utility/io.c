@@ -8,9 +8,6 @@
 #if defined(_WIN32)
 #include <windows.h>
 #include <direct.h>
-#elif defined(__APPLE__)
-#include <mach-o/dyld.h>
-#include <unistd.h>
 #else
 #include <unistd.h>
 #endif
@@ -28,15 +25,6 @@ static int get_exe_dir(char* out, size_t sz) {
     while (len && out[len] != '\\')
         --len;
     out[len] = '\0';
-    return 0;
-#elif defined(__APPLE__)
-    uint32_t len = (uint32_t)sz;
-    if (_NSGetExecutablePath(out, &len) != 0)
-        return -1;
-    char* dir = strrchr(out, '/');
-    if (!dir)
-        return -1;
-    *dir = '\0';
     return 0;
 #else
     ssize_t len = readlink("/proc/self/exe", out, sz - 1);

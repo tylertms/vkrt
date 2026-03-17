@@ -13,3 +13,4 @@
 - direct light NEE + MIS could be underperforming still, check nsight profiler
 - light speckles still, not as bad, check pbr book
 - hero wavelength or some other method of adding wavelength-dependent refraction
+- add object volumetrics

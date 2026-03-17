@@ -1,10 +1,7 @@
 #ifndef VKRT_CORE_CONSTANTS_SLANG
 #define VKRT_CORE_CONSTANTS_SLANG
 
-static const uint VKRT_INVALID_INDEX = 0xffffffffu;
-static const uint VKRT_TONE_MAPPING_MODE_NONE = 0u;
-static const uint VKRT_TONE_MAPPING_MODE_ACES = 1u;
-static const uint VKRT_SCENE_TIMELINE_MAX_KEYFRAMES = 16u;
+#include "../../shared/constants.h"
 
 static const float VKRT_RAY_T_MIN = 0.001;
 static const float VKRT_RAY_T_MAX = 10000.0;

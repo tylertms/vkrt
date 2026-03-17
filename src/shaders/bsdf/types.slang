@@ -5,7 +5,6 @@
 
 struct BSDFSample {
     float3 wi;
-    float3 value;
     float3 weight;
     float pdf;
     uint isTransmission;

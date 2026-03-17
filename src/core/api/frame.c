@@ -186,16 +186,7 @@ VKRT_Result VKRT_updateScene(VKRT* vkrt) {
 VKRT_Result VKRT_trace(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
     if (!vkrt->runtime.frameAcquired && !vkrt->runtime.frameOffscreen) return VKRT_SUCCESS;
-    VKRT_Result result = vkrtConvertVkResult(vkResetFences(
-        vkrt->core.device,
-        1,
-        &vkrt->runtime.inFlightFences[vkrt->runtime.currentFrame]
-    ));
-    if (result != VKRT_SUCCESS) {
-        return result;
-    }
-
-    result = vkrtConvertVkResult(vkResetCommandBuffer(
+    VKRT_Result result = vkrtConvertVkResult(vkResetCommandBuffer(
         vkrt->runtime.commandBuffers[vkrt->runtime.currentFrame],
         0
     ));
@@ -224,6 +215,15 @@ VKRT_Result VKRT_trace(VKRT* vkrt) {
     submitInfo.pCommandBuffers = &vkrt->runtime.commandBuffers[vkrt->runtime.currentFrame];
     submitInfo.signalSemaphoreCount = vkrt->runtime.frameOffscreen ? 0u : 1u;
     submitInfo.pSignalSemaphores = vkrt->runtime.frameOffscreen ? NULL : signalSemaphores;
+
+    result = vkrtConvertVkResult(vkResetFences(
+        vkrt->core.device,
+        1,
+        &vkrt->runtime.inFlightFences[vkrt->runtime.currentFrame]
+    ));
+    if (result != VKRT_SUCCESS) {
+        return result;
+    }
 
     result = vkrtConvertVkResult(vkQueueSubmit(
         vkrt->core.graphicsQueue,

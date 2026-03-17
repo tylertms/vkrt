@@ -102,6 +102,10 @@ int benchmarkRun(VKRT* vkrt, const CLIBenchmarkOptions* options) {
 
     for (;;) {
         VKRT_poll(vkrt);
+        if (!options->headless && VKRT_shouldDeinit(vkrt)) {
+            LOG_ERROR("Benchmark aborted after window close");
+            return EXIT_FAILURE;
+        }
 
         if (!state.renderStarted && state.setupFramesRemaining == 0u) {
             if (VKRT_startRender(vkrt, options->width, options->height, UINT32_MAX) != VKRT_SUCCESS) {
@@ -139,7 +143,7 @@ int benchmarkRun(VKRT* vkrt, const CLIBenchmarkOptions* options) {
                 return EXIT_FAILURE;
             }
             state.timingStarted = 1u;
-            state.measurementSamplesStart = 0u;
+            state.measurementSamplesStart = status.totalSamples;
             state.startTimeUs = getMicroseconds();
             continue;
         }

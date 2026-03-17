@@ -55,36 +55,6 @@ VKRT_Result createInstance(VKRT* vkrt, VkBool32 requirePresentation) {
         return extensionResult;
     }
 
-#ifdef __APPLE__
-    {
-        uint32_t availableExtCount = 0;
-        vkEnumerateInstanceExtensionProperties(NULL, &availableExtCount, NULL);
-        VkExtensionProperties* availableExts = NULL;
-        if (availableExtCount > 0) {
-            availableExts = (VkExtensionProperties*)malloc(availableExtCount * sizeof(VkExtensionProperties));
-        }
-        VkBool32 hasPortabilityEnum = VK_FALSE;
-        if (availableExts) {
-            vkEnumerateInstanceExtensionProperties(NULL, &availableExtCount, availableExts);
-            for (uint32_t i = 0; i < availableExtCount; i++) {
-                if (!strcmp(availableExts[i].extensionName, VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME)) {
-                    hasPortabilityEnum = VK_TRUE;
-                    break;
-                }
-            }
-            free(availableExts);
-        }
-        if (hasPortabilityEnum) {
-            const char** newExts = (const char**)realloc(extensions, (extensionCount + 1) * sizeof(const char*));
-            if (newExts) {
-                extensions = newExts;
-                extensions[extensionCount++] = VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME;
-                instanceCreateInfo.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
-            }
-        }
-    }
-#endif
-
     instanceCreateInfo.enabledExtensionCount = extensionCount;
     instanceCreateInfo.ppEnabledExtensionNames = extensionCount > 0u ? extensions : NULL;
 

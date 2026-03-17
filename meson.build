@@ -10,9 +10,6 @@ project('vkrt', ['c', 'cpp'],
 )
 
 sys = host_machine.system()
-if sys == 'darwin'
-  add_languages('objc', native: false, required: true)
-endif
 
 cc = meson.get_compiler('c')
 cpp = meson.get_compiler('cpp')
@@ -130,9 +127,6 @@ glfw_dep = dependency('glfw3', required: false, allow_fallback: false)
 if not glfw_dep.found()
   glfw_options = cmake.subproject_options()
   glfw_options.append_compile_args('c', cc.get_argument_syntax() == 'msvc' ? '/w' : '-w')
-  if sys == 'darwin'
-    glfw_options.append_compile_args('objc', '-w')
-  endif
   glfw_options.add_cmake_defines({
     'BUILD_SHARED_LIBS': 'OFF',
     'GLFW_BUILD_DOCS': 'OFF',
@@ -168,10 +162,6 @@ endif
 threads_dep = dependency('threads')
 rt_dep = dependency('rt', required: false)
 
-if sys == 'darwin'
-  iokit_dep = dependency('appleframeworks', modules: ['IOKit'])
-endif
-
 core_dependencies = [
   vulkan_dep,
   glfw_dep,
@@ -185,11 +175,6 @@ app_dependencies = [
   threads_dep,
   rt_dep,
 ]
-
-if sys == 'darwin'
-  core_dependencies += iokit_dep
-  app_dependencies += iokit_dep
-endif
 
 imgui_dependencies = [
   vulkan_dep,
@@ -227,27 +212,8 @@ if not file_dialogs_opt.disabled()
   nfd_source = []
   nfd_deps = []
   nfd_cpp_args = []
-  nfd_objc_args = ['-w']
 
-  if sys == 'darwin'
-    nfd_deps += dependency(
-      'appleframeworks',
-      modules: ['AppKit'],
-    )
-    nfd_uti_dep = dependency(
-      'appleframeworks',
-      modules: ['UniformTypeIdentifiers'],
-      required: false,
-    )
-    if nfd_uti_dep.found()
-      nfd_deps += nfd_uti_dep
-      nfd_objc_args += ['-DNFD_MACOS_ALLOWEDCONTENTTYPES=1']
-    else
-      nfd_objc_args += ['-DNFD_MACOS_ALLOWEDCONTENTTYPES=0']
-    endif
-    nfd_source = files('external/nfd/src/nfd_cocoa.m')
-    file_dialogs_enabled = true
-  elif sys == 'windows'
+  if sys == 'windows'
     nfd_source = files('external/nfd/src/nfd_win.cpp')
     file_dialogs_enabled = true
   elif sys == 'linux'
@@ -303,7 +269,6 @@ if not file_dialogs_opt.disabled()
       sources: nfd_source,
       dependencies: nfd_deps,
       cpp_args: nfd_cpp_args,
-      objc_args: nfd_objc_args,
       override_options: ['warning_level=0'],
     )
     app_dialog_source = files('src/app/editor/dialogs.c')

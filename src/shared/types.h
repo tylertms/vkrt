@@ -82,9 +82,9 @@ struct SceneData {
     uint rrMinDepth;
     uint4 viewportRect;
     uint toneMappingMode;
+    uint _padding0;
     float timeBase;
     float timeStep;
-    float fogDensity;
     float4 environmentLight;
     uint debugMode;
     uint misNeeEnabled;

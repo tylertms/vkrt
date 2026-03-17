@@ -124,8 +124,8 @@ static void drawMeshInfoHeader(VKRT* vkrt, uint32_t meshIndex, const VKRT_MeshSn
     if (!vkrt || !mesh) return;
 
     uint32_t triangleCount = mesh->info.indexCount / 3;
-    uint64_t vertexBytes = (uint64_t)mesh->info.vertexCount * 32;
-    uint64_t indexBytes = (uint64_t)mesh->info.indexCount * 4;
+    uint64_t vertexBytes = (uint64_t)mesh->info.vertexCount * sizeof(Vertex);
+    uint64_t indexBytes = (uint64_t)mesh->info.indexCount * sizeof(uint32_t);
 
     char countText[kSceneStatTextCapacity];
     char sizeText[kSceneSizeTextCapacity];

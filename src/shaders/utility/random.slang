@@ -20,17 +20,6 @@ float rand(inout uint rng) {
     return float(rng & 0x00ffffffu) * (1.0 / 16777216.0);
 }
 
-float3 rand3(inout uint rng) {
-    return float3(rand(rng), rand(rng), rand(rng));
-}
-
-float3 randUnit(inout uint rng) {
-    float z = 2.0 * rand(rng) - 1.0;
-    float phi = 2.0 * 3.14159265358979323846 * rand(rng);
-    float r = sqrt(max(1.0 - z * z, 0.0));
-    return float3(r * cos(phi), r * sin(phi), z);
-}
-
 uint initPixelSeed(int2 pixel, uint frameNumber, uint sampleIndex) {
     uint seed = uint(pixel.x) * 73856093u;
     seed ^= uint(pixel.y) * 19349663u;

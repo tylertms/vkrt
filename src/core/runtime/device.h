@@ -13,7 +13,6 @@ extern const uint32_t optionalDeviceExtensionBits[NUM_OPT_EXTENSIONS];
 VKRT_Result pickPhysicalDevice(VKRT* vkrt, const VKRT_CreateInfo* createInfo);
 VKRT_Result createLogicalDevice(VKRT* vkrt);
 VKRT_Result createQueryPool(VKRT* vkrt);
-int32_t isDeviceSuitable(VKRT* vkrt);
 VkBool32 isQueueFamilyComplete(QueueFamily indices);
 QueueFamily findQueueFamilies(VKRT* vkrt);
 VkBool32 extensionsSupported(VKRT* vkrt, VkPhysicalDevice device, DeviceExtensionSupport* outSupport);

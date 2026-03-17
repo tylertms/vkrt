@@ -105,6 +105,8 @@ void applyGPUImageState(VKRT* vkrt, const GPUImageState* state) {
 
     vkrt->core.accumulationReadIndex = 0;
     vkrt->core.accumulationWriteIndex = 1;
+    vkrt->renderStatus.accumulationFrame = 0;
+    vkrt->renderStatus.totalSamples = 0;
     vkrt->core.accumulationNeedsReset = VK_TRUE;
     markSelectionMaskDirty(vkrt);
 }

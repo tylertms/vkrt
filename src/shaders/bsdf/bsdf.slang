@@ -20,9 +20,8 @@ BSDFSample sampleBSDF(BSDFState state, ShadingBasis basis, inout uint rng) {
         return sample;
     }
 
-    sample.value = eval.value;
     sample.pdf = eval.pdf;
-    sample.weight = sample.value * absCosTheta(directionSample.wi) / sample.pdf;
+    sample.weight = eval.value * absCosTheta(directionSample.wi) / sample.pdf;
 
     return sample;
 }
