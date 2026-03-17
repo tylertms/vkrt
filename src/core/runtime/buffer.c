@@ -25,7 +25,7 @@ static VKRT_Result appendPendingSceneTransfer(
         (size_t)nextCount * sizeof(PendingBufferCopy)
     );
     if (!resized) {
-        return VKRT_ERROR_OPERATION_FAILED;
+        return VKRT_ERROR_OUT_OF_MEMORY;
     }
 
     update->sceneTransfers = resized;
@@ -224,6 +224,32 @@ VKRT_Result createDeviceBufferFromData(
         *outDeviceAddress = queryBufferDeviceAddress(vkrt, *outBuffer);
     }
     return VKRT_SUCCESS;
+}
+
+VKRT_Result createZeroInitializedDeviceBuffer(
+    VKRT* vkrt,
+    VkDeviceSize size,
+    VkBufferUsageFlags usage,
+    Buffer* outBuffer
+) {
+    if (!vkrt || !outBuffer || size == 0) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    *outBuffer = (Buffer){0};
+
+    void* zeros = calloc(1, (size_t)size);
+    if (!zeros) return VKRT_ERROR_OUT_OF_MEMORY;
+
+    VKRT_Result result = createDeviceBufferFromData(
+        vkrt,
+        zeros,
+        size,
+        usage,
+        &outBuffer->buffer,
+        &outBuffer->memory,
+        &outBuffer->deviceAddress
+    );
+    free(zeros);
+    return result;
 }
 
 void destroyBufferResources(VKRT* vkrt, Buffer* buffer) {

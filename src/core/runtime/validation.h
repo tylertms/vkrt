@@ -8,7 +8,7 @@ extern const VkBool32 enableValidationLayers;
 extern const VkBool32 enableDebugUtils;
 
 int checkValidationLayerSupport(void);
-const char** getRequiredExtensions(uint32_t* extensionCount, VkBool32 requirePresentation);
+VKRT_Result getRequiredExtensions(uint32_t* extensionCount, VkBool32 requirePresentation, const char*** outExtensions);
 
 void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT* createInfo);
 VKRT_Result setupDebugMessenger(VKRT* vkrt);

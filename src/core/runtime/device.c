@@ -18,7 +18,7 @@ const char* requiredDeviceExtensions[NUM_REQ_EXTENSIONS] = {
 };
 
 const char* optionalDeviceExtensions[NUM_OPT_EXTENSIONS] = {
-    VK_EXT_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME
+    VK_NV_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME
 };
 
 const uint32_t requiredDeviceExtensionBits[NUM_REQ_EXTENSIONS] = {
@@ -272,18 +272,25 @@ VKRT_Result pickPhysicalDevice(VKRT* vkrt, const VKRT_CreateInfo* createInfo) {
     vkrt->core.physicalDevice = VK_NULL_HANDLE;
 
     uint32_t deviceCount = 0;
-    vkEnumeratePhysicalDevices(vkrt->core.instance, &deviceCount, NULL);
+    if (vkEnumeratePhysicalDevices(vkrt->core.instance, &deviceCount, NULL) != VK_SUCCESS) {
+        LOG_ERROR("Failed to enumerate physical devices");
+        return VKRT_ERROR_INITIALIZATION_FAILED;
+    }
 
     if (deviceCount == 0) {
         LOG_ERROR("Failed to find a GPU with Vulkan support");
-        return VKRT_ERROR_OPERATION_FAILED;
+        return VKRT_ERROR_INITIALIZATION_FAILED;
     }
 
     VkPhysicalDevice* devices = (VkPhysicalDevice*)malloc(deviceCount * sizeof(VkPhysicalDevice));
     if (!devices) {
-        return VKRT_ERROR_OPERATION_FAILED;
+        return VKRT_ERROR_OUT_OF_MEMORY;
     }
-    vkEnumeratePhysicalDevices(vkrt->core.instance, &deviceCount, devices);
+    if (vkEnumeratePhysicalDevices(vkrt->core.instance, &deviceCount, devices) != VK_SUCCESS) {
+        LOG_ERROR("Failed to enumerate physical devices");
+        free(devices);
+        return VKRT_ERROR_INITIALIZATION_FAILED;
+    }
 
     int32_t highestScore = -1;
     int32_t bestDevice = -1;
@@ -433,8 +440,8 @@ VKRT_Result createLogicalDevice(VKRT* vkrt) {
     deviceRayTracingPipelineFeatures.rayTracingPipelineTraceRaysIndirect = VK_FALSE;
     deviceRayTracingPipelineFeatures.rayTraversalPrimitiveCulling = VK_FALSE;
 
-    VkPhysicalDeviceRayTracingInvocationReorderFeaturesEXT supportedReorderFeatures = {0};
-    supportedReorderFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_FEATURES_EXT;
+    VkPhysicalDeviceRayTracingInvocationReorderFeaturesNV supportedReorderFeatures = {0};
+    supportedReorderFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_FEATURES_NV;
     if (extensionSupport.availableMask & DEVICE_EXTENSION_RAY_TRACING_INVOCATION_REORDER_BIT) {
         VkPhysicalDeviceRayTracingPipelineFeaturesKHR supportedRayTracingPipelineFeatures = {0};
         supportedRayTracingPipelineFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
@@ -445,8 +452,8 @@ VKRT_Result createLogicalDevice(VKRT* vkrt) {
         supportedFeatures.pNext = &supportedRayTracingPipelineFeatures;
         vkGetPhysicalDeviceFeatures2(vkrt->core.physicalDevice, &supportedFeatures);
 
-        VkPhysicalDeviceRayTracingInvocationReorderPropertiesEXT reorderProperties = {0};
-        reorderProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_PROPERTIES_EXT;
+        VkPhysicalDeviceRayTracingInvocationReorderPropertiesNV reorderProperties = {0};
+        reorderProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_PROPERTIES_NV;
 
         VkPhysicalDeviceProperties2 supportedProperties = {0};
         supportedProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
@@ -454,21 +461,43 @@ VKRT_Result createLogicalDevice(VKRT* vkrt) {
         vkGetPhysicalDeviceProperties2(vkrt->core.physicalDevice, &supportedProperties);
 
         vkrt->core.serReorderingHintMode = reorderProperties.rayTracingInvocationReorderReorderingHint;
-        vkrt->core.serMaxShaderBindingTableRecordIndex = reorderProperties.maxShaderBindingTableRecordIndex;
+        vkrt->core.serMaxShaderBindingTableRecordIndex = 0u;
     }
 
-    VkPhysicalDeviceRayTracingInvocationReorderFeaturesEXT deviceReorderFeatures = {0};
-    deviceReorderFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_FEATURES_EXT;
+    VkPhysicalDeviceRayTracingInvocationReorderFeaturesNV deviceReorderFeatures = {0};
+    deviceReorderFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_FEATURES_NV;
     deviceReorderFeatures.pNext = &deviceAccelerationStructureFeatures;
     deviceReorderFeatures.rayTracingInvocationReorder = VK_TRUE;
 
-    const char* enabledExtensions[NUM_REQ_EXTENSIONS + NUM_OPT_EXTENSIONS] = {0};
+    const char* enabledExtensions[NUM_REQ_EXTENSIONS + NUM_OPT_EXTENSIONS + 1] = {0};
     uint32_t enabledExtensionCount = 0;
     uint32_t requiredExtensionStart = queryRequiredDeviceExtensionStartIndex(vkrt);
     for (uint32_t i = requiredExtensionStart; i < NUM_REQ_EXTENSIONS; i++) {
         enabledExtensions[enabledExtensionCount++] = requiredDeviceExtensions[i];
         extensionSupport.enabledMask |= requiredDeviceExtensionBits[i];
     }
+
+#ifdef __APPLE__
+    {
+        uint32_t devExtCount = 0;
+        vkEnumerateDeviceExtensionProperties(vkrt->core.physicalDevice, NULL, &devExtCount, NULL);
+        VkExtensionProperties* devExts = NULL;
+        if (devExtCount > 0) {
+            devExts = (VkExtensionProperties*)malloc(devExtCount * sizeof(VkExtensionProperties));
+        }
+        if (devExts) {
+            vkEnumerateDeviceExtensionProperties(vkrt->core.physicalDevice, NULL, &devExtCount, devExts);
+            for (uint32_t i = 0; i < devExtCount; i++) {
+                if (!strcmp(devExts[i].extensionName, "VK_KHR_portability_subset")) {
+                    enabledExtensions[enabledExtensionCount++] = "VK_KHR_portability_subset";
+                    LOG_INFO("    Enabling VK_KHR_portability_subset for MoltenVK compatibility");
+                    break;
+                }
+            }
+            free(devExts);
+        }
+    }
+#endif
 
     if (!vkrt->runtime.disableSER &&
             (extensionSupport.availableMask & DEVICE_EXTENSION_RAY_TRACING_INVOCATION_REORDER_BIT) &&
@@ -517,7 +546,7 @@ VKRT_Result createLogicalDevice(VKRT* vkrt) {
             (extensionSupport.availableMask & DEVICE_EXTENSION_RAY_TRACING_INVOCATION_REORDER_BIT)) {
         LOG_INFO(
             "    Optional extension %s was available but disabled by request",
-            VK_EXT_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME
+            VK_NV_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME
         );
     }
 
@@ -525,7 +554,7 @@ VKRT_Result createLogicalDevice(VKRT* vkrt) {
             !supportedReorderFeatures.rayTracingInvocationReorder) {
         LOG_INFO(
             "    Optional extension %s was loaded but its feature is unsupported, so it was not enabled",
-            VK_EXT_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME
+            VK_NV_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME
         );
     }
 
@@ -550,7 +579,7 @@ VKRT_Result createLogicalDevice(VKRT* vkrt) {
     if (vkCreateDevice(vkrt->core.physicalDevice, &createInfo, NULL, &vkrt->core.device) != VK_SUCCESS) {
         LOG_ERROR("Failed to create logical device");
         free(queueCreateInfos);
-        return VKRT_ERROR_OPERATION_FAILED;
+        return VKRT_ERROR_INITIALIZATION_FAILED;
     }
 
     vkGetDeviceQueue(vkrt->core.device, indices.graphics, 0, &vkrt->core.graphicsQueue);
@@ -629,17 +658,24 @@ VkBool32 isQueueFamilyComplete(QueueFamily indices) {
 }
 
 VkBool32 extensionsSupported(VKRT* vkrt, VkPhysicalDevice device, DeviceExtensionSupport* outSupport) {
-    uint32_t extensionCount;
+    uint32_t extensionCount = 0;
     DeviceExtensionSupport support = initDeviceExtensionSupport();
     uint32_t requiredExtensionStart = queryRequiredDeviceExtensionStartIndex(vkrt);
-    vkEnumerateDeviceExtensionProperties(device, NULL, &extensionCount, NULL);
+    if (vkEnumerateDeviceExtensionProperties(device, NULL, &extensionCount, NULL) != VK_SUCCESS) {
+        if (outSupport) *outSupport = support;
+        return VK_FALSE;
+    }
 
     VkExtensionProperties* availableExtensions = (VkExtensionProperties*)malloc(extensionCount * sizeof(VkExtensionProperties));
     if (!availableExtensions) {
         if (outSupport) *outSupport = support;
         return VK_FALSE;
     }
-    vkEnumerateDeviceExtensionProperties(device, NULL, &extensionCount, availableExtensions);
+    if (vkEnumerateDeviceExtensionProperties(device, NULL, &extensionCount, availableExtensions) != VK_SUCCESS) {
+        free(availableExtensions);
+        if (outSupport) *outSupport = support;
+        return VK_FALSE;
+    }
 
     support.requiredMask = 0;
     for (uint32_t i = requiredExtensionStart; i < NUM_REQ_EXTENSIONS; i++) {

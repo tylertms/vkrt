@@ -23,12 +23,17 @@ const VkBool32 enableDebugUtils = 0;
 #endif
 
 int checkValidationLayerSupport(void) {
-    uint32_t layerCount;
-    vkEnumerateInstanceLayerProperties(&layerCount, 0);
+    uint32_t layerCount = 0;
+    if (vkEnumerateInstanceLayerProperties(&layerCount, NULL) != VK_SUCCESS) {
+        return VK_FALSE;
+    }
 
     VkLayerProperties* availableLayers = (VkLayerProperties*)malloc(layerCount * sizeof(VkLayerProperties));
     if (!availableLayers) return VK_FALSE;
-    vkEnumerateInstanceLayerProperties(&layerCount, availableLayers);
+    if (vkEnumerateInstanceLayerProperties(&layerCount, availableLayers) != VK_SUCCESS) {
+        free(availableLayers);
+        return VK_FALSE;
+    }
 
     for (uint32_t i = 0; i < numValidationLayers; i++) {
         int layerFound = 0;
@@ -50,15 +55,19 @@ int checkValidationLayerSupport(void) {
     return VK_TRUE;
 }
 
-const char** getRequiredExtensions(uint32_t* extensionCount, VkBool32 requirePresentation) {
-    if (!extensionCount) return NULL;
+VKRT_Result getRequiredExtensions(uint32_t* extensionCount, VkBool32 requirePresentation, const char*** outExtensions) {
+    if (!extensionCount || !outExtensions) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    *extensionCount = 0;
+    *outExtensions = NULL;
 
     const char** baseExtensions = NULL;
     uint32_t baseCount = 0;
     if (requirePresentation) {
         baseExtensions = glfwGetRequiredInstanceExtensions(&baseCount);
-        if (!baseExtensions) {
-            return NULL;
+        if (!baseExtensions || baseCount == 0u) {
+            LOG_ERROR("GLFW did not provide the required Vulkan instance extensions");
+            return VKRT_ERROR_INITIALIZATION_FAILED;
         }
     }
 
@@ -69,13 +78,13 @@ const char** getRequiredExtensions(uint32_t* extensionCount, VkBool32 requirePre
     }
 
     if (count == 0) {
-        *extensionCount = 0;
-        return NULL;
+        return VKRT_SUCCESS;
     }
 
     const char** extensions = (const char**)malloc(sizeof(const char*) * count);
     if (!extensions) {
-        return NULL;
+        LOG_ERROR("Failed to allocate Vulkan instance extension list");
+        return VKRT_ERROR_OUT_OF_MEMORY;
     }
 
     for (uint32_t i = 0; i < baseCount; ++i) {
@@ -87,7 +96,8 @@ const char** getRequiredExtensions(uint32_t* extensionCount, VkBool32 requirePre
     }
 
     *extensionCount = count;
-    return extensions;
+    *outExtensions = extensions;
+    return VKRT_SUCCESS;
 }
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
