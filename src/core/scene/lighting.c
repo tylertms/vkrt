@@ -78,12 +78,12 @@ static int buildAliasTable(const float* pmf, uint32_t count, float* outQ, uint32
     if (count == 0) return 1;
 
     float* scaled = (float*)malloc(sizeof(float) * count);
-    uint32_t* small = (uint32_t*)malloc(sizeof(uint32_t) * count);
-    uint32_t* large = (uint32_t*)malloc(sizeof(uint32_t) * count);
-    if (!scaled || !small || !large) {
+    uint32_t* smallBin = (uint32_t*)malloc(sizeof(uint32_t) * count);
+    uint32_t* largeBin = (uint32_t*)malloc(sizeof(uint32_t) * count);
+    if (!scaled || !smallBin || !largeBin) {
         free(scaled);
-        free(small);
-        free(large);
+        free(smallBin);
+        free(largeBin);
         return 0;
     }
 
@@ -91,37 +91,37 @@ static int buildAliasTable(const float* pmf, uint32_t count, float* outQ, uint32
 
     for (uint32_t i = 0; i < count; ++i) {
         scaled[i] = pmf[i] * (float)count;
-        if (scaled[i] < 1.0f) small[smallCount++] = i;
-        else large[largeCount++] = i;
+        if (scaled[i] < 1.0f) smallBin[smallCount++] = i;
+        else largeBin[largeCount++] = i;
     }
 
     while (smallCount > 0 && largeCount > 0) {
-        uint32_t s = small[--smallCount];
-        uint32_t l = large[--largeCount];
+        uint32_t s = smallBin[--smallCount];
+        uint32_t l = largeBin[--largeCount];
 
         outQ[s] = scaled[s];
         outIdx[s] = l;
 
         scaled[l] = scaled[l] + scaled[s] - 1.0f;
-        if (scaled[l] < 1.0f) small[smallCount++] = l;
-        else large[largeCount++] = l;
+        if (scaled[l] < 1.0f) smallBin[smallCount++] = l;
+        else largeBin[largeCount++] = l;
     }
 
     while (largeCount > 0) {
-        uint32_t l = large[--largeCount];
+        uint32_t l = largeBin[--largeCount];
         outQ[l] = 1.0f;
         outIdx[l] = l;
     }
 
     while (smallCount > 0) {
-        uint32_t s = small[--smallCount];
+        uint32_t s = smallBin[--smallCount];
         outQ[s] = 1.0f;
         outIdx[s] = s;
     }
 
     free(scaled);
-    free(small);
-    free(large);
+    free(smallBin);
+    free(largeBin);
     return 1;
 }
 
