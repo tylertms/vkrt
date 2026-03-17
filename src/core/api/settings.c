@@ -255,7 +255,6 @@ VKRT_Result VKRT_setSelectedMesh(VKRT* vkrt, uint32_t meshIndex) {
 
     vkrtMarkSelectionResourcesDirty(vkrt);
     syncSelectionSceneData(vkrt);
-    resetSceneData(vkrt);
     return VKRT_SUCCESS;
 }
 
