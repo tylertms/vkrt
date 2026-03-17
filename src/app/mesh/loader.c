@@ -7,11 +7,29 @@
 #include "cgltf.h"
 
 #include <math.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 enum { kGeneratedMeshNameCapacity = 256 };
+static const size_t kMeshImportMaxPrimitiveBytes = 1024u * 1024u * 1024u;
+
+typedef struct MeshImportFeatureReport {
+    int materialTextures;
+    int advancedMaterials;
+    int additionalTexcoordSets;
+    int vertexColors;
+    int skinning;
+    int morphTargets;
+    int cameras;
+    int lights;
+    int animations;
+    int gpuInstancing;
+    int dracoCompression;
+} MeshImportFeatureReport;
+
+void decomposeImportedMeshTransform(mat4 worldTransform, vec3 outPosition, vec3 outRotation, vec3 outScale);
 
 static void releaseImportEntry(MeshImportEntry* entry) {
     if (!entry) return;
@@ -83,6 +101,180 @@ static void buildEntryName(
         snprintf(outName, outNameSize, "%s_%zu", baseName, primitiveIndex);
     } else {
         snprintf(outName, outNameSize, "%s", baseName);
+    }
+}
+
+static int checkedMultiplySize(size_t count, size_t stride, size_t* outBytes) {
+    if (!outBytes) return 0;
+    *outBytes = 0;
+    if (count == 0 || stride == 0) return 1;
+    if (count > SIZE_MAX / stride) return 0;
+    *outBytes = count * stride;
+    return 1;
+}
+
+static int checkedAddSize(size_t lhs, size_t rhs, size_t* outBytes) {
+    if (!outBytes) return 0;
+    *outBytes = 0;
+    if (lhs > SIZE_MAX - rhs) return 0;
+    *outBytes = lhs + rhs;
+    return 1;
+}
+
+static int validatePrimitiveAllocationFootprint(size_t vertexCount, size_t indexCount, int needsTexcoords) {
+    if (vertexCount == 0 || vertexCount > (size_t)VKRT_INVALID_INDEX) {
+        LOG_ERROR("glTF mesh import rejected an invalid vertex count: %zu", vertexCount);
+        return 0;
+    }
+    if (indexCount == 0 || indexCount > (size_t)VKRT_INVALID_INDEX) {
+        LOG_ERROR("glTF mesh import rejected an invalid index count: %zu", indexCount);
+        return 0;
+    }
+
+    size_t vertexBytes = 0;
+    size_t indexBytes = 0;
+    size_t texcoordBytes = 0;
+    size_t totalBytes = 0;
+    if (!checkedMultiplySize(vertexCount, sizeof(Vertex), &vertexBytes) ||
+        !checkedMultiplySize(indexCount, sizeof(uint32_t), &indexBytes) ||
+        !checkedAddSize(vertexBytes, indexBytes, &totalBytes)) {
+        LOG_ERROR("glTF mesh import rejected a primitive with overflowing buffer sizes");
+        return 0;
+    }
+
+    if (needsTexcoords) {
+        if (!checkedMultiplySize(vertexCount, sizeof(float) * 2u, &texcoordBytes) ||
+            !checkedAddSize(totalBytes, texcoordBytes, &totalBytes)) {
+            LOG_ERROR("glTF mesh import rejected a primitive with overflowing texcoord buffer sizes");
+            return 0;
+        }
+    }
+
+    if (totalBytes > kMeshImportMaxPrimitiveBytes) {
+        LOG_ERROR(
+            "glTF mesh import rejected a primitive requiring %zu bytes of host staging (limit: %zu)",
+            totalBytes,
+            kMeshImportMaxPrimitiveBytes
+        );
+        return 0;
+    }
+
+    return 1;
+}
+
+static int materialUsesTextureView(const cgltf_texture_view* textureView) {
+    return textureView && textureView->texture != NULL;
+}
+
+static int materialUsesUnsupportedTextures(const cgltf_material* material) {
+    if (!material) return 0;
+
+    return materialUsesTextureView(&material->pbr_metallic_roughness.base_color_texture) ||
+        materialUsesTextureView(&material->pbr_metallic_roughness.metallic_roughness_texture) ||
+        materialUsesTextureView(&material->normal_texture) ||
+        materialUsesTextureView(&material->occlusion_texture) ||
+        materialUsesTextureView(&material->emissive_texture) ||
+        materialUsesTextureView(&material->clearcoat.clearcoat_texture) ||
+        materialUsesTextureView(&material->clearcoat.clearcoat_roughness_texture) ||
+        materialUsesTextureView(&material->clearcoat.clearcoat_normal_texture) ||
+        materialUsesTextureView(&material->specular.specular_texture) ||
+        materialUsesTextureView(&material->specular.specular_color_texture) ||
+        materialUsesTextureView(&material->transmission.transmission_texture) ||
+        materialUsesTextureView(&material->volume.thickness_texture) ||
+        materialUsesTextureView(&material->sheen.sheen_color_texture) ||
+        materialUsesTextureView(&material->sheen.sheen_roughness_texture) ||
+        materialUsesTextureView(&material->iridescence.iridescence_texture) ||
+        materialUsesTextureView(&material->iridescence.iridescence_thickness_texture) ||
+        materialUsesTextureView(&material->diffuse_transmission.diffuse_transmission_texture) ||
+        materialUsesTextureView(&material->diffuse_transmission.diffuse_transmission_color_texture) ||
+        materialUsesTextureView(&material->anisotropy.anisotropy_texture);
+}
+
+static int materialUsesUnsupportedModels(const cgltf_material* material) {
+    if (!material) return 0;
+
+    return material->has_pbr_specular_glossiness ||
+        material->has_volume ||
+        material->has_iridescence ||
+        material->has_diffuse_transmission ||
+        material->has_anisotropy ||
+        material->has_dispersion ||
+        material->unlit ||
+        material->alpha_mode != cgltf_alpha_mode_opaque;
+}
+
+static void collectIgnoredImportFeatures(const cgltf_data* data, MeshImportFeatureReport* outReport) {
+    if (!data || !outReport) return;
+
+    outReport->animations = data->animations_count > 0;
+    outReport->cameras = data->cameras_count > 0;
+    outReport->lights = data->lights_count > 0;
+    outReport->skinning = data->skins_count > 0;
+
+    for (cgltf_size materialIndex = 0; materialIndex < data->materials_count; materialIndex++) {
+        const cgltf_material* material = &data->materials[materialIndex];
+        outReport->materialTextures |= materialUsesUnsupportedTextures(material);
+        outReport->advancedMaterials |= materialUsesUnsupportedModels(material);
+    }
+
+    for (cgltf_size nodeIndex = 0; nodeIndex < data->nodes_count; nodeIndex++) {
+        const cgltf_node* node = &data->nodes[nodeIndex];
+        outReport->gpuInstancing |= node->has_mesh_gpu_instancing;
+        outReport->skinning |= node->skin != NULL;
+    }
+
+    for (cgltf_size meshIndex = 0; meshIndex < data->meshes_count; meshIndex++) {
+        const cgltf_mesh* mesh = &data->meshes[meshIndex];
+        outReport->morphTargets |= mesh->weights_count > 0;
+
+        for (cgltf_size primitiveIndex = 0; primitiveIndex < mesh->primitives_count; primitiveIndex++) {
+            const cgltf_primitive* primitive = &mesh->primitives[primitiveIndex];
+            outReport->morphTargets |= primitive->targets_count > 0;
+            outReport->dracoCompression |= primitive->has_draco_mesh_compression;
+
+            for (cgltf_size attributeIndex = 0; attributeIndex < primitive->attributes_count; attributeIndex++) {
+                const cgltf_attribute* attribute = &primitive->attributes[attributeIndex];
+                outReport->additionalTexcoordSets |=
+                    attribute->type == cgltf_attribute_type_texcoord && attribute->index > 0;
+                outReport->vertexColors |= attribute->type == cgltf_attribute_type_color;
+                outReport->skinning |=
+                    attribute->type == cgltf_attribute_type_joints || attribute->type == cgltf_attribute_type_weights;
+            }
+        }
+    }
+}
+
+static void appendIgnoredFeature(char* buffer, size_t bufferSize, const char* label) {
+    if (!buffer || bufferSize == 0 || !label || !label[0]) return;
+
+    size_t currentLength = strlen(buffer);
+    if (currentLength >= bufferSize - 1u) return;
+
+    const char* separator = currentLength > 0 ? ", " : "";
+    (void)snprintf(buffer + currentLength, bufferSize - currentLength, "%s%s", separator, label);
+}
+
+static void logIgnoredImportFeatures(const char* resolvedPath, const cgltf_data* data) {
+    if (!resolvedPath || !resolvedPath[0] || !data) return;
+
+    MeshImportFeatureReport report = {0};
+    collectIgnoredImportFeatures(data, &report);
+
+    char ignoredFeatures[384] = {0};
+    if (report.materialTextures) appendIgnoredFeature(ignoredFeatures, sizeof(ignoredFeatures), "material textures");
+    if (report.advancedMaterials) appendIgnoredFeature(ignoredFeatures, sizeof(ignoredFeatures), "advanced material models");
+    if (report.additionalTexcoordSets) appendIgnoredFeature(ignoredFeatures, sizeof(ignoredFeatures), "secondary UV sets");
+    if (report.vertexColors) appendIgnoredFeature(ignoredFeatures, sizeof(ignoredFeatures), "vertex colors");
+    if (report.skinning) appendIgnoredFeature(ignoredFeatures, sizeof(ignoredFeatures), "skinning data");
+    if (report.morphTargets) appendIgnoredFeature(ignoredFeatures, sizeof(ignoredFeatures), "morph targets");
+    if (report.cameras) appendIgnoredFeature(ignoredFeatures, sizeof(ignoredFeatures), "cameras");
+    if (report.lights) appendIgnoredFeature(ignoredFeatures, sizeof(ignoredFeatures), "lights");
+    if (report.animations) appendIgnoredFeature(ignoredFeatures, sizeof(ignoredFeatures), "animations");
+    if (report.gpuInstancing) appendIgnoredFeature(ignoredFeatures, sizeof(ignoredFeatures), "GPU instancing");
+    if (report.dracoCompression) appendIgnoredFeature(ignoredFeatures, sizeof(ignoredFeatures), "Draco-compressed primitives");
+
+    if (ignoredFeatures[0]) {
+        LOG_INFO("glTF mesh import ignored %s in '%s'", ignoredFeatures, resolvedPath);
     }
 }
 
@@ -305,32 +497,7 @@ static void decomposeNodeTransform(const cgltf_node* node, vec3 outPosition, vec
     cgltf_float rawWorldTransform[16] = {0};
     cgltf_node_transform_world(node, rawWorldTransform);
     memcpy(worldTransform, rawWorldTransform, sizeof(worldTransform));
-
-    vec4 translation = {0.0f, 0.0f, 0.0f, 1.0f};
-    mat4 rotationMatrix = GLM_MAT4_IDENTITY_INIT;
-    vec3 scale = {1.0f, 1.0f, 1.0f};
-    glm_decompose(worldTransform, translation, rotationMatrix, scale);
-
-    for (int axis = 0; axis < 3; axis++) {
-        if (fabsf(scale[axis]) < 1e-6f) {
-            scale[axis] = 1.0f;
-        }
-    }
-
-    vec3 rotationRadians = {0.0f, 0.0f, 0.0f};
-    glm_euler_angles(rotationMatrix, rotationRadians);
-
-    outPosition[0] = translation[0];
-    outPosition[1] = translation[1];
-    outPosition[2] = translation[2];
-
-    outRotation[0] = glm_deg(rotationRadians[0]);
-    outRotation[1] = glm_deg(rotationRadians[1]);
-    outRotation[2] = glm_deg(rotationRadians[2]) + 90.0f;
-
-    outScale[0] = scale[0];
-    outScale[1] = scale[1];
-    outScale[2] = scale[2];
+    decomposeImportedMeshTransform(worldTransform, outPosition, outRotation, outScale);
 }
 
 static void generateNormals(Vertex* vertices, size_t vertexCount, const uint32_t* indices, size_t indexCount) {
@@ -517,6 +684,9 @@ static int buildPrimitiveEntry(
         : (size_t)positionAccessor->count;
     entry.material = buildMaterial(primitive->material);
     entry.renderBackfaces = primitive->material && primitive->material->double_sided ? 1u : 0u;
+    if (!validatePrimitiveAllocationFootprint(entry.vertexCount, entry.indexCount, !useImportedTangents && texcoordAccessor)) {
+        return -1;
+    }
 
     char generatedName[kGeneratedMeshNameCapacity];
     buildEntryName(generatedName, sizeof(generatedName), node, mesh, primitiveIndex);
@@ -668,6 +838,8 @@ int meshLoadFromFile(const char* filePath, MeshImportData* outImportData) {
         LOG_ERROR("Failed to load buffers for '%s'", resolvedPath);
         return -1;
     }
+
+    logIgnoredImportFeatures(resolvedPath, data);
 
     int result = 0;
     if (data->scene && data->scene->nodes_count > 0) {
