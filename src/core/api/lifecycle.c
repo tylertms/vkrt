@@ -19,7 +19,6 @@
 #include "vkrt_internal.h"
 
 #include <stdio.h>
-#include <stdatomic.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,42 +28,24 @@ static inline void logStepTime(const char* stepName, uint64_t startTime) {
 }
 
 static uint32_t g_glfwInitRefCount = 0u;
-static atomic_flag g_glfwInitLock = ATOMIC_FLAG_INIT;
-
-static void lockGLFWInitState(void) {
-    while (atomic_flag_test_and_set_explicit(&g_glfwInitLock, memory_order_acquire)) {
-    }
-}
-
-static void unlockGLFWInitState(void) {
-    atomic_flag_clear_explicit(&g_glfwInitLock, memory_order_release);
-}
 
 static VKRT_Result acquireGLFW(void) {
-    lockGLFWInitState();
     if (g_glfwInitRefCount == 0u && !glfwInit()) {
-        unlockGLFWInitState();
         LOG_ERROR("Failed to initialize GLFW");
         return VKRT_ERROR_INITIALIZATION_FAILED;
     }
 
     g_glfwInitRefCount++;
-    unlockGLFWInitState();
     return VKRT_SUCCESS;
 }
 
 static void releaseGLFW(void) {
-    lockGLFWInitState();
-    if (g_glfwInitRefCount == 0u) {
-        unlockGLFWInitState();
-        return;
-    }
+    if (g_glfwInitRefCount == 0u) return;
 
     g_glfwInitRefCount--;
     if (g_glfwInitRefCount == 0u) {
         glfwTerminate();
     }
-    unlockGLFWInitState();
 }
 
 static void destroyBufferAndMemory(VKRT* vkrt, VkBuffer* buffer, VkDeviceMemory* memory) {
