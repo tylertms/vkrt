@@ -56,9 +56,36 @@ typedef struct DialogState {
     char* responsePath;
 } DialogState;
 
-static DialogState gDialogState = {0};
+static DialogState* getDialogState(Session* session) {
+    if (!session) return NULL;
+    return session->editor.dialogState;
+}
 
-static int prepareDialogRequest(DialogKind kind, const char* defaultPath, const char* defaultName, DialogRequest* outRequest) {
+static const char* queryDialogKindLabel(DialogKind kind) {
+    switch (kind) {
+        case DIALOG_KIND_IMPORT_MESH:
+            return "mesh import";
+        case DIALOG_KIND_SAVE_RENDER:
+            return "render save";
+        case DIALOG_KIND_PICK_SEQUENCE_FOLDER:
+            return "sequence folder";
+        default:
+            return "unknown";
+    }
+}
+
+static int dialogBackendAvailable(const DialogState* state) {
+    if (!state) return 0;
+    return state->workerAvailable || state->mainThreadAvailable;
+}
+
+static int prepareDialogRequest(
+    DialogState* state,
+    DialogKind kind,
+    const char* defaultPath,
+    const char* defaultName,
+    DialogRequest* outRequest
+) {
     if (!outRequest) return 0;
 
     DialogRequest request = {0};
@@ -74,8 +101,8 @@ static int prepareDialogRequest(DialogKind kind, const char* defaultPath, const 
         }
     }
 
-    if (gDialogState.window) {
-        NFD_GetNativeWindowFromGLFWWindow(gDialogState.window, &request.parentWindow);
+    if (state && state->window) {
+        NFD_GetNativeWindowFromGLFWWindow(state->window, &request.parentWindow);
     }
 
     *outRequest = request;
@@ -91,7 +118,7 @@ static char* runDialogRequest(const DialogRequest* request) {
 
     switch (request->kind) {
         case DIALOG_KIND_IMPORT_MESH: {
-            nfdu8filteritem_t filters[] = {{"glTF 2.0", "glb,gltf"}};
+            nfdu8filteritem_t filters[] = {{"glTF mesh", "glb,gltf"}};
             nfdopendialogu8args_t args = {
                 .filterList = filters,
                 .filterCount = 1,
@@ -142,7 +169,8 @@ static char* runDialogRequest(const DialogRequest* request) {
 }
 
 static int dialogWorkerMain(void* userData) {
-    (void)userData;
+    DialogState* state = (DialogState*)userData;
+    if (!state) return 0;
 
     nfdresult_t initResult = NFD_Init();
     if (initResult == NFD_OKAY) {
@@ -151,11 +179,11 @@ static int dialogWorkerMain(void* userData) {
         }
     }
 
-    vkrtMutexLock(&gDialogState.mutex);
-    gDialogState.workerAvailable = initResult == NFD_OKAY ? 1u : 0u;
-    gDialogState.workerStartupComplete = 1u;
-    vkrtCondBroadcast(&gDialogState.condition);
-    vkrtMutexUnlock(&gDialogState.mutex);
+    vkrtMutexLock(&state->mutex);
+    state->workerAvailable = initResult == NFD_OKAY ? 1u : 0u;
+    state->workerStartupComplete = 1u;
+    vkrtCondBroadcast(&state->condition);
+    vkrtMutexUnlock(&state->mutex);
 
     if (initResult != NFD_OKAY) {
         const char* errorMessage = NFD_GetError();
@@ -167,112 +195,129 @@ static int dialogWorkerMain(void* userData) {
     for (;;) {
         DialogRequest request = {0};
 
-        vkrtMutexLock(&gDialogState.mutex);
-        while (gDialogState.running && !gDialogState.requestPending) {
-            vkrtCondWait(&gDialogState.condition, &gDialogState.mutex);
+        vkrtMutexLock(&state->mutex);
+        while (state->running && !state->requestPending) {
+            vkrtCondWait(&state->condition, &state->mutex);
         }
 
-        if (!gDialogState.running) {
-            vkrtMutexUnlock(&gDialogState.mutex);
+        if (!state->running) {
+            vkrtMutexUnlock(&state->mutex);
             break;
         }
 
-        request = gDialogState.request;
-        gDialogState.requestPending = 0u;
-        gDialogState.requestActive = 1u;
-        vkrtMutexUnlock(&gDialogState.mutex);
+        request = state->request;
+        state->requestPending = 0u;
+        state->requestActive = 1u;
+        vkrtMutexUnlock(&state->mutex);
 
         char* selectedPath = runDialogRequest(&request);
 
-        vkrtMutexLock(&gDialogState.mutex);
-        gDialogState.responseKind = request.kind;
-        gDialogState.responsePath = selectedPath;
-        gDialogState.responsePending = 1u;
-        gDialogState.requestActive = 0u;
-        vkrtCondBroadcast(&gDialogState.condition);
-        vkrtMutexUnlock(&gDialogState.mutex);
+        vkrtMutexLock(&state->mutex);
+        state->responseKind = request.kind;
+        state->responsePath = selectedPath;
+        state->responsePending = 1u;
+        state->requestActive = 0u;
+        vkrtCondBroadcast(&state->condition);
+        vkrtMutexUnlock(&state->mutex);
     }
 
     NFD_Quit();
     return 0;
 }
 
-static void shutdownDialogWorker(void) {
-    if (!gDialogState.workerStarted) return;
+static void shutdownDialogWorker(DialogState* state) {
+    if (!state || !state->workerStarted) return;
 
-    vkrtMutexLock(&gDialogState.mutex);
-    gDialogState.running = 0u;
-    vkrtCondBroadcast(&gDialogState.condition);
-    vkrtMutexUnlock(&gDialogState.mutex);
+    vkrtMutexLock(&state->mutex);
+    state->running = 0u;
+    vkrtCondBroadcast(&state->condition);
+    vkrtMutexUnlock(&state->mutex);
 
-    vkrtThreadJoin(gDialogState.worker, NULL);
-    gDialogState.workerStarted = 0u;
-    gDialogState.workerAvailable = 0u;
+    vkrtThreadJoin(state->worker, NULL);
+    state->workerStarted = 0u;
+    state->workerAvailable = 0u;
 }
 
-void editorUIInitializeDialogs(GLFWwindow* window) {
-    gDialogState.window = window;
+void editorUIInitializeDialogs(Session* session, GLFWwindow* window) {
+    if (!session || session->editor.dialogState) return;
 
-    int mutexResult = vkrtMutexInit(&gDialogState.mutex, VKRT_MUTEX_PLAIN);
-    int conditionResult = mutexResult == VKRT_THREAD_SUCCESS
-        ? vkrtCondInit(&gDialogState.condition)
-        : VKRT_THREAD_ERROR;
-    if (mutexResult != VKRT_THREAD_SUCCESS || conditionResult != VKRT_THREAD_SUCCESS) {
-        if (mutexResult == VKRT_THREAD_SUCCESS) {
-            vkrtMutexDestroy(&gDialogState.mutex);
-        }
-        gDialogState.mainThreadAvailable = NFD_Init() == NFD_OKAY ? 1u : 0u;
-        if (gDialogState.mainThreadAvailable) {
-            NFD_SetDisplayPropertiesFromGLFW();
-        }
+    DialogState* state = (DialogState*)calloc(1, sizeof(*state));
+    if (!state) {
+        LOG_ERROR("Failed to allocate dialog state");
         return;
     }
 
-    gDialogState.syncPrimitivesInitialized = 1u;
-    gDialogState.running = 1u;
-    if (vkrtThreadCreate(&gDialogState.worker, dialogWorkerMain, NULL) == VKRT_THREAD_SUCCESS) {
-        gDialogState.workerStarted = 1u;
-        vkrtMutexLock(&gDialogState.mutex);
-        while (!gDialogState.workerStartupComplete) {
-            vkrtCondWait(&gDialogState.condition, &gDialogState.mutex);
+    state->window = window;
+
+    int mutexResult = vkrtMutexInit(&state->mutex, VKRT_MUTEX_PLAIN);
+    int conditionResult = mutexResult == VKRT_THREAD_SUCCESS
+        ? vkrtCondInit(&state->condition)
+        : VKRT_THREAD_ERROR;
+    if (mutexResult != VKRT_THREAD_SUCCESS || conditionResult != VKRT_THREAD_SUCCESS) {
+        if (mutexResult == VKRT_THREAD_SUCCESS) {
+            vkrtMutexDestroy(&state->mutex);
         }
-        uint8_t workerAvailable = gDialogState.workerAvailable;
-        vkrtMutexUnlock(&gDialogState.mutex);
+        state->mainThreadAvailable = NFD_Init() == NFD_OKAY ? 1u : 0u;
+        if (state->mainThreadAvailable) {
+            NFD_SetDisplayPropertiesFromGLFW();
+        }
+        session->editor.dialogState = state;
+        return;
+    }
+
+    state->syncPrimitivesInitialized = 1u;
+    state->running = 1u;
+    if (vkrtThreadCreate(&state->worker, dialogWorkerMain, state) == VKRT_THREAD_SUCCESS) {
+        state->workerStarted = 1u;
+        vkrtMutexLock(&state->mutex);
+        while (!state->workerStartupComplete) {
+            vkrtCondWait(&state->condition, &state->mutex);
+        }
+        uint8_t workerAvailable = state->workerAvailable;
+        vkrtMutexUnlock(&state->mutex);
+
+        session->editor.dialogState = state;
 
         if (workerAvailable) {
             return;
         }
 
-        shutdownDialogWorker();
+        shutdownDialogWorker(state);
     }
 
-    gDialogState.mainThreadAvailable = NFD_Init() == NFD_OKAY ? 1u : 0u;
-    if (gDialogState.mainThreadAvailable) {
+    state->mainThreadAvailable = NFD_Init() == NFD_OKAY ? 1u : 0u;
+    if (state->mainThreadAvailable) {
         NFD_SetDisplayPropertiesFromGLFW();
     } else {
         LOG_ERROR("Failed to initialize file dialogs on the main thread");
     }
+
+    session->editor.dialogState = state;
 }
 
-void editorUIShutdownDialogs(void) {
-    shutdownDialogWorker();
+void editorUIShutdownDialogs(Session* session) {
+    DialogState* state = getDialogState(session);
+    if (!state) return;
 
-    if (gDialogState.mainThreadAvailable) {
+    shutdownDialogWorker(state);
+
+    if (state->mainThreadAvailable) {
         NFD_Quit();
-        gDialogState.mainThreadAvailable = 0u;
+        state->mainThreadAvailable = 0u;
     }
 
-    if (gDialogState.responsePath) {
-        free(gDialogState.responsePath);
-        gDialogState.responsePath = NULL;
+    if (state->responsePath) {
+        free(state->responsePath);
+        state->responsePath = NULL;
     }
 
-    if (gDialogState.syncPrimitivesInitialized) {
-        vkrtCondDestroy(&gDialogState.condition);
-        vkrtMutexDestroy(&gDialogState.mutex);
+    if (state->syncPrimitivesInitialized) {
+        vkrtCondDestroy(&state->condition);
+        vkrtMutexDestroy(&state->mutex);
     }
 
-    memset(&gDialogState, 0, sizeof(gDialogState));
+    free(state);
+    session->editor.dialogState = NULL;
 }
 
 static void applyDialogResponse(Session* session, DialogKind kind, char* selectedPath) {
@@ -301,97 +346,120 @@ static void applyDialogResponse(Session* session, DialogKind kind, char* selecte
 }
 
 static void drainDialogResponse(Session* session) {
-    if (!gDialogState.workerStarted) return;
+    DialogState* state = getDialogState(session);
+    if (!state || !state->workerStarted) return;
 
-    vkrtMutexLock(&gDialogState.mutex);
-    if (!gDialogState.responsePending) {
-        vkrtMutexUnlock(&gDialogState.mutex);
+    vkrtMutexLock(&state->mutex);
+    if (!state->responsePending) {
+        vkrtMutexUnlock(&state->mutex);
         return;
     }
 
-    DialogKind kind = gDialogState.responseKind;
-    char* selectedPath = gDialogState.responsePath;
-    gDialogState.responseKind = DIALOG_KIND_NONE;
-    gDialogState.responsePath = NULL;
-    gDialogState.responsePending = 0u;
-    vkrtMutexUnlock(&gDialogState.mutex);
+    DialogKind kind = state->responseKind;
+    char* selectedPath = state->responsePath;
+    state->responseKind = DIALOG_KIND_NONE;
+    state->responsePath = NULL;
+    state->responsePending = 0u;
+    vkrtMutexUnlock(&state->mutex);
 
     applyDialogResponse(session, kind, selectedPath);
 }
 
-static int queueDialogRequest(const DialogRequest* request) {
-    if (!request || !gDialogState.workerStarted) return 0;
+static int queueDialogRequest(DialogState* state, const DialogRequest* request) {
+    if (!state || !request || !state->workerStarted) return 0;
 
-    vkrtMutexLock(&gDialogState.mutex);
-    if (!gDialogState.workerAvailable ||
-        gDialogState.requestPending ||
-        gDialogState.requestActive ||
-        gDialogState.responsePending) {
-        vkrtMutexUnlock(&gDialogState.mutex);
+    vkrtMutexLock(&state->mutex);
+    if (!state->workerAvailable ||
+        state->requestPending ||
+        state->requestActive ||
+        state->responsePending) {
+        vkrtMutexUnlock(&state->mutex);
         return 0;
     }
 
-    gDialogState.request = *request;
-    gDialogState.requestPending = 1u;
-    vkrtCondSignal(&gDialogState.condition);
-    vkrtMutexUnlock(&gDialogState.mutex);
+    state->request = *request;
+    state->requestPending = 1u;
+    vkrtCondSignal(&state->condition);
+    vkrtMutexUnlock(&state->mutex);
     return 1;
 }
 
-static void executeDialogSynchronously(Session* session, const DialogRequest* request) {
-    if (!gDialogState.mainThreadAvailable || !request) return;
+static void executeDialogSynchronously(DialogState* state, Session* session, const DialogRequest* request) {
+    if (!state || !request) return;
+    if (!state->mainThreadAvailable) {
+        LOG_ERROR("File dialog backend unavailable for %s request", queryDialogKindLabel(request->kind));
+        return;
+    }
     char* selectedPath = runDialogRequest(request);
     applyDialogResponse(session, request->kind, selectedPath);
 }
 
 static int tryScheduleImportMeshDialog(Session* session) {
     if (!sessionTakeMeshImportDialogRequest(session)) return 0;
+    DialogState* state = getDialogState(session);
+    if (!state) return 1;
 
     char defaultPath[VKRT_PATH_MAX];
     defaultPath[0] = '\0';
     resolveExistingParentPath("assets/models", NULL, defaultPath, sizeof(defaultPath));
 
     DialogRequest request = {0};
-    if (!prepareDialogRequest(DIALOG_KIND_IMPORT_MESH, defaultPath, NULL, &request)) {
+    if (!prepareDialogRequest(state, DIALOG_KIND_IMPORT_MESH, defaultPath, NULL, &request)) {
         return 1;
     }
 
-    if (queueDialogRequest(&request)) return 1;
-    executeDialogSynchronously(session, &request);
+    if (queueDialogRequest(state, &request)) return 1;
+    if (!dialogBackendAvailable(state)) {
+        LOG_ERROR("File dialog backend unavailable for %s request", queryDialogKindLabel(request.kind));
+        return 1;
+    }
+    executeDialogSynchronously(state, session, &request);
     return 1;
 }
 
 static int tryScheduleRenderSaveDialog(Session* session) {
     if (!sessionTakeRenderSaveDialogRequest(session)) return 0;
+    DialogState* state = getDialogState(session);
+    if (!state) return 1;
 
     char defaultPath[VKRT_PATH_MAX];
     defaultPath[0] = '\0';
     resolveExistingParentPath("captures", NULL, defaultPath, sizeof(defaultPath));
 
     DialogRequest request = {0};
-    if (!prepareDialogRequest(DIALOG_KIND_SAVE_RENDER, defaultPath, "render.png", &request)) {
+    if (!prepareDialogRequest(state, DIALOG_KIND_SAVE_RENDER, defaultPath, "render.png", &request)) {
         return 1;
     }
 
-    if (queueDialogRequest(&request)) return 1;
-    executeDialogSynchronously(session, &request);
+    if (queueDialogRequest(state, &request)) return 1;
+    if (!dialogBackendAvailable(state)) {
+        LOG_ERROR("File dialog backend unavailable for %s request", queryDialogKindLabel(request.kind));
+        return 1;
+    }
+    executeDialogSynchronously(state, session, &request);
     return 1;
 }
 
 static int tryScheduleSequenceFolderDialog(Session* session) {
     if (!sessionTakeRenderSequenceFolderDialogRequest(session)) return 0;
+    DialogState* state = getDialogState(session);
+    if (!state) return 1;
 
     char defaultPath[VKRT_PATH_MAX];
     defaultPath[0] = '\0';
     resolveExistingParentPath(sessionGetRenderSequenceFolder(session), "captures", defaultPath, sizeof(defaultPath));
 
     DialogRequest request = {0};
-    if (!prepareDialogRequest(DIALOG_KIND_PICK_SEQUENCE_FOLDER, defaultPath, NULL, &request)) {
+    if (!prepareDialogRequest(state, DIALOG_KIND_PICK_SEQUENCE_FOLDER, defaultPath, NULL, &request)) {
         return 1;
     }
 
-    if (queueDialogRequest(&request)) return 1;
-    executeDialogSynchronously(session, &request);
+    if (queueDialogRequest(state, &request)) return 1;
+    if (!dialogBackendAvailable(state)) {
+        LOG_ERROR("File dialog backend unavailable for %s request", queryDialogKindLabel(request.kind));
+        return 1;
+    }
+    executeDialogSynchronously(state, session, &request);
     return 1;
 }
 
@@ -400,10 +468,11 @@ void editorUIProcessDialogs(Session* session) {
 
     drainDialogResponse(session);
 
-    if (gDialogState.workerStarted) {
-        vkrtMutexLock(&gDialogState.mutex);
-        uint8_t workerBusy = gDialogState.requestPending || gDialogState.requestActive || gDialogState.responsePending;
-        vkrtMutexUnlock(&gDialogState.mutex);
+    DialogState* state = getDialogState(session);
+    if (state && state->workerStarted) {
+        vkrtMutexLock(&state->mutex);
+        uint8_t workerBusy = state->requestPending || state->requestActive || state->responsePending;
+        vkrtMutexUnlock(&state->mutex);
         if (workerBusy) return;
     }
 

@@ -16,6 +16,8 @@
 #include <float.h>
 #include <math.h>
 #include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
 
 static const float kEditorBaseTextSizePx = 15.5f;
 static const float kEditorBaseIconSizePx = 11.0f;
@@ -27,9 +29,20 @@ static const float kWorkspaceHostBorderOverlapPx = 1.0f;
 static const float kMinimumViewportExtentPx = 1.0f;
 static const uint32_t kViewportRectSnapTolerancePx = 1u;
 
-static float gEditorUIScale = 0.0f;
-static GLFWwindow* gEditorWindow = NULL;
-static bool gEditorFrameReady = false;
+typedef struct EditorUIState {
+    float uiScale;
+    GLFWwindow* window;
+    bool frameReady;
+    bool dockLayoutInitialized;
+    bool glfwBackendInitialized;
+    bool vulkanBackendInitialized;
+    VKRT_OverlayInfo overlay;
+} EditorUIState;
+
+static EditorUIState* getEditorUIState(Session* session) {
+    if (!session) return NULL;
+    return session->editor.uiState;
+}
 
 static uint32_t absDiffU32(uint32_t a, uint32_t b) {
     return (a > b) ? (a - b) : (b - a);
@@ -58,7 +71,143 @@ static float queryEditorContentScale(GLFWwindow* window) {
     return vkrtFiniteClampf(scale, 1.0f, FLT_MIN, INFINITY);
 }
 
+static bool overlayInfoMatches(const VKRT_OverlayInfo* a, const VKRT_OverlayInfo* b) {
+    if (!a || !b) return false;
+
+    return a->window == b->window &&
+        a->instance == b->instance &&
+        a->physicalDevice == b->physicalDevice &&
+        a->device == b->device &&
+        a->graphicsQueueFamily == b->graphicsQueueFamily &&
+        a->graphicsQueue == b->graphicsQueue &&
+        a->descriptorPool == b->descriptorPool &&
+        a->renderPass == b->renderPass &&
+        a->swapchainImageCount == b->swapchainImageCount &&
+        a->swapchainMinImageCount == b->swapchainMinImageCount;
+}
+
+static void populateVulkanInitInfo(const VKRT_OverlayInfo* overlay, ImGui_ImplVulkan_InitInfo* outInitInfo) {
+    if (!overlay || !outInitInfo) return;
+
+    *outInitInfo = (ImGui_ImplVulkan_InitInfo){
+        .Instance = overlay->instance,
+        .PhysicalDevice = overlay->physicalDevice,
+        .Device = overlay->device,
+        .QueueFamily = overlay->graphicsQueueFamily,
+        .Queue = overlay->graphicsQueue,
+        .PipelineCache = VK_NULL_HANDLE,
+        .DescriptorPool = overlay->descriptorPool,
+        .Allocator = VK_NULL_HANDLE,
+        .MinImageCount = overlay->swapchainMinImageCount,
+        .ImageCount = overlay->swapchainImageCount,
+        .CheckVkResultFn = VK_NULL_HANDLE,
+        .RenderPass = overlay->renderPass,
+    };
+}
+
+static bool queryEditorOverlayInfo(VKRT* vkrt, VKRT_OverlayInfo* outOverlay) {
+    if (!vkrt || !outOverlay) return false;
+
+    VKRT_Result result = VKRT_getOverlayInfo(vkrt, outOverlay);
+    if (result != VKRT_SUCCESS) {
+        LOG_ERROR("Querying overlay info failed (%d)", (int)result);
+        return false;
+    }
+
+    return true;
+}
+
+static bool initializeEditorVulkanBackend(EditorUIState* state, const VKRT_OverlayInfo* overlay) {
+    if (!state || !overlay) return false;
+
+    ImGui_ImplVulkan_InitInfo initInfo = {0};
+    populateVulkanInitInfo(overlay, &initInfo);
+    if (!cImGui_ImplVulkan_Init(&initInfo)) {
+        return false;
+    }
+    if (!cImGui_ImplVulkan_CreateFontsTexture()) {
+        cImGui_ImplVulkan_Shutdown();
+        return false;
+    }
+
+    state->overlay = *overlay;
+    state->vulkanBackendInitialized = true;
+    return true;
+}
+
+static bool initializeEditorGlfwBackend(EditorUIState* state) {
+    if (!state || !state->window) return false;
+    if (state->glfwBackendInitialized) return true;
+
+    if (!cImGui_ImplGlfw_InitForVulkan(state->window, true)) {
+        return false;
+    }
+
+    state->glfwBackendInitialized = true;
+    return true;
+}
+
+static void shutdownEditorGlfwBackend(EditorUIState* state) {
+    if (!state || !state->glfwBackendInitialized) return;
+
+    cImGui_ImplGlfw_Shutdown();
+    state->glfwBackendInitialized = false;
+}
+
+static void shutdownEditorVulkanBackend(EditorUIState* state) {
+    if (!state || !state->vulkanBackendInitialized) return;
+
+    cImGui_ImplVulkan_Shutdown();
+    state->vulkanBackendInitialized = false;
+    memset(&state->overlay, 0, sizeof(state->overlay));
+}
+
+static bool refreshEditorOverlayBackend(EditorUIState* state, VKRT* vkrt) {
+    if (!state || !vkrt) return false;
+
+    VKRT_OverlayInfo overlay = {0};
+    if (!queryEditorOverlayInfo(vkrt, &overlay)) {
+        return false;
+    }
+
+    state->window = overlay.window;
+
+    if (!state->glfwBackendInitialized) {
+        if (!initializeEditorGlfwBackend(state)) {
+            LOG_ERROR("Initializing editor GLFW backend failed");
+            return false;
+        }
+    }
+
+    if (!state->vulkanBackendInitialized) {
+        if (!initializeEditorVulkanBackend(state, &overlay)) {
+            LOG_ERROR("Initializing editor Vulkan backend failed");
+            return false;
+        }
+        return true;
+    }
+
+    if (overlayInfoMatches(&state->overlay, &overlay)) {
+        return true;
+    }
+
+    shutdownEditorVulkanBackend(state);
+    shutdownEditorGlfwBackend(state);
+    if (!initializeEditorGlfwBackend(state)) {
+        LOG_ERROR("Refreshing editor GLFW backend failed");
+        return false;
+    }
+    if (!initializeEditorVulkanBackend(state, &overlay)) {
+        LOG_ERROR("Refreshing editor Vulkan backend failed");
+        return false;
+    }
+
+    return true;
+}
+
 static void rebuildEditorFonts(ImGuiIO* io, float uiScale) {
+    if (!io) return;
+
     ImFontAtlas_Clear(io->Fonts);
 
     ImFontConfig textConfig = makeDefaultFontConfig();
@@ -71,22 +220,28 @@ static void rebuildEditorFonts(ImGuiIO* io, float uiScale) {
     iconConfig.PixelSnapH = true;
     static const ImWchar iconRanges[] = {ICON_MIN_FA, ICON_MAX_FA, 0};
     ImFontAtlas_AddFontFromMemoryTTF(io->Fonts, (void*)fa_solid_900, fa_solid_900_len, kEditorBaseIconSizePx * uiScale, &iconConfig, iconRanges);
+
+    unsigned char* pixels = NULL;
+    int width = 0;
+    int height = 0;
+    ImFontAtlas_GetTexDataAsRGBA32(io->Fonts, &pixels, &width, &height, NULL);
 }
 
-static void applyEditorUIScale(float uiScale, bool refreshVulkanFonts) {
-    if (gEditorUIScale > 0.0f && fabsf(uiScale - gEditorUIScale) <= kEditorScaleEpsilon) return;
+static void applyEditorUIScale(EditorUIState* state, float uiScale, bool refreshVulkanFonts) {
+    if (!state) return;
+    if (state->uiScale > 0.0f && fabsf(uiScale - state->uiScale) <= kEditorScaleEpsilon) return;
 
     ImGuiIO* io = ImGui_GetIO();
     ImGuiStyle* style = ImGui_GetStyle();
-    if (gEditorUIScale <= 0.0f) {
+    if (state->uiScale <= 0.0f) {
         editorThemeApplyDefault();
         ImGuiStyle_ScaleAllSizes(style, uiScale);
     } else {
-        ImGuiStyle_ScaleAllSizes(style, uiScale / gEditorUIScale);
+        ImGuiStyle_ScaleAllSizes(style, uiScale / state->uiScale);
     }
 
     rebuildEditorFonts(io, uiScale);
-    gEditorUIScale = uiScale;
+    state->uiScale = uiScale;
 
     if (refreshVulkanFonts) {
         cImGui_ImplVulkan_CreateFontsTexture();
@@ -142,9 +297,8 @@ static void drawMainMenuBar(VKRT* vkrt, Session* session, const VKRT_RenderStatu
     ImGui_EndMainMenuBar();
 }
 
-static void initializeDockLayout(void) {
-    static bool isInitialized = false;
-    if (isInitialized) return;
+static void initializeDockLayout(EditorUIState* state) {
+    if (!state || state->dockLayoutInitialized) return;
 
     const ImGuiViewport* viewport = ImGui_GetMainViewport();
     ImVec2 dockspaceSize = viewport->Size;
@@ -154,7 +308,7 @@ static void initializeDockLayout(void) {
     ImGuiDockNode* existingDockNode = ImGui_DockBuilderGetNode(dockspaceID);
     if (existingDockNode &&
         (existingDockNode->ChildNodes[0] || existingDockNode->ChildNodes[1] || existingDockNode->Windows.Size > 0)) {
-        isInitialized = true;
+        state->dockLayoutInitialized = true;
         return;
     }
 
@@ -201,10 +355,10 @@ static void initializeDockLayout(void) {
     }
 
     ImGui_DockBuilderFinish(dockspaceID);
-    isInitialized = true;
+    state->dockLayoutInitialized = true;
 }
 
-static bool drawWorkspaceDockspace(void) {
+static bool drawWorkspaceDockspace(EditorUIState* state) {
     const ImGuiViewport* mainViewport = ImGui_GetMainViewport();
     ImVec2 dockspacePos = mainViewport->Pos;
     dockspacePos.y += queryTopMenuBarHeight() - kWorkspaceHostBorderOverlapPx;
@@ -228,7 +382,7 @@ static bool drawWorkspaceDockspace(void) {
 
     ImGuiID dockspaceID = ImGui_GetID("WorkspaceDockspace");
     ImGui_DockSpaceEx(dockspaceID, (ImVec2){0.0f, 0.0f}, ImGuiDockNodeFlags_None, NULL);
-    initializeDockLayout();
+    initializeDockLayout(state);
 
     ImGui_End();
     return true;
@@ -497,95 +651,101 @@ static void applyEditorCameraInput(
 }
 
 void editorUIInitialize(VKRT* vkrt, void* userData) {
-    (void)userData;
+    Session* session = (Session*)userData;
+    if (!session || session->editor.uiState) return;
+
+    EditorUIState* state = (EditorUIState*)calloc(1, sizeof(*state));
+    if (!state) {
+        LOG_ERROR("Failed to allocate editor UI state");
+        return;
+    }
+    session->editor.uiState = state;
 
     ImGui_CreateContext(NULL);
-    gEditorFrameReady = false;
+    state->frameReady = false;
 
     ImGuiIO* io = ImGui_GetIO();
     io->ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
     VKRT_OverlayInfo overlay = {0};
-    VKRT_Result result = VKRT_getOverlayInfo(vkrt, &overlay);
-    if (result != VKRT_SUCCESS) {
-        LOG_ERROR("Querying overlay info during editor initialization failed (%d)", (int)result);
+    if (!queryEditorOverlayInfo(vkrt, &overlay)) {
         ImGui_DestroyContext(NULL);
+        free(state);
+        session->editor.uiState = NULL;
         return;
     }
 
-    gEditorWindow = overlay.window;
-    editorUIInitializeDialogs(gEditorWindow);
-    float uiScale = queryEditorContentScale(gEditorWindow);
-    applyEditorUIScale(uiScale, false);
+    state->window = overlay.window;
+    editorUIInitializeDialogs(session, state->window);
+    float uiScale = queryEditorContentScale(state->window);
+    applyEditorUIScale(state, uiScale, false);
 
-    cImGui_ImplGlfw_InitForVulkan(overlay.window, true);
+    if (!initializeEditorGlfwBackend(state)) {
+        ImGui_DestroyContext(NULL);
+        editorUIShutdownDialogs(session);
+        free(state);
+        session->editor.uiState = NULL;
+        return;
+    }
 
-    ImGui_ImplVulkan_InitInfo initInfo = {
-        .Instance = overlay.instance,
-        .PhysicalDevice = overlay.physicalDevice,
-        .Device = overlay.device,
-        .QueueFamily = overlay.graphicsQueueFamily,
-        .Queue = overlay.graphicsQueue,
-        .PipelineCache = VK_NULL_HANDLE,
-        .DescriptorPool = overlay.descriptorPool,
-        .Allocator = VK_NULL_HANDLE,
-        .MinImageCount = overlay.swapchainMinImageCount,
-        .ImageCount = overlay.swapchainImageCount,
-        .CheckVkResultFn = VK_NULL_HANDLE,
-        .RenderPass = overlay.renderPass,
-    };
-
-    cImGui_ImplVulkan_Init(&initInfo);
-    cImGui_ImplVulkan_CreateFontsTexture();
+    if (!initializeEditorVulkanBackend(state, &overlay)) {
+        shutdownEditorGlfwBackend(state);
+        ImGui_DestroyContext(NULL);
+        editorUIShutdownDialogs(session);
+        free(state);
+        session->editor.uiState = NULL;
+        return;
+    }
 }
 
 void editorUIShutdown(VKRT* vkrt, void* userData) {
     (void)vkrt;
-    (void)userData;
+    Session* session = (Session*)userData;
+    EditorUIState* state = getEditorUIState(session);
+    if (!state) return;
 
     uint64_t shutdownStartTime = getMicroseconds();
 
     uint64_t vulkanShutdownStartTime = getMicroseconds();
-    cImGui_ImplVulkan_Shutdown();
+    shutdownEditorVulkanBackend(state);
     double vulkanShutdownMs = (double)(getMicroseconds() - vulkanShutdownStartTime) / 1e3;
 
     uint64_t glfwShutdownStartTime = getMicroseconds();
-    cImGui_ImplGlfw_Shutdown();
+    shutdownEditorGlfwBackend(state);
     double glfwShutdownMs = (double)(getMicroseconds() - glfwShutdownStartTime) / 1e3;
 
     LOG_TRACE("UI backends shut down. Vulkan: %.3f ms, GLFW: %.3f ms", vulkanShutdownMs, glfwShutdownMs);
     LOG_TRACE("Destroying UI context");
 
     ImGui_DestroyContext(NULL);
-    editorUIShutdownDialogs();
-    gEditorUIScale = 0.0f;
-    gEditorWindow = NULL;
+    editorUIShutdownDialogs(session);
 
     LOG_TRACE("UI shutdown complete in %.3f ms", (double)(getMicroseconds() - shutdownStartTime) / 1e3);
+
+    free(state);
+    session->editor.uiState = NULL;
 }
 
 void editorUIDraw(VKRT* vkrt, VkCommandBuffer commandBuffer, void* userData) {
     (void)vkrt;
-    (void)userData;
+    Session* session = (Session*)userData;
+    const EditorUIState* state = getEditorUIState(session);
 
     if (!ImGui_GetCurrentContext()) return;
-    if (!gEditorFrameReady) return;
+    if (!state || !state->frameReady || !state->glfwBackendInitialized || !state->vulkanBackendInitialized) return;
     cImGui_ImplVulkan_RenderDrawData(ImGui_GetDrawData(), commandBuffer);
 }
 
 void editorUIUpdate(VKRT* vkrt, Session* session) {
     if (!vkrt || !session) return;
     if (!ImGui_GetCurrentContext()) return;
+    EditorUIState* state = getEditorUIState(session);
+    if (!state) return;
+    state->frameReady = false;
 
-    if (!gEditorWindow) {
-        VKRT_OverlayInfo overlay = {0};
-        if (VKRT_getOverlayInfo(vkrt, &overlay) == VKRT_SUCCESS) {
-            gEditorWindow = overlay.window;
-        }
-    }
-    if (!gEditorWindow) return;
+    if (!refreshEditorOverlayBackend(state, vkrt) || !state->window || !state->glfwBackendInitialized) return;
 
-    applyEditorUIScale(queryEditorContentScale(gEditorWindow), true);
+    applyEditorUIScale(state, queryEditorContentScale(state->window), true);
 
     cImGui_ImplGlfw_NewFrame();
     cImGui_ImplVulkan_NewFrame();
@@ -600,7 +760,7 @@ void editorUIUpdate(VKRT* vkrt, Session* session) {
     queueSelectedMeshRemovalOnDelete(vkrt, session, hasStatus ? &status : NULL);
 
     drawMainMenuBar(vkrt, session, hasStatus ? &status : NULL);
-    drawWorkspaceDockspace();
+    drawWorkspaceDockspace(state);
 
     bool viewportHovered = false;
     if (hasStatus && hasRuntime) {
@@ -611,5 +771,5 @@ void editorUIUpdate(VKRT* vkrt, Session* session) {
     }
 
     ImGui_Render();
-    gEditorFrameReady = true;
+    state->frameReady = true;
 }

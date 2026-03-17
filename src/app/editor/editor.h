@@ -1,6 +1,7 @@
 #pragma once
 
 #include "vkrt.h"
+#include "vkrt_overlay.h"
 #include "session.h"
 
 void editorUIInitialize(VKRT* vkrt, void* userData);

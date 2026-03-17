@@ -1,6 +1,8 @@
 #pragma once
 
-#include "vkrt.h"
+#include "vkrt_overlay.h"
 
-void editorUIInitializeDialogs(GLFWwindow* window);
-void editorUIShutdownDialogs(void);
+typedef struct Session Session;
+
+void editorUIInitializeDialogs(Session* session, GLFWwindow* window);
+void editorUIShutdownDialogs(Session* session);

@@ -23,6 +23,8 @@ enum { SESSION_SCENE_TIMELINE_KEYFRAME_CAPACITY = VKRT_SCENE_TIMELINE_MAX_KEYFRA
 
 typedef VKRT_SceneTimelineKeyframe SessionSceneTimelineKeyframe;
 typedef VKRT_SceneTimelineSettings SessionSceneTimelineSettings;
+typedef struct EditorUIState EditorUIState;
+typedef struct DialogState DialogState;
 
 typedef struct SessionRenderAnimationSettings {
     uint8_t enabled;
@@ -74,6 +76,8 @@ typedef struct SessionRenderTimer {
 typedef struct SessionEditorState {
     uint32_t propertiesPanelIndex;
     char* renderSequenceFolderPath;
+    EditorUIState* uiState;
+    DialogState* dialogState;
     uint8_t requestMeshImportDialog;
     uint8_t requestRenderSaveDialog;
     uint8_t requestRenderSequenceFolderDialog;
