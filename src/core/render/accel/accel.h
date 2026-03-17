@@ -15,4 +15,5 @@ VKRT_Result createBottomLevelAccelerationStructureForGeometry(
 VKRT_Result prepareBottomLevelAccelerationStructureBuilds(VKRT* vkrt);
 VKRT_Result recordBottomLevelAccelerationStructureBuilds(VKRT* vkrt, VkCommandBuffer commandBuffer);
 VKRT_Result createTopLevelAccelerationStructures(VKRT* vkrt);
+VKRT_Result createSelectionTopLevelAccelerationStructure(VKRT* vkrt);
 VKRT_Result recordTopLevelAccelerationStructureBuilds(VKRT* vkrt, VkCommandBuffer commandBuffer);

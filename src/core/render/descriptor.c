@@ -374,23 +374,47 @@ VKRT_Result createDescriptorSetLayout(VKRT* vkrt) {
 VKRT_Result createDescriptorPool(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
 
-    VkDescriptorPoolSize poolSizes[] = {
+    static const VkDescriptorPoolSize rendererPoolSizes[] = {
         {VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 2u * VKRT_MAX_FRAMES_IN_FLIGHT},
         {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 4u * VKRT_MAX_FRAMES_IN_FLIGHT},
         {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 11u * VKRT_MAX_FRAMES_IN_FLIGHT},
         {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VKRT_MAX_FRAMES_IN_FLIGHT},
         {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4u},
     };
+    static const VkDescriptorPoolSize overlayPoolSizes[] = {
+        {VK_DESCRIPTOR_TYPE_SAMPLER, 128u},
+        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 128u},
+        {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 128u},
+        {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 128u},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 32u},
+        {VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 32u},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 128u},
+        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 128u},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 32u},
+        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 32u},
+        {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 32u},
+    };
 
     VkDescriptorPoolCreateInfo createInfo = {0};
     createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    createInfo.poolSizeCount = VKRT_ARRAY_COUNT(poolSizes);
-    createInfo.pPoolSizes = poolSizes;
+    createInfo.poolSizeCount = VKRT_ARRAY_COUNT(rendererPoolSizes);
+    createInfo.pPoolSizes = rendererPoolSizes;
     createInfo.maxSets = VKRT_MAX_FRAMES_IN_FLIGHT + 4u;
     createInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
 
     if (vkCreateDescriptorPool(vkrt->core.device, &createInfo, NULL, &vkrt->core.descriptorPool) != VK_SUCCESS) {
         LOG_ERROR("Failed to create descriptor pool");
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+
+    createInfo.poolSizeCount = VKRT_ARRAY_COUNT(overlayPoolSizes);
+    createInfo.pPoolSizes = overlayPoolSizes;
+    createInfo.maxSets = 512u;
+
+    if (vkCreateDescriptorPool(vkrt->core.device, &createInfo, NULL, &vkrt->core.overlayDescriptorPool) != VK_SUCCESS) {
+        LOG_ERROR("Failed to create overlay descriptor pool");
+        vkDestroyDescriptorPool(vkrt->core.device, vkrt->core.descriptorPool, NULL);
+        vkrt->core.descriptorPool = VK_NULL_HANDLE;
         return VKRT_ERROR_OPERATION_FAILED;
     }
     return VKRT_SUCCESS;

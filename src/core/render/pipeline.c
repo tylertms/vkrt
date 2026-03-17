@@ -18,7 +18,7 @@ static VKRT_Result createRayTracingPipelineLayout(VKRT* vkrt) {
 
     if (vkCreatePipelineLayout(vkrt->core.device, &pipelineLayoutInfo, NULL, &vkrt->core.pipelineLayout) != VK_SUCCESS) {
         LOG_ERROR("Failed to create pipeline layout");
-        return VKRT_ERROR_OPERATION_FAILED;
+        return VKRT_ERROR_PIPELINE_CREATION_FAILED;
     }
     return VKRT_SUCCESS;
 }
@@ -51,7 +51,7 @@ VKRT_Result createRayTracingPipeline(VKRT* vkrt) {
         if (closestHitModule != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, closestHitModule, NULL);
         if (missModule != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, missModule, NULL);
         if (shadowMissModule != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, shadowMissModule, NULL);
-        return VKRT_ERROR_OPERATION_FAILED;
+        return VKRT_ERROR_SHADER_COMPILATION_FAILED;
     }
 
     LOG_INFO(
@@ -350,8 +350,9 @@ VKRT_Result createShaderModule(VKRT* vkrt, const char* spirv, size_t length, VkS
     return VKRT_SUCCESS;
 }
 
-VKRT_Result createRenderPass(VKRT* vkrt) {
-    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+VKRT_Result createRenderPass(VKRT* vkrt, VkRenderPass* outRenderPass) {
+    if (!vkrt || !outRenderPass) return VKRT_ERROR_INVALID_ARGUMENT;
+
     VkAttachmentDescription colorAttachment = {0};
     colorAttachment.format = vkrt->runtime.swapChainImageFormat;
     colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -388,9 +389,12 @@ VKRT_Result createRenderPass(VKRT* vkrt) {
     renderPassCreateInfo.dependencyCount = 1;
     renderPassCreateInfo.pDependencies = &dependency;
 
-    if (vkCreateRenderPass(vkrt->core.device, &renderPassCreateInfo, NULL, &vkrt->runtime.renderPass) != VK_SUCCESS) {
+    VkRenderPass renderPass = VK_NULL_HANDLE;
+    if (vkCreateRenderPass(vkrt->core.device, &renderPassCreateInfo, NULL, &renderPass) != VK_SUCCESS) {
         LOG_ERROR("Failed to create UI render pass");
         return VKRT_ERROR_OPERATION_FAILED;
     }
+
+    *outRenderPass = renderPass;
     return VKRT_SUCCESS;
 }

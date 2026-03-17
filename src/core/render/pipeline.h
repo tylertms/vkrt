@@ -9,4 +9,4 @@ VKRT_Result createComputePipeline(VKRT* vkrt);
 #endif
 VKRT_Result createSyncObjects(VKRT* vkrt);
 VKRT_Result createShaderModule(VKRT* vkrt, const char* spirv, size_t length, VkShaderModule* outShaderModule);
-VKRT_Result createRenderPass(VKRT* vkrt);
+VKRT_Result createRenderPass(VKRT* vkrt, VkRenderPass* outRenderPass);
