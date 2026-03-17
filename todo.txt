@@ -1,0 +1,15 @@
+- materials should be separate from objects
+- equirectangular environment mapping
+- sheen roughness/tint energy conservation is wrong, seems to make objects glow
+- glass still doesn't look right
+- shader execution reordering, look at hints and shadow/selection rays still
+- texture mapping to objects and full gltf loading
+- scene load/save
+- get rid of windows menu bar and make custom one
+- add license and proper readme
+- animation system doesn't work right now
+- improve scaling/spacing, make it look a little nicer, especially left pane
+- in display two units, the second unit can only be the second largest one below the first, so 7m 0s not 7m 503ms
+- direct light NEE + MIS could be underperforming still, check nsight profiler
+- light speckles still, not as bad, check pbr book
+- hero wavelength or some other method of adding wavelength-dependent refraction

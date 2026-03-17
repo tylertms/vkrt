@@ -6,8 +6,5 @@ captures/
 /subprojects/*
 !/subprojects/*.wrap
 
-bench.txt
-todo.txt
-
 .vscode/
 .cache/
