@@ -27,6 +27,10 @@ static inline void logStepTime(const char* stepName, uint64_t startTime) {
     LOG_TRACE("%s in %.3f ms", stepName, (double)(getMicroseconds() - startTime) / 1e3);
 }
 
+static inline uint32_t defaultWindowExtentFromDisplay(uint32_t displayExtent) {
+    return displayExtent > 1u ? (uint32_t)(((uint64_t)displayExtent * 4u) / 5u) : 1u;
+}
+
 static uint32_t g_glfwInitRefCount = 0u;
 
 static VKRT_Result acquireGLFW(void) {
@@ -307,8 +311,8 @@ VKRT_Result VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInf
 
     uint32_t width = createInfo->startFullscreen ? displayWidth : createInfo->width;
     uint32_t height = createInfo->startFullscreen ? displayHeight : createInfo->height;
-    if (width == 0) width = createInfo->startMaximized ? displayWidth : (displayWidth > 1u ? displayWidth * 0.8 : 1u);
-    if (height == 0) height = createInfo->startMaximized ? displayHeight : (displayHeight > 1u ? displayHeight * 0.8 : 1u);
+    if (width == 0) width = createInfo->startMaximized ? displayWidth : defaultWindowExtentFromDisplay(displayWidth);
+    if (height == 0) height = createInfo->startMaximized ? displayHeight : defaultWindowExtentFromDisplay(displayHeight);
     if (width == 0) width = VKRT_DEFAULT_WIDTH;
     if (height == 0) height = VKRT_DEFAULT_HEIGHT;
     if (vkrt->runtime.headless) {

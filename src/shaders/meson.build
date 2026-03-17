@@ -36,8 +36,8 @@ foreach shader_program : shader_programs
   endif
 
   if 'ser' in shader_features
-    shader_capabilities += ['-capability', 'spvShaderInvocationReorderNV']
-    shader_extra_args += ['-DVKRT_SER_ENABLED']
+    shader_capabilities += ['-capability', 'spvShaderInvocationReorderEXT']
+    shader_extra_args += ['-DVKRT_SER_ENABLED', '-warnings-disable', '41012']
   endif
 
   shader_target = custom_target(

@@ -19,8 +19,6 @@
 #define VKRT_MKDIR(path) mkdir(path, 0755)
 #endif
 
-static const float kRenderSequenceMinStep = 0.0001f;
-static const float kRenderSequenceDefaultStep = 0.05f;
 static const float kMicrosecondsPerSecond = 1000000.0f;
 static const uint32_t kMinimumFramesForEta = 2u;
 enum {

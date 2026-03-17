@@ -396,10 +396,12 @@ static bool drawViewportWindow(
     if (!vkrt || !status || !runtime) return false;
 
     ImGuiWindowClass viewportWindowClass = {0};
-    viewportWindowClass.DockNodeFlagsOverrideSet = ImGuiDockNodeFlags_NoTabBar |
-                                                   ImGuiDockNodeFlags_NoUndocking |
-                                                   ImGuiDockNodeFlags_NoWindowMenuButton |
-                                                   ImGuiDockNodeFlags_NoCloseButton;
+    viewportWindowClass.DockNodeFlagsOverrideSet = (ImGuiDockNodeFlags)(
+        ImGuiDockNodeFlags_NoTabBar |
+        ImGuiDockNodeFlags_NoUndocking |
+        ImGuiDockNodeFlags_NoWindowMenuButton |
+        ImGuiDockNodeFlags_NoCloseButton
+    );
     ImGui_SetNextWindowClass(&viewportWindowClass);
 
     ImGui_PushStyleVarImVec2(ImGuiStyleVar_WindowPadding, (ImVec2){0.0f, 0.0f});

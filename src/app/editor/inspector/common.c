@@ -90,7 +90,7 @@ void formatByteSize(uint64_t bytes, char* out, size_t outSize) {
     if (!out || outSize == 0) return;
 
     static const char* symbols[] = {"B", "KB", "MB", "GB"};
-    double _bytes = bytes;
+    double _bytes = (double)bytes;
     int index;
 
     for (index = 0; index < 3; index++) {

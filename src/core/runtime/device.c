@@ -18,7 +18,7 @@ const char* requiredDeviceExtensions[NUM_REQ_EXTENSIONS] = {
 };
 
 const char* optionalDeviceExtensions[NUM_OPT_EXTENSIONS] = {
-    VK_NV_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME
+    VK_EXT_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME
 };
 
 const uint32_t requiredDeviceExtensionBits[NUM_REQ_EXTENSIONS] = {
@@ -440,8 +440,8 @@ VKRT_Result createLogicalDevice(VKRT* vkrt) {
     deviceRayTracingPipelineFeatures.rayTracingPipelineTraceRaysIndirect = VK_FALSE;
     deviceRayTracingPipelineFeatures.rayTraversalPrimitiveCulling = VK_FALSE;
 
-    VkPhysicalDeviceRayTracingInvocationReorderFeaturesNV supportedReorderFeatures = {0};
-    supportedReorderFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_FEATURES_NV;
+    VkPhysicalDeviceRayTracingInvocationReorderFeaturesEXT supportedReorderFeatures = {0};
+    supportedReorderFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_FEATURES_EXT;
     if (extensionSupport.availableMask & DEVICE_EXTENSION_RAY_TRACING_INVOCATION_REORDER_BIT) {
         VkPhysicalDeviceRayTracingPipelineFeaturesKHR supportedRayTracingPipelineFeatures = {0};
         supportedRayTracingPipelineFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
@@ -452,8 +452,8 @@ VKRT_Result createLogicalDevice(VKRT* vkrt) {
         supportedFeatures.pNext = &supportedRayTracingPipelineFeatures;
         vkGetPhysicalDeviceFeatures2(vkrt->core.physicalDevice, &supportedFeatures);
 
-        VkPhysicalDeviceRayTracingInvocationReorderPropertiesNV reorderProperties = {0};
-        reorderProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_PROPERTIES_NV;
+        VkPhysicalDeviceRayTracingInvocationReorderPropertiesEXT reorderProperties = {0};
+        reorderProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_PROPERTIES_EXT;
 
         VkPhysicalDeviceProperties2 supportedProperties = {0};
         supportedProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
@@ -464,8 +464,8 @@ VKRT_Result createLogicalDevice(VKRT* vkrt) {
         vkrt->core.serMaxShaderBindingTableRecordIndex = 0u;
     }
 
-    VkPhysicalDeviceRayTracingInvocationReorderFeaturesNV deviceReorderFeatures = {0};
-    deviceReorderFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_FEATURES_NV;
+    VkPhysicalDeviceRayTracingInvocationReorderFeaturesEXT deviceReorderFeatures = {0};
+    deviceReorderFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_FEATURES_EXT;
     deviceReorderFeatures.pNext = &deviceAccelerationStructureFeatures;
     deviceReorderFeatures.rayTracingInvocationReorder = VK_TRUE;
 
@@ -546,7 +546,7 @@ VKRT_Result createLogicalDevice(VKRT* vkrt) {
             (extensionSupport.availableMask & DEVICE_EXTENSION_RAY_TRACING_INVOCATION_REORDER_BIT)) {
         LOG_INFO(
             "    Optional extension %s was available but disabled by request",
-            VK_NV_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME
+            VK_EXT_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME
         );
     }
 
@@ -554,7 +554,7 @@ VKRT_Result createLogicalDevice(VKRT* vkrt) {
             !supportedReorderFeatures.rayTracingInvocationReorder) {
         LOG_INFO(
             "    Optional extension %s was loaded but its feature is unsupported, so it was not enabled",
-            VK_NV_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME
+            VK_EXT_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME
         );
     }
 

@@ -101,7 +101,12 @@ static FILE* fopen_exe_relative(const char* relpath, const char* mode) {
     size_t dirlen = strlen(buf);
     snprintf(buf + dirlen, sizeof buf - dirlen, "/%s", relpath);
 
+#if defined(_WIN32)
+    FILE* file = NULL;
+    return fopen_s(&file, buf, mode) == 0 ? file : NULL;
+#else
     return fopen(buf, mode);
+#endif
 }
 
 static int pathExists(const char* path) {
