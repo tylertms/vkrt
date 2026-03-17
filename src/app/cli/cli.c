@@ -30,6 +30,16 @@ static int optionMatches(const char* arg, const char* optionName) {
     return strncmp(arg, optionName, optionLength) == 0 && arg[optionLength] == '=';
 }
 
+static uint32_t queryVulkanRuntimeVersion(void) {
+    uint32_t version = VK_API_VERSION_1_0;
+    PFN_vkEnumerateInstanceVersion enumerateInstanceVersion =
+        (PFN_vkEnumerateInstanceVersion)vkGetInstanceProcAddr(VK_NULL_HANDLE, "vkEnumerateInstanceVersion");
+    if (enumerateInstanceVersion && enumerateInstanceVersion(&version) != VK_SUCCESS) {
+        version = VK_API_VERSION_1_0;
+    }
+    return version;
+}
+
 static const char* requireOptionValue(
     int argc,
     char* argv[],
@@ -262,12 +272,13 @@ void CLIPrintArgumentError(const char* error) {
 }
 
 void CLIPrintVersion(void) {
+    uint32_t runtimeVersion = queryVulkanRuntimeVersion();
     printf("vkrt %s\n", VKRT_VERSION);
     printf("  GLFW    %d.%d.%d\n", GLFW_VERSION_MAJOR, GLFW_VERSION_MINOR, GLFW_VERSION_REVISION);
     printf("  Vulkan  %d.%d.%d\n",
-        VK_API_VERSION_MAJOR(VK_HEADER_VERSION_COMPLETE),
-        VK_API_VERSION_MINOR(VK_HEADER_VERSION_COMPLETE),
-        VK_API_VERSION_PATCH(VK_HEADER_VERSION_COMPLETE)
+        VK_API_VERSION_MAJOR(runtimeVersion),
+        VK_API_VERSION_MINOR(runtimeVersion),
+        VK_API_VERSION_PATCH(runtimeVersion)
     );
     printf("  spng    %d.%d.%d\n", SPNG_VERSION_MAJOR, SPNG_VERSION_MINOR, SPNG_VERSION_PATCH);
 }
@@ -303,7 +314,7 @@ void CLIPrintHelp(void) {
     printf("  Right mouse drag           Pan render view\n");
     printf("  Scroll wheel               Zoom render view\n");
     printf("\nFile Formats:\n");
-    printf("  Import: glTF 2.0 (.glb, .gltf)\n");
+    printf("  Import: glTF mesh (.glb, .gltf; geometry + scalar material factors)\n");
     printf("  Export: PNG (.png)\n");
     printf("\nRequirements:\n");
     printf("  Vulkan 1.2+ with ray tracing pipeline support\n");

@@ -10,6 +10,7 @@
 #include <string.h>
 
 #if defined(_WIN32)
+#include <windows.h>
 #include <direct.h>
 #define VKRT_MKDIR(path) _mkdir(path)
 #else
@@ -71,10 +72,22 @@ static void completeSequenceWithPause(RenderSequencer* sequencer) {
     clearSequencerState(sequencer);
 }
 
+static int pathIsDirectory(const char* path) {
+    if (!path || !path[0]) return 0;
+#if defined(_WIN32)
+    DWORD attributes = GetFileAttributesA(path);
+    return attributes != INVALID_FILE_ATTRIBUTES &&
+           (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+#else
+    struct stat pathInfo = {0};
+    return stat(path, &pathInfo) == 0 && S_ISDIR(pathInfo.st_mode);
+#endif
+}
+
 static int createDirectoryIfMissing(const char* path) {
     if (!path || !path[0]) return -1;
     if (VKRT_MKDIR(path) == 0) return 0;
-    if (errno == EEXIST) return 0;
+    if (errno == EEXIST) return pathIsDirectory(path) ? 0 : -1;
     return -1;
 }
 

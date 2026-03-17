@@ -5,6 +5,7 @@
 #include "editor/editor.h"
 #include "controller.h"
 #include "vkrt.h"
+#include "vkrt_overlay.h"
 #include "debug.h"
 
 #include <stdlib.h>
@@ -46,10 +47,8 @@ int main(int argc, char* argv[]) {
 
     if (VKRT_initWithCreateInfo(vkrt, &launchOptions.createInfo) != VKRT_SUCCESS) {
         LOG_ERROR("Failed to initialize VKRT runtime");
-        VKRT_deinit(vkrt);
-        VKRT_destroy(vkrt);
-        sessionDeinit(&session);
-        return EXIT_FAILURE;
+        exitCode = EXIT_FAILURE;
+        goto cleanup;
     }
 
     if (launchOptions.loadDefaultScene) {
@@ -59,19 +58,14 @@ int main(int argc, char* argv[]) {
     if (launchOptions.startupImportPath) {
         if (!meshControllerImportMesh(vkrt, &session, launchOptions.startupImportPath, NULL, NULL)) {
             LOG_ERROR("Startup mesh import failed. Path: %s", launchOptions.startupImportPath);
-            VKRT_deinit(vkrt);
-            VKRT_destroy(vkrt);
-            sessionDeinit(&session);
-            return EXIT_FAILURE;
+            exitCode = EXIT_FAILURE;
+            goto cleanup;
         }
     }
 
     if (benchmarkMode) {
         exitCode = benchmarkRun(vkrt, &launchOptions.benchmark);
-        VKRT_deinit(vkrt);
-        VKRT_destroy(vkrt);
-        sessionDeinit(&session);
-        return exitCode;
+        goto cleanup;
     }
 
     while (!VKRT_shouldDeinit(vkrt)) {
@@ -99,7 +93,7 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    VKRT_deinit(vkrt);
+cleanup:
     VKRT_destroy(vkrt);
     sessionDeinit(&session);
     return exitCode;

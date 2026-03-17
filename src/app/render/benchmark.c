@@ -129,18 +129,19 @@ int benchmarkRun(VKRT* vkrt, const CLIBenchmarkOptions* options) {
         }
 
         uint64_t nowUs = getMicroseconds();
-        VkBool32 warmupSamplesReached = status.totalSamples >= state.warmupSamples;
-        VkBool32 warmupTimeReached = state.renderStartTimeUs > 0u &&
-                                     nowUs >= state.renderStartTimeUs &&
-                                     nowUs - state.renderStartTimeUs >= kBenchmarkWarmupTimeUs;
+        int warmupSamplesReached = status.totalSamples >= state.warmupSamples;
+        int warmupTimeReached = state.renderStartTimeUs > 0u &&
+                                nowUs >= state.renderStartTimeUs &&
+                                nowUs - state.renderStartTimeUs >= kBenchmarkWarmupTimeUs;
         if (!state.timingStarted && warmupSamplesReached && warmupTimeReached) {
             if (!lockBenchmarkSampling(vkrt, &state.lockedSamplesPerFrame)) {
                 LOG_ERROR("Failed to lock benchmark sampling");
                 return EXIT_FAILURE;
             }
             state.timingStarted = 1u;
-            state.measurementSamplesStart = status.totalSamples;
-            state.startTimeUs = nowUs;
+            state.measurementSamplesStart = 0u;
+            state.startTimeUs = getMicroseconds();
+            continue;
         }
 
         uint64_t measuredSamples = status.totalSamples;
