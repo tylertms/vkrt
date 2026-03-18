@@ -1,4 +1,3 @@
-- materials should be separate from objects
 - equirectangular environment mapping
 - shader execution reordering, look at hints and shadow/selection rays still
 - look at dispatch overhead with shadow rays, NEE/MNEE, perhaps we can limit invocation penalties
