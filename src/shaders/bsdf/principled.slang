@@ -149,15 +149,19 @@ BSDFEval evalReflectionStack(BSDFState state, float3 wi) {
     if (state.sampleWeights.sheen > 0.0) {
         sheen = evalSheen(state.sheenColor, state.material.sheenRoughness, state.wo, wi);
     }
+
     if (state.sampleWeights.coat > 0.0) {
         coat = evalClearcoat(state.material.clearcoat, state.wo, wi, state.clearcoat);
     }
+
     if (state.sampleWeights.metal > 0.0) {
         metal = evalGGX(state.material, state.wo, wi, state.ggx);
     }
+
     if (state.sampleWeights.dielectric > 0.0) {
         dielectric = evalDielectricReflection(state.material, state.wo, wi, state.frontFace, state.ggx);
     }
+
     if (state.sampleWeights.diffuse > 0.0) {
         float3 diffuseWeight = state.diffuseColor * ((1.0 - state.material.transmission) * (1.0 - state.material.subsurface));
         if (state.material.diffuseRoughness <= 0.0) {
@@ -166,6 +170,7 @@ BSDFEval evalReflectionStack(BSDFState state, float3 wi) {
             diffuse = evalOrenNayar(diffuseWeight, state.material.diffuseRoughness, state.wo, wi);
         }
     }
+
     if (state.sampleWeights.subsurface > 0.0) {
         subsurface = evalFakeSubsurface(
             state.subsurfaceColor * state.material.subsurface,
@@ -206,7 +211,6 @@ BSDFEval evalBSDF(BSDFState state, float3 wi) {
     if (cosTheta(wi) > 0.0) {
         return evalReflectionStack(state, wi);
     }
-
 
     BSDFEval transmission = evalDielectricTransmission(
         state.material,
