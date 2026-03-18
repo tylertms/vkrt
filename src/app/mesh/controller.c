@@ -2,6 +2,7 @@
 #include "loader.h"
 #include "debug.h"
 #include "vkrt.h"
+#include "vkrt_types.h"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -165,6 +166,7 @@ void meshControllerApplySessionActions(VKRT* vkrt, Session* session) {
     }
 }
 
+/*
 void meshControllerLoadDefaultAssets(VKRT* vkrt, Session* session) {
     const char* planePath = "assets/models/plane.glb";
     const char* spherePath = "assets/models/sphere.glb";
@@ -280,4 +282,80 @@ void meshControllerLoadDefaultAssets(VKRT* vkrt, Session* session) {
     vec3 cameraUp = {0.0f, 0.0f, 1.0f};
     VKRT_Result result = VKRT_cameraSetPose(vkrt, cameraPosition, cameraTarget, cameraUp, 26.9f);
     if (result != VKRT_SUCCESS) LOG_ERROR("Setting default camera pose failed (%d)", (int)result);
+}
+*/
+
+void meshControllerLoadDefaultAssets(VKRT* vkrt, Session* session) {
+    const char* planePath = "assets/models/plane.glb";
+    const char* spherePath = "assets/models/sphere.glb";
+    const char* suzannePath = "assets/models/suzanne.glb";
+
+    Material neutralWhite = VKRT_materialDefault();
+    neutralWhite.roughness = 1.0f;
+    neutralWhite.diffuseRoughness = 1.0f;
+
+    Material floorMaterial = neutralWhite;
+    floorMaterial.baseColor[0] = 1.00f;
+    floorMaterial.baseColor[1] = 0.37f;
+    floorMaterial.baseColor[2] = 0.00f;
+
+    Material lightMaterial = neutralWhite;
+    lightMaterial.baseColor[0] = 0.0f;
+    lightMaterial.baseColor[1] = 0.0f;
+    lightMaterial.baseColor[2] = 0.0f;
+    lightMaterial.emissionColor[0] = 1.0f;
+    lightMaterial.emissionColor[1] = 1.0f;
+    lightMaterial.emissionColor[2] = 1.0f;
+    lightMaterial.emissionLuminance = 2000.0f;
+
+    Material suzanneMaterial = neutralWhite;
+    suzanneMaterial.baseColor[0] = 1.0f;
+    suzanneMaterial.baseColor[1] = 1.0f;
+    suzanneMaterial.baseColor[2] = 1.0f;
+    suzanneMaterial.roughness = 0.0f;
+    suzanneMaterial.diffuseRoughness = 0.0f;
+    suzanneMaterial.transmission = 1.0f;
+
+
+    const DefaultMeshSpec defaultMeshes[] = {
+        {
+            .assetPath = planePath,
+            .importName = "floor",
+            .position = {0.0f, 0.0f, 1.0f},
+            .rotation = {0.0f, 0.0f, 90.0f},
+            .scale = {1000.0f, 1.0f, 1000.0f},
+            .material = floorMaterial,
+        },
+        {
+            .assetPath = spherePath,
+            .importName = "light",
+            .position = {1.95f, 4.30f, -1.4f},
+            .rotation = {90.0f, 0.0f, 90.0f},
+            .scale = {0.2f, 0.2f, 0.2f},
+            .material = lightMaterial,
+        },
+        {
+            .assetPath = suzannePath,
+            .importName = "suzanne",
+            .position = {0.0f, 0.01f, 0.5f},
+            .rotation = {35.75f, 180.0f, 109.95f},
+            .scale = {1.0f, 1.0f, 1.0f},
+            .material = suzanneMaterial,
+        }
+    };
+
+    for (size_t i = 0; i < sizeof(defaultMeshes) / sizeof(defaultMeshes[0]); i++) {
+        importDefaultMesh(vkrt, session, &defaultMeshes[i]);
+    }
+
+    vec3 cameraPosition = {-5.973f, 2.651f, -2.664f};
+    vec3 cameraTarget = {0.0f, -0.260f, 0.500f};
+    vec3 cameraUp = {0.0f, 0.0f, 1.0f};
+    VKRT_Result result = VKRT_cameraSetPose(vkrt, cameraPosition, cameraTarget, cameraUp, 26.9f);
+    if (result != VKRT_SUCCESS) LOG_ERROR("Setting default camera pose failed (%d)", (int)result);
+
+    vec3 environmentColor = {0.0f, 0.0f, 0.0f};
+    float environmentStrength = 0.0f;
+    result = VKRT_setEnvironmentLight(vkrt, environmentColor, environmentStrength);
+    if (result != VKRT_SUCCESS) LOG_ERROR("Setting default environment light failed (%d)", (int)result);
 }

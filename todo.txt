@@ -1,6 +1,7 @@
 - materials should be separate from objects
 - equirectangular environment mapping
 - shader execution reordering, look at hints and shadow/selection rays still
+- look at dispatch overhead with shadow rays, NEE/MNEE, perhaps we can limit invocation penalties
 - texture mapping to objects and full gltf loading
 - scene load/save
 - get rid of windows menu bar and make custom one
@@ -12,3 +13,6 @@
 - light speckles still, not as bad, check pbr book
 - hero wavelength or some other method of adding wavelength-dependent refraction
 - add denoiser, NRD maybe? doesn't need to be realtime
+- improve logging and debug modes
+- some settings maybe should be render-only like MNEE
+- organize src/shaders better, maybe more like blender cycles
