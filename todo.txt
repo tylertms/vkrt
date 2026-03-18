@@ -5,8 +5,10 @@
 - scene load/save
 - get rid of windows menu bar and make custom one
 - add license and proper readme
-- animation system doesn't work right now
+- light animation system doesn't work right now
+- real animation/keyframe system for more than lighting
 - improve scaling/spacing, make it look a little nicer, especially left pane
 - in display two units, the second unit can only be the second largest one below the first, so 7m 0s not 7m 503ms
 - light speckles still, not as bad, check pbr book
 - hero wavelength or some other method of adding wavelength-dependent refraction
+- add denoiser, NRD maybe? doesn't need to be realtime
