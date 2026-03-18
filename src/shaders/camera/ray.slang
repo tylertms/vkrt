@@ -1,7 +1,7 @@
 #ifndef VKRT_UTILITY_RAY_SLANG
 #define VKRT_UTILITY_RAY_SLANG
 
-#include "scene/resources.slang"
+#include "../scene/resources.slang"
 
 RayDesc makeRay(float3 origin, float3 direction, float tMin, float tMax) {
     RayDesc ray;

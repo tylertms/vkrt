@@ -1,7 +1,7 @@
 #ifndef VKRT_CORE_RESOURCES_SLANG
 #define VKRT_CORE_RESOURCES_SLANG
 
-#include "scene/constants.slang"
+#include "constants.slang"
 #include "../../shared/types.h"
 
 [[vk::binding(0, 0)]] RaytracingAccelerationStructure topLevelAS;

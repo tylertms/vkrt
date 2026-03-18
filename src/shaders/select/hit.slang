@@ -1,4 +1,4 @@
-#include "scene/resources.slang"
+#include "../scene/resources.slang"
 #include "payload.slang"
 
 [shader("closesthit")]

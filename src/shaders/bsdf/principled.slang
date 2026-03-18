@@ -1,14 +1,14 @@
 #ifndef VKRT_BSDF_MODEL_SLANG
 #define VKRT_BSDF_MODEL_SLANG
 
-#include "bsdf/base.slang"
-#include "bsdf/lobes/lambertian.slang"
-#include "bsdf/lobes/oren_nayar.slang"
-#include "bsdf/lobes/subsurface.slang"
-#include "bsdf/lobes/sheen.slang"
-#include "bsdf/lobes/ggx.slang"
-#include "bsdf/lobes/clearcoat.slang"
-#include "bsdf/lobes/dielectric.slang"
+#include "base.slang"
+#include "lobes/lambertian.slang"
+#include "lobes/oren_nayar.slang"
+#include "lobes/subsurface.slang"
+#include "lobes/sheen.slang"
+#include "lobes/ggx.slang"
+#include "lobes/clearcoat.slang"
+#include "lobes/dielectric.slang"
 
 // Layered Principled BSDF:
 // Sheen on top, then clearcoat, then the base dielectric/metal/substrate stack.

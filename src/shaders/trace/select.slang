@@ -1,8 +1,8 @@
 #ifndef VKRT_TRACE_SELECTION_SLANG
 #define VKRT_TRACE_SELECTION_SLANG
 
-#include "scene/resources.slang"
-#include "select/payload.slang"
+#include "../scene/resources.slang"
+#include "../select/payload.slang"
 
 void traceSelectionRay(inout SelectionPayload payload, RayDesc ray) {
     TraceRay(

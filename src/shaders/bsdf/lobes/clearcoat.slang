@@ -1,7 +1,7 @@
 #ifndef VKRT_BSDF_CLEARCOAT_SLANG
 #define VKRT_BSDF_CLEARCOAT_SLANG
 
-#include "bsdf/base.slang"
+#include "../base.slang"
 
 // Disney clearcoat
 //

@@ -1,8 +1,8 @@
 #ifndef VKRT_BSDF_SHEEN_SLANG
 #define VKRT_BSDF_SHEEN_SLANG
 
-#include "bsdf/base.slang"
-#include "bsdf/data/sheen_ltc.slang"
+#include "../base.slang"
+#include "../data/sheen_ltc.slang"
 
 // Microfiber sheen using the LTC-based multiple-scattering model used by Blender 4 Cycles.
 //

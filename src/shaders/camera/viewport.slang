@@ -1,7 +1,7 @@
 #ifndef VKRT_UTILITY_VIEWPORT_SLANG
 #define VKRT_UTILITY_VIEWPORT_SLANG
 
-#include "scene/resources.slang"
+#include "../scene/resources.slang"
 
 bool insideViewport(int2 pixel) {
     int2 viewportOrigin = int2(scene.viewportRect.xy);

@@ -1,5 +1,5 @@
-#include "scene/resources.slang"
-#include "trace/shadow.slang"
+#include "../scene/resources.slang"
+#include "../trace/shadow.slang"
 
 [shader("closesthit")]
 void main(inout ShadowPayload payload, in BuiltInTriangleIntersectionAttributes attr) {

@@ -1,7 +1,7 @@
 #ifndef VKRT_TRACE_SHADOW_SLANG
 #define VKRT_TRACE_SHADOW_SLANG
 
-#include "scene/resources.slang"
+#include "../scene/resources.slang"
 
 static const uint VKRT_SHADOW_VISIBILITY_OCCLUDED = 0u;
 static const uint VKRT_SHADOW_VISIBILITY_VISIBLE = 1u;

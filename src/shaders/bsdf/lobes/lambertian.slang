@@ -1,7 +1,7 @@
 #ifndef VKRT_BSDF_LAMBERTIAN_SLANG
 #define VKRT_BSDF_LAMBERTIAN_SLANG
 
-#include "bsdf/base.slang"
+#include "../base.slang"
 
 // Lambertian diffuse reflection.
 //

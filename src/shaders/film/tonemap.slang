@@ -1,7 +1,7 @@
 #ifndef VKRT_UTILITY_TONEMAP_SLANG
 #define VKRT_UTILITY_TONEMAP_SLANG
 
-#include "scene/resources.slang"
+#include "../scene/resources.slang"
 
 // References:
 // ACES filmic curve approximation: Narkowicz, 2016 - https://knarkowicz.wordpress.com/2016/01/06/aces-filmic-tone-mapping-curve/

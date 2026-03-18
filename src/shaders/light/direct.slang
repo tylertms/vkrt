@@ -6,10 +6,10 @@
 // Direct lighting / NEE: Pharr, Jakob, Humphreys, 2023 - https://www.pbr-book.org/4ed/Light_Transport_I_Surface_Reflection/A_Better_Path_Tracer
 // Alias method: Schwarz, 2011 - https://www.keithschwarz.com/darts-dice-coins/
 
-#include "scene/resources.slang"
-#include "trace/shadow.slang"
-#include "sample/sampling.slang"
-#include "bsdf/bsdf.slang"
+#include "../scene/resources.slang"
+#include "../trace/shadow.slang"
+#include "../sample/sampling.slang"
+#include "../bsdf/bsdf.slang"
 
 struct LightSample {
     float3 position;
