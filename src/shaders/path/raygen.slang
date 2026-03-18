@@ -1,16 +1,18 @@
-#include "../../core/resources.slang"
-#include "../../bsdf/bsdf.slang"
-#include "../../lighting/direct.slang"
-#include "../../utility/random.slang"
-#include "../../utility/ray.slang"
-#include "../../utility/packing.slang"
-#include "../../utility/tonemap.slang"
-#include "../../utility/viewport.slang"
-#include "../../trace/scene.slang"
+#include "scene/resources.slang"
+#include "bsdf/bsdf.slang"
+#include "light/direct.slang"
+#include "sample/random.slang"
+#include "camera/ray.slang"
+#include "geometry/packing.slang"
+#include "film/tonemap.slang"
+#include "camera/viewport.slang"
+#include "trace/scene.slang"
 #include "payload.slang"
 
 [shader("raygeneration")]
 void main() {
+    static const uint kSceneSerHintBits = 2u;
+
     int2 pixel = int2(DispatchRaysIndex().xy);
     if (!insideViewport(pixel)) {
         accumulationWriteImage[pixel] = float4(0.0);
@@ -42,7 +44,7 @@ void main() {
 
         if (captureSelection) {
             Payload pickPayload = Payload.make();
-            traceSceneRay(pickPayload, makePrimaryRay(pixel, float2(0.0)), 0u);
+            traceSceneRay(pickPayload, makePrimaryRay(pixel, float2(0.0)), 0u, 0u, 0u);
             firstHitInstance = pickPayload.instanceIndex;
         }
     }
@@ -65,7 +67,9 @@ void main() {
 
         for (uint depth = 0u; depth < scene.rrMaxDepth; depth++) {
             Payload payload = Payload.make();
-            traceSceneRay(payload, ray, depth);
+            uint sceneRayHint = (medium.refractiveActive ? 1u : 0u) |
+                (medium.absorptionActive ? 2u : 0u);
+            traceSceneRay(payload, ray, depth, sceneRayHint, kSceneSerHintBits);
 
             if (sampleIndex == 0u && depth == 0u) {
                 firstHitInstance = payload.instanceIndex;
@@ -111,7 +115,7 @@ void main() {
 
             float3 contribution = float3(0.0);
             if (!bsdfOnlyDebug && neeEnabled && currentVertexNeeAllowed) {
-                DirectLightResult directLight = evaluateDirectLight(
+                DirectLightResult directLight = sampleDirectLight(
                     hitPoint,
                     geometricNormal,
                     basis,

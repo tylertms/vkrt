@@ -1,7 +1,7 @@
 #ifndef VKRT_BSDF_GGX_SLANG
 #define VKRT_BSDF_GGX_SLANG
 
-#include "../common.slang"
+#include "bsdf/base.slang"
 
 // GGX microfacet specular reflection (conductor/metallic lobe).
 // Sampled using spherical-cap VNDF sampling with Smith height-correlated masking.

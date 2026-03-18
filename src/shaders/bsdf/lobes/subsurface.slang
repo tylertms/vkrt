@@ -1,7 +1,7 @@
 #ifndef VKRT_BSDF_SUBSURFACE_SLANG
 #define VKRT_BSDF_SUBSURFACE_SLANG
 
-#include "oren_nayar.slang"
+#include "bsdf/lobes/oren_nayar.slang"
 
 // Disney fake subsurface: Hanrahan-Krueger approximation for thin diffuse scattering.
 //

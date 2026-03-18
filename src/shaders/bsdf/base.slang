@@ -1,9 +1,9 @@
 #ifndef VKRT_BSDF_COMMON_SLANG
 #define VKRT_BSDF_COMMON_SLANG
 
-#include "types.slang"
-#include "../utility/random.slang"
-#include "../utility/ray.slang"
+#include "bsdf/types.slang"
+#include "sample/random.slang"
+#include "camera/ray.slang"
 
 // References:
 // Basis construction: Duff et al., 2017 - https://graphics.pixar.com/library/OrthonormalB/paper.pdf

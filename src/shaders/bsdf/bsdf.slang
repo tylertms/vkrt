@@ -1,7 +1,7 @@
 #ifndef VKRT_BSDF_BSDF_SLANG
 #define VKRT_BSDF_BSDF_SLANG
 
-#include "model.slang"
+#include "bsdf/principled.slang"
 
 BSDFSample sampleBSDF(BSDFState state, ShadingBasis basis, inout uint rng) {
     BSDFSample sample = BSDFSample();

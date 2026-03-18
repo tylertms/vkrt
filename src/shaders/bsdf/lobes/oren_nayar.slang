@@ -1,7 +1,7 @@
 #ifndef VKRT_BSDF_OREN_NAYAR_SLANG
 #define VKRT_BSDF_OREN_NAYAR_SLANG
 
-#include "../common.slang"
+#include "bsdf/base.slang"
 
 // Oren-Nayar rough diffuse reflection.
 //

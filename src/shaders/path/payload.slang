@@ -1,7 +1,7 @@
 #ifndef VKRT_RT_MAIN_PAYLOAD_SLANG
 #define VKRT_RT_MAIN_PAYLOAD_SLANG
 
-#include "../../core/constants.slang"
+#include "scene/constants.slang"
 
 struct Payload {
     uint didHit;

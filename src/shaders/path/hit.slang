@@ -1,6 +1,6 @@
-#include "../../core/resources.slang"
-#include "../../geometry/surface.slang"
-#include "../../utility/packing.slang"
+#include "scene/resources.slang"
+#include "geometry/surface.slang"
+#include "geometry/packing.slang"
 #include "payload.slang"
 
 [shader("closesthit")]

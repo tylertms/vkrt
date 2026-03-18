@@ -1,7 +1,7 @@
 #ifndef VKRT_BSDF_DIELECTRIC_SLANG
 #define VKRT_BSDF_DIELECTRIC_SLANG
 
-#include "ggx.slang"
+#include "bsdf/lobes/ggx.slang"
 
 struct DielectricSample {
     float3 wi;

@@ -6,10 +6,10 @@
 // Direct lighting / NEE: Pharr, Jakob, Humphreys, 2023 - https://www.pbr-book.org/4ed/Light_Transport_I_Surface_Reflection/A_Better_Path_Tracer
 // Alias method: Schwarz, 2011 - https://www.keithschwarz.com/darts-dice-coins/
 
-#include "../core/resources.slang"
-#include "../trace/shadow.slang"
-#include "../utility/sampling.slang"
-#include "../bsdf/bsdf.slang"
+#include "scene/resources.slang"
+#include "trace/shadow.slang"
+#include "sample/sampling.slang"
+#include "bsdf/bsdf.slang"
 
 struct LightSample {
     float3 position;
@@ -24,7 +24,7 @@ struct DirectLightResult {
     bool neeSupported;
 };
 
-LightSample sampleEmissiveLight(inout uint rng) {
+LightSample sampleLight(inout uint rng) {
     LightSample ls;
     ls.valid = false;
 
@@ -72,7 +72,7 @@ float computeBSDFEmitterMISWeight(float bsdfPdf, float lightPdfArea, float3 geom
     return powerHeuristic(bsdfPdf, lightPdfSolidAngle);
 }
 
-DirectLightResult evaluateDirectLight(
+DirectLightResult sampleDirectLight(
     float3 hitPoint,
     float3 geometricNormal,
     ShadingBasis basis,
@@ -86,10 +86,10 @@ DirectLightResult evaluateDirectLight(
 
     if (absCosTheta(state.wo) <= 0.0) return result;
 
-    LightSample ls = sampleEmissiveLight(rng);
-    if (!ls.valid) return result;
+    LightSample lightSample = sampleLight(rng);
+    if (!lightSample.valid) return result;
 
-    float3 toLight = ls.position - hitPoint;
+    float3 toLight = lightSample.position - hitPoint;
     float distSq = dot(toLight, toLight);
     if (distSq <= 0.0) return result;
 
@@ -97,10 +97,10 @@ DirectLightResult evaluateDirectLight(
     float dist = distSq * invDist;
     float3 wi = toLight * invDist;
 
-    float cosLight = abs(dot(wi, ls.normal));
+    float cosLight = abs(dot(wi, lightSample.normal));
     if (cosLight <= 0.0) return result;
 
-    float pdfSolidAngle = ls.pdf * distSq / cosLight;
+    float pdfSolidAngle = lightSample.pdf * distSq / cosLight;
     if (pdfSolidAngle <= 0.0) return result;
 
     float3 shadowOffset = dot(wi, geometricNormal) >= 0.0 ? geometricNormal : -geometricNormal;
@@ -127,7 +127,7 @@ DirectLightResult evaluateDirectLight(
     float misWeight = powerHeuristic(pdfSolidAngle, eval.pdf);
     float3 transmittance = mediumTransmittance(medium, shadowDist);
 
-    result.radiance = misWeight * transmittance * fCos * ls.emission / pdfSolidAngle;
+    result.radiance = misWeight * transmittance * fCos * lightSample.emission / pdfSolidAngle;
     return result;
 }
 

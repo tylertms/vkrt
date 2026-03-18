@@ -1,4 +1,4 @@
-#include "../core/resources.slang"
+#include "scene/resources.slang"
 
 static const int kGroupSize = 16;
 static const int kMaxOutlineRadius = 5;

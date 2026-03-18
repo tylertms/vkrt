@@ -1,8 +1,8 @@
 #ifndef VKRT_GEOMETRY_SURFACE_SLANG
 #define VKRT_GEOMETRY_SURFACE_SLANG
 
-#include "../core/resources.slang"
-#include "../utility/ray.slang"
+#include "scene/resources.slang"
+#include "camera/ray.slang"
 
 // References:
 // Triangle normal interpolation: Pharr, Jakob, Humphreys, 2023 - https://www.pbr-book.org/4ed/Shapes/Triangle_Meshes

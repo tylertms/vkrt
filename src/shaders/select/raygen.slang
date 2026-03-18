@@ -1,7 +1,7 @@
-#include "../../core/resources.slang"
-#include "../../trace/selection.slang"
-#include "../../utility/ray.slang"
-#include "../../utility/viewport.slang"
+#include "scene/resources.slang"
+#include "trace/select.slang"
+#include "camera/ray.slang"
+#include "camera/viewport.slang"
 
 [shader("raygeneration")]
 void main() {
