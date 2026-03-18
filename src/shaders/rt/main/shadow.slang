@@ -2,5 +2,5 @@
 
 [shader("miss")]
 void main(inout ShadowPayload payload) {
-    payload.visible = 1u;
+    payload.visibility = VKRT_SHADOW_VISIBILITY_VISIBLE;
 }

@@ -166,7 +166,7 @@ void meshControllerApplySessionActions(VKRT* vkrt, Session* session) {
     }
 }
 
-/*
+
 void meshControllerLoadDefaultAssets(VKRT* vkrt, Session* session) {
     const char* planePath = "assets/models/plane.glb";
     const char* spherePath = "assets/models/sphere.glb";
@@ -283,8 +283,9 @@ void meshControllerLoadDefaultAssets(VKRT* vkrt, Session* session) {
     VKRT_Result result = VKRT_cameraSetPose(vkrt, cameraPosition, cameraTarget, cameraUp, 26.9f);
     if (result != VKRT_SUCCESS) LOG_ERROR("Setting default camera pose failed (%d)", (int)result);
 }
-*/
 
+
+/*
 void meshControllerLoadDefaultAssets(VKRT* vkrt, Session* session) {
     const char* planePath = "assets/models/plane.glb";
     const char* spherePath = "assets/models/sphere.glb";
@@ -306,7 +307,7 @@ void meshControllerLoadDefaultAssets(VKRT* vkrt, Session* session) {
     lightMaterial.emissionColor[0] = 1.0f;
     lightMaterial.emissionColor[1] = 1.0f;
     lightMaterial.emissionColor[2] = 1.0f;
-    lightMaterial.emissionLuminance = 2000.0f;
+    lightMaterial.emissionLuminance = 8000.0f;
 
     Material suzanneMaterial = neutralWhite;
     suzanneMaterial.baseColor[0] = 1.0f;
@@ -331,7 +332,7 @@ void meshControllerLoadDefaultAssets(VKRT* vkrt, Session* session) {
             .importName = "light",
             .position = {1.95f, 4.30f, -1.4f},
             .rotation = {90.0f, 0.0f, 90.0f},
-            .scale = {0.2f, 0.2f, 0.2f},
+            .scale = {0.1f, 0.1f, 0.1f},
             .material = lightMaterial,
         },
         {
@@ -359,3 +360,4 @@ void meshControllerLoadDefaultAssets(VKRT* vkrt, Session* session) {
     result = VKRT_setEnvironmentLight(vkrt, environmentColor, environmentStrength);
     if (result != VKRT_SUCCESS) LOG_ERROR("Setting default environment light failed (%d)", (int)result);
 }
+*/

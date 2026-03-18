@@ -107,10 +107,11 @@ void main() {
             float3 wo = worldToLocal(-ray.Direction, basis);
             BSDFState state = makeBSDFState(material, wo, payload.frontFace);
             bool currentVertexNeeAllowed = !medium.refractiveActive;
+            bool vertexNeeSupported = currentVertexNeeAllowed;
 
             float3 contribution = float3(0.0);
             if (!bsdfOnlyDebug && neeEnabled && currentVertexNeeAllowed) {
-                contribution += evaluateDirectLight(
+                DirectLightResult directLight = evaluateDirectLight(
                     hitPoint,
                     geometricNormal,
                     basis,
@@ -118,6 +119,8 @@ void main() {
                     medium,
                     rng
                 );
+                contribution += directLight.radiance;
+                vertexNeeSupported = directLight.neeSupported;
             }
 
             if (!neeOnlyDebug) {
@@ -151,8 +154,8 @@ void main() {
                 break;
             }
 
-            bool sampledPathNeeAllowed = currentVertexNeeAllowed;
-            if (sampledPathNeeAllowed && materialMediumIsRefractive(material) && sample.isTransmission != 0u) {
+            bool sampledPathNeeAllowed = vertexNeeSupported;
+            if (sampledPathNeeAllowed && sample.isTransmission != 0u) {
                 sampledPathNeeAllowed = false;
             }
 

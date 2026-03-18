@@ -187,7 +187,7 @@ VKRT_Result createShaderBindingTable(VKRT* vkrt) {
         vkrt->core.rayTracingPipeline,
         1u,
         2u,
-        1u,
+        2u,
         &vkrt->core.shaderBindingTableBuffer,
         &vkrt->core.shaderBindingTableMemory,
         vkrt->core.shaderBindingTables

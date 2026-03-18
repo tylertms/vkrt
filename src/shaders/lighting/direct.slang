@@ -19,6 +19,11 @@ struct LightSample {
     bool valid;
 };
 
+struct DirectLightResult {
+    float3 radiance;
+    bool neeSupported;
+};
+
 LightSample sampleEmissiveLight(inout uint rng) {
     LightSample ls;
     ls.valid = false;
@@ -67,7 +72,7 @@ float computeBSDFEmitterMISWeight(float bsdfPdf, float lightPdfArea, float3 geom
     return powerHeuristic(bsdfPdf, lightPdfSolidAngle);
 }
 
-float3 evaluateDirectLight(
+DirectLightResult evaluateDirectLight(
     float3 hitPoint,
     float3 geometricNormal,
     ShadingBasis basis,
@@ -75,45 +80,55 @@ float3 evaluateDirectLight(
     MediumState medium,
     inout uint rng
 ) {
-    if (absCosTheta(state.wo) <= 0.0) return float3(0.0);
+    DirectLightResult result;
+    result.radiance = float3(0.0);
+    result.neeSupported = true;
+
+    if (absCosTheta(state.wo) <= 0.0) return result;
 
     LightSample ls = sampleEmissiveLight(rng);
-    if (!ls.valid) return float3(0.0);
+    if (!ls.valid) return result;
 
     float3 toLight = ls.position - hitPoint;
     float distSq = dot(toLight, toLight);
-    if (distSq <= 0.0) return float3(0.0);
+    if (distSq <= 0.0) return result;
 
     float invDist = rsqrt(distSq);
     float dist = distSq * invDist;
     float3 wi = toLight * invDist;
 
     float cosLight = abs(dot(wi, ls.normal));
-    if (cosLight <= 0.0) return float3(0.0);
+    if (cosLight <= 0.0) return result;
 
     float pdfSolidAngle = ls.pdf * distSq / cosLight;
-    if (pdfSolidAngle <= 0.0) return float3(0.0);
+    if (pdfSolidAngle <= 0.0) return result;
 
     float3 shadowOffset = dot(wi, geometricNormal) >= 0.0 ? geometricNormal : -geometricNormal;
     float3 shadowOrigin = hitPoint + shadowOffset * VKRT_SHADOW_ORIGIN_OFFSET;
     float shadowDist = dist - VKRT_SHADOW_DISTANCE_OFFSET;
-    if (shadowDist <= 0.0) return float3(0.0);
+    if (shadowDist <= 0.0) return result;
 
-    if (!traceShadowRay(shadowOrigin, wi, shadowDist)) return float3(0.0);
+    ShadowRayResult shadow = traceShadowRay(shadowOrigin, wi, shadowDist);
+    if (!shadow.neeSupported) {
+        result.neeSupported = false;
+        return result;
+    }
+    if (!shadow.visible) return result;
 
     float3 wiLocal = worldToLocal(wi, basis);
     if (materialMediumIsRefractive(state.material) && cosTheta(wiLocal) <= 0.0) {
-        return float3(0.0);
+        return result;
     }
 
     BSDFEval eval = evalBSDF(state, wiLocal);
-    if (eval.pdf <= 0.0) return float3(0.0);
+    if (eval.pdf <= 0.0) return result;
 
     float3 fCos = eval.value * abs(dot(wi, basis.normal));
     float misWeight = powerHeuristic(pdfSolidAngle, eval.pdf);
     float3 transmittance = mediumTransmittance(medium, shadowDist);
 
-    return misWeight * transmittance * fCos * ls.emission / pdfSolidAngle;
+    result.radiance = misWeight * transmittance * fCos * ls.emission / pdfSolidAngle;
+    return result;
 }
 
 #endif

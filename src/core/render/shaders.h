@@ -12,6 +12,9 @@ extern const size_t shaderRchitSize;
 extern const uint32_t shaderRmissData[];
 extern const size_t shaderRmissSize;
 
+extern const uint32_t shaderShadowRchitData[];
+extern const size_t shaderShadowRchitSize;
+
 extern const uint32_t shaderShadowMissData[];
 extern const size_t shaderShadowMissSize;
 
@@ -23,6 +26,9 @@ extern const size_t shaderRchitSerSize;
 
 extern const uint32_t shaderRmissSerData[];
 extern const size_t shaderRmissSerSize;
+
+extern const uint32_t shaderShadowRchitSerData[];
+extern const size_t shaderShadowRchitSerSize;
 
 extern const uint32_t shaderShadowMissSerData[];
 extern const size_t shaderShadowMissSerSize;

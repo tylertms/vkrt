@@ -31,10 +31,12 @@ VKRT_Result createRayTracingPipeline(VKRT* vkrt) {
     const uint32_t* rayGenData = useSerShaders ? shaderRgenSerData : shaderRgenData;
     const uint32_t* closestHitData = useSerShaders ? shaderRchitSerData : shaderRchitData;
     const uint32_t* missData = useSerShaders ? shaderRmissSerData : shaderRmissData;
+    const uint32_t* shadowClosestHitData = useSerShaders ? shaderShadowRchitSerData : shaderShadowRchitData;
     const uint32_t* shadowMissData = useSerShaders ? shaderShadowMissSerData : shaderShadowMissData;
     size_t rayGenSize = useSerShaders ? shaderRgenSerSize : shaderRgenSize;
     size_t closestHitSize = useSerShaders ? shaderRchitSerSize : shaderRchitSize;
     size_t missSize = useSerShaders ? shaderRmissSerSize : shaderRmissSize;
+    size_t shadowClosestHitSize = useSerShaders ? shaderShadowRchitSerSize : shaderShadowRchitSize;
     size_t shadowMissSize = useSerShaders ? shaderShadowMissSerSize : shaderShadowMissSize;
 
     if (createRayTracingPipelineLayout(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
@@ -42,24 +44,28 @@ VKRT_Result createRayTracingPipeline(VKRT* vkrt) {
     VkShaderModule rayGenModule = VK_NULL_HANDLE;
     VkShaderModule closestHitModule = VK_NULL_HANDLE;
     VkShaderModule missModule = VK_NULL_HANDLE;
+    VkShaderModule shadowClosestHitModule = VK_NULL_HANDLE;
     VkShaderModule shadowMissModule = VK_NULL_HANDLE;
     if (createShaderModule(vkrt, rayGenData, rayGenSize, &rayGenModule) != VKRT_SUCCESS ||
         createShaderModule(vkrt, closestHitData, closestHitSize, &closestHitModule) != VKRT_SUCCESS ||
         createShaderModule(vkrt, missData, missSize, &missModule) != VKRT_SUCCESS ||
+        createShaderModule(vkrt, shadowClosestHitData, shadowClosestHitSize, &shadowClosestHitModule) != VKRT_SUCCESS ||
         createShaderModule(vkrt, shadowMissData, shadowMissSize, &shadowMissModule) != VKRT_SUCCESS) {
         if (rayGenModule != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, rayGenModule, NULL);
         if (closestHitModule != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, closestHitModule, NULL);
         if (missModule != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, missModule, NULL);
+        if (shadowClosestHitModule != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, shadowClosestHitModule, NULL);
         if (shadowMissModule != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, shadowMissModule, NULL);
         return VKRT_ERROR_SHADER_COMPILATION_FAILED;
     }
 
     LOG_INFO(
-        "Using embedded ray tracing shaders (%s variant, rgen: %zu bytes, rchit: %zu bytes, rmiss: %zu bytes, rmissShadow: %zu bytes)",
+        "Using embedded ray tracing shaders (%s variant, rgen: %zu bytes, rchit: %zu bytes, rmiss: %zu bytes, shadowRchit: %zu bytes, rmissShadow: %zu bytes)",
         useSerShaders ? "SER" : "default",
         rayGenSize,
         closestHitSize,
         missSize,
+        shadowClosestHitSize,
         shadowMissSize
     );
 
@@ -119,18 +125,34 @@ VKRT_Result createRayTracingPipeline(VKRT* vkrt) {
     closestHitShaderGroup.anyHitShader = VK_SHADER_UNUSED_KHR;
     closestHitShaderGroup.intersectionShader = VK_SHADER_UNUSED_KHR;
 
+    VkPipelineShaderStageCreateInfo shadowClosestHitStageInfo = {0};
+    shadowClosestHitStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    shadowClosestHitStageInfo.stage = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+    shadowClosestHitStageInfo.module = shadowClosestHitModule;
+    shadowClosestHitStageInfo.pName = "main";
+
+    VkRayTracingShaderGroupCreateInfoKHR shadowClosestHitShaderGroup = {0};
+    shadowClosestHitShaderGroup.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+    shadowClosestHitShaderGroup.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
+    shadowClosestHitShaderGroup.generalShader = VK_SHADER_UNUSED_KHR;
+    shadowClosestHitShaderGroup.closestHitShader = 4;
+    shadowClosestHitShaderGroup.anyHitShader = VK_SHADER_UNUSED_KHR;
+    shadowClosestHitShaderGroup.intersectionShader = VK_SHADER_UNUSED_KHR;
+
     VkPipelineShaderStageCreateInfo shaderStages[] = {
         rayGenStageInfo,
         missStageInfo,
         shadowMissStageInfo,
-        closestHitStageInfo
+        closestHitStageInfo,
+        shadowClosestHitStageInfo
     };
 
     VkRayTracingShaderGroupCreateInfoKHR shaderGroups[] = {
         rayGenShaderGroup,
         missShaderGroup,
         shadowMissShaderGroup,
-        closestHitShaderGroup
+        closestHitShaderGroup,
+        shadowClosestHitShaderGroup
     };
 
     VkRayTracingPipelineCreateInfoKHR pipelineCreateInfo = {0};
@@ -147,6 +169,7 @@ VKRT_Result createRayTracingPipeline(VKRT* vkrt) {
         vkDestroyShaderModule(vkrt->core.device, rayGenModule, NULL);
         vkDestroyShaderModule(vkrt->core.device, closestHitModule, NULL);
         vkDestroyShaderModule(vkrt->core.device, missModule, NULL);
+        vkDestroyShaderModule(vkrt->core.device, shadowClosestHitModule, NULL);
         vkDestroyShaderModule(vkrt->core.device, shadowMissModule, NULL);
         return VKRT_ERROR_OPERATION_FAILED;
     }
@@ -154,6 +177,7 @@ VKRT_Result createRayTracingPipeline(VKRT* vkrt) {
     vkDestroyShaderModule(vkrt->core.device, rayGenModule, NULL);
     vkDestroyShaderModule(vkrt->core.device, closestHitModule, NULL);
     vkDestroyShaderModule(vkrt->core.device, missModule, NULL);
+    vkDestroyShaderModule(vkrt->core.device, shadowClosestHitModule, NULL);
     vkDestroyShaderModule(vkrt->core.device, shadowMissModule, NULL);
 
     LOG_INFO(

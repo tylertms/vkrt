@@ -3,17 +3,26 @@
 
 #include "../core/resources.slang"
 
+static const uint VKRT_SHADOW_VISIBILITY_OCCLUDED = 0u;
+static const uint VKRT_SHADOW_VISIBILITY_VISIBLE = 1u;
+static const uint VKRT_SHADOW_VISIBILITY_UNSUPPORTED_TRANSMISSION = 2u;
+
 struct ShadowPayload {
-    uint visible;
+    uint visibility;
 
     static ShadowPayload make() {
         ShadowPayload payload;
-        payload.visible = 0u;
+        payload.visibility = VKRT_SHADOW_VISIBILITY_OCCLUDED;
         return payload;
     }
 };
 
-bool traceShadowRay(float3 origin, float3 direction, float tMax) {
+struct ShadowRayResult {
+    bool visible;
+    bool neeSupported;
+};
+
+ShadowRayResult traceShadowRay(float3 origin, float3 direction, float tMax) {
     ShadowPayload payload = ShadowPayload.make();
 
     RayDesc ray;
@@ -24,16 +33,19 @@ bool traceShadowRay(float3 origin, float3 direction, float tMax) {
 
     TraceRay(
         topLevelAS,
-        RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER,
+        RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH,
         0xffu,
-        0u,
+        1u,
         0u,
         1u,
         ray,
         payload
     );
 
-    return payload.visible != 0u;
+    ShadowRayResult result;
+    result.visible = payload.visibility == VKRT_SHADOW_VISIBILITY_VISIBLE;
+    result.neeSupported = payload.visibility != VKRT_SHADOW_VISIBILITY_UNSUPPORTED_TRANSMISSION;
+    return result;
 }
 
 #endif

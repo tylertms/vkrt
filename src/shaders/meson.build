@@ -4,10 +4,12 @@ shader_programs = [
   ['rgen',          'rt/main/rgen.slang',   'rgen.spv',          'raygeneration', ['rt'],        'shaderRgen'         ],
   ['rchit',         'rt/main/rchit.slang',  'rchit.spv',         'closesthit',    ['rt'],        'shaderRchit'        ],
   ['rmiss',         'rt/main/rmiss.slang',  'rmiss.spv',         'miss',          ['rt'],        'shaderRmiss'        ],
+  ['shadowRchit',   'rt/main/shadow_rchit.slang', 'shadowRchit.spv', 'closesthit', ['rt'],        'shaderShadowRchit'  ],
   ['shadowMiss',    'rt/main/shadow.slang', 'shadowMiss.spv',    'miss',          ['rt'],        'shaderShadowMiss'   ],
   ['rgenSer',       'rt/main/rgen.slang',   'rgenSer.spv',       'raygeneration', ['rt', 'ser'], 'shaderRgenSer'      ],
   ['rchitSer',      'rt/main/rchit.slang',  'rchitSer.spv',      'closesthit',    ['rt', 'ser'], 'shaderRchitSer'     ],
   ['rmissSer',      'rt/main/rmiss.slang',  'rmissSer.spv',      'miss',          ['rt', 'ser'], 'shaderRmissSer'     ],
+  ['shadowRchitSer','rt/main/shadow_rchit.slang', 'shadowRchitSer.spv', 'closesthit', ['rt', 'ser'], 'shaderShadowRchitSer'],
   ['shadowMissSer', 'rt/main/shadow.slang', 'shadowMissSer.spv', 'miss',          ['rt', 'ser'], 'shaderShadowMissSer'],
 ]
 
