@@ -85,6 +85,13 @@ static void releaseMeshHostGeometry(VKRT* vkrt) {
     vkrt->core.meshCount = 0;
 }
 
+static void releaseSceneMaterials(VKRT* vkrt) {
+    if (!vkrt) return;
+    free(vkrt->core.materials);
+    vkrt->core.materials = NULL;
+    vkrt->core.materialCount = 0;
+}
+
 static void releaseGeometryLayout(VKRT* vkrt) {
     if (!vkrt) return;
     vkrt->core.geometryLayout.vertexCapacity = 0;
@@ -135,6 +142,7 @@ static void cleanupSceneAndAccelerationResources(VKRT* vkrt) {
     }
 
     releaseMeshHostGeometry(vkrt);
+    releaseSceneMaterials(vkrt);
 
     destroyBufferAndMemory(vkrt, &vkrt->core.vertexData.buffer, &vkrt->core.vertexData.memory);
     destroyBufferAndMemory(vkrt, &vkrt->core.indexData.buffer, &vkrt->core.indexData.memory);
@@ -229,6 +237,7 @@ static void cleanupCommandAndQueryResources(VKRT* vkrt) {
 static void cleanupHostOnlyResources(VKRT* vkrt) {
     if (!vkrt) return;
     releaseMeshHostGeometry(vkrt);
+    releaseSceneMaterials(vkrt);
     releaseGeometryLayout(vkrt);
     resetRenderFinishedSemaphores(vkrt, vkrt->runtime.swapChainImageCount, 0);
 }
@@ -294,8 +303,10 @@ VKRT_Result VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInf
     }
     vkrt->core.sceneResourceRevision = 0;
     vkrt->core.materialResourceRevision = 0;
+    vkrt->core.lightResourceRevision = 0;
     vkrt->core.sceneRevision = 1;
     vkrt->core.materialRevision = 1;
+    vkrt->core.lightRevision = 1;
     vkrt->core.emissiveMeshCount = 0;
     vkrt->core.emissiveTriangleCount = 0;
     vkrt->renderStatus.renderModeActive = 0;

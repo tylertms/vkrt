@@ -5,7 +5,7 @@
 #include <vulkan/vulkan.h>
 
 const float kInspectorControlSpacing = 4.0f;
-const float kInspectorSectionIndent = 8.0f;
+const float kInspectorSectionIndent = 12.0f;
 const float kInspectorSpacerHairline = 1.0f;
 const float kInspectorSpacerMedium = 6.0f;
 static const ImVec2 kTooltipPadding = {8.0f, 4.0f};

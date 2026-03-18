@@ -30,6 +30,7 @@ typedef struct MeshImportFeatureReport {
 } MeshImportFeatureReport;
 
 void decomposeImportedMeshTransform(mat4 worldTransform, vec3 outPosition, vec3 outRotation, vec3 outScale);
+static Material buildMaterial(const cgltf_material* sourceMaterial);
 
 static void releaseImportEntry(MeshImportEntry* entry) {
     if (!entry) return;
@@ -37,6 +38,12 @@ static void releaseImportEntry(MeshImportEntry* entry) {
     free(entry->vertices);
     free(entry->indices);
     memset(entry, 0, sizeof(*entry));
+}
+
+static void releaseImportMaterial(MaterialImportEntry* material) {
+    if (!material) return;
+    free(material->name);
+    memset(material, 0, sizeof(*material));
 }
 
 void meshReleaseImportData(MeshImportData* importData) {
@@ -49,6 +56,14 @@ void meshReleaseImportData(MeshImportData* importData) {
     free(importData->entries);
     importData->entries = NULL;
     importData->count = 0;
+
+    for (uint32_t i = 0; i < importData->materialCount; i++) {
+        releaseImportMaterial(&importData->materials[i]);
+    }
+
+    free(importData->materials);
+    importData->materials = NULL;
+    importData->materialCount = 0;
 }
 
 static int appendImportEntry(MeshImportData* importData, MeshImportEntry* entry) {
@@ -66,6 +81,42 @@ static int appendImportEntry(MeshImportData* importData, MeshImportEntry* entry)
     importData->entries[importData->count] = *entry;
     importData->count++;
     memset(entry, 0, sizeof(*entry));
+    return 0;
+}
+
+static int populateImportMaterials(const cgltf_data* data, MeshImportData* importData) {
+    if (!data || !importData) return -1;
+    if (data->materials_count == 0) return 0;
+    if (data->materials_count > (cgltf_size)VKRT_INVALID_INDEX) return -1;
+
+    MaterialImportEntry* materials = (MaterialImportEntry*)calloc(
+        (size_t)data->materials_count,
+        sizeof(MaterialImportEntry)
+    );
+    if (!materials) return -1;
+
+    for (cgltf_size materialIndex = 0; materialIndex < data->materials_count; materialIndex++) {
+        const cgltf_material* sourceMaterial = &data->materials[materialIndex];
+        char generatedName[VKRT_NAME_LEN];
+        if (sourceMaterial->name && sourceMaterial->name[0]) {
+            snprintf(generatedName, sizeof(generatedName), "%s", sourceMaterial->name);
+        } else {
+            snprintf(generatedName, sizeof(generatedName), "Material %zu", materialIndex);
+        }
+
+        materials[materialIndex].material = buildMaterial(sourceMaterial);
+        materials[materialIndex].name = stringDuplicate(generatedName);
+        if (!materials[materialIndex].name) {
+            for (cgltf_size i = 0; i <= materialIndex; i++) {
+                releaseImportMaterial(&materials[i]);
+            }
+            free(materials);
+            return -1;
+        }
+    }
+
+    importData->materials = materials;
+    importData->materialCount = (uint32_t)data->materials_count;
     return 0;
 }
 
@@ -686,12 +737,13 @@ static void alignPrimitiveWindingToNormals(Vertex* vertices, size_t vertexCount,
 }
 
 static int buildPrimitiveEntry(
+    const cgltf_data* data,
     const cgltf_node* node,
     const cgltf_mesh* mesh,
     cgltf_size primitiveIndex,
     MeshImportEntry* outEntry
 ) {
-    if (!node || !mesh || !outEntry || primitiveIndex >= mesh->primitives_count) return -1;
+    if (!data || !node || !mesh || !outEntry || primitiveIndex >= mesh->primitives_count) return -1;
 
     const cgltf_primitive* primitive = &mesh->primitives[primitiveIndex];
     if (primitive->type != cgltf_primitive_type_triangles) return 0;
@@ -708,7 +760,7 @@ static int buildPrimitiveEntry(
     entry.indexCount = primitive->indices
         ? (size_t)primitive->indices->count
         : (size_t)positionAccessor->count;
-    entry.material = buildMaterial(primitive->material);
+    entry.materialIndex = primitive->material ? (uint32_t)(primitive->material - data->materials) : VKRT_INVALID_INDEX;
     entry.renderBackfaces = primitive->material && primitive->material->double_sided ? 1u : 0u;
     if (!validatePrimitiveAllocationFootprint(entry.vertexCount, entry.indexCount, !useImportedTangents && texcoordAccessor)) {
         return -1;
@@ -812,13 +864,13 @@ static int buildPrimitiveEntry(
     return 1;
 }
 
-static int collectNodeEntries(const cgltf_node* node, MeshImportData* importData) {
-    if (!node || !importData) return -1;
+static int collectNodeEntries(const cgltf_data* data, const cgltf_node* node, MeshImportData* importData) {
+    if (!data || !node || !importData) return -1;
 
     if (node->mesh) {
         for (cgltf_size primitiveIndex = 0; primitiveIndex < node->mesh->primitives_count; primitiveIndex++) {
             MeshImportEntry entry = {0};
-            int buildResult = buildPrimitiveEntry(node, node->mesh, primitiveIndex, &entry);
+            int buildResult = buildPrimitiveEntry(data, node, node->mesh, primitiveIndex, &entry);
             if (buildResult < 0) {
                 releaseImportEntry(&entry);
                 return -1;
@@ -832,7 +884,7 @@ static int collectNodeEntries(const cgltf_node* node, MeshImportData* importData
     }
 
     for (cgltf_size childIndex = 0; childIndex < node->children_count; childIndex++) {
-        if (collectNodeEntries(node->children[childIndex], importData) != 0) {
+        if (collectNodeEntries(data, node->children[childIndex], importData) != 0) {
             return -1;
         }
     }
@@ -867,10 +919,17 @@ int meshLoadFromFile(const char* filePath, MeshImportData* outImportData) {
 
     logIgnoredImportFeatures(resolvedPath, data);
 
+    if (populateImportMaterials(data, outImportData) != 0) {
+        cgltf_free(data);
+        meshReleaseImportData(outImportData);
+        LOG_ERROR("Failed to extract material entries from '%s'", resolvedPath);
+        return -1;
+    }
+
     int result = 0;
     if (data->scene && data->scene->nodes_count > 0) {
         for (cgltf_size nodeIndex = 0; nodeIndex < data->scene->nodes_count; nodeIndex++) {
-            if (collectNodeEntries(data->scene->nodes[nodeIndex], outImportData) != 0) {
+            if (collectNodeEntries(data, data->scene->nodes[nodeIndex], outImportData) != 0) {
                 result = -1;
                 break;
             }
@@ -878,7 +937,7 @@ int meshLoadFromFile(const char* filePath, MeshImportData* outImportData) {
     } else {
         for (cgltf_size nodeIndex = 0; nodeIndex < data->nodes_count; nodeIndex++) {
             if (data->nodes[nodeIndex].parent) continue;
-            if (collectNodeEntries(&data->nodes[nodeIndex], outImportData) != 0) {
+            if (collectNodeEntries(data, &data->nodes[nodeIndex], outImportData) != 0) {
                 result = -1;
                 break;
             }

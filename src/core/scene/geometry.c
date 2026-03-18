@@ -460,6 +460,11 @@ VKRT_Result vkrtSceneUploadMeshData(
     uint32_t previousCount = vkrt->core.meshCount;
     uint32_t newCount = previousCount + 1u;
 
+    VKRT_Result defaultMaterialResult = vkrtEnsureDefaultMaterial(vkrt);
+    if (defaultMaterialResult != VKRT_SUCCESS) {
+        return defaultMaterialResult;
+    }
+
     Mesh* resized = (Mesh*)realloc(vkrt->core.meshes, (size_t)newCount * sizeof(Mesh));
     if (!resized) {
         LOG_ERROR("Failed to grow mesh list");
@@ -489,8 +494,7 @@ VKRT_Result vkrtSceneUploadMeshData(
 
     mesh->info.vertexCount = (uint32_t)vertexCount;
     mesh->info.indexCount = (uint32_t)indexCount;
-    mesh->info.materialIndex = previousCount;
-    mesh->material = VKRT_materialDefault();
+    mesh->info.materialIndex = 0u;
     mesh->info.renderBackfaces = vkrtResolveMeshRenderBackfaces(mesh);
     vec3 scale = {1.0f, 1.0f, 1.0f};
     glm_vec3_copy(scale, mesh->info.scale);

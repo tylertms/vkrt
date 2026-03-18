@@ -1,3 +1,4 @@
+#include "state.h"
 #include "vkrt_internal.h"
 
 #include <stdio.h>
@@ -65,10 +66,31 @@ VKRT_Result VKRT_getMeshSnapshot(const VKRT* vkrt, uint32_t meshIndex, VKRT_Mesh
     if (meshIndex >= vkrt->core.meshCount) return VKRT_ERROR_INVALID_ARGUMENT;
 
     const Mesh* mesh = &vkrt->core.meshes[meshIndex];
+    const Material* material = vkrtGetSceneMaterialData(vkrt, mesh->info.materialIndex);
     outMesh->info = mesh->info;
-    outMesh->material = mesh->material;
+    outMesh->material = material ? *material : VKRT_materialDefault();
+    outMesh->materialIndex = mesh->info.materialIndex;
     outMesh->geometrySource = mesh->geometrySource;
     outMesh->ownsGeometry = mesh->ownsGeometry;
     snprintf(outMesh->name, sizeof(outMesh->name), "%s", mesh->name);
+    return VKRT_SUCCESS;
+}
+
+VKRT_Result VKRT_getMaterialCount(const VKRT* vkrt, uint32_t* outMaterialCount) {
+    if (!vkrt || !outMaterialCount) return VKRT_ERROR_INVALID_ARGUMENT;
+    *outMaterialCount = vkrt->core.materialCount;
+    return VKRT_SUCCESS;
+}
+
+VKRT_Result VKRT_getMaterialSnapshot(const VKRT* vkrt, uint32_t materialIndex, VKRT_MaterialSnapshot* outMaterial) {
+    if (!vkrt || !outMaterial) return VKRT_ERROR_INVALID_ARGUMENT;
+    if (materialIndex >= vkrt->core.materialCount) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    const SceneMaterial* material = vkrtGetSceneMaterial(vkrt, materialIndex);
+    if (!material) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    outMaterial->material = material->material;
+    outMaterial->useCount = vkrtCountMaterialUsers(vkrt, materialIndex);
+    snprintf(outMaterial->name, sizeof(outMaterial->name), "%s", material->name);
     return VKRT_SUCCESS;
 }

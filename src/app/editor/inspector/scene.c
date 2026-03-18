@@ -19,6 +19,8 @@ enum {
     kSceneBrowserNameTextCapacity = 192,
     kSceneBrowserIdCapacity = 32,
     kSceneSourceTextCapacity = 192,
+    kSceneMaterialNameTextCapacity = 192,
+    kSceneMaterialComboMaxEntries = 64,
 };
 
 static void formatPrefixedText(char* out, size_t outSize, const char* prefix, const char* text) {
@@ -143,6 +145,7 @@ static void drawMeshInfoHeader(VKRT* vkrt, uint32_t meshIndex, const VKRT_MeshSn
     if (inspectorBeginKeyValueTable("##mesh_stats")) {
         ImGui_TableNextRow();
         ImGui_TableSetColumnIndex(0);
+        ImGui_AlignTextToFramePadding();
         ImGui_TextDisabled("Name");
         ImGui_TableSetColumnIndex(1);
         char meshName[VKRT_NAME_LEN];
@@ -189,46 +192,154 @@ static void drawMeshTransformEditor(VKRT* vkrt, uint32_t meshIndex, const VKRT_M
     }
 }
 
-static void drawMeshMaterialEditor(VKRT* vkrt, uint32_t meshIndex, const VKRT_MeshSnapshot* mesh) {
+static void formatMaterialLabel(char* out, size_t outSize, const VKRT_MaterialSnapshot* material, uint32_t materialIndex) {
+    if (!out || outSize == 0 || !material) return;
+
+    char suffix[kSceneSuffixTextCapacity];
+    int suffixLength = snprintf(suffix, sizeof(suffix), " (#%u)", materialIndex);
+    if (suffixLength < 0) return;
+
+    size_t suffixSize = (size_t)suffixLength;
+    size_t available = outSize > suffixSize + 1u ? outSize - suffixSize - 1u : 0u;
+    int nameLimit = available > (size_t)INT_MAX ? INT_MAX : (int)available;
+    const char* materialName = material->name[0] ? material->name : "Material";
+    snprintf(out, outSize, "%.*s%s", nameLimit, materialName, suffix);
+}
+
+static void drawMeshMaterialBindingEditor(VKRT* vkrt, uint32_t meshIndex, const VKRT_MeshSnapshot* mesh) {
     if (!vkrt || !mesh) return;
 
-    Material material = mesh->material;
+    uint32_t materialCount = 0;
+    if (VKRT_getMaterialCount(vkrt, &materialCount) != VKRT_SUCCESS || materialCount == 0) {
+        ImGui_TextDisabled("No materials available.");
+        return;
+    }
+
+    if (materialCount > kSceneMaterialComboMaxEntries) {
+        materialCount = kSceneMaterialComboMaxEntries;
+    }
+
+    int currentMaterialIndex = (int)mesh->materialIndex;
+    char storage[kSceneMaterialComboMaxEntries][kSceneMaterialNameTextCapacity];
+    const char* labels[kSceneMaterialComboMaxEntries];
+
+    for (uint32_t materialIndex = 0; materialIndex < materialCount; materialIndex++) {
+        VKRT_MaterialSnapshot material = {0};
+        if (VKRT_getMaterialSnapshot(vkrt, materialIndex, &material) == VKRT_SUCCESS) {
+            formatMaterialLabel(storage[materialIndex], sizeof(storage[materialIndex]), &material, materialIndex);
+        } else {
+            snprintf(storage[materialIndex], sizeof(storage[materialIndex]), "Material %u", materialIndex);
+        }
+        labels[materialIndex] = storage[materialIndex];
+    }
+
+    float frameHeight = ImGui_GetFrameHeight();
+    const ImGuiStyle* style = ImGui_GetStyle();
+    float buttonWidth = frameHeight;
+    float spacing = style ? style->ItemInnerSpacing.x : 4.0f;
+    float comboWidth = ImGui_CalcItemWidth() - buttonWidth - spacing;
+
+    ImGui_SetNextItemWidth(comboWidth);
+    if (ImGui_ComboCharEx("##material_binding", &currentMaterialIndex, labels, (int)materialCount, (int)materialCount)) {
+        VKRT_Result result = VKRT_setMeshMaterialIndex(vkrt, meshIndex, (uint32_t)currentMaterialIndex);
+        if (result != VKRT_SUCCESS) {
+            LOG_ERROR("Updating mesh material assignment failed (%d)", (int)result);
+        }
+    }
+    ImGui_SameLine();
+    if (ImGui_ButtonEx("+", (ImVec2){buttonWidth, frameHeight})) {
+        char materialName[VKRT_NAME_LEN];
+        const char* baseName = mesh->name[0] ? mesh->name : "Material";
+        snprintf(materialName, sizeof(materialName), "%s", baseName);
+
+        uint32_t materialIndex = VKRT_INVALID_INDEX;
+        VKRT_Result result = VKRT_addMaterial(vkrt, &mesh->material, materialName, &materialIndex);
+        if (result == VKRT_SUCCESS) {
+            result = VKRT_setMeshMaterialIndex(vkrt, meshIndex, materialIndex);
+            if (result != VKRT_SUCCESS) {
+                (void)VKRT_removeMaterial(vkrt, materialIndex);
+            }
+        }
+        if (result != VKRT_SUCCESS) {
+            LOG_ERROR("Creating unique material failed (%d)", (int)result);
+        }
+    }
+}
+
+static void drawMaterialPropertiesEditor(VKRT* vkrt, uint32_t materialIndex, const VKRT_MaterialSnapshot* materialSnapshot) {
+    if (!vkrt || !materialSnapshot) return;
+
+    Material material = materialSnapshot->material;
     bool materialChanged = false;
-    materialChanged |= ImGui_ColorEdit3("Base Color", material.baseColor, ImGuiColorEditFlags_Float);
 
-    materialChanged |= ImGui_SliderFloatEx("Metallic", &material.metallic, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-    materialChanged |= ImGui_SliderFloatEx("Roughness", &material.roughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-    materialChanged |= ImGui_SliderFloatEx("Diffuse Roughness", &material.diffuseRoughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-    materialChanged |= ImGui_SliderFloatEx("Subsurface", &material.subsurface, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    ImGui_PushID("mat_surface");
+    if (ImGui_CollapsingHeader("Surface", ImGuiTreeNodeFlags_DefaultOpen)) {
+        inspectorIndentSection();
+        materialChanged |= ImGui_ColorEdit3("Base Color", material.baseColor, ImGuiColorEditFlags_Float);
+        materialChanged |= ImGui_SliderFloatEx("Metallic", &material.metallic, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        materialChanged |= ImGui_SliderFloatEx("Roughness", &material.roughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        materialChanged |= ImGui_SliderFloatEx("Diffuse Roughness", &material.diffuseRoughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        materialChanged |= ImGui_SliderFloatEx("Subsurface", &material.subsurface, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        inspectorUnindentSection();
+    }
+    ImGui_PopID();
 
-    ImGui_Separator();
-    materialChanged |= ImGui_DragFloatEx("IOR", &material.ior, 0.01f, 1.0f, 4.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-    materialChanged |= ImGui_SliderFloatEx("Specular", &material.specular, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-    materialChanged |= ImGui_SliderFloatEx("Specular Tint", &material.specularTint, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-    materialChanged |= ImGui_SliderFloatEx("Anisotropic", &material.anisotropic, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-    materialChanged |= ImGui_SliderFloatEx("Transmission", &material.transmission, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-    materialChanged |= ImGui_ColorEdit3("Attenuation Color", material.attenuationColor, ImGuiColorEditFlags_Float);
-    materialChanged |= ImGui_DragFloatEx("Absorption Coefficient", &material.absorptionCoefficient, 0.01f, 0.0f, VKRT_MAX_ABSORPTION_COEFFICIENT, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    ImGui_PushID("mat_specular");
+    if (ImGui_CollapsingHeader("Specular", ImGuiTreeNodeFlags_DefaultOpen)) {
+        inspectorIndentSection();
+        materialChanged |= ImGui_DragFloatEx("IOR", &material.ior, 0.01f, 1.0f, 4.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        materialChanged |= ImGui_SliderFloatEx("Weight", &material.specular, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        materialChanged |= ImGui_SliderFloatEx("Tint", &material.specularTint, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        materialChanged |= ImGui_SliderFloatEx("Anisotropic", &material.anisotropic, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        inspectorUnindentSection();
+    }
+    ImGui_PopID();
 
-    ImGui_Separator();
-    materialChanged |= ImGui_SliderFloatEx("Sheen Weight", &material.sheenTintWeight[3], 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-    materialChanged |= ImGui_ColorEdit3("Sheen Tint", material.sheenTintWeight, ImGuiColorEditFlags_Float);
-    materialChanged |= ImGui_SliderFloatEx("Sheen Roughness", &material.sheenRoughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-    materialChanged |= ImGui_SliderFloatEx("Clearcoat", &material.clearcoat, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-    materialChanged |= ImGui_SliderFloatEx("Clearcoat Gloss", &material.clearcoatGloss, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-    materialChanged |= ImGui_DragFloatEx("Emission", &material.emissionLuminance, 0.1f, 0.0f, 1000000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-    materialChanged |= ImGui_ColorEdit3("Emission Color", material.emissionColor, ImGuiColorEditFlags_Float);
+    ImGui_PushID("mat_transmission");
+    if (ImGui_CollapsingHeader("Transmission", ImGuiTreeNodeFlags_DefaultOpen)) {
+        inspectorIndentSection();
+        materialChanged |= ImGui_SliderFloatEx("Weight", &material.transmission, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        materialChanged |= ImGui_ColorEdit3("Attenuation Color", material.attenuationColor, ImGuiColorEditFlags_Float);
+        materialChanged |= ImGui_DragFloatEx("Absorption", &material.absorptionCoefficient, 0.01f, 0.0f, VKRT_MAX_ABSORPTION_COEFFICIENT, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        inspectorUnindentSection();
+    }
+    ImGui_PopID();
 
+    ImGui_PushID("mat_coating");
+    if (ImGui_CollapsingHeader("Coating", ImGuiTreeNodeFlags_DefaultOpen)) {
+        inspectorIndentSection();
+        materialChanged |= ImGui_SliderFloatEx("Clearcoat", &material.clearcoat, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        materialChanged |= ImGui_SliderFloatEx("Clearcoat Gloss", &material.clearcoatGloss, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        materialChanged |= ImGui_SliderFloatEx("Sheen Weight", &material.sheenTintWeight[3], 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        materialChanged |= ImGui_ColorEdit3("Sheen Tint", material.sheenTintWeight, ImGuiColorEditFlags_Float);
+        materialChanged |= ImGui_SliderFloatEx("Sheen Roughness", &material.sheenRoughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        inspectorUnindentSection();
+    }
+    ImGui_PopID();
+
+    ImGui_PushID("mat_emission");
+    if (ImGui_CollapsingHeader("Emission", ImGuiTreeNodeFlags_DefaultOpen)) {
+        inspectorIndentSection();
+        materialChanged |= ImGui_DragFloatEx("Luminance", &material.emissionLuminance, 0.1f, 0.0f, 1000000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        materialChanged |= ImGui_ColorEdit3("Color", material.emissionColor, ImGuiColorEditFlags_Float);
+        inspectorUnindentSection();
+    }
+    ImGui_PopID();
+
+    ImGui_PushID("mat_advanced");
     if (ImGui_CollapsingHeader("Advanced", ImGuiTreeNodeFlags_None)) {
+        inspectorIndentSection();
         materialChanged |= ImGui_DragFloat3Ex("Conductor Eta", material.eta, 0.01f, 0.0f, 10.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
         materialChanged |= ImGui_DragFloat3Ex("Conductor K", material.k, 0.01f, 0.0f, 10.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        inspectorUnindentSection();
     }
+    ImGui_PopID();
 
     if (!materialChanged) return;
 
-    VKRT_Result result = VKRT_setMeshMaterial(vkrt, meshIndex, &material);
+    VKRT_Result result = VKRT_setMaterial(vkrt, materialIndex, &material);
     if (result != VKRT_SUCCESS) {
-        LOG_ERROR("Updating mesh material failed (%d)", (int)result);
+        LOG_ERROR("Updating material failed (%d)", (int)result);
     }
 }
 
@@ -245,16 +356,54 @@ static void drawSelectedMeshEditor(VKRT* vkrt, Session* session, uint32_t meshIn
 
     ImGui_BeginDisabled(renderModeActive);
 
+    ImGui_Spacing();
     ImGui_SeparatorText(ICON_FA_ARROWS_UP_DOWN_LEFT_RIGHT " Transform");
     inspectorIndentSection();
     drawMeshTransformEditor(vkrt, meshIndex, &mesh);
     inspectorUnindentSection();
 
+    ImGui_Spacing();
     ImGui_SeparatorText(ICON_FA_PALETTE " Material");
     inspectorIndentSection();
-    drawMeshMaterialEditor(vkrt, meshIndex, &mesh);
+    drawMeshMaterialBindingEditor(vkrt, meshIndex, &mesh);
     inspectorUnindentSection();
 
+    VKRT_MeshSnapshot refreshedMesh = mesh;
+    if (VKRT_getMeshSnapshot(vkrt, meshIndex, &refreshedMesh) != VKRT_SUCCESS) {
+        refreshedMesh = mesh;
+    }
+
+    VKRT_MaterialSnapshot material = {0};
+    if (VKRT_getMaterialSnapshot(vkrt, refreshedMesh.materialIndex, &material) == VKRT_SUCCESS) {
+        ImGui_Spacing();
+        ImGui_SeparatorText(ICON_FA_SLIDERS " Properties");
+        inspectorIndentSection();
+        if (inspectorBeginKeyValueTable("##material_stats")) {
+            ImGui_TableNextRow();
+            ImGui_TableSetColumnIndex(0);
+            ImGui_AlignTextToFramePadding();
+            ImGui_TextDisabled("Name");
+            ImGui_TableSetColumnIndex(1);
+            char materialName[VKRT_NAME_LEN];
+            snprintf(materialName, sizeof(materialName), "%s", material.name);
+            if (ImGui_InputText("##material_name", materialName, sizeof(materialName), ImGuiInputTextFlags_None)) {
+                VKRT_Result result = VKRT_setMaterialName(vkrt, refreshedMesh.materialIndex, materialName);
+                if (result != VKRT_SUCCESS) {
+                    LOG_ERROR("Updating material name failed (%d)", (int)result);
+                }
+            }
+            inspectorEndKeyValueTable();
+        }
+        ImGui_Spacing();
+        drawMaterialPropertiesEditor(vkrt, refreshedMesh.materialIndex, &material);
+        inspectorUnindentSection();
+    } else {
+        ImGui_TextDisabled("Assigned material is unavailable.");
+    }
+
+    ImGui_Spacing();
+    ImGui_Spacing();
+    ImGui_Separator();
     ImGui_Spacing();
     if (inspectorPaddedButton(ICON_FA_TRASH " Remove Mesh")) {
         sessionQueueMeshRemoval(session, meshIndex);

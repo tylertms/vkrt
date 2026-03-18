@@ -2,6 +2,7 @@
 
 #include "buffer.h"
 #include "scene.h"
+#include "state.h"
 #include "debug.h"
 
 #include <math.h>
@@ -142,7 +143,8 @@ VKRT_Result vkrtSceneRebuildLightBuffers(VKRT* vkrt) {
 
     for (uint32_t meshIndex = 0; meshIndex < meshCount; meshIndex++) {
         Mesh* mesh = &vkrt->core.meshes[meshIndex];
-        if (materialEmissionWeight(&mesh->material) <= 0.0f) continue;
+        const Material* material = vkrtGetSceneMaterialData(vkrt, mesh->info.materialIndex);
+        if (!material || materialEmissionWeight(material) <= 0.0f) continue;
         uint32_t triangleCount = mesh->info.indexCount / 3u;
         if (triangleCount == 0) continue;
         emissiveMeshCount64++;
@@ -202,7 +204,9 @@ VKRT_Result vkrtSceneRebuildLightBuffers(VKRT* vkrt) {
 
     for (uint32_t meshIndex = 0; meshIndex < meshCount; meshIndex++) {
         Mesh* mesh = &vkrt->core.meshes[meshIndex];
-        float emissionWeight = materialEmissionWeight(&mesh->material);
+        const Material* material = vkrtGetSceneMaterialData(vkrt, mesh->info.materialIndex);
+        if (!material) continue;
+        float emissionWeight = materialEmissionWeight(material);
         if (emissionWeight <= 0.0f) continue;
         if (!mesh->vertices || !mesh->indices) continue;
 
@@ -274,9 +278,9 @@ VKRT_Result vkrtSceneRebuildLightBuffers(VKRT* vkrt) {
         meshGPU.triCount = validTriCount;
         meshGPU.pmfMesh = 0.0f;
         meshGPU.invTotalArea = invTotalArea;
-        meshGPU.emission[0] = mesh->material.emissionColor[0] * mesh->material.emissionLuminance;
-        meshGPU.emission[1] = mesh->material.emissionColor[1] * mesh->material.emissionLuminance;
-        meshGPU.emission[2] = mesh->material.emissionColor[2] * mesh->material.emissionLuminance;
+        meshGPU.emission[0] = material->emissionColor[0] * material->emissionLuminance;
+        meshGPU.emission[1] = material->emissionColor[1] * material->emissionLuminance;
+        meshGPU.emission[2] = material->emissionColor[2] * material->emissionLuminance;
         meshGPU._pad0 = 0.0f;
 
         meshWeights[meshWriteIndex] = selectionWeight;

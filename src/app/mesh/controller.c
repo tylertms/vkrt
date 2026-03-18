@@ -32,6 +32,22 @@ static void rollbackImportedMeshes(VKRT* vkrt, uint32_t meshCountBefore) {
     }
 }
 
+static void rollbackImportedMaterials(VKRT* vkrt, uint32_t materialCountBefore) {
+    if (!vkrt) return;
+
+    uint32_t materialCount = 0;
+    if (VKRT_getMaterialCount(vkrt, &materialCount) != VKRT_SUCCESS) return;
+
+    while (materialCount > materialCountBefore) {
+        uint32_t materialIndex = materialCount - 1u;
+        if (VKRT_removeMaterial(vkrt, materialIndex) != VKRT_SUCCESS) {
+            LOG_ERROR("Rolling back imported material failed at index %u", materialIndex);
+            break;
+        }
+        materialCount--;
+    }
+}
+
 static void applyMeshTransform(VKRT* vkrt, uint32_t meshIndex, const DefaultMeshSpec* spec) {
     if (!vkrt || !spec || meshIndex == VKRT_INVALID_INDEX) return;
 
@@ -48,7 +64,26 @@ static void applyMeshTransform(VKRT* vkrt, uint32_t meshIndex, const DefaultMesh
 static void applyMeshMaterial(VKRT* vkrt, uint32_t meshIndex, const DefaultMeshSpec* spec) {
     if (!vkrt || !spec || meshIndex == VKRT_INVALID_INDEX) return;
 
-    VKRT_Result result = VKRT_setMeshMaterial(vkrt, meshIndex, &spec->material);
+    uint32_t previousMaterialIndex = VKRT_INVALID_INDEX;
+    VKRT_MeshSnapshot mesh = {0};
+    if (VKRT_getMeshSnapshot(vkrt, meshIndex, &mesh) == VKRT_SUCCESS) {
+        previousMaterialIndex = mesh.materialIndex;
+    }
+
+    uint32_t materialIndex = VKRT_INVALID_INDEX;
+    VKRT_Result result = VKRT_addMaterial(vkrt, &spec->material, spec->importName, &materialIndex);
+    if (result == VKRT_SUCCESS) {
+        result = VKRT_setMeshMaterialIndex(vkrt, meshIndex, materialIndex);
+        if (result != VKRT_SUCCESS) {
+            (void)VKRT_removeMaterial(vkrt, materialIndex);
+        } else if (previousMaterialIndex != VKRT_INVALID_INDEX && previousMaterialIndex != materialIndex) {
+            VKRT_MaterialSnapshot previousMaterial = {0};
+            if (VKRT_getMaterialSnapshot(vkrt, previousMaterialIndex, &previousMaterial) == VKRT_SUCCESS &&
+                previousMaterial.useCount == 0u) {
+                (void)VKRT_removeMaterial(vkrt, previousMaterialIndex);
+            }
+        }
+    }
     if (result != VKRT_SUCCESS) {
         LOG_ERROR("Setting %s material failed (%d)", spec->importName, (int)result);
     }
@@ -72,7 +107,9 @@ int meshControllerImportMesh(VKRT* vkrt, Session* session, const char* path, con
 
     uint64_t startTime = getMicroseconds();
     uint32_t meshCountBeforeImport = 0;
+    uint32_t materialCountBeforeImport = 0;
     if (VKRT_getMeshCount(vkrt, &meshCountBeforeImport) != VKRT_SUCCESS) return 0;
+    if (VKRT_getMaterialCount(vkrt, &materialCountBeforeImport) != VKRT_SUCCESS) return 0;
 
     MeshImportData importData = {0};
     if (meshLoadFromFile(path, &importData) != 0) {
@@ -80,22 +117,60 @@ int meshControllerImportMesh(VKRT* vkrt, Session* session, const char* path, con
         return 0;
     }
 
-    uint32_t importedCount = 0;
+    uint32_t* importedMaterialIndices = NULL;
+    if (importData.materialCount > 0) {
+        importedMaterialIndices = (uint32_t*)malloc(importData.materialCount * sizeof(uint32_t));
+        if (!importedMaterialIndices) {
+            meshReleaseImportData(&importData);
+            return 0;
+        }
+        for (uint32_t i = 0; i < importData.materialCount; i++) {
+            importedMaterialIndices[i] = VKRT_INVALID_INDEX;
+        }
+    }
+
+    uint32_t uploadedMeshCount = 0;
     for (uint32_t i = 0; i < importData.count; i++) {
         const MeshImportEntry* entry = &importData.entries[i];
-        uint32_t meshIndex = meshCountBeforeImport + importedCount;
 
         if (VKRT_uploadMeshData(vkrt, entry->vertices, entry->vertexCount, entry->indices, entry->indexCount) != VKRT_SUCCESS) {
             LOG_ERROR("Mesh upload failed. File: %s, Entry: %s", path, entry->name ? entry->name : "(unnamed)");
             rollbackImportedMeshes(vkrt, meshCountBeforeImport);
+            free(importedMaterialIndices);
             meshReleaseImportData(&importData);
             return 0;
         }
+        uploadedMeshCount++;
+    }
 
-        if (VKRT_setMeshMaterial(vkrt, meshIndex, &entry->material) != VKRT_SUCCESS ||
+    for (uint32_t materialIndex = 0; materialIndex < importData.materialCount; materialIndex++) {
+        const MaterialImportEntry* material = &importData.materials[materialIndex];
+        if (VKRT_addMaterial(vkrt, &material->material, material->name, &importedMaterialIndices[materialIndex]) != VKRT_SUCCESS) {
+            LOG_ERROR("Material import failed. File: %s, Material: %s", path, material->name ? material->name : "(unnamed)");
+            rollbackImportedMeshes(vkrt, meshCountBeforeImport);
+            rollbackImportedMaterials(vkrt, materialCountBeforeImport);
+            free(importedMaterialIndices);
+            meshReleaseImportData(&importData);
+            return 0;
+        }
+    }
+
+    uint32_t configuredMeshCount = 0;
+    for (uint32_t i = 0; i < importData.count; i++) {
+        const MeshImportEntry* entry = &importData.entries[i];
+        uint32_t meshIndex = meshCountBeforeImport + configuredMeshCount;
+
+        VKRT_Result materialResult = VKRT_SUCCESS;
+        if (entry->materialIndex != VKRT_INVALID_INDEX) {
+            materialResult = VKRT_setMeshMaterialIndex(vkrt, meshIndex, importedMaterialIndices[entry->materialIndex]);
+        }
+
+        if (materialResult != VKRT_SUCCESS ||
             VKRT_setMeshRenderBackfaces(vkrt, meshIndex, entry->renderBackfaces) != VKRT_SUCCESS) {
             LOG_ERROR("Mesh material import failed. File: %s, Entry: %s", path, entry->name ? entry->name : "(unnamed)");
             rollbackImportedMeshes(vkrt, meshCountBeforeImport);
+            rollbackImportedMaterials(vkrt, materialCountBeforeImport);
+            free(importedMaterialIndices);
             meshReleaseImportData(&importData);
             return 0;
         }
@@ -106,6 +181,8 @@ int meshControllerImportMesh(VKRT* vkrt, Session* session, const char* path, con
         if (VKRT_setMeshTransform(vkrt, meshIndex, position, rotation, scale) != VKRT_SUCCESS) {
             LOG_ERROR("Mesh transform import failed. File: %s, Entry: %s", path, entry->name ? entry->name : "(unnamed)");
             rollbackImportedMeshes(vkrt, meshCountBeforeImport);
+            rollbackImportedMaterials(vkrt, materialCountBeforeImport);
+            free(importedMaterialIndices);
             meshReleaseImportData(&importData);
             return 0;
         }
@@ -121,18 +198,24 @@ int meshControllerImportMesh(VKRT* vkrt, Session* session, const char* path, con
             LOG_ERROR("Mesh imported but failed to store mesh label. File: %s", meshName);
         }
 
-        if (importedCount == 0 && outMeshIndex) {
+        if (configuredMeshCount == 0 && outMeshIndex) {
             *outMeshIndex = meshIndex;
         }
-        importedCount++;
+        configuredMeshCount++;
     }
 
+    if (materialCountBeforeImport == 0u) {
+        (void)VKRT_removeMaterial(vkrt, 0u);
+    }
+
+    free(importedMaterialIndices);
     meshReleaseImportData(&importData);
 
     uint32_t meshCountAfterImport = 0;
     if (VKRT_getMeshCount(vkrt, &meshCountAfterImport) != VKRT_SUCCESS || meshCountAfterImport <= meshCountBeforeImport) {
         LOG_ERROR("Mesh import failed. File: %s", path);
         rollbackImportedMeshes(vkrt, meshCountBeforeImport);
+        rollbackImportedMaterials(vkrt, materialCountBeforeImport);
         return 0;
     }
 

@@ -86,7 +86,7 @@ VKRT_Result vkrtSceneRebuildMaterialBuffer(VKRT* vkrt) {
     Buffer previousMaterialData = *materialData;
     Buffer nextMaterialData = {0};
 
-    uint32_t materialCount = vkrt->core.meshCount;
+    uint32_t materialCount = vkrt->core.materialCount;
     if (materialCount == 0) {
         VKRT_Result result = createZeroInitializedDeviceBuffer(
             vkrt,
@@ -115,8 +115,7 @@ VKRT_Result vkrtSceneRebuildMaterialBuffer(VKRT* vkrt) {
     }
 
     for (uint32_t i = 0; i < materialCount; i++) {
-        vkrt->core.meshes[i].info.materialIndex = i;
-        materials[i] = vkrt->core.meshes[i].material;
+        materials[i] = vkrt->core.materials[i].material;
     }
 
     VKRT_Result result = createDeviceBufferFromData(

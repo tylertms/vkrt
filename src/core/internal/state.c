@@ -1,6 +1,10 @@
 #include "state.h"
 
+#include <stdio.h>
+#include <stdlib.h>
 #include <stdint.h>
+
+static const char* kDefaultMaterialName = "Default Material";
 
 VKRT_Result vkrtRequireSceneStateReady(const VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
@@ -32,6 +36,42 @@ VKRT_Result vkrtConvertVkResult(VkResult result) {
     default:
         return VKRT_ERROR_OPERATION_FAILED;
     }
+}
+
+VKRT_Result vkrtEnsureDefaultMaterial(VKRT* vkrt) {
+    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+    if (vkrt->core.materialCount > 0) return VKRT_SUCCESS;
+
+    SceneMaterial* materials = (SceneMaterial*)malloc(sizeof(SceneMaterial));
+    if (!materials) return VKRT_ERROR_OUT_OF_MEMORY;
+
+    materials[0].material = VKRT_materialDefault();
+    snprintf(materials[0].name, sizeof(materials[0].name), "%s", kDefaultMaterialName);
+    vkrt->core.materials = materials;
+    vkrt->core.materialCount = 1u;
+    return VKRT_SUCCESS;
+}
+
+const SceneMaterial* vkrtGetSceneMaterial(const VKRT* vkrt, uint32_t materialIndex) {
+    if (!vkrt || materialIndex >= vkrt->core.materialCount || !vkrt->core.materials) return NULL;
+    return &vkrt->core.materials[materialIndex];
+}
+
+const Material* vkrtGetSceneMaterialData(const VKRT* vkrt, uint32_t materialIndex) {
+    const SceneMaterial* material = vkrtGetSceneMaterial(vkrt, materialIndex);
+    return material ? &material->material : NULL;
+}
+
+uint32_t vkrtCountMaterialUsers(const VKRT* vkrt, uint32_t materialIndex) {
+    if (!vkrt || materialIndex >= vkrt->core.materialCount) return 0u;
+
+    uint32_t useCount = 0u;
+    for (uint32_t meshIndex = 0; meshIndex < vkrt->core.meshCount; meshIndex++) {
+        if (vkrt->core.meshes[meshIndex].info.materialIndex == materialIndex) {
+            useCount++;
+        }
+    }
+    return useCount;
 }
 
 uint32_t vkrtResolveMeshRenderBackfaces(const Mesh* mesh) {

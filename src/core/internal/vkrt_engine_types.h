@@ -14,7 +14,6 @@ typedef struct AccelerationStructure {
 
 typedef struct Mesh {
     MeshInfo info;
-    Material material;
     char name[VKRT_NAME_LEN];
     AccelerationStructure bottomLevelAccelerationStructure;
     Vertex* vertices;
@@ -25,6 +24,11 @@ typedef struct Mesh {
     uint8_t geometryUploadPending;
     uint8_t blasBuildPending;
 } Mesh;
+
+typedef struct SceneMaterial {
+    Material material;
+    char name[VKRT_NAME_LEN];
+} SceneMaterial;
 
 typedef struct GeometryLayout {
     uint32_t vertexCapacity;

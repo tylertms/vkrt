@@ -82,10 +82,12 @@ typedef struct VKRT_Core {
     VkImageView selectionMaskImageView;
     VkDeviceMemory selectionMaskImageMemory;
     Mesh* meshes;
+    SceneMaterial* materials;
     Buffer selection;
     Buffer vertexData;
     Buffer indexData;
     uint32_t meshCount;
+    uint32_t materialCount;
     Buffer sceneMeshData;
     Buffer sceneMaterialData;
     Buffer sceneEmissiveMeshData;

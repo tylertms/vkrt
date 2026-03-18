@@ -157,9 +157,16 @@ typedef struct VKRT_SystemInfo {
 typedef struct VKRT_MeshSnapshot {
     MeshInfo info;
     Material material;
+    uint32_t materialIndex;
     uint32_t geometrySource;
     uint8_t ownsGeometry;
     char name[VKRT_NAME_LEN];
 } VKRT_MeshSnapshot;
+
+typedef struct VKRT_MaterialSnapshot {
+    Material material;
+    uint32_t useCount;
+    char name[VKRT_NAME_LEN];
+} VKRT_MaterialSnapshot;
 
 #define VKRT_ARRAY_COUNT(x) ((sizeof(x) / sizeof(0 [x])) / ((size_t)(!(sizeof(x) % sizeof(0 [x])))))
