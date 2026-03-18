@@ -115,11 +115,6 @@ static void updateSelectedMesh(VKRT* vkrt, uint32_t meshIndex) {
     }
 }
 
-static bool materialHasConductor(const Material* material) {
-    if (!material) return false;
-    return material->k[0] > 0.0f || material->k[1] > 0.0f || material->k[2] > 0.0f;
-}
-
 static void drawMeshInfoHeader(VKRT* vkrt, uint32_t meshIndex, const VKRT_MeshSnapshot* mesh) {
     if (!vkrt || !mesh) return;
 
@@ -199,20 +194,23 @@ static void drawMeshMaterialEditor(VKRT* vkrt, uint32_t meshIndex, const VKRT_Me
 
     Material material = mesh->material;
     bool materialChanged = false;
-    bool conductorActive = materialHasConductor(&material);
     materialChanged |= ImGui_ColorEdit3("Base Color", material.baseColor, ImGuiColorEditFlags_Float);
-    if (conductorActive) {
-        tooltipOnHover("For conductor presets, eta/k drives the specular response. Base Color still controls the diffuse side if you lower Metallic.");
-    }
+
     materialChanged |= ImGui_SliderFloatEx("Metallic", &material.metallic, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     materialChanged |= ImGui_SliderFloatEx("Roughness", &material.roughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     materialChanged |= ImGui_SliderFloatEx("Diffuse Roughness", &material.diffuseRoughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    materialChanged |= ImGui_SliderFloatEx("Subsurface", &material.subsurface, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+
+    ImGui_Separator();
     materialChanged |= ImGui_DragFloatEx("IOR", &material.ior, 0.01f, 1.0f, 4.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     materialChanged |= ImGui_SliderFloatEx("Specular", &material.specular, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     materialChanged |= ImGui_SliderFloatEx("Specular Tint", &material.specularTint, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     materialChanged |= ImGui_SliderFloatEx("Anisotropic", &material.anisotropic, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     materialChanged |= ImGui_SliderFloatEx("Transmission", &material.transmission, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-    materialChanged |= ImGui_SliderFloatEx("Subsurface", &material.subsurface, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    materialChanged |= ImGui_ColorEdit3("Attenuation Color", material.attenuationColor, ImGuiColorEditFlags_Float);
+    materialChanged |= ImGui_DragFloatEx("Absorption Coefficient", &material.absorptionCoefficient, 0.01f, 0.0f, VKRT_MAX_ABSORPTION_COEFFICIENT, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+
+    ImGui_Separator();
     materialChanged |= ImGui_SliderFloatEx("Sheen Weight", &material.sheenTintWeight[3], 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     materialChanged |= ImGui_ColorEdit3("Sheen Tint", material.sheenTintWeight, ImGuiColorEditFlags_Float);
     materialChanged |= ImGui_SliderFloatEx("Sheen Roughness", &material.sheenRoughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);

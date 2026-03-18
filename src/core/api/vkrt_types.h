@@ -94,6 +94,8 @@ static inline Material VKRT_materialDefault(void) {
         .transmission = 0.0f,
         .subsurface = 0.0f,
         .sheenRoughness = 0.5f,
+        .absorptionCoefficient = 0.0f,
+        .attenuationColor = {1.0f, 1.0f, 1.0f},
     };
 }
 

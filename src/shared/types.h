@@ -54,6 +54,8 @@ struct Material {
     float transmission;
     float subsurface;
     float sheenRoughness;
+    float absorptionCoefficient;
+    float3 attenuationColor;
     float padding;
 };
 

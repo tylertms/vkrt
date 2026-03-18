@@ -133,6 +133,10 @@ float3 bsdfSheenColor(Material material) {
 }
 
 float3 bsdfTransmissionColor(Material material) {
+    if (material.transmission > 0.0 && material.metallic <= 0.0) {
+        return float3(1.0);
+    }
+
     return material.baseColor;
 }
 
@@ -148,6 +152,47 @@ float interfaceEta(Material material, uint frontFace) {
 float interfaceRefractionEta(Material material, uint frontFace) {
     float ior = interfaceIor(material);
     return frontFace != 0u ? (1.0 / ior) : ior;
+}
+
+struct MediumState {
+    bool refractiveActive;
+    bool absorptionActive;
+    float3 absorptionSigma;
+};
+
+bool materialHasAbsorption(Material material) {
+    return material.absorptionCoefficient > 0.0 && any(material.attenuationColor < float3(0.9999));
+}
+
+bool materialMediumIsRefractive(Material material) {
+    return material.transmission > 0.0 && interfaceIor(material) > 1.0 + 1e-4;
+}
+
+float3 materialAbsorptionSigma(Material material) {
+    float3 absorptionTint = max(saturate(material.attenuationColor), float3(1e-6));
+    return -log(absorptionTint) * material.absorptionCoefficient;
+}
+
+bool mediumHasActiveBoundary(MediumState medium) {
+    return medium.refractiveActive || medium.absorptionActive;
+}
+
+float3 mediumTransmittance(MediumState medium, float distance) {
+    return medium.absorptionActive ? exp(-medium.absorptionSigma * distance) : float3(1.0);
+}
+
+void updateMediumStateFromTransmission(
+    Material material,
+    uint frontFace,
+    uint isTransmission,
+    inout MediumState medium
+) {
+    if (isTransmission == 0u) return;
+
+    bool enteringMedium = frontFace != 0u;
+    medium.refractiveActive = enteringMedium && materialMediumIsRefractive(material);
+    medium.absorptionActive = enteringMedium && materialHasAbsorption(material);
+    medium.absorptionSigma = medium.absorptionActive ? materialAbsorptionSigma(material) : float3(0.0);
 }
 
 float dielectricF0(float eta) {

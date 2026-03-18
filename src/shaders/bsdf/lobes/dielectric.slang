@@ -27,7 +27,11 @@ float dielectricFresnel(Material material, uint frontFace, float cosThetaI) {
     return fresnelDielectric(cosThetaI, interfaceEta(material, frontFace));
 }
 
-float3 dielectricReflectionColor(Material material, float cosThetaI) {
+float3 dielectricReflectionColor(Material material, float cosThetaI, float fresnel) {
+    if (material.transmission > 0.0 && material.metallic <= 0.0) {
+        return fresnel.xxx;
+    }
+
     return fresnelSchlick(cosThetaI, bsdfDielectricSpecularF0(material));
 }
 
@@ -95,7 +99,7 @@ BSDFEval evalDielectricReflection(Material material, float3 wo, float3 wi, uint 
 
     float Dm = ggxDistribution(wm, params.alpha);
     float G = ggxMasking(wo, wi, params.alpha);
-    eval.value = dielectricReflectionColor(material, woDotWm) *
+    eval.value = dielectricReflectionColor(material, woDotWm, fresnel) *
         (Dm * G / max(4.0 * cosTheta(wo) * cosTheta(wi), GGX_EPSILON));
     eval.pdf = reflectionProbability * ggxReflectionPdf(wo, wm, params);
     return eval;

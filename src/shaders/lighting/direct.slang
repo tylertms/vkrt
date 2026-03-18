@@ -67,7 +67,14 @@ float computeBSDFEmitterMISWeight(float bsdfPdf, float lightPdfArea, float3 geom
     return powerHeuristic(bsdfPdf, lightPdfSolidAngle);
 }
 
-float3 evaluateDirectLight(float3 hitPoint, float3 geometricNormal, ShadingBasis basis, BSDFState state, inout uint rng) {
+float3 evaluateDirectLight(
+    float3 hitPoint,
+    float3 geometricNormal,
+    ShadingBasis basis,
+    BSDFState state,
+    MediumState medium,
+    inout uint rng
+) {
     if (absCosTheta(state.wo) <= 0.0) return float3(0.0);
 
     LightSample ls = sampleEmissiveLight(rng);
@@ -95,13 +102,18 @@ float3 evaluateDirectLight(float3 hitPoint, float3 geometricNormal, ShadingBasis
     if (!traceShadowRay(shadowOrigin, wi, shadowDist)) return float3(0.0);
 
     float3 wiLocal = worldToLocal(wi, basis);
+    if (materialMediumIsRefractive(state.material) && cosTheta(wiLocal) <= 0.0) {
+        return float3(0.0);
+    }
+
     BSDFEval eval = evalBSDF(state, wiLocal);
     if (eval.pdf <= 0.0) return float3(0.0);
 
     float3 fCos = eval.value * abs(dot(wi, basis.normal));
     float misWeight = powerHeuristic(pdfSolidAngle, eval.pdf);
+    float3 transmittance = mediumTransmittance(medium, shadowDist);
 
-    return misWeight * fCos * ls.emission / pdfSolidAngle;
+    return misWeight * transmittance * fCos * ls.emission / pdfSolidAngle;
 }
 
 #endif

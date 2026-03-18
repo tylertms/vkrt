@@ -11,6 +11,7 @@ static Material sanitizeMaterial(Material material) {
         material.baseColor[c] = vkrtFiniteClampf(material.baseColor[c], 0.0f, 0.0f, 1.0f);
         material.emissionColor[c] = vkrtFiniteClampf(material.emissionColor[c], 0.0f, 0.0f, INFINITY);
         material.sheenTintWeight[c] = vkrtFiniteClampf(material.sheenTintWeight[c], 0.0f, 0.0f, 1.0f);
+        material.attenuationColor[c] = vkrtFiniteClampf(material.attenuationColor[c], 1.0f, 0.0f, 1.0f);
     }
 
     material.metallic = vkrtFiniteClampf(material.metallic, 0.0f, 0.0f, 1.0f);
@@ -26,6 +27,7 @@ static Material sanitizeMaterial(Material material) {
     material.transmission = vkrtFiniteClampf(material.transmission, 0.0f, 0.0f, 1.0f);
     material.subsurface = vkrtFiniteClampf(material.subsurface, 0.0f, 0.0f, 1.0f);
     material.sheenRoughness = vkrtFiniteClampf(material.sheenRoughness, 0.0f, 0.0f, 1.0f);
+    material.absorptionCoefficient = vkrtFiniteClampf(material.absorptionCoefficient, 0.0f, 0.0f, VKRT_MAX_ABSORPTION_COEFFICIENT);
     material.emissionLuminance = vkrtFiniteClampf(material.emissionLuminance, 0.0f, 0.0f, INFINITY);
     for (int c = 0; c < 3; c++) {
         material.eta[c] = vkrtFiniteClampf(material.eta[c], 0.0f, 0.0f, INFINITY);
@@ -60,7 +62,9 @@ static int materialsEqual(const Material* a, const Material* b) {
         a->diffuseRoughness == b->diffuseRoughness &&
         a->transmission == b->transmission &&
         a->subsurface == b->subsurface &&
-        a->sheenRoughness == b->sheenRoughness;
+        a->sheenRoughness == b->sheenRoughness &&
+        a->absorptionCoefficient == b->absorptionCoefficient &&
+        materialComponentEqual(a->attenuationColor, b->attenuationColor, 3);
 }
 
 static int updateMeshVector(vec3 destination, vec3 source) {

@@ -190,11 +190,16 @@ static int materialUsesUnsupportedTextures(const cgltf_material* material) {
         materialUsesTextureView(&material->anisotropy.anisotropy_texture);
 }
 
+static int materialUsesUnsupportedVolume(const cgltf_material* material) {
+    if (!material || !material->has_volume) return 0;
+    return material->volume.thickness_factor > 0.0f;
+}
+
 static int materialUsesUnsupportedModels(const cgltf_material* material) {
     if (!material) return 0;
 
     return material->has_pbr_specular_glossiness ||
-        material->has_volume ||
+        materialUsesUnsupportedVolume(material) ||
         material->has_iridescence ||
         material->has_diffuse_transmission ||
         material->has_anisotropy ||
@@ -449,6 +454,16 @@ static Material buildMaterial(const cgltf_material* sourceMaterial) {
 
     if (sourceMaterial->has_transmission) {
         material.transmission = sourceMaterial->transmission.transmission_factor;
+    }
+
+    if (sourceMaterial->has_volume) {
+        material.attenuationColor[0] = sourceMaterial->volume.attenuation_color[0];
+        material.attenuationColor[1] = sourceMaterial->volume.attenuation_color[1];
+        material.attenuationColor[2] = sourceMaterial->volume.attenuation_color[2];
+        material.absorptionCoefficient = sourceMaterial->volume.attenuation_distance > 0.0f &&
+            isfinite(sourceMaterial->volume.attenuation_distance)
+            ? 1.0f / sourceMaterial->volume.attenuation_distance
+            : 0.0f;
     }
 
     if (sourceMaterial->has_clearcoat) {

@@ -50,6 +50,11 @@ void main() {
     for (uint sampleIndex = 0u; sampleIndex < spp && !debugEarlyOut; sampleIndex++) {
         float3 radiance = float3(0.0);
         float3 throughput = float3(1.0);
+        MediumState medium;
+        medium.refractiveActive = false;
+        medium.absorptionActive = false;
+        medium.absorptionSigma = float3(0.0);
+        bool prevVertexNeeAllowed = false;
 
         uint rng = initPixelSeed(pixel, scene.frameNumber, previousSamples + sampleIndex);
         float2 jitter = float2(rand(rng), rand(rng)) - float2(0.5);
@@ -82,7 +87,7 @@ void main() {
             }
 
             if (payload.didHit == 0u) {
-                if (!neeOnlyDebug) {
+                if (!neeOnlyDebug && !mediumHasActiveBoundary(medium)) {
                     radiance += throughput * scene.environmentLight.xyz;
                 }
                 break;
@@ -92,20 +97,34 @@ void main() {
             float3 shadingNormal = unpackOctNormal(payload.packedShadingNormal);
             float3 geometricNormal = unpackOctNormal(payload.packedGeometricNormal);
             Material material = materials[payload.materialIndex];
+            if (medium.absorptionActive) {
+                throughput *= mediumTransmittance(medium, payload.hitDistance);
+                if (!any(throughput > 0.0)) {
+                    break;
+                }
+            }
             ShadingBasis basis = makeShadingBasis(shadingNormal, payload.tangent);
             float3 wo = worldToLocal(-ray.Direction, basis);
             BSDFState state = makeBSDFState(material, wo, payload.frontFace);
+            bool currentVertexNeeAllowed = !medium.refractiveActive;
 
             float3 contribution = float3(0.0);
-            if (!bsdfOnlyDebug && neeEnabled) {
-                contribution += evaluateDirectLight(hitPoint, geometricNormal, basis, state, rng);
+            if (!bsdfOnlyDebug && neeEnabled && currentVertexNeeAllowed) {
+                contribution += evaluateDirectLight(
+                    hitPoint,
+                    geometricNormal,
+                    basis,
+                    state,
+                    medium,
+                    rng
+                );
             }
 
             if (!neeOnlyDebug) {
                 float3 emission = material.emissionColor * material.emissionLuminance;
                 if (any(emission > 0.0)) {
                     float misWeight = 1.0;
-                    if (neeEnabled && depth > 0u && prevBsdfPdf > 0.0) {
+                    if (neeEnabled && prevVertexNeeAllowed && depth > 0u && prevBsdfPdf > 0.0) {
                         misWeight = computeBSDFEmitterMISWeight(
                             prevBsdfPdf,
                             meshInfos[payload.instanceIndex].lightPdfArea,
@@ -131,6 +150,19 @@ void main() {
             if (!any(throughput > 0.0)) {
                 break;
             }
+
+            bool sampledPathNeeAllowed = currentVertexNeeAllowed;
+            if (sampledPathNeeAllowed && materialMediumIsRefractive(material) && sample.isTransmission != 0u) {
+                sampledPathNeeAllowed = false;
+            }
+
+            updateMediumStateFromTransmission(
+                material,
+                payload.frontFace,
+                sample.isTransmission,
+                medium
+            );
+            prevVertexNeeAllowed = sampledPathNeeAllowed;
 
             if (depth + 1u >= scene.rrMinDepth) {
                 float continueProbability = clamp(max(throughput.x, max(throughput.y, throughput.z)), VKRT_RR_MIN_CONTINUE_PROB, VKRT_RR_MAX_CONTINUE_PROB);
