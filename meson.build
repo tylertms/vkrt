@@ -24,12 +24,11 @@ if sys == 'linux' and cc.get_argument_syntax() == 'gcc'
   c_args += [define_prefix + '_GNU_SOURCE']
 endif
 
-c_args += [define_prefix + 'VKRT_VERSION="' + meson.project_version() + '"']
+c_args += [define_prefix + 'VKRT_VERSION="' + get_option('vkrt_version') + '"']
 c_args += [define_prefix + 'GLFW_INCLUDE_NONE']
 cpp_args += [define_prefix + 'GLFW_INCLUDE_NONE']
 
 buildtype = get_option('buildtype')
-selection_enabled = get_option('selection')
 profiling_enabled = get_option('profiling')
 validation_enabled = (buildtype == 'debug' or buildtype == 'debugoptimized') and not profiling_enabled
 debug_utils_enabled = validation_enabled or profiling_enabled
@@ -42,11 +41,9 @@ endif
 c_args += [define_prefix + 'VKRT_PROFILING_ENABLED=' + (profiling_enabled ? '1' : '0')]
 c_args += [define_prefix + 'VKRT_VALIDATION_ENABLED=' + (validation_enabled ? '1' : '0')]
 c_args += [define_prefix + 'VKRT_DEBUG_UTILS_ENABLED=' + (debug_utils_enabled ? '1' : '0')]
-c_args += [define_prefix + 'VKRT_SELECTION_ENABLED=' + (selection_enabled ? '1' : '0')]
 cpp_args += [define_prefix + 'VKRT_PROFILING_ENABLED=' + (profiling_enabled ? '1' : '0')]
 cpp_args += [define_prefix + 'VKRT_VALIDATION_ENABLED=' + (validation_enabled ? '1' : '0')]
 cpp_args += [define_prefix + 'VKRT_DEBUG_UTILS_ENABLED=' + (debug_utils_enabled ? '1' : '0')]
-cpp_args += [define_prefix + 'VKRT_SELECTION_ENABLED=' + (selection_enabled ? '1' : '0')]
 
 if profiling_enabled
   if cc.get_argument_syntax() == 'msvc'
@@ -78,7 +75,7 @@ external_includes = include_directories(
   'external/imgui/icons',
   'external/cglm/include',
   'external/cgltf/include',
-  'external/spng',
+  'external/stb',
   'external/nfd/src/include',
   is_system: true,
 )
@@ -138,25 +135,6 @@ if not glfw_dep.found()
   })
   glfw_project = cmake.subproject('glfw', options: glfw_options)
   glfw_dep = glfw_project.dependency('glfw')
-endif
-
-if sys == 'windows'
-  zlib_dep = dependency(
-    'zlib',
-    required: true,
-    fallback: ['zlib', 'zlib_dep'],
-    default_options: ['default_library=static', 'warning_level=0'],
-  )
-else
-  zlib_dep = dependency('zlib', required: false, allow_fallback: false)
-  if not zlib_dep.found()
-    zlib_dep = dependency(
-      'zlib',
-      required: true,
-      fallback: ['zlib', 'zlib_dep'],
-      default_options: ['default_library=static', 'warning_level=0'],
-    )
-  endif
 endif
 
 threads_dep = dependency('threads')

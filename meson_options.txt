@@ -14,15 +14,15 @@ option(
 )
 
 option(
-  'selection',
-  type: 'boolean',
-  value: true,
-  description: 'Build selection ray tracing and outline pipelines.',
-)
-
-option(
   'profiling',
   type: 'boolean',
   value: false,
   description: 'Enable CPU and GPU debug and profiling information.',
+)
+
+option(
+  'vkrt_version',
+  type: 'string',
+  value: 'dev',
+  description: 'Version string embedded in the binary.',
 )

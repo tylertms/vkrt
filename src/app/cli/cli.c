@@ -1,13 +1,17 @@
 #include "cli.h"
 
+#include <dcimgui.h>
 #include <errno.h>
+#include <nfd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include <GLFW/glfw3.h>
+#include <stb_image.h>
+#include <types.h>
+#include <version.h>
 #include <vulkan/vulkan.h>
-#include <spng.h>
 
 #ifndef VKRT_VERSION
 #define VKRT_VERSION "dev"
@@ -273,14 +277,25 @@ void CLIPrintArgumentError(const char* error) {
 
 void CLIPrintVersion(void) {
     uint32_t runtimeVersion = queryVulkanRuntimeVersion();
-    printf("vkrt %s\n", VKRT_VERSION);
-    printf("  GLFW    %d.%d.%d\n", GLFW_VERSION_MAJOR, GLFW_VERSION_MINOR, GLFW_VERSION_REVISION);
-    printf("  Vulkan  %d.%d.%d\n",
+    printf("===================================\n");
+    printf(" vkrt       %s\n", VKRT_VERSION);
+    printf("===================================\n");
+
+    printf(" Vulkan     %d.%d.%d\n",
         VK_API_VERSION_MAJOR(runtimeVersion),
         VK_API_VERSION_MINOR(runtimeVersion),
         VK_API_VERSION_PATCH(runtimeVersion)
     );
-    printf("  spng    %d.%d.%d\n", SPNG_VERSION_MAJOR, SPNG_VERSION_MINOR, SPNG_VERSION_PATCH);
+    printf(" ImGui      %s\n", IMGUI_VERSION);
+    printf(" glfw       %d.%d.%d\n", GLFW_VERSION_MAJOR, GLFW_VERSION_MINOR, GLFW_VERSION_REVISION);
+    printf(" cglm       %d.%d.%d\n", CGLM_VERSION_MAJOR, CGLM_VERSION_MINOR, CGLM_VERSION_PATCH);
+    printf(" cgltf      1.15\n");
+    printf(" stb_image  2.30\n");
+    printf(" nfd-ext    1.30\n");
+    printf("===================================\n");
+    printf(" https://github.com/tylertms/vkrt\n");
+    printf("===================================\n");
+
 }
 
 void CLIPrintHelp(void) {
@@ -315,7 +330,7 @@ void CLIPrintHelp(void) {
     printf("  Scroll wheel               Zoom render view\n");
     printf("\nFile Formats:\n");
     printf("  Import: glTF mesh (.glb, .gltf; geometry + scalar material factors)\n");
-    printf("  Export: PNG (.png)\n");
+    printf("  Export: Image (.png, .jpg, .jpeg, .bmp, .tga)\n");
     printf("\nRequirements:\n");
     printf("  Vulkan 1.2+ with ray tracing pipeline support\n");
 }
