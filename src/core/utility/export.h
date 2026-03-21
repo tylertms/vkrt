@@ -2,5 +2,5 @@
 
 #include "vkrt_internal.h"
 
-int saveCurrentRenderPNG(VKRT* vkrt, const char* path);
-void shutdownRenderPNGExporter(VKRT* vkrt);
+int saveCurrentRenderImage(VKRT* vkrt, const char* path);
+void shutdownRenderImageExporter(VKRT* vkrt);

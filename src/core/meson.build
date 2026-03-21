@@ -10,9 +10,11 @@ vkrt_sources = files(
   'runtime/instance.c',
   'render/pipeline.c',
   'scene/camera.c',
+  'scene/exposure.c',
   'scene/geometry.c',
   'scene/lighting.c',
   'scene/rebuild.c',
+  'scene/textures.c',
   'scene/timing.c',
   'scene/transform.c',
   'scene/uniform.c',
@@ -31,16 +33,11 @@ vkrt_sources = files(
   'api/settings.c',
   'api/render.c',
   'api/query.c',
+  'api/texture.c',
   'utility/export.c',
+  'utility/image.c',
   'utility/io.c',
   'utility/platform.c',
-)
-
-spng = static_library('spng',
-  sources: files('../../external/spng/spng.c'),
-  include_directories: include_directories('../../external/spng', is_system: true),
-  dependencies: [zlib_dep],
-  override_options: ['warning_level=0'],
 )
 
 vkrt = static_library('vkrt_core',
@@ -48,6 +45,6 @@ vkrt = static_library('vkrt_core',
   sources: vkrt_sources,
   dependencies: core_dependencies,
   include_directories: [core_build_includes, core_internal_includes],
-  link_with: [dcimgui, spng],
+  link_with: [dcimgui],
   link_language: 'cpp',
 )
