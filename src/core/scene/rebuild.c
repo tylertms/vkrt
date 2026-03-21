@@ -130,9 +130,7 @@ VKRT_Result vkrtSceneRebuildMaterialBuffer(VKRT* vkrt) {
     nextMaterialData.count = materialCount;
 
     free(materials);
-    if (result != VKRT_SUCCESS) {
-        return result;
-    }
+    if (result != VKRT_SUCCESS) return result;
 
     if ((result = vkrtSceneRebuildLightBuffers(vkrt)) != VKRT_SUCCESS) {
         destroyBufferResources(vkrt, &nextMaterialData);

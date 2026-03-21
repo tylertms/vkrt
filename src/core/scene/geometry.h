@@ -15,4 +15,5 @@ VKRT_Result vkrtSceneUploadMeshData(
     const uint32_t* indices,
     size_t indexCount
 );
+VKRT_Result vkrtSceneUploadMeshDataBatch(VKRT* vkrt, const VKRT_MeshUpload* uploads, size_t uploadCount);
 VKRT_Result vkrtSceneRemoveMesh(VKRT* vkrt, uint32_t meshIndex);

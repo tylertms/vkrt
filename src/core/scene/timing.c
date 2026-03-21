@@ -25,14 +25,15 @@ static void updateFrameTimes(VKRT* vkrt) {
     vkrt->renderStatus.averageFrametime =
         vkrt->renderStatus.averageFrametime * (1.0f - weight) + vkrt->renderStatus.displayFrameTimeMs * weight;
     vkrt->renderStatus.framesPerSecond = (uint32_t)(1000.0f / vkrt->renderStatus.displayFrameTimeMs);
-    vkrt->renderStatus.frametimes[vkrt->timing.frametimeStartIndex] = vkrt->renderStatus.displayFrameTimeMs;
-    vkrt->timing.frametimeStartIndex = (vkrt->timing.frametimeStartIndex + 1) % VKRT_ARRAY_COUNT(vkrt->renderStatus.frametimes);
+    vkrt->renderStatus.frametimes[vkrt->renderControl.timing.frametimeStartIndex] = vkrt->renderStatus.displayFrameTimeMs;
+    vkrt->renderControl.timing.frametimeStartIndex =
+        (vkrt->renderControl.timing.frametimeStartIndex + 1) % VKRT_ARRAY_COUNT(vkrt->renderStatus.frametimes);
 }
 
 static float queryAutoSPPTargetMs(const VKRT* vkrt) {
     if (!vkrt) return 0.0f;
 
-    float targetMs = vkrt->autoSPP.targetFrameMs;
+    float targetMs = vkrt->renderControl.autoSPP.targetFrameMs;
     if (targetMs > 0.0f) return targetMs;
 
     uint32_t targetFPS = vkrt->sceneSettings.autoSPPTargetFPS ? vkrt->sceneSettings.autoSPPTargetFPS : 60u;
@@ -51,13 +52,13 @@ void recordFrameTime(VKRT* vkrt, uint32_t frameIndex) {
 
     uint64_t currentTime = getMicroseconds();
 
-    if (vkrt->timing.lastFrameTimestamp == 0) {
-        vkrt->timing.lastFrameTimestamp = currentTime;
+    if (vkrt->renderControl.timing.lastFrameTimestamp == 0) {
+        vkrt->renderControl.timing.lastFrameTimestamp = currentTime;
         return;
     }
 
-    vkrt->renderStatus.displayTimeMs = (currentTime - vkrt->timing.lastFrameTimestamp) / 1000.0f;
-    vkrt->timing.lastFrameTimestamp = currentTime;
+    vkrt->renderStatus.displayTimeMs = (currentTime - vkrt->renderControl.timing.lastFrameTimestamp) / 1000.0f;
+    vkrt->renderControl.timing.lastFrameTimestamp = currentTime;
 
     if (frameIndex >= VKRT_MAX_FRAMES_IN_FLIGHT || !vkrt->runtime.frameTimingPending[frameIndex]) {
         updateFrameTimes(vkrt);
@@ -109,14 +110,14 @@ void updateAutoSPP(VKRT* vkrt) {
     float measuredMsPerSPP = controlMs / sppf;
     if (measuredMsPerSPP <= 0.0f) return;
 
-    if (vkrt->autoSPP.controlMs <= 0.0f) {
-        vkrt->autoSPP.controlMs = measuredMsPerSPP;
+    if (vkrt->renderControl.autoSPP.controlMs <= 0.0f) {
+        vkrt->renderControl.autoSPP.controlMs = measuredMsPerSPP;
     } else {
-        vkrt->autoSPP.controlMs =
-            vkrt->autoSPP.controlMs * (1.0f - measurementSmoothing) + measuredMsPerSPP * measurementSmoothing;
+        vkrt->renderControl.autoSPP.controlMs =
+            vkrt->renderControl.autoSPP.controlMs * (1.0f - measurementSmoothing) + measuredMsPerSPP * measurementSmoothing;
     }
 
-    float desired = (targetMs * budgetScale) / vkrt->autoSPP.controlMs;
+    float desired = (targetMs * budgetScale) / vkrt->renderControl.autoSPP.controlMs;
     if (desired < 1.0f) desired = 1.0f;
     if (desired > 2048.0f) desired = 2048.0f;
 

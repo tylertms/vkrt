@@ -32,7 +32,7 @@ void applyCameraInput(VKRT* vkrt, const VKRT_CameraInput* input) {
     if (input->panning) {
         float s = panSpeed * dist;
         float mx = -input->panDx * s;
-        float my = -input->panDy * s;
+        float my = input->panDy * s;
         for (int i = 0; i < 3; i++) {
             float d = right[i] * mx + up[i] * my;
             pos[i] += d;
@@ -46,7 +46,7 @@ void applyCameraInput(VKRT* vkrt, const VKRT_CameraInput* input) {
         const float EPS = 0.001f;
 
         float yaw = atan2f(viewDir[1], viewDir[0]) - input->orbitDx * orbitSpeed;
-        float pitch = atan2f(viewDir[2], sqrtf(viewDir[0] * viewDir[0] + viewDir[1] * viewDir[1])) + input->orbitDy * orbitSpeed;
+        float pitch = atan2f(viewDir[2], sqrtf(viewDir[0] * viewDir[0] + viewDir[1] * viewDir[1])) - input->orbitDy * orbitSpeed;
         pitch = glm_clamp(pitch, -PI_2 + EPS, PI_2 - EPS);
 
         float cp = cosf(pitch);
@@ -81,6 +81,7 @@ void syncCameraMatrices(VKRT* vkrt) {
 
     glm_lookat(cam.pos, cam.target, cam.up, view);
     glm_perspective(glm_rad(cam.vfov), (float)viewportWidth / (float)viewportHeight, cam.nearZ, cam.farZ, proj);
+    proj[1][1] *= -1.0f;
 
     glm_mat4_inv(view, vkrt->core.sceneData->viewInverse);
     glm_mat4_inv(proj, vkrt->core.sceneData->projInverse);

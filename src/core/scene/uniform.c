@@ -24,7 +24,15 @@ static void resetAutoSPPForSceneChange(VKRT* vkrt) {
     if (!vkrt->sceneSettings.autoSPPEnabled) return;
 
     vkrt->sceneSettings.samplesPerPixel = 1u;
-    vkrt->autoSPP.controlMs = 0.0f;
+    vkrt->renderControl.autoSPP.controlMs = 0.0f;
+}
+
+static void resetAutoExposureForSceneChange(VKRT* vkrt) {
+    if (!vkrt) return;
+    vkrt->renderControl.autoExposure.filteredLuminance = 0.0f;
+    for (uint32_t i = 0; i < VKRT_MAX_FRAMES_IN_FLIGHT; i++) {
+        vkrt->renderControl.autoExposure.readbacks[i].pending = 0u;
+    }
 }
 
 static void writeTimelineUniform(SceneData* sceneData, const VKRT_SceneSettingsSnapshot* settings) {
@@ -65,6 +73,7 @@ static void writeSceneStateUniform(SceneData* sceneData, const VKRT* vkrt) {
     sceneData->rrMaxDepth = settings->rrMaxDepth;
     sceneData->rrMinDepth = settings->rrMinDepth;
     sceneData->toneMappingMode = settings->toneMappingMode;
+    sceneData->exposure = settings->exposure;
     sceneData->timeBase = settings->timeBase;
     sceneData->timeStep = settings->timeStep;
     sceneData->environmentLight[0] = settings->environmentColor[0] * settings->environmentStrength;
@@ -163,6 +172,10 @@ VKRT_Result createSceneUniform(VKRT* vkrt) {
     vkrt->core.selection.deviceAddress = 0;
     vkrt->core.selection.count = 1;
 
+    if (createAutoExposureReadbacks(vkrt) != VKRT_SUCCESS) {
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+
     uint32_t initialWidth = vkrt->runtime.swapChainExtent.width ? vkrt->runtime.swapChainExtent.width : VKRT_DEFAULT_WIDTH;
     uint32_t initialHeight = vkrt->runtime.swapChainExtent.height ? vkrt->runtime.swapChainExtent.height : VKRT_DEFAULT_HEIGHT;
     vkrt->runtime.renderExtent = (VkExtent2D){initialWidth, initialHeight};
@@ -175,6 +188,8 @@ VKRT_Result createSceneUniform(VKRT* vkrt) {
     vkrt->sceneSettings.rrMaxDepth = 8;
     vkrt->sceneSettings.rrMinDepth = 4;
     vkrt->sceneSettings.toneMappingMode = VKRT_TONE_MAPPING_MODE_ACES;
+    vkrt->sceneSettings.exposure = 1.0f;
+    vkrt->sceneSettings.autoExposureEnabled = 1u;
     vkrt->sceneSettings.environmentColor[0] = 0.25f;
     vkrt->sceneSettings.environmentColor[1] = 0.25f;
     vkrt->sceneSettings.environmentColor[2] = 0.25f;
@@ -182,9 +197,9 @@ VKRT_Result createSceneUniform(VKRT* vkrt) {
     vkrt->renderStatus.renderModeActive = 0;
     vkrt->renderStatus.renderModeFinished = 0;
     vkrt->renderStatus.renderTargetSamples = 0;
-    vkrt->renderView.zoom = 1.0f;
-    vkrt->renderView.panX = 0.0f;
-    vkrt->renderView.panY = 0.0f;
+    vkrt->renderControl.view.zoom = 1.0f;
+    vkrt->renderControl.view.panX = 0.0f;
+    vkrt->renderControl.view.panY = 0.0f;
     vkrt->sceneSettings.autoSPPEnabled = 1;
     float refreshHz = vkrt->runtime.displayRefreshHz;
     if (refreshHz <= 0.0f) refreshHz = 60.0f;
@@ -192,8 +207,8 @@ VKRT_Result createSceneUniform(VKRT* vkrt) {
     if (targetFPS < 30) targetFPS = 30;
     if (targetFPS > 360) targetFPS = 360;
     vkrt->sceneSettings.autoSPPTargetFPS = targetFPS;
-    vkrt->autoSPP.targetFrameMs = 1000.0f / (float)targetFPS;
-    vkrt->autoSPP.controlMs = 0.0f;
+    vkrt->renderControl.autoSPP.targetFrameMs = 1000.0f / (float)targetFPS;
+    vkrt->renderControl.autoSPP.controlMs = 0.0f;
 
     vkrt->sceneSettings.camera = (Camera){
         .nearZ = 0.001f, .farZ = 10000.0f,
@@ -226,12 +241,13 @@ void resetSceneData(VKRT* vkrt) {
     if (!vkrt || !vkrt->core.sceneData) return;
 
     resetAutoSPPForSceneChange(vkrt);
+    resetAutoExposureForSceneChange(vkrt);
     vkrt->core.sceneData->frameNumber = 0;
     vkrt->renderStatus.renderModeFinished = 0;
     vkrt->renderStatus.accumulationFrame = 0;
     vkrt->renderStatus.totalSamples = 0;
     vkrt->renderStatus.averageFrametime = 0.0f;
-    vkrt->timing.frametimeStartIndex = 0;
+    vkrt->renderControl.timing.frametimeStartIndex = 0;
     vkrt->core.accumulationNeedsReset = VK_TRUE;
     syncSceneStateData(vkrt);
     vkrt->core.sceneData->emissiveMeshCount = vkrt->core.emissiveMeshCount;

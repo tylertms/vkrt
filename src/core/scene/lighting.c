@@ -33,6 +33,13 @@ static float materialEmissionWeight(const Material* material) {
     return lum * material->emissionLuminance;
 }
 
+static int materialEligibleForDirectLightSampling(const MeshInfo* meshInfo, const Material* material) {
+    if (!meshInfo || !material) return 0;
+    if (meshInfo->opacity < 0.999f || material->opacity < 0.999f) return 0;
+    if (material->emissiveTextureIndex != VKRT_INVALID_INDEX) return 0;
+    return material->alphaMode == VKRT_MATERIAL_ALPHA_MODE_OPAQUE;
+}
+
 static void transformPosition(const VkTransformMatrixKHR* transform, const vec4 position, vec3 outWorld) {
     outWorld[0] = transform->matrix[0][0] * position[0] + transform->matrix[0][1] * position[1] + transform->matrix[0][2] * position[2] + transform->matrix[0][3];
     outWorld[1] = transform->matrix[1][0] * position[0] + transform->matrix[1][1] * position[1] + transform->matrix[1][2] * position[2] + transform->matrix[1][3];
@@ -144,7 +151,7 @@ VKRT_Result vkrtSceneRebuildLightBuffers(VKRT* vkrt) {
     for (uint32_t meshIndex = 0; meshIndex < meshCount; meshIndex++) {
         Mesh* mesh = &vkrt->core.meshes[meshIndex];
         const Material* material = vkrtGetSceneMaterialData(vkrt, mesh->info.materialIndex);
-        if (!material || materialEmissionWeight(material) <= 0.0f) continue;
+        if (!material || !materialEligibleForDirectLightSampling(&mesh->info, material) || materialEmissionWeight(material) <= 0.0f) continue;
         uint32_t triangleCount = mesh->info.indexCount / 3u;
         if (triangleCount == 0) continue;
         emissiveMeshCount64++;
@@ -206,6 +213,7 @@ VKRT_Result vkrtSceneRebuildLightBuffers(VKRT* vkrt) {
         Mesh* mesh = &vkrt->core.meshes[meshIndex];
         const Material* material = vkrtGetSceneMaterialData(vkrt, mesh->info.materialIndex);
         if (!material) continue;
+        if (!materialEligibleForDirectLightSampling(&mesh->info, material)) continue;
         float emissionWeight = materialEmissionWeight(material);
         if (emissionWeight <= 0.0f) continue;
         if (!mesh->vertices || !mesh->indices) continue;
@@ -213,7 +221,7 @@ VKRT_Result vkrtSceneRebuildLightBuffers(VKRT* vkrt) {
         uint32_t triangleCount = mesh->info.indexCount / 3u;
         if (triangleCount == 0) continue;
 
-        VkTransformMatrixKHR transform = getMeshTransform(&mesh->info);
+        VkTransformMatrixKHR transform = getMeshWorldTransform(mesh);
         float totalArea = 0.0f;
         uint32_t triangleOffset = triangleWriteIndex;
 

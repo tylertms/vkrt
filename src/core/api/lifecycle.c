@@ -13,6 +13,7 @@
 #include "swapchain.h"
 #include "rebuild.h"
 #include "state.h"
+#include "textures.h"
 #include "validation.h"
 #include "export.h"
 #include "debug.h"
@@ -107,13 +108,8 @@ static void cleanupSwapChainAndStorageResources(VKRT* vkrt) {
     destroyGPUImages(vkrt);
 }
 
-static void cleanupRayTracingAndRenderPassResources(VKRT* vkrt) {
+static void cleanupRayTracingResources(VKRT* vkrt) {
     if (!vkrt || vkrt->core.device == VK_NULL_HANDLE) return;
-
-    if (vkrt->runtime.renderPass != VK_NULL_HANDLE) {
-        vkDestroyRenderPass(vkrt->core.device, vkrt->runtime.renderPass, NULL);
-        vkrt->runtime.renderPass = VK_NULL_HANDLE;
-    }
 
     destroyBufferAndMemory(vkrt, &vkrt->core.shaderBindingTableBuffer, &vkrt->core.shaderBindingTableMemory);
     destroyBufferAndMemory(vkrt, &vkrt->core.selectionShaderBindingTableBuffer, &vkrt->core.selectionShaderBindingTableMemory);
@@ -143,9 +139,11 @@ static void cleanupSceneAndAccelerationResources(VKRT* vkrt) {
 
     releaseMeshHostGeometry(vkrt);
     releaseSceneMaterials(vkrt);
+    vkrtReleaseSceneTextures(vkrt);
 
     destroyBufferAndMemory(vkrt, &vkrt->core.vertexData.buffer, &vkrt->core.vertexData.memory);
     destroyBufferAndMemory(vkrt, &vkrt->core.indexData.buffer, &vkrt->core.indexData.memory);
+    destroyAutoExposureReadbacks(vkrt);
 
     if (vkrt->core.selectionData && vkrt->core.selection.memory != VK_NULL_HANDLE) {
         vkUnmapMemory(vkrt->core.device, vkrt->core.selection.memory);
@@ -238,6 +236,7 @@ static void cleanupHostOnlyResources(VKRT* vkrt) {
     if (!vkrt) return;
     releaseMeshHostGeometry(vkrt);
     releaseSceneMaterials(vkrt);
+    vkrtReleaseSceneTextures(vkrt);
     releaseGeometryLayout(vkrt);
     resetRenderFinishedSemaphores(vkrt, vkrt->runtime.swapChainImageCount, 0);
 }
@@ -303,9 +302,11 @@ VKRT_Result VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInf
     }
     vkrt->core.sceneResourceRevision = 0;
     vkrt->core.materialResourceRevision = 0;
+    vkrt->core.textureResourceRevision = 0;
     vkrt->core.lightResourceRevision = 0;
     vkrt->core.sceneRevision = 1;
     vkrt->core.materialRevision = 1;
+    vkrt->core.textureRevision = 1;
     vkrt->core.lightRevision = 1;
     vkrt->core.emissiveMeshCount = 0;
     vkrt->core.emissiveTriangleCount = 0;
@@ -387,22 +388,19 @@ VKRT_Result VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInf
         stepStartTime = getMicroseconds();
         if (createSwapChain(vkrt) != VKRT_SUCCESS) goto init_failed;
         if (createImageViews(vkrt) != VKRT_SUCCESS) goto init_failed;
-        if (createRenderPass(vkrt, &vkrt->runtime.renderPass) != VKRT_SUCCESS) goto init_failed;
-        if (createFramebuffers(vkrt) != VKRT_SUCCESS) goto init_failed;
-        logStepTime("Swapchain and framebuffers ready", stepStartTime);
+        logStepTime("Swapchain ready", stepStartTime);
     }
 
     stepStartTime = getMicroseconds();
     if (createCommandPool(vkrt) != VKRT_SUCCESS) goto init_failed;
+    if (vkrtEnsureTextureBindings(vkrt) != VKRT_SUCCESS) goto init_failed;
     if (createDescriptorSetLayout(vkrt) != VKRT_SUCCESS) goto init_failed;
     logStepTime("Command pool and descriptor layout ready", stepStartTime);
 
     stepStartTime = getMicroseconds();
     if (createRayTracingPipeline(vkrt) != VKRT_SUCCESS) goto init_failed;
-#if VKRT_SELECTION_ENABLED
     if (createSelectionRayTracingPipeline(vkrt) != VKRT_SUCCESS) goto init_failed;
     if (createComputePipeline(vkrt) != VKRT_SUCCESS) goto init_failed;
-#endif
     logStepTime("Ray tracing pipelines and compute pipeline ready", stepStartTime);
 
     stepStartTime = getMicroseconds();
@@ -423,9 +421,7 @@ VKRT_Result VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInf
 
     stepStartTime = getMicroseconds();
     if (createShaderBindingTable(vkrt) != VKRT_SUCCESS) goto init_failed;
-#if VKRT_SELECTION_ENABLED
     if (createSelectionShaderBindingTable(vkrt) != VKRT_SUCCESS) goto init_failed;
-#endif
     logStepTime("Shader binding tables ready", stepStartTime);
 
     stepStartTime = getMicroseconds();
@@ -470,8 +466,8 @@ void VKRT_deinit(VKRT* vkrt) {
         logStepTime("Device idle wait complete", stepStartTime);
 
         stepStartTime = getMicroseconds();
-        shutdownRenderPNGExporter(vkrt);
-        logStepTime("PNG export worker shutdown complete", stepStartTime);
+        shutdownRenderImageExporter(vkrt);
+        logStepTime("Render image export worker shutdown complete", stepStartTime);
 
         stepStartTime = getMicroseconds();
         if (vkrt->runtime.appInitialized && vkrt->appHooks.deinit) {
@@ -485,8 +481,8 @@ void VKRT_deinit(VKRT* vkrt) {
         logStepTime("Swapchain cleanup complete", stepStartTime);
 
         stepStartTime = getMicroseconds();
-        cleanupRayTracingAndRenderPassResources(vkrt);
-        logStepTime("Render pass and shader binding table cleanup complete", stepStartTime);
+        cleanupRayTracingResources(vkrt);
+        logStepTime("Ray tracing resource cleanup complete", stepStartTime);
 
         stepStartTime = getMicroseconds();
         cleanupSceneAndAccelerationResources(vkrt);
@@ -540,9 +536,7 @@ void VKRT_deinit(VKRT* vkrt) {
     memset(&vkrt->runtime, 0, sizeof(vkrt->runtime));
     memset(&vkrt->sceneSettings, 0, sizeof(vkrt->sceneSettings));
     memset(&vkrt->renderStatus, 0, sizeof(vkrt->renderStatus));
-    memset(&vkrt->renderView, 0, sizeof(vkrt->renderView));
-    memset(&vkrt->timing, 0, sizeof(vkrt->timing));
-    memset(&vkrt->autoSPP, 0, sizeof(vkrt->autoSPP));
+    memset(&vkrt->renderControl, 0, sizeof(vkrt->renderControl));
     vkrt->appHooks = hooks;
 
     LOG_INFO("VKRT deinitialization complete in %.3f ms", (double)(getMicroseconds() - deinitStartTime) / 1e3);

@@ -12,6 +12,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+static const uint64_t kGeometryFingerprintSeed = 1469598103934665603ull;
+static const uint64_t kGeometryFingerprintPrime = 1099511628211ull;
+
 static VkBufferUsageFlags verticesUsage(void) {
     return VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
            VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT |
@@ -93,6 +96,7 @@ static void syncDuplicateMeshFromSource(Mesh* mesh, const Mesh* source) {
     if (!mesh || !source) return;
     mesh->vertices = source->vertices;
     mesh->indices = source->indices;
+    mesh->geometryFingerprint = source->geometryFingerprint;
     mesh->info.vertexBase = source->info.vertexBase;
     mesh->info.indexBase = source->info.indexBase;
     mesh->bottomLevelAccelerationStructure.deviceAddress = source->bottomLevelAccelerationStructure.deviceAddress;
@@ -133,6 +137,101 @@ static void shrinkMeshList(VKRT* vkrt, uint32_t meshCount) {
 
     Mesh* shrunk = (Mesh*)realloc(vkrt->core.meshes, (size_t)meshCount * sizeof(Mesh));
     if (shrunk) vkrt->core.meshes = shrunk;
+}
+
+static uint64_t hashGeometryBytes(uint64_t hash, const void* bytes, size_t byteCount) {
+    if (!bytes || byteCount == 0) return hash;
+
+    const uint8_t* cursor = (const uint8_t*)bytes;
+    size_t wordCount = byteCount / sizeof(uint64_t);
+    const uint64_t* words = (const uint64_t*)cursor;
+    for (size_t i = 0; i < wordCount; i++) {
+        hash ^= words[i];
+        hash *= kGeometryFingerprintPrime;
+    }
+
+    size_t remaining = byteCount - wordCount * sizeof(uint64_t);
+    cursor += wordCount * sizeof(uint64_t);
+    for (size_t i = 0; i < remaining; i++) {
+        hash ^= (uint64_t)cursor[i];
+        hash *= kGeometryFingerprintPrime;
+    }
+    return hash;
+}
+
+static uint64_t geometryFingerprint(
+    const Vertex* vertices,
+    size_t vertexCount,
+    const uint32_t* indices,
+    size_t indexCount
+) {
+    uint64_t hash = kGeometryFingerprintSeed;
+    hash = hashGeometryBytes(hash, &vertexCount, sizeof(vertexCount));
+    hash = hashGeometryBytes(hash, &indexCount, sizeof(indexCount));
+    hash = hashGeometryBytes(hash, vertices, vertexCount * sizeof(Vertex));
+    hash = hashGeometryBytes(hash, indices, indexCount * sizeof(uint32_t));
+    return hash;
+}
+
+static uint32_t findDuplicateGeometrySource(
+    const VKRT* vkrt,
+    uint32_t meshCount,
+    const Vertex* vertices,
+    size_t vertexCount,
+    const uint32_t* indices,
+    size_t indexCount,
+    uint64_t fingerprint
+) {
+    if (!vkrt || !vertices || !indices) return VKRT_INVALID_INDEX;
+
+    for (uint32_t i = 0; i < meshCount; i++) {
+        const Mesh* existing = &vkrt->core.meshes[i];
+        if (!existing->ownsGeometry) continue;
+        if (existing->info.vertexCount != (uint32_t)vertexCount || existing->info.indexCount != (uint32_t)indexCount) {
+            continue;
+        }
+        if (existing->geometryFingerprint != fingerprint) {
+            continue;
+        }
+        if (memcmp(existing->vertices, vertices, vertexCount * sizeof(Vertex)) != 0) {
+            continue;
+        }
+        if (memcmp(existing->indices, indices, indexCount * sizeof(uint32_t)) != 0) {
+            continue;
+        }
+        return existing->geometrySource;
+    }
+
+    return VKRT_INVALID_INDEX;
+}
+
+static void initializeMeshDefaults(Mesh* mesh, size_t vertexCount, size_t indexCount) {
+    if (!mesh) return;
+
+    memset(mesh, 0, sizeof(*mesh));
+    glm_mat4_identity(mesh->worldTransform);
+    mesh->renderBackfacesOverride = -1;
+    mesh->hasMaterialAssignment = 0u;
+    mesh->info.vertexCount = (uint32_t)vertexCount;
+    mesh->info.indexCount = (uint32_t)indexCount;
+    mesh->info.materialIndex = 0u;
+    mesh->info.renderBackfaces = vkrtResolveMeshRenderBackfaces(mesh);
+    mesh->info.opacity = 1.0f;
+    vec3 scale = {1.0f, 1.0f, 1.0f};
+    glm_vec3_copy(scale, mesh->info.scale);
+    memset(&mesh->info.rotation, 0, sizeof(vec3));
+    memset(&mesh->info.position, 0, sizeof(vec3));
+}
+
+static void releaseNewMeshRange(VKRT* vkrt, uint32_t startIndex, uint32_t endIndex) {
+    if (!vkrt || startIndex > endIndex) return;
+
+    for (uint32_t i = startIndex; i < endIndex; i++) {
+        Mesh* mesh = &vkrt->core.meshes[i];
+        if (!mesh->ownsGeometry) continue;
+        free(mesh->vertices);
+        free(mesh->indices);
+    }
 }
 
 static int backupMeshState(
@@ -454,17 +553,55 @@ VKRT_Result vkrtSceneUploadMeshData(
     size_t indexCount
 ) {
     if (!vkrt || !vertices || !indices || vertexCount == 0 || indexCount == 0) return VKRT_ERROR_INVALID_ARGUMENT;
-    if (vertexCount > VKRT_INVALID_INDEX || indexCount > VKRT_INVALID_INDEX) return VKRT_ERROR_INVALID_ARGUMENT;
 
     uint64_t startTime = getMicroseconds();
+    VKRT_MeshUpload upload = {
+        .vertices = vertices,
+        .vertexCount = vertexCount,
+        .indices = indices,
+        .indexCount = indexCount,
+    };
+    VKRT_Result result = vkrtSceneUploadMeshDataBatch(vkrt, &upload, 1u);
+    if (result != VKRT_SUCCESS) {
+        return result;
+    }
+
+    const Mesh* mesh = &vkrt->core.meshes[vkrt->core.meshCount - 1u];
+    LOG_TRACE(
+        "Mesh upload complete. Total Meshes: %u, Vertices: %zu, Indices: %zu, Reused Geometry: %s, in %.3f ms",
+        vkrt->core.meshCount,
+        vertexCount,
+        indexCount,
+        mesh->ownsGeometry ? "No" : "Yes",
+        (double)(getMicroseconds() - startTime) / 1e3
+    );
+    return VKRT_SUCCESS;
+}
+
+VKRT_Result vkrtSceneUploadMeshDataBatch(VKRT* vkrt, const VKRT_MeshUpload* uploads, size_t uploadCount) {
+    if (!vkrt || !uploads || uploadCount == 0) return VKRT_ERROR_INVALID_ARGUMENT;
+    if (uploadCount > (size_t)VKRT_INVALID_INDEX) return VKRT_ERROR_INVALID_ARGUMENT;
+    if ((uint64_t)vkrt->core.meshCount + (uint64_t)uploadCount > (uint64_t)VKRT_INVALID_INDEX) {
+        return VKRT_ERROR_INVALID_ARGUMENT;
+    }
+
     uint32_t previousCount = vkrt->core.meshCount;
-    uint32_t newCount = previousCount + 1u;
+    for (size_t i = 0; i < uploadCount; i++) {
+        const VKRT_MeshUpload* upload = &uploads[i];
+        if (!upload->vertices || !upload->indices || upload->vertexCount == 0 || upload->indexCount == 0) {
+            return VKRT_ERROR_INVALID_ARGUMENT;
+        }
+        if (upload->vertexCount > VKRT_INVALID_INDEX || upload->indexCount > VKRT_INVALID_INDEX) {
+            return VKRT_ERROR_INVALID_ARGUMENT;
+        }
+    }
 
     VKRT_Result defaultMaterialResult = vkrtEnsureDefaultMaterial(vkrt);
     if (defaultMaterialResult != VKRT_SUCCESS) {
         return defaultMaterialResult;
     }
 
+    uint32_t newCount = previousCount + (uint32_t)uploadCount;
     Mesh* resized = (Mesh*)realloc(vkrt->core.meshes, (size_t)newCount * sizeof(Mesh));
     if (!resized) {
         LOG_ERROR("Failed to grow mesh list");
@@ -472,78 +609,62 @@ VKRT_Result vkrtSceneUploadMeshData(
     }
 
     vkrt->core.meshes = resized;
-    Mesh* mesh = &vkrt->core.meshes[previousCount];
-    memset(mesh, 0, sizeof(*mesh));
-    mesh->renderBackfacesOverride = -1;
 
-    uint32_t duplicateIndex = VKRT_INVALID_INDEX;
-    for (uint32_t i = 0; i < previousCount; i++) {
-        Mesh* existing = &vkrt->core.meshes[i];
-        if (existing->info.vertexCount != (uint32_t)vertexCount || existing->info.indexCount != (uint32_t)indexCount) {
-            continue;
-        }
-        if (memcmp(existing->vertices, vertices, vertexCount * sizeof(Vertex)) != 0) {
-            continue;
-        }
-        if (memcmp(existing->indices, indices, indexCount * sizeof(uint32_t)) != 0) {
-            continue;
-        }
-        duplicateIndex = existing->geometrySource;
-        break;
-    }
+    for (size_t uploadIndex = 0; uploadIndex < uploadCount; uploadIndex++) {
+        const VKRT_MeshUpload* upload = &uploads[uploadIndex];
+        uint32_t meshIndex = previousCount + (uint32_t)uploadIndex;
+        Mesh* mesh = &vkrt->core.meshes[meshIndex];
+        initializeMeshDefaults(mesh, upload->vertexCount, upload->indexCount);
 
-    mesh->info.vertexCount = (uint32_t)vertexCount;
-    mesh->info.indexCount = (uint32_t)indexCount;
-    mesh->info.materialIndex = 0u;
-    mesh->info.renderBackfaces = vkrtResolveMeshRenderBackfaces(mesh);
-    vec3 scale = {1.0f, 1.0f, 1.0f};
-    glm_vec3_copy(scale, mesh->info.scale);
-    memset(&mesh->info.rotation, 0, sizeof(vec3));
-    memset(&mesh->info.position, 0, sizeof(vec3));
+        uint64_t fingerprint = geometryFingerprint(
+            upload->vertices,
+            upload->vertexCount,
+            upload->indices,
+            upload->indexCount
+        );
+        uint32_t duplicateIndex = findDuplicateGeometrySource(
+            vkrt,
+            meshIndex,
+            upload->vertices,
+            upload->vertexCount,
+            upload->indices,
+            upload->indexCount,
+            fingerprint
+        );
 
-    if (duplicateIndex == VKRT_INVALID_INDEX) {
-        mesh->vertices = (Vertex*)malloc(vertexCount * sizeof(Vertex));
-        mesh->indices = (uint32_t*)malloc(indexCount * sizeof(uint32_t));
-        if (!mesh->vertices || !mesh->indices) {
-            free(mesh->vertices);
-            free(mesh->indices);
-            shrinkMeshList(vkrt, previousCount);
-            LOG_ERROR("Failed to allocate mesh host data");
-            return VKRT_ERROR_OPERATION_FAILED;
+        if (duplicateIndex == VKRT_INVALID_INDEX) {
+            mesh->vertices = (Vertex*)malloc(upload->vertexCount * sizeof(Vertex));
+            mesh->indices = (uint32_t*)malloc(upload->indexCount * sizeof(uint32_t));
+            if (!mesh->vertices || !mesh->indices) {
+                free(mesh->vertices);
+                free(mesh->indices);
+                releaseNewMeshRange(vkrt, previousCount, meshIndex);
+                shrinkMeshList(vkrt, previousCount);
+                LOG_ERROR("Failed to allocate mesh host data");
+                return VKRT_ERROR_OPERATION_FAILED;
+            }
+
+            memcpy(mesh->vertices, upload->vertices, upload->vertexCount * sizeof(Vertex));
+            memcpy(mesh->indices, upload->indices, upload->indexCount * sizeof(uint32_t));
+            mesh->geometryFingerprint = fingerprint;
+            mesh->geometrySource = meshIndex;
+            mesh->ownsGeometry = 1;
+        } else {
+            mesh->geometrySource = duplicateIndex;
+            mesh->ownsGeometry = 0;
+            syncDuplicateMeshFromSource(mesh, &vkrt->core.meshes[duplicateIndex]);
         }
-
-        memcpy(mesh->vertices, vertices, vertexCount * sizeof(Vertex));
-        memcpy(mesh->indices, indices, indexCount * sizeof(uint32_t));
-        mesh->geometrySource = previousCount;
-        mesh->ownsGeometry = 1;
-    } else {
-        Mesh* source = &vkrt->core.meshes[duplicateIndex];
-        syncDuplicateMeshFromSource(mesh, source);
-        mesh->geometrySource = duplicateIndex;
-        mesh->ownsGeometry = 0;
     }
 
     vkrt->core.meshCount = newCount;
     if (rebuildGeometryLayout(vkrt) != VKRT_SUCCESS) {
-        if (mesh->ownsGeometry) {
-            free(mesh->vertices);
-            free(mesh->indices);
-        }
+        releaseNewMeshRange(vkrt, previousCount, newCount);
         vkrt->core.meshCount = previousCount;
         shrinkMeshList(vkrt, previousCount);
         return VKRT_ERROR_OPERATION_FAILED;
     }
 
     markSceneMutation(vkrt);
-
-    LOG_TRACE(
-        "Mesh upload complete. Total Meshes: %u, Vertices: %zu, Indices: %zu, Reused Geometry: %s, in %.3f ms",
-        vkrt->core.meshCount,
-        vertexCount,
-        indexCount,
-        duplicateIndex == VKRT_INVALID_INDEX ? "No" : "Yes",
-        (double)(getMicroseconds() - startTime) / 1e3
-    );
     return VKRT_SUCCESS;
 }
 

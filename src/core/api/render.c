@@ -11,11 +11,15 @@
 #include <math.h>
 #include <string.h>
 
-VKRT_Result VKRT_saveRenderPNG(VKRT* vkrt, const char* path) {
+VKRT_Result VKRT_saveRenderImage(VKRT* vkrt, const char* path) {
     if (!vkrt || !path || !path[0]) return VKRT_ERROR_INVALID_ARGUMENT;
-    return saveCurrentRenderPNG(vkrt, path) == 0
+    return saveCurrentRenderImage(vkrt, path) == 0
         ? VKRT_SUCCESS
         : VKRT_ERROR_OPERATION_FAILED;
+}
+
+VKRT_Result VKRT_saveRenderPNG(VKRT* vkrt, const char* path) {
+    return VKRT_saveRenderImage(vkrt, path);
 }
 
 static VkExtent2D queryEffectiveRenderExtent(const VKRT* vkrt) {
@@ -138,13 +142,13 @@ static void resetRenderSessionState(VKRT* vkrt, VkBool32 resetViewTransform) {
     if (!vkrt) return;
 
     if (resetViewTransform) {
-        vkrt->renderView.zoom = 1.0f;
-        vkrt->renderView.panX = 0.0f;
-        vkrt->renderView.panY = 0.0f;
+        vkrt->renderControl.view.zoom = 1.0f;
+        vkrt->renderControl.view.panX = 0.0f;
+        vkrt->renderControl.view.panY = 0.0f;
     }
 
-    vkrt->timing.lastFrameTimestamp = 0;
-    vkrt->autoSPP.controlMs = 0.0f;
+    vkrt->renderControl.timing.lastFrameTimestamp = 0;
+    vkrt->renderControl.autoSPP.controlMs = 0.0f;
 }
 
 static VKRT_Result updateRenderExtent(VKRT* vkrt, VkExtent2D extent) {
@@ -269,9 +273,9 @@ VKRT_Result VKRT_getRenderViewCrop(const VKRT* vkrt, float zoom, float* outWidth
 
 VKRT_Result VKRT_getRenderViewState(const VKRT* vkrt, float* outZoom, float* outPanX, float* outPanY) {
     if (!vkrt || !outZoom || !outPanX || !outPanY) return VKRT_ERROR_INVALID_ARGUMENT;
-    *outZoom = vkrt->renderView.zoom;
-    *outPanX = vkrt->renderView.panX;
-    *outPanY = vkrt->renderView.panY;
+    *outZoom = vkrt->renderControl.view.zoom;
+    *outPanX = vkrt->renderControl.view.panX;
+    *outPanY = vkrt->renderControl.view.panY;
     return VKRT_SUCCESS;
 }
 
@@ -285,15 +289,15 @@ VKRT_Result VKRT_setRenderViewState(VKRT* vkrt, float zoom, float panX, float pa
     VkExtent2D viewportExtent = queryEffectiveDisplayViewportExtent(vkrt);
     vkrtClampRenderViewPanOffset(renderExtent, viewportExtent, zoom, &panX, &panY);
 
-    if (vkrt->renderView.zoom == zoom &&
-        vkrt->renderView.panX == panX &&
-        vkrt->renderView.panY == panY) {
+    if (vkrt->renderControl.view.zoom == zoom &&
+        vkrt->renderControl.view.panX == panX &&
+        vkrt->renderControl.view.panY == panY) {
         return VKRT_SUCCESS;
     }
 
-    vkrt->renderView.zoom = zoom;
-    vkrt->renderView.panX = panX;
-    vkrt->renderView.panY = panY;
+    vkrt->renderControl.view.zoom = zoom;
+    vkrt->renderControl.view.panX = panX;
+    vkrt->renderControl.view.panY = panY;
     return VKRT_SUCCESS;
 }
 

@@ -81,6 +81,7 @@ VKRT_Result VKRT_beginFrame(VKRT* vkrt) {
         LOG_ERROR("Failed to wait for in-flight fence (%d)", (int)fenceResult);
         return VKRT_ERROR_OPERATION_FAILED;
     }
+    resolveAutoExposureReadback(vkrt, vkrt->runtime.currentFrame);
     resolveCompletedSelection(vkrt);
     vkrtCleanupFrameSceneUpdate(vkrt, vkrt->runtime.currentFrame);
     recordFrameTime(vkrt, vkrt->runtime.currentFrame);
@@ -126,6 +127,7 @@ VKRT_Result VKRT_updateScene(VKRT* vkrt) {
     if (!vkrt->runtime.frameAcquired && !vkrt->runtime.frameOffscreen) return VKRT_SUCCESS;
 
     VkBool32 materialDirty = vkrt->core.materialResourceRevision != vkrt->core.materialRevision;
+    VkBool32 textureDirty = vkrt->core.textureResourceRevision != vkrt->core.textureRevision;
     VkBool32 sceneDirty = vkrt->core.sceneResourceRevision != vkrt->core.sceneRevision;
     VkBool32 selectionDirty = vkrt->core.selectionResourceRevision != vkrt->core.selectionRevision;
     VkBool32 lightDirty = vkrt->core.lightResourceRevision != vkrt->core.lightRevision;
@@ -136,7 +138,7 @@ VKRT_Result VKRT_updateScene(VKRT* vkrt) {
         }
     }
 
-    if (materialDirty || sceneDirty || selectionDirty || lightDirty) {
+    if (materialDirty || textureDirty || sceneDirty || selectionDirty || lightDirty) {
         invalidateDescriptorSets(vkrt);
     }
 
@@ -237,6 +239,7 @@ VKRT_Result VKRT_trace(VKRT* vkrt) {
     }
 
     vkrt->core.materialResourceRevision = vkrt->core.materialRevision;
+    vkrt->core.textureResourceRevision = vkrt->core.textureRevision;
     vkrt->core.sceneResourceRevision = vkrt->core.sceneRevision;
     vkrt->core.selectionResourceRevision = vkrt->core.selectionRevision;
     vkrt->core.lightResourceRevision = vkrt->core.lightRevision;

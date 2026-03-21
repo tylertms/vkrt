@@ -14,13 +14,14 @@ typedef struct VKRT_AppHooks {
 
 typedef struct VKRT_OverlayInfo {
     GLFWwindow* window;
+    uint32_t apiVersion;
     VkInstance instance;
     VkPhysicalDevice physicalDevice;
     VkDevice device;
     uint32_t graphicsQueueFamily;
     VkQueue graphicsQueue;
     VkDescriptorPool descriptorPool;
-    VkRenderPass renderPass;
+    VkFormat colorAttachmentFormat;
     uint32_t swapchainImageCount;
     uint32_t swapchainMinImageCount;
 } VKRT_OverlayInfo;

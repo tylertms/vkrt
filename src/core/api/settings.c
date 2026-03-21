@@ -82,7 +82,7 @@ VKRT_Result VKRT_setPathDepth(VKRT* vkrt, uint32_t rrMinDepth, uint32_t rrMaxDep
 VKRT_Result VKRT_setAutoSPPEnabled(VKRT* vkrt, uint8_t enabled) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
     vkrt->sceneSettings.autoSPPEnabled = enabled ? 1 : 0;
-    vkrt->autoSPP.controlMs = 0.0f;
+    vkrt->renderControl.autoSPP.controlMs = 0.0f;
     return VKRT_SUCCESS;
 }
 
@@ -90,8 +90,8 @@ VKRT_Result VKRT_setAutoSPPTargetFPS(VKRT* vkrt, uint32_t targetFPS) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
     targetFPS = sanitizeAutoSPPTargetFPS(vkrt, targetFPS);
     vkrt->sceneSettings.autoSPPTargetFPS = targetFPS;
-    vkrt->autoSPP.targetFrameMs = 1000.0f / (float)targetFPS;
-    vkrt->autoSPP.controlMs = 0.0f;
+    vkrt->renderControl.autoSPP.targetFrameMs = 1000.0f / (float)targetFPS;
+    vkrt->renderControl.autoSPP.controlMs = 0.0f;
     return VKRT_SUCCESS;
 }
 
@@ -105,7 +105,35 @@ VKRT_Result VKRT_setToneMappingMode(VKRT* vkrt, VKRT_ToneMappingMode toneMapping
 
     if (vkrt->sceneSettings.toneMappingMode == toneMappingMode) return VKRT_SUCCESS;
     vkrt->sceneSettings.toneMappingMode = toneMappingMode;
-    resetSceneData(vkrt);
+    syncSceneStateData(vkrt);
+    return VKRT_SUCCESS;
+}
+
+VKRT_Result VKRT_setExposure(VKRT* vkrt, float exposure) {
+    VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
+    if (stateReady != VKRT_SUCCESS) return stateReady;
+
+    exposure = vkrtFiniteClampf(exposure, 1.0f, 0.0f, INFINITY);
+    if (vkrt->sceneSettings.exposure == exposure) return VKRT_SUCCESS;
+
+    vkrt->sceneSettings.exposure = exposure;
+    syncSceneStateData(vkrt);
+    return VKRT_SUCCESS;
+}
+
+VKRT_Result VKRT_setAutoExposureEnabled(VKRT* vkrt, uint8_t enabled) {
+    VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
+    if (stateReady != VKRT_SUCCESS) return stateReady;
+
+    enabled = enabled ? 1u : 0u;
+    if (vkrt->sceneSettings.autoExposureEnabled == enabled) return VKRT_SUCCESS;
+
+    vkrt->sceneSettings.autoExposureEnabled = enabled;
+    vkrt->renderControl.autoExposure.filteredLuminance = 0.0f;
+    for (uint32_t i = 0; i < VKRT_MAX_FRAMES_IN_FLIGHT; i++) {
+        vkrt->renderControl.autoExposure.readbacks[i].pending = 0u;
+    }
+    syncSceneStateData(vkrt);
     return VKRT_SUCCESS;
 }
 
