@@ -20,6 +20,9 @@ struct Vertex {
     float4 position;
     float4 normal;
     float4 tangent;
+    float4 color;
+    float2 texcoord0;
+    float2 texcoord1;
 };
 
 struct MeshInfo {
@@ -33,6 +36,10 @@ struct MeshInfo {
     uint materialIndex;
     uint renderBackfaces;
     float lightPdfArea;
+    float opacity;
+    uint _meshPad0;
+    uint _meshPad1;
+    uint _meshPad2;
 };
 
 struct Material {
@@ -46,6 +53,8 @@ struct Material {
     float anisotropic;
     float specular;
     float specularTint;
+    float _materialPad0;
+    float _materialPad1;
     float4 sheenTintWeight;
     float clearcoat;
     float clearcoatGloss;
@@ -56,7 +65,24 @@ struct Material {
     float sheenRoughness;
     float absorptionCoefficient;
     float3 attenuationColor;
-    float padding;
+    float normalTextureScale;
+    uint baseColorTextureIndex;
+    uint metallicRoughnessTextureIndex;
+    uint normalTextureIndex;
+    uint emissiveTextureIndex;
+    uint baseColorTextureWrap;
+    uint metallicRoughnessTextureWrap;
+    uint normalTextureWrap;
+    uint emissiveTextureWrap;
+    float opacity;
+    float alphaCutoff;
+    uint alphaMode;
+    uint textureTexcoordSets;
+    float4 baseColorTextureTransform;
+    float4 metallicRoughnessTextureTransform;
+    float4 normalTextureTransform;
+    float4 emissiveTextureTransform;
+    float4 textureRotations;
 };
 
 struct EmissiveMesh {
@@ -83,7 +109,7 @@ struct SceneData {
     uint rrMinDepth;
     uint4 viewportRect;
     uint toneMappingMode;
-    uint _padding0;
+    float exposure;
     float timeBase;
     float timeStep;
     float4 environmentLight;

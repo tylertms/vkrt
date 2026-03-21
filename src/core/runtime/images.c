@@ -1,10 +1,213 @@
 #include "images.h"
 
+#include "buffer.h"
 #include "command/pool.h"
 #include "command/record.h"
 #include "device.h"
 #include "scene.h"
 #include "debug.h"
+
+#include <string.h>
+
+static VKRT_Result createImageWithMemory(
+    VKRT* vkrt,
+    VkExtent2D extent,
+    VkFormat format,
+    VkImageUsageFlags usage,
+    VkImage* outImage,
+    VkImageView* outView,
+    VkDeviceMemory* outMemory
+) {
+    if (!vkrt || !outImage || !outView || !outMemory) return VKRT_ERROR_INVALID_ARGUMENT;
+    if (extent.width == 0 || extent.height == 0) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    *outImage = VK_NULL_HANDLE;
+    *outView = VK_NULL_HANDLE;
+    *outMemory = VK_NULL_HANDLE;
+
+    VkImageCreateInfo imageCreateInfo = {0};
+    imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
+    imageCreateInfo.extent = (VkExtent3D){extent.width, extent.height, 1u};
+    imageCreateInfo.mipLevels = 1;
+    imageCreateInfo.arrayLayers = 1;
+    imageCreateInfo.format = format;
+    imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    imageCreateInfo.usage = usage;
+    imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    if (vkCreateImage(vkrt->core.device, &imageCreateInfo, NULL, outImage) != VK_SUCCESS) {
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+
+    VkMemoryRequirements memoryRequirements = {0};
+    vkGetImageMemoryRequirements(vkrt->core.device, *outImage, &memoryRequirements);
+
+    VkMemoryAllocateInfo memoryAllocateInfo = {0};
+    memoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    memoryAllocateInfo.allocationSize = memoryRequirements.size;
+    if (findMemoryType(
+        vkrt,
+        memoryRequirements.memoryTypeBits,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        &memoryAllocateInfo.memoryTypeIndex
+    ) != VKRT_SUCCESS) {
+        vkrtDestroyImageResources(vkrt, outImage, outView, outMemory);
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+
+    if (vkAllocateMemory(vkrt->core.device, &memoryAllocateInfo, NULL, outMemory) != VK_SUCCESS) {
+        vkrtDestroyImageResources(vkrt, outImage, outView, outMemory);
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+
+    if (vkBindImageMemory(vkrt->core.device, *outImage, *outMemory, 0) != VK_SUCCESS) {
+        vkrtDestroyImageResources(vkrt, outImage, outView, outMemory);
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+
+    VkImageViewCreateInfo imageViewCreateInfo = {0};
+    imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    imageViewCreateInfo.image = *outImage;
+    imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    imageViewCreateInfo.format = format;
+    imageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
+    imageViewCreateInfo.subresourceRange.levelCount = 1;
+    imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
+    imageViewCreateInfo.subresourceRange.layerCount = 1;
+    if (vkCreateImageView(vkrt->core.device, &imageViewCreateInfo, NULL, outView) != VK_SUCCESS) {
+        vkrtDestroyImageResources(vkrt, outImage, outView, outMemory);
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+
+    return VKRT_SUCCESS;
+}
+
+void vkrtDestroyImageResources(VKRT* vkrt, VkImage* image, VkImageView* view, VkDeviceMemory* memory) {
+    if (!vkrt || vkrt->core.device == VK_NULL_HANDLE) return;
+
+    if (view && *view != VK_NULL_HANDLE) {
+        vkDestroyImageView(vkrt->core.device, *view, NULL);
+        *view = VK_NULL_HANDLE;
+    }
+    if (image && *image != VK_NULL_HANDLE) {
+        vkDestroyImage(vkrt->core.device, *image, NULL);
+        *image = VK_NULL_HANDLE;
+    }
+    if (memory && *memory != VK_NULL_HANDLE) {
+        vkFreeMemory(vkrt->core.device, *memory, NULL);
+        *memory = VK_NULL_HANDLE;
+    }
+}
+
+VKRT_Result vkrtCreateDeviceImage(
+    VKRT* vkrt,
+    VkExtent2D extent,
+    VkFormat format,
+    VkImageUsageFlags usage,
+    VkImage* outImage,
+    VkImageView* outView,
+    VkDeviceMemory* outMemory
+) {
+    return createImageWithMemory(vkrt, extent, format, usage, outImage, outView, outMemory);
+}
+
+VKRT_Result vkrtCreateSampledTextureImageFromPixels(
+    VKRT* vkrt,
+    const void* pixels,
+    uint32_t width,
+    uint32_t height,
+    uint32_t colorSpace,
+    VkImage* outImage,
+    VkImageView* outView,
+    VkDeviceMemory* outMemory
+) {
+    if (!vkrt || !pixels || width == 0u || height == 0u || !outImage || !outView || !outMemory) {
+        return VKRT_ERROR_INVALID_ARGUMENT;
+    }
+
+    VkFormat format = colorSpace == VKRT_TEXTURE_COLOR_SPACE_SRGB
+        ? VK_FORMAT_R8G8B8A8_SRGB
+        : VK_FORMAT_R8G8B8A8_UNORM;
+
+    VKRT_Result result = createImageWithMemory(
+        vkrt,
+        (VkExtent2D){width, height},
+        format,
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+        outImage,
+        outView,
+        outMemory
+    );
+    if (result != VKRT_SUCCESS) {
+        return result;
+    }
+
+    VkDeviceSize byteSize = (VkDeviceSize)width * (VkDeviceSize)height * 4u;
+    VkBuffer stagingBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
+    result = createBuffer(
+        vkrt,
+        byteSize,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        &stagingBuffer,
+        &stagingMemory
+    );
+    if (result != VKRT_SUCCESS) {
+        vkrtDestroyImageResources(vkrt, outImage, outView, outMemory);
+        return result;
+    }
+
+    void* mapped = NULL;
+    if (vkMapMemory(vkrt->core.device, stagingMemory, 0, byteSize, 0, &mapped) != VK_SUCCESS || !mapped) {
+        vkDestroyBuffer(vkrt->core.device, stagingBuffer, NULL);
+        vkFreeMemory(vkrt->core.device, stagingMemory, NULL);
+        vkrtDestroyImageResources(vkrt, outImage, outView, outMemory);
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+    memcpy(mapped, pixels, (size_t)byteSize);
+    vkUnmapMemory(vkrt->core.device, stagingMemory);
+
+    VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+    result = beginSingleTimeCommands(vkrt, &commandBuffer);
+    if (result != VKRT_SUCCESS) {
+        vkDestroyBuffer(vkrt->core.device, stagingBuffer, NULL);
+        vkFreeMemory(vkrt->core.device, stagingMemory, NULL);
+        vkrtDestroyImageResources(vkrt, outImage, outView, outMemory);
+        return result;
+    }
+
+    transitionImageLayout(commandBuffer, *outImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+    VkBufferImageCopy copyRegion = {0};
+    copyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    copyRegion.imageSubresource.mipLevel = 0;
+    copyRegion.imageSubresource.baseArrayLayer = 0;
+    copyRegion.imageSubresource.layerCount = 1;
+    copyRegion.imageExtent = (VkExtent3D){width, height, 1u};
+
+    vkCmdCopyBufferToImage(
+        commandBuffer,
+        stagingBuffer,
+        *outImage,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        1,
+        &copyRegion
+    );
+    transitionImageLayout(commandBuffer, *outImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+    result = endSingleTimeCommands(vkrt, commandBuffer);
+    vkDestroyBuffer(vkrt->core.device, stagingBuffer, NULL);
+    vkFreeMemory(vkrt->core.device, stagingMemory, NULL);
+    if (result != VKRT_SUCCESS) {
+        vkrtDestroyImageResources(vkrt, outImage, outView, outMemory);
+    }
+    return result;
+}
 
 typedef struct GPUImageSlot {
     VkImage* image;
@@ -118,20 +321,7 @@ void destroyGPUImageState(VKRT* vkrt, GPUImageState* state) {
     uint32_t slotCount = queryGPUImageSlots(state, slots);
 
     for (uint32_t i = 0; i < slotCount; i++) {
-        if (*slots[i].view != VK_NULL_HANDLE) {
-            vkDestroyImageView(vkrt->core.device, *slots[i].view, NULL);
-            *slots[i].view = VK_NULL_HANDLE;
-        }
-
-        if (*slots[i].image != VK_NULL_HANDLE) {
-            vkDestroyImage(vkrt->core.device, *slots[i].image, NULL);
-            *slots[i].image = VK_NULL_HANDLE;
-        }
-
-        if (*slots[i].memory != VK_NULL_HANDLE) {
-            vkFreeMemory(vkrt->core.device, *slots[i].memory, NULL);
-            *slots[i].memory = VK_NULL_HANDLE;
-        }
+        vkrtDestroyImageResources(vkrt, slots[i].image, slots[i].view, slots[i].memory);
     }
 }
 
@@ -149,68 +339,17 @@ VKRT_Result createGPUImageState(VKRT* vkrt, VkExtent2D extent, GPUImageState* ou
     GPUImageSlot slots[4] = {0};
     uint32_t slotCount = queryGPUImageSlots(outState, slots);
 
-    VkImageCreateInfo imageCreateInfo = {0};
-    imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
-    imageCreateInfo.extent.width = extent.width;
-    imageCreateInfo.extent.height = extent.height;
-    imageCreateInfo.extent.depth = 1;
-    imageCreateInfo.mipLevels = 1;
-    imageCreateInfo.arrayLayers = 1;
-    imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-    imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-    imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-    VkImageViewCreateInfo imageViewCreateInfo = {0};
-    imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    imageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
-    imageViewCreateInfo.subresourceRange.levelCount = 1;
-    imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
-    imageViewCreateInfo.subresourceRange.layerCount = 1;
-
     for (uint32_t i = 0; i < slotCount; i++) {
-        imageCreateInfo.format = slots[i].format;
-        imageCreateInfo.usage = slots[i].usage;
-        if (vkCreateImage(vkrt->core.device, &imageCreateInfo, NULL, slots[i].image) != VK_SUCCESS) {
-            LOG_ERROR("Failed to create image, #%d", i);
-            destroyGPUImageState(vkrt, outState);
-            return VKRT_ERROR_OPERATION_FAILED;
-        }
-
-        VkMemoryRequirements memoryRequirements = {0};
-        vkGetImageMemoryRequirements(vkrt->core.device, *slots[i].image, &memoryRequirements);
-
-        VkMemoryAllocateInfo memoryAllocateInfo = {0};
-        memoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        memoryAllocateInfo.allocationSize = memoryRequirements.size;
-        if (findMemoryType(
+        if (vkrtCreateDeviceImage(
             vkrt,
-            memoryRequirements.memoryTypeBits,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            &memoryAllocateInfo.memoryTypeIndex
+            extent,
+            slots[i].format,
+            slots[i].usage,
+            slots[i].image,
+            slots[i].view,
+            slots[i].memory
         ) != VKRT_SUCCESS) {
-            destroyGPUImageState(vkrt, outState);
-            return VKRT_ERROR_OPERATION_FAILED;
-        }
-
-        if (vkAllocateMemory(vkrt->core.device, &memoryAllocateInfo, NULL, slots[i].memory) != VK_SUCCESS) {
-            LOG_ERROR("Failed to allocate image memory, #%d", i);
-            destroyGPUImageState(vkrt, outState);
-            return VKRT_ERROR_OPERATION_FAILED;
-        }
-
-        if (vkBindImageMemory(vkrt->core.device, *slots[i].image, *slots[i].memory, 0) != VK_SUCCESS) {
-            LOG_ERROR("Failed to bind image memory, #%d", i);
-            destroyGPUImageState(vkrt, outState);
-            return VKRT_ERROR_OPERATION_FAILED;
-        }
-
-        imageViewCreateInfo.image = *slots[i].image;
-        imageViewCreateInfo.format = slots[i].format;
-        if (vkCreateImageView(vkrt->core.device, &imageViewCreateInfo, NULL, slots[i].view) != VK_SUCCESS) {
-            LOG_ERROR("Failed to create image view, #%d", i);
+            LOG_ERROR("Failed to create image, #%d", i);
             destroyGPUImageState(vkrt, outState);
             return VKRT_ERROR_OPERATION_FAILED;
         }

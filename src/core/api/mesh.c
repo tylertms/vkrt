@@ -1,5 +1,6 @@
 #include "state.h"
 #include "scene.h"
+#include "textures.h"
 #include "vkrt_internal.h"
 #include "numeric.h"
 
@@ -8,7 +9,72 @@
 #include <stdlib.h>
 #include <string.h>
 
-static Material sanitizeMaterial(Material material) {
+static float* accessMaterialTextureRotation(Material* material, uint32_t textureSlot) {
+    if (!material) return NULL;
+
+    switch (textureSlot) {
+        case VKRT_MATERIAL_TEXTURE_SLOT_BASE_COLOR: return &material->textureRotations[0];
+        case VKRT_MATERIAL_TEXTURE_SLOT_METALLIC_ROUGHNESS: return &material->textureRotations[1];
+        case VKRT_MATERIAL_TEXTURE_SLOT_NORMAL: return &material->textureRotations[2];
+        case VKRT_MATERIAL_TEXTURE_SLOT_EMISSIVE: return &material->textureRotations[3];
+        default: return NULL;
+    }
+}
+
+static uint32_t queryMaterialTextureTexcoordSet(uint32_t packedSets, uint32_t textureSlot) {
+    return (packedSets >> materialTextureTexcoordSetShift(textureSlot)) & 0xffu;
+}
+
+static void assignMaterialTextureTexcoordSet(uint32_t* packedSets, uint32_t textureSlot, uint32_t texcoordSet) {
+    if (!packedSets) return;
+
+    uint32_t shift = materialTextureTexcoordSetShift(textureSlot);
+    uint32_t mask = 0xffu << shift;
+    *packedSets = (*packedSets & ~mask) | ((texcoordSet & 0xffu) << shift);
+}
+
+static void sanitizeMaterialTextureSlot(
+    const VKRT* vkrt,
+    uint32_t textureSlot,
+    uint32_t* textureIndex,
+    uint32_t* textureWrap,
+    uint32_t* textureTexcoordSets,
+    float4 textureTransform,
+    float* textureRotation,
+    uint32_t expectedColorSpace
+) {
+    if (!textureIndex || !textureWrap || !textureTexcoordSets || !textureTransform || !textureRotation) return;
+
+    if (*textureIndex == VKRT_INVALID_INDEX) {
+        *textureWrap = 0u;
+        assignMaterialTextureTexcoordSet(textureTexcoordSets, textureSlot, 0u);
+        setIdentityMaterialTextureTransform(textureTransform);
+        *textureRotation = 0.0f;
+        return;
+    }
+
+    const SceneTexture* texture = vkrtGetSceneTexture(vkrt, *textureIndex);
+    if (!texture || texture->colorSpace != expectedColorSpace) {
+        *textureIndex = VKRT_INVALID_INDEX;
+        *textureWrap = 0u;
+        assignMaterialTextureTexcoordSet(textureTexcoordSets, textureSlot, 0u);
+        setIdentityMaterialTextureTransform(textureTransform);
+        *textureRotation = 0.0f;
+        return;
+    }
+
+    if (*textureWrap == 0u) {
+        *textureWrap = VKRT_TEXTURE_WRAP_DEFAULT;
+    }
+    if (!isfinite(*textureRotation)) {
+        *textureRotation = 0.0f;
+    }
+    if (queryMaterialTextureTexcoordSet(*textureTexcoordSets, textureSlot) > 1u) {
+        assignMaterialTextureTexcoordSet(textureTexcoordSets, textureSlot, 0u);
+    }
+}
+
+static Material sanitizeMaterial(const VKRT* vkrt, Material material) {
     for (int c = 0; c < 3; c++) {
         material.baseColor[c] = vkrtFiniteClampf(material.baseColor[c], 0.0f, 0.0f, 1.0f);
         material.emissionColor[c] = vkrtFiniteClampf(material.emissionColor[c], 0.0f, 0.0f, INFINITY);
@@ -31,10 +97,58 @@ static Material sanitizeMaterial(Material material) {
     material.sheenRoughness = vkrtFiniteClampf(material.sheenRoughness, 0.0f, 0.0f, 1.0f);
     material.absorptionCoefficient = vkrtFiniteClampf(material.absorptionCoefficient, 0.0f, 0.0f, VKRT_MAX_ABSORPTION_COEFFICIENT);
     material.emissionLuminance = vkrtFiniteClampf(material.emissionLuminance, 0.0f, 0.0f, INFINITY);
+    material.normalTextureScale = vkrtFiniteOrf(material.normalTextureScale, 1.0f);
+    if (material.normalTextureScale < 0.0f) material.normalTextureScale = 0.0f;
+    material.opacity = vkrtFiniteClampf(material.opacity, 1.0f, 0.0f, 1.0f);
+    material.alphaCutoff = vkrtFiniteClampf(material.alphaCutoff, 0.5f, 0.0f, 1.0f);
+    if (material.alphaMode != VKRT_MATERIAL_ALPHA_MODE_MASK &&
+        material.alphaMode != VKRT_MATERIAL_ALPHA_MODE_BLEND) {
+        material.alphaMode = VKRT_MATERIAL_ALPHA_MODE_OPAQUE;
+    }
     for (int c = 0; c < 3; c++) {
         material.eta[c] = vkrtFiniteClampf(material.eta[c], 0.0f, 0.0f, INFINITY);
         material.k[c] = vkrtFiniteClampf(material.k[c], 0.0f, 0.0f, INFINITY);
     }
+    sanitizeMaterialTextureSlot(
+        vkrt,
+        VKRT_MATERIAL_TEXTURE_SLOT_BASE_COLOR,
+        &material.baseColorTextureIndex,
+        &material.baseColorTextureWrap,
+        &material.textureTexcoordSets,
+        material.baseColorTextureTransform,
+        accessMaterialTextureRotation(&material, VKRT_MATERIAL_TEXTURE_SLOT_BASE_COLOR),
+        VKRT_TEXTURE_COLOR_SPACE_SRGB
+    );
+    sanitizeMaterialTextureSlot(
+        vkrt,
+        VKRT_MATERIAL_TEXTURE_SLOT_METALLIC_ROUGHNESS,
+        &material.metallicRoughnessTextureIndex,
+        &material.metallicRoughnessTextureWrap,
+        &material.textureTexcoordSets,
+        material.metallicRoughnessTextureTransform,
+        accessMaterialTextureRotation(&material, VKRT_MATERIAL_TEXTURE_SLOT_METALLIC_ROUGHNESS),
+        VKRT_TEXTURE_COLOR_SPACE_LINEAR
+    );
+    sanitizeMaterialTextureSlot(
+        vkrt,
+        VKRT_MATERIAL_TEXTURE_SLOT_NORMAL,
+        &material.normalTextureIndex,
+        &material.normalTextureWrap,
+        &material.textureTexcoordSets,
+        material.normalTextureTransform,
+        accessMaterialTextureRotation(&material, VKRT_MATERIAL_TEXTURE_SLOT_NORMAL),
+        VKRT_TEXTURE_COLOR_SPACE_LINEAR
+    );
+    sanitizeMaterialTextureSlot(
+        vkrt,
+        VKRT_MATERIAL_TEXTURE_SLOT_EMISSIVE,
+        &material.emissiveTextureIndex,
+        &material.emissiveTextureWrap,
+        &material.textureTexcoordSets,
+        material.emissiveTextureTransform,
+        accessMaterialTextureRotation(&material, VKRT_MATERIAL_TEXTURE_SLOT_EMISSIVE),
+        VKRT_TEXTURE_COLOR_SPACE_SRGB
+    );
 
     return material;
 }
@@ -66,14 +180,25 @@ static int materialsEqual(const Material* a, const Material* b) {
         a->subsurface == b->subsurface &&
         a->sheenRoughness == b->sheenRoughness &&
         a->absorptionCoefficient == b->absorptionCoefficient &&
-        materialComponentEqual(a->attenuationColor, b->attenuationColor, 3);
-}
-
-static int updateMeshVector(vec3 destination, vec3 source) {
-    if (!source) return 0;
-    if (memcmp(destination, source, sizeof(vec3)) == 0) return 0;
-    glm_vec3_copy(source, destination);
-    return 1;
+        materialComponentEqual(a->attenuationColor, b->attenuationColor, 3) &&
+        a->normalTextureScale == b->normalTextureScale &&
+        a->baseColorTextureIndex == b->baseColorTextureIndex &&
+        a->metallicRoughnessTextureIndex == b->metallicRoughnessTextureIndex &&
+        a->normalTextureIndex == b->normalTextureIndex &&
+        a->emissiveTextureIndex == b->emissiveTextureIndex &&
+        a->baseColorTextureWrap == b->baseColorTextureWrap &&
+        a->metallicRoughnessTextureWrap == b->metallicRoughnessTextureWrap &&
+        a->normalTextureWrap == b->normalTextureWrap &&
+        a->emissiveTextureWrap == b->emissiveTextureWrap &&
+        a->opacity == b->opacity &&
+        a->alphaCutoff == b->alphaCutoff &&
+        a->alphaMode == b->alphaMode &&
+        a->textureTexcoordSets == b->textureTexcoordSets &&
+        materialComponentEqual(a->baseColorTextureTransform, b->baseColorTextureTransform, 4) &&
+        materialComponentEqual(a->metallicRoughnessTextureTransform, b->metallicRoughnessTextureTransform, 4) &&
+        materialComponentEqual(a->normalTextureTransform, b->normalTextureTransform, 4) &&
+        materialComponentEqual(a->emissiveTextureTransform, b->emissiveTextureTransform, 4) &&
+        materialComponentEqual(a->textureRotations, b->textureRotations, 4);
 }
 
 static int meshVectorFinite(const vec3 value) {
@@ -90,6 +215,52 @@ static int meshScaleValid(const vec3 scale) {
         fabsf(scale[2]) >= 1e-6f;
 }
 
+static int meshTransformMatrixValid(mat4 transform) {
+    if (!transform) return 0;
+
+    mat4 transformCopy = GLM_MAT4_IDENTITY_INIT;
+    memcpy(transformCopy, transform, sizeof(transformCopy));
+    mat3 linear = GLM_MAT3_IDENTITY_INIT;
+    glm_mat4_pick3(transformCopy, linear);
+    float determinant = glm_mat3_det(linear);
+    if (!isfinite(determinant) || fabsf(determinant) < 1e-8f) {
+        return 0;
+    }
+
+    for (int column = 0; column < 4; column++) {
+        for (int row = 0; row < 4; row++) {
+            if (!isfinite(transform[column][row])) return 0;
+        }
+    }
+    return 1;
+}
+
+static int updateMeshTransformMatrix(mat4 destination, mat4 source) {
+    if (!destination || !source) return 0;
+    if (memcmp(destination, source, sizeof(mat4)) == 0) return 0;
+    memcpy(destination, source, sizeof(mat4));
+    return 1;
+}
+
+static int meshOpacityValid(float opacity) {
+    return isfinite(opacity) && opacity >= 0.0f && opacity <= 1.0f;
+}
+
+static int selectionMaskUsesMesh(const VKRT* vkrt, uint32_t meshIndex) {
+    return vkrt &&
+        vkrt->sceneSettings.selectionEnabled &&
+        meshIndex < vkrt->core.meshCount &&
+        vkrt->sceneSettings.selectedMeshIndex == meshIndex;
+}
+
+static int selectionMaskUsesMaterial(const VKRT* vkrt, uint32_t materialIndex) {
+    if (!vkrt || !vkrt->sceneSettings.selectionEnabled) return 0;
+
+    uint32_t selectedMeshIndex = vkrt->sceneSettings.selectedMeshIndex;
+    if (selectedMeshIndex >= vkrt->core.meshCount) return 0;
+    return vkrt->core.meshes[selectedMeshIndex].info.materialIndex == materialIndex;
+}
+
 static void formatMaterialName(char outName[VKRT_NAME_LEN], const char* name, uint32_t materialIndex) {
     if (!outName) return;
     if (name && name[0]) {
@@ -99,41 +270,17 @@ static void formatMaterialName(char outName[VKRT_NAME_LEN], const char* name, ui
     }
 }
 
-VKRT_Result VKRT_getMeshCount(const VKRT* vkrt, uint32_t* outMeshCount) {
-    if (!vkrt || !outMeshCount) return VKRT_ERROR_INVALID_ARGUMENT;
-    *outMeshCount = vkrt->core.meshCount;
-    return VKRT_SUCCESS;
-}
+static VKRT_Result removeMaterialAtIndex(VKRT* vkrt, uint32_t materialIndex) {
+    if (!vkrt || materialIndex >= vkrt->core.materialCount) return VKRT_ERROR_INVALID_ARGUMENT;
+    if (materialIndex == 0u) return VKRT_ERROR_OPERATION_FAILED;
 
-VKRT_Result VKRT_addMaterial(VKRT* vkrt, const Material* material, const char* name, uint32_t* outMaterialIndex) {
-    if (outMaterialIndex) *outMaterialIndex = VKRT_INVALID_INDEX;
-
-    VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
-    if (stateReady != VKRT_SUCCESS) return stateReady;
-
-    uint32_t materialIndex = vkrt->core.materialCount;
-    SceneMaterial* resized = (SceneMaterial*)realloc(
-        vkrt->core.materials,
-        (size_t)(materialIndex + 1u) * sizeof(SceneMaterial)
-    );
-    if (!resized) return VKRT_ERROR_OUT_OF_MEMORY;
-
-    vkrt->core.materials = resized;
-    vkrt->core.materials[materialIndex].material = sanitizeMaterial(material ? *material : VKRT_materialDefault());
-    formatMaterialName(vkrt->core.materials[materialIndex].name, name, materialIndex);
-    vkrt->core.materialCount = materialIndex + 1u;
-    vkrtMarkMaterialResourcesDirty(vkrt);
-    resetSceneData(vkrt);
-
-    if (outMaterialIndex) *outMaterialIndex = materialIndex;
-    return VKRT_SUCCESS;
-}
-
-VKRT_Result VKRT_removeMaterial(VKRT* vkrt, uint32_t materialIndex) {
-    VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
-    if (stateReady != VKRT_SUCCESS) return stateReady;
-    if (materialIndex >= vkrt->core.materialCount) return VKRT_ERROR_INVALID_ARGUMENT;
-    if (vkrtCountMaterialUsers(vkrt, materialIndex) != 0u) return VKRT_ERROR_OPERATION_FAILED;
+    int selectionMaskAffected = selectionMaskUsesMaterial(vkrt, materialIndex);
+    for (uint32_t meshIndex = 0; meshIndex < vkrt->core.meshCount; meshIndex++) {
+        if (vkrt->core.meshes[meshIndex].info.materialIndex == materialIndex) {
+            vkrt->core.meshes[meshIndex].info.materialIndex = 0u;
+            vkrt->core.meshes[meshIndex].hasMaterialAssignment = 0;
+        }
+    }
 
     uint32_t materialCount = vkrt->core.materialCount;
     if (materialIndex + 1u < materialCount) {
@@ -164,8 +311,128 @@ VKRT_Result VKRT_removeMaterial(VKRT* vkrt, uint32_t materialIndex) {
 
     vkrtMarkMaterialResourcesDirty(vkrt);
     vkrtMarkSceneResourcesDirty(vkrt);
+    vkrtMarkLightResourcesDirty(vkrt);
+    if (selectionMaskAffected) {
+        markSelectionMaskDirty(vkrt);
+    }
     resetSceneData(vkrt);
     return VKRT_SUCCESS;
+}
+
+static uint32_t collectMaterialTextureIndices(const Material* material, uint32_t outTextureIndices[4]) {
+    if (!material || !outTextureIndices) return 0u;
+
+    uint32_t count = 0u;
+    const uint32_t candidates[] = {
+        material->baseColorTextureIndex,
+        material->metallicRoughnessTextureIndex,
+        material->normalTextureIndex,
+        material->emissiveTextureIndex,
+    };
+
+    for (uint32_t i = 0; i < VKRT_ARRAY_COUNT(candidates); i++) {
+        uint32_t textureIndex = candidates[i];
+        if (textureIndex == VKRT_INVALID_INDEX) continue;
+
+        int duplicate = 0;
+        for (uint32_t existingIndex = 0; existingIndex < count; existingIndex++) {
+            if (outTextureIndices[existingIndex] == textureIndex) {
+                duplicate = 1;
+                break;
+            }
+        }
+        if (duplicate) continue;
+
+        uint32_t insertIndex = count;
+        while (insertIndex > 0u && outTextureIndices[insertIndex - 1u] < textureIndex) {
+            outTextureIndices[insertIndex] = outTextureIndices[insertIndex - 1u];
+            insertIndex--;
+        }
+        outTextureIndices[insertIndex] = textureIndex;
+        count++;
+    }
+
+    return count;
+}
+
+static VKRT_Result releaseTextureIndicesIfUnused(
+    VKRT* vkrt,
+    const uint32_t* textureIndices,
+    uint32_t textureCount
+) {
+    VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
+    if (stateReady != VKRT_SUCCESS) return stateReady;
+
+    for (uint32_t i = 0; i < textureCount; i++) {
+        uint32_t textureIndex = textureIndices[i];
+        if (textureIndex == VKRT_INVALID_INDEX || textureIndex >= vkrt->core.textureCount) continue;
+        if (vkrtCountTextureUsers(vkrt, textureIndex) != 0u) continue;
+
+        VKRT_Result result = vkrtSceneRemoveTexture(vkrt, textureIndex);
+        if (result != VKRT_SUCCESS) return result;
+    }
+
+    return VKRT_SUCCESS;
+}
+
+VKRT_Result vkrtReleaseTextureIfUnused(VKRT* vkrt, uint32_t textureIndex) {
+    if (!vkrt || textureIndex == VKRT_INVALID_INDEX) return VKRT_SUCCESS;
+
+    uint32_t textureIndices[] = {textureIndex};
+    return releaseTextureIndicesIfUnused(vkrt, textureIndices, VKRT_ARRAY_COUNT(textureIndices));
+}
+
+static VKRT_Result releaseTexturesReferencedByMaterialIfUnused(VKRT* vkrt, const Material* material) {
+    uint32_t textureIndices[4] = {0};
+    uint32_t textureCount = collectMaterialTextureIndices(material, textureIndices);
+    if (textureCount == 0u) {
+        return VKRT_SUCCESS;
+    }
+
+    return releaseTextureIndicesIfUnused(vkrt, textureIndices, textureCount);
+}
+
+VKRT_Result VKRT_getMeshCount(const VKRT* vkrt, uint32_t* outMeshCount) {
+    if (!vkrt || !outMeshCount) return VKRT_ERROR_INVALID_ARGUMENT;
+    *outMeshCount = vkrt->core.meshCount;
+    return VKRT_SUCCESS;
+}
+
+VKRT_Result VKRT_addMaterial(VKRT* vkrt, const Material* material, const char* name, uint32_t* outMaterialIndex) {
+    if (outMaterialIndex) *outMaterialIndex = VKRT_INVALID_INDEX;
+
+    VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
+    if (stateReady != VKRT_SUCCESS) return stateReady;
+
+    uint32_t materialIndex = vkrt->core.materialCount;
+    SceneMaterial* resized = (SceneMaterial*)realloc(
+        vkrt->core.materials,
+        (size_t)(materialIndex + 1u) * sizeof(SceneMaterial)
+    );
+    if (!resized) return VKRT_ERROR_OUT_OF_MEMORY;
+
+    vkrt->core.materials = resized;
+    vkrt->core.materials[materialIndex].material = sanitizeMaterial(vkrt, material ? *material : VKRT_materialDefault());
+    formatMaterialName(vkrt->core.materials[materialIndex].name, name, materialIndex);
+    vkrt->core.materialCount = materialIndex + 1u;
+    vkrtAdjustMaterialTextureUseCounts(vkrt, &vkrt->core.materials[materialIndex].material, 1);
+    vkrtMarkMaterialResourcesDirty(vkrt);
+    resetSceneData(vkrt);
+
+    if (outMaterialIndex) *outMaterialIndex = materialIndex;
+    return VKRT_SUCCESS;
+}
+
+VKRT_Result VKRT_removeMaterial(VKRT* vkrt, uint32_t materialIndex) {
+    VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
+    if (stateReady != VKRT_SUCCESS) return stateReady;
+    if (materialIndex >= vkrt->core.materialCount) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    Material removedMaterial = vkrt->core.materials[materialIndex].material;
+    vkrtAdjustMaterialTextureUseCounts(vkrt, &removedMaterial, -1);
+    VKRT_Result result = removeMaterialAtIndex(vkrt, materialIndex);
+    if (result != VKRT_SUCCESS) return result;
+    return releaseTexturesReferencedByMaterialIfUnused(vkrt, &removedMaterial);
 }
 
 VKRT_Result VKRT_setMaterialName(VKRT* vkrt, uint32_t materialIndex, const char* name) {
@@ -189,13 +456,19 @@ VKRT_Result VKRT_setMaterial(VKRT* vkrt, uint32_t materialIndex, const Material*
     if (stateReady != VKRT_SUCCESS) return stateReady;
     if (!material || materialIndex >= vkrt->core.materialCount) return VKRT_ERROR_INVALID_ARGUMENT;
 
-    Material sanitized = sanitizeMaterial(*material);
+    Material sanitized = sanitizeMaterial(vkrt, *material);
     if (materialsEqual(&vkrt->core.materials[materialIndex].material, &sanitized)) return VKRT_SUCCESS;
 
+    Material previousMaterial = vkrt->core.materials[materialIndex].material;
+    vkrtAdjustMaterialTextureUseCounts(vkrt, &previousMaterial, -1);
     vkrt->core.materials[materialIndex].material = sanitized;
+    vkrtAdjustMaterialTextureUseCounts(vkrt, &sanitized, 1);
     vkrtMarkMaterialResourcesDirty(vkrt);
+    if (selectionMaskUsesMaterial(vkrt, materialIndex)) {
+        markSelectionMaskDirty(vkrt);
+    }
     resetSceneData(vkrt);
-    return VKRT_SUCCESS;
+    return releaseTexturesReferencedByMaterialIfUnused(vkrt, &previousMaterial);
 }
 
 VKRT_Result VKRT_setMeshName(VKRT* vkrt, uint32_t meshIndex, const char* name) {
@@ -220,16 +493,36 @@ VKRT_Result VKRT_setMeshTransform(VKRT* vkrt, uint32_t meshIndex, vec3 position,
     if (scale && !meshScaleValid(scale)) return VKRT_ERROR_INVALID_ARGUMENT;
 
     Mesh* mesh = &vkrt->core.meshes[meshIndex];
-    MeshInfo* info = &mesh->info;
-    int changed = 0;
-    changed |= updateMeshVector(info->position, position);
-    changed |= updateMeshVector(info->rotation, rotation);
-    changed |= updateMeshVector(info->scale, scale);
+    vec3 resolvedPosition = {0.0f, 0.0f, 0.0f};
+    vec3 resolvedRotation = {0.0f, 0.0f, 0.0f};
+    vec3 resolvedScale = {1.0f, 1.0f, 1.0f};
+    if (position) glm_vec3_copy(position, resolvedPosition);
+    else glm_vec3_copy(mesh->info.position, resolvedPosition);
+    if (rotation) glm_vec3_copy(rotation, resolvedRotation);
+    else glm_vec3_copy(mesh->info.rotation, resolvedRotation);
+    if (scale) glm_vec3_copy(scale, resolvedScale);
+    else glm_vec3_copy(mesh->info.scale, resolvedScale);
 
-    if (!changed) return VKRT_SUCCESS;
+    mat4 worldTransform = GLM_MAT4_IDENTITY_INIT;
+    buildMeshTransformMatrix(resolvedPosition, resolvedRotation, resolvedScale, worldTransform);
+    return VKRT_setMeshTransformMatrix(vkrt, meshIndex, worldTransform);
+}
 
+VKRT_Result VKRT_setMeshTransformMatrix(VKRT* vkrt, uint32_t meshIndex, mat4 worldTransform) {
+    VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
+    if (stateReady != VKRT_SUCCESS) return stateReady;
+    if (meshIndex >= vkrt->core.meshCount || !meshTransformMatrixValid(worldTransform)) {
+        return VKRT_ERROR_INVALID_ARGUMENT;
+    }
+
+    Mesh* mesh = &vkrt->core.meshes[meshIndex];
+    if (!updateMeshTransformMatrix(mesh->worldTransform, worldTransform)) {
+        return VKRT_SUCCESS;
+    }
+
+    decomposeImportedMeshTransform(mesh->worldTransform, mesh->info.position, mesh->info.rotation, mesh->info.scale);
     vkrtMarkSceneResourcesDirty(vkrt);
-    const Material* material = vkrtGetSceneMaterialData(vkrt, info->materialIndex);
+    const Material* material = vkrtGetSceneMaterialData(vkrt, mesh->info.materialIndex);
     if (material && material->emissionLuminance > 0.0f) {
         vkrtMarkLightResourcesDirty(vkrt);
     }
@@ -245,20 +538,80 @@ VKRT_Result VKRT_setMeshMaterialIndex(VKRT* vkrt, uint32_t meshIndex, uint32_t m
         return VKRT_ERROR_INVALID_ARGUMENT;
     }
 
-    MeshInfo* info = &vkrt->core.meshes[meshIndex].info;
-    if (info->materialIndex == materialIndex) return VKRT_SUCCESS;
+    Mesh* mesh = &vkrt->core.meshes[meshIndex];
+    MeshInfo* info = &mesh->info;
+    if (info->materialIndex == materialIndex && mesh->hasMaterialAssignment) return VKRT_SUCCESS;
 
     const Material* oldMaterial = vkrtGetSceneMaterialData(vkrt, info->materialIndex);
     const Material* newMaterial = vkrtGetSceneMaterialData(vkrt, materialIndex);
     int affectsLighting =
         (oldMaterial && oldMaterial->emissionLuminance > 0.0f) ||
         (newMaterial && newMaterial->emissionLuminance > 0.0f);
-
     info->materialIndex = materialIndex;
+    mesh->hasMaterialAssignment = 1u;
     vkrtMarkSceneResourcesDirty(vkrt);
     if (affectsLighting) {
         vkrtMarkLightResourcesDirty(vkrt);
     }
+    if (selectionMaskUsesMesh(vkrt, meshIndex)) {
+        markSelectionMaskDirty(vkrt);
+    }
+    resetSceneData(vkrt);
+    return VKRT_SUCCESS;
+}
+
+VKRT_Result VKRT_clearMeshMaterialAssignment(VKRT* vkrt, uint32_t meshIndex) {
+    VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
+    if (stateReady != VKRT_SUCCESS) return stateReady;
+    if (meshIndex >= vkrt->core.meshCount) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    VKRT_Result defaultMaterialResult = vkrtEnsureDefaultMaterial(vkrt);
+    if (defaultMaterialResult != VKRT_SUCCESS) return defaultMaterialResult;
+
+    Mesh* mesh = &vkrt->core.meshes[meshIndex];
+    MeshInfo* info = &mesh->info;
+    if (!mesh->hasMaterialAssignment && info->materialIndex == 0u) {
+        return VKRT_SUCCESS;
+    }
+
+    const Material* oldMaterial = vkrtGetSceneMaterialData(vkrt, info->materialIndex);
+    const Material* defaultMaterial = vkrtGetSceneMaterialData(vkrt, 0u);
+    int affectsLighting =
+        (oldMaterial && oldMaterial->emissionLuminance > 0.0f) ||
+        (defaultMaterial && defaultMaterial->emissionLuminance > 0.0f);
+    info->materialIndex = 0u;
+    mesh->hasMaterialAssignment = 0u;
+    vkrtMarkSceneResourcesDirty(vkrt);
+    if (affectsLighting) {
+        vkrtMarkLightResourcesDirty(vkrt);
+    }
+    if (selectionMaskUsesMesh(vkrt, meshIndex)) {
+        markSelectionMaskDirty(vkrt);
+    }
+    resetSceneData(vkrt);
+    return VKRT_SUCCESS;
+}
+
+VKRT_Result VKRT_setMeshOpacity(VKRT* vkrt, uint32_t meshIndex, float opacity) {
+    VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
+    if (stateReady != VKRT_SUCCESS) return stateReady;
+    if (meshIndex >= vkrt->core.meshCount || !meshOpacityValid(opacity)) {
+        return VKRT_ERROR_INVALID_ARGUMENT;
+    }
+
+    Mesh* mesh = &vkrt->core.meshes[meshIndex];
+    MeshInfo* info = &mesh->info;
+    if (info->opacity == opacity) {
+        return VKRT_SUCCESS;
+    }
+
+    info->opacity = opacity;
+    vkrtMarkSceneResourcesDirty(vkrt);
+    const Material* material = vkrtGetSceneMaterialData(vkrt, info->materialIndex);
+    if (material && material->emissionLuminance > 0.0f) {
+        vkrtMarkLightResourcesDirty(vkrt);
+    }
+    markSelectionMaskDirty(vkrt);
     resetSceneData(vkrt);
     return VKRT_SUCCESS;
 }

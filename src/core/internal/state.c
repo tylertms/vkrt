@@ -121,6 +121,11 @@ void vkrtMarkMaterialResourcesDirty(VKRT* vkrt) {
     vkrt->core.materialRevision++;
 }
 
+void vkrtMarkTextureResourcesDirty(VKRT* vkrt) {
+    if (!vkrt) return;
+    vkrt->core.textureRevision++;
+}
+
 void vkrtMarkLightResourcesDirty(VKRT* vkrt) {
     if (!vkrt) return;
     vkrt->core.lightRevision++;

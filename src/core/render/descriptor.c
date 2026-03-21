@@ -4,6 +4,27 @@
 #include "vkrt_internal.h"
 #include <vulkan/vulkan_core.h>
 
+static VkBool32 textureDescriptorsReady(const VKRT* vkrt) {
+    if (!vkrt ||
+        vkrt->core.textureFallbackView == VK_NULL_HANDLE ||
+        vkrt->core.textureCount > VKRT_MAX_BINDLESS_TEXTURES) {
+        return VK_FALSE;
+    }
+
+    for (uint32_t i = 0; i < VKRT_TEXTURE_SAMPLER_VARIANT_COUNT; i++) {
+        if (vkrt->core.textureSamplers[i] == VK_NULL_HANDLE) {
+            return VK_FALSE;
+        }
+    }
+
+    for (uint32_t i = 0; i < vkrt->core.textureCount; i++) {
+        if (vkrt->core.textures[i].view == VK_NULL_HANDLE) {
+            return VK_FALSE;
+        }
+    }
+    return VK_TRUE;
+}
+
 static VkBool32 descriptorResourcesReadyForFrame(VKRT* vkrt, uint32_t frameIndex) {
     if (!vkrt || frameIndex >= VKRT_MAX_FRAMES_IN_FLIGHT) return VK_FALSE;
     if (vkrt->core.accumulationReadIndex >= 2u || vkrt->core.accumulationWriteIndex >= 2u) {
@@ -25,7 +46,8 @@ static VkBool32 descriptorResourcesReadyForFrame(VKRT* vkrt, uint32_t frameIndex
            vkrt->core.sceneMeshAliasQ.buffer != VK_NULL_HANDLE &&
            vkrt->core.sceneMeshAliasIdx.buffer != VK_NULL_HANDLE &&
            vkrt->core.sceneTriAliasQ.buffer != VK_NULL_HANDLE &&
-           vkrt->core.sceneTriAliasIdx.buffer != VK_NULL_HANDLE;
+           vkrt->core.sceneTriAliasIdx.buffer != VK_NULL_HANDLE &&
+           textureDescriptorsReady(vkrt);
 }
 
 static VKRT_Result updateDescriptorSetForFrame(VKRT* vkrt, uint32_t frameIndex) {
@@ -304,6 +326,36 @@ static VKRT_Result updateDescriptorSetForFrame(VKRT* vkrt, uint32_t frameIndex) 
     triAliasIdxWrite.descriptorCount = 1;
     triAliasIdxWrite.pBufferInfo = &triAliasIdxInfo;
 
+    VkDescriptorImageInfo samplerInfos[VKRT_TEXTURE_SAMPLER_VARIANT_COUNT] = {0};
+    for (uint32_t i = 0; i < VKRT_TEXTURE_SAMPLER_VARIANT_COUNT; i++) {
+        samplerInfos[i].sampler = vkrt->core.textureSamplers[i];
+    }
+
+    VkWriteDescriptorSet samplerWrite = {0};
+    samplerWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    samplerWrite.dstSet = descriptorSet;
+    samplerWrite.dstBinding = 18;
+    samplerWrite.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+    samplerWrite.descriptorCount = VKRT_TEXTURE_SAMPLER_VARIANT_COUNT;
+    samplerWrite.pImageInfo = samplerInfos;
+
+    VkDescriptorImageInfo textureBindings[VKRT_MAX_BINDLESS_TEXTURES] = {0};
+    for (uint32_t i = 0; i < VKRT_MAX_BINDLESS_TEXTURES; i++) {
+        textureBindings[i].imageView = vkrt->core.textureFallbackView;
+        textureBindings[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    }
+    for (uint32_t i = 0; i < vkrt->core.textureCount; i++) {
+        textureBindings[i].imageView = vkrt->core.textures[i].view;
+    }
+
+    VkWriteDescriptorSet textureWrite = {0};
+    textureWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    textureWrite.dstSet = descriptorSet;
+    textureWrite.dstBinding = 19;
+    textureWrite.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    textureWrite.descriptorCount = VKRT_MAX_BINDLESS_TEXTURES;
+    textureWrite.pImageInfo = textureBindings;
+
     VkWriteDescriptorSet writeDescriptorSets[] = {
         accelerationStructureWrites[0],
         accelerationStructureWrites[1],
@@ -323,6 +375,8 @@ static VKRT_Result updateDescriptorSetForFrame(VKRT* vkrt, uint32_t frameIndex) 
         meshAliasIdxWrite,
         triAliasQWrite,
         triAliasIdxWrite,
+        samplerWrite,
+        textureWrite,
     };
 
     vkUpdateDescriptorSets(vkrt->core.device, VKRT_ARRAY_COUNT(writeDescriptorSets), writeDescriptorSets, 0, VK_NULL_HANDLE);
@@ -333,9 +387,12 @@ static VKRT_Result updateDescriptorSetForFrame(VKRT* vkrt, uint32_t frameIndex) 
 VKRT_Result createDescriptorSetLayout(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
 
-    VkShaderStageFlags rtAll = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR;
+    VkShaderStageFlags rtAll = VK_SHADER_STAGE_RAYGEN_BIT_KHR |
+        VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
+        VK_SHADER_STAGE_ANY_HIT_BIT_KHR |
+        VK_SHADER_STAGE_MISS_BIT_KHR;
     VkShaderStageFlags rgen = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
-    VkShaderStageFlags rchit = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+    VkShaderStageFlags rhit = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR;
     VkShaderStageFlags comp = VK_SHADER_STAGE_COMPUTE_BIT;
 
     VkDescriptorSetLayoutBinding bindings[] = {
@@ -345,18 +402,20 @@ VKRT_Result createDescriptorSetLayout(VKRT* vkrt) {
         {.binding = 3,  .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,              .descriptorCount = 1, .stageFlags = rgen},
         {.binding = 4,  .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,              .descriptorCount = 1, .stageFlags = rgen | comp},
         {.binding = 5,  .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,              .descriptorCount = 1, .stageFlags = rgen | comp},
-        {.binding = 6,  .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rchit},
-        {.binding = 7,  .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rchit},
+        {.binding = 6,  .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rhit},
+        {.binding = 7,  .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rhit},
         {.binding = 8,  .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,             .descriptorCount = 1, .stageFlags = rtAll | comp},
         {.binding = 9,  .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rgen},
-        {.binding = 10, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rgen | rchit},
-        {.binding = 11, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rgen},
+        {.binding = 10, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rgen | rhit},
+        {.binding = 11, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rgen | rhit},
         {.binding = 12, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rgen},
         {.binding = 13, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rgen},
         {.binding = 14, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rgen},
         {.binding = 15, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rgen},
         {.binding = 16, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rgen},
         {.binding = 17, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rgen},
+        {.binding = 18, .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,                    .descriptorCount = VKRT_TEXTURE_SAMPLER_VARIANT_COUNT, .stageFlags = rtAll},
+        {.binding = 19, .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,              .descriptorCount = VKRT_MAX_BINDLESS_TEXTURES, .stageFlags = rtAll},
     };
 
     VkDescriptorSetLayoutCreateInfo createInfo = {0};
@@ -379,7 +438,8 @@ VKRT_Result createDescriptorPool(VKRT* vkrt) {
         {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 4u * VKRT_MAX_FRAMES_IN_FLIGHT},
         {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 11u * VKRT_MAX_FRAMES_IN_FLIGHT},
         {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VKRT_MAX_FRAMES_IN_FLIGHT},
-        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4u},
+        {VK_DESCRIPTOR_TYPE_SAMPLER, VKRT_TEXTURE_SAMPLER_VARIANT_COUNT * VKRT_MAX_FRAMES_IN_FLIGHT},
+        {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, VKRT_MAX_BINDLESS_TEXTURES * VKRT_MAX_FRAMES_IN_FLIGHT},
     };
     static const VkDescriptorPoolSize overlayPoolSizes[] = {
         {VK_DESCRIPTOR_TYPE_SAMPLER, 128u},

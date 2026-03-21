@@ -47,6 +47,10 @@ typedef struct VKRT_Core {
     VkDescriptorPool descriptorPool;
     VkDescriptorPool overlayDescriptorPool;
     VkDescriptorSet descriptorSets[VKRT_MAX_FRAMES_IN_FLIGHT];
+    VkSampler textureSamplers[VKRT_TEXTURE_SAMPLER_VARIANT_COUNT];
+    VkImage textureFallbackImage;
+    VkImageView textureFallbackView;
+    VkDeviceMemory textureFallbackMemory;
     VkPipelineLayout pipelineLayout;
     VkPipeline rayTracingPipeline;
     VkPipeline selectionRayTracingPipeline;
@@ -83,11 +87,13 @@ typedef struct VKRT_Core {
     VkDeviceMemory selectionMaskImageMemory;
     Mesh* meshes;
     SceneMaterial* materials;
+    SceneTexture* textures;
     Buffer selection;
     Buffer vertexData;
     Buffer indexData;
     uint32_t meshCount;
     uint32_t materialCount;
+    uint32_t textureCount;
     Buffer sceneMeshData;
     Buffer sceneMaterialData;
     Buffer sceneEmissiveMeshData;
@@ -102,10 +108,12 @@ typedef struct VKRT_Core {
     uint32_t sceneRevision;
     uint32_t selectionRevision;
     uint32_t materialRevision;
+    uint32_t textureRevision;
     uint32_t lightRevision;
     uint32_t sceneResourceRevision;
     uint32_t selectionResourceRevision;
     uint32_t materialResourceRevision;
+    uint32_t textureResourceRevision;
     uint32_t lightResourceRevision;
     GeometryLayout geometryLayout;
     uint32_t emissiveMeshCount;
@@ -176,8 +184,6 @@ typedef struct VKRT_Runtime {
     uint32_t displayWidth;
     uint32_t displayHeight;
     uint32_t displayViewportRect[4];
-    VkRenderPass renderPass;
-    VkFramebuffer* framebuffers;
     VkCommandPool commandPool;
     VkCommandBuffer commandBuffers[VKRT_MAX_FRAMES_IN_FLIGHT];
     FrameSceneUpdate frameSceneUpdates[VKRT_MAX_FRAMES_IN_FLIGHT];
@@ -223,16 +229,32 @@ typedef struct VKRT_AutoSPPState {
     float controlMs;
 } VKRT_AutoSPPState;
 
+typedef struct VKRT_AutoExposureReadback {
+    Buffer buffer;
+    float* mappedSamples;
+    uint8_t pending;
+} VKRT_AutoExposureReadback;
+
+typedef struct VKRT_AutoExposureState {
+    float filteredLuminance;
+    VKRT_AutoExposureReadback readbacks[VKRT_MAX_FRAMES_IN_FLIGHT];
+} VKRT_AutoExposureState;
+
+typedef struct VKRT_RenderControlState {
+    VKRT_RenderViewState view;
+    VKRT_TimingState timing;
+    VKRT_AutoSPPState autoSPP;
+    VKRT_AutoExposureState autoExposure;
+} VKRT_RenderControlState;
+
 typedef struct VKRT {
     VKRT_Core core;
     VKRT_Runtime runtime;
     VKRT_SceneSettingsSnapshot sceneSettings;
     VKRT_RenderStatusSnapshot renderStatus;
-    VKRT_RenderViewState renderView;
-    VKRT_TimingState timing;
-    VKRT_AutoSPPState autoSPP;
+    VKRT_RenderControlState renderControl;
     VKRT_AppHooks appHooks;
-    PNGExporter pngExporter;
+    RenderImageExporter renderImageExporter;
 } VKRT;
 
 static inline VkBool32 vkrtSerEnabled(const VKRT* vkrt) {

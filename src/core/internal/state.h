@@ -12,8 +12,10 @@ const SceneMaterial* vkrtGetSceneMaterial(const VKRT* vkrt, uint32_t materialInd
 const Material* vkrtGetSceneMaterialData(const VKRT* vkrt, uint32_t materialIndex);
 uint32_t vkrtCountMaterialUsers(const VKRT* vkrt, uint32_t materialIndex);
 uint32_t vkrtResolveMeshRenderBackfaces(const Mesh* mesh);
+VKRT_Result vkrtReleaseTextureIfUnused(VKRT* vkrt, uint32_t textureIndex);
 void vkrtDestroyAccelerationStructureResources(VKRT* vkrt, AccelerationStructure* accelerationStructure);
 void vkrtMarkSceneResourcesDirty(VKRT* vkrt);
 void vkrtMarkSelectionResourcesDirty(VKRT* vkrt);
 void vkrtMarkMaterialResourcesDirty(VKRT* vkrt);
+void vkrtMarkTextureResourcesDirty(VKRT* vkrt);
 void vkrtMarkLightResourcesDirty(VKRT* vkrt);

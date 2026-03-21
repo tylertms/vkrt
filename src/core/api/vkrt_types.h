@@ -45,6 +45,8 @@ static inline int vkrtCompareSceneTimelineKeyframesByTime(const void* lhs, const
 }
 
 typedef uint32_t VKRT_ToneMappingMode;
+typedef uint32_t VKRT_MaterialTextureSlot;
+typedef uint32_t VKRT_TextureColorSpace;
 
 typedef struct Camera {
     vec3 pos, target, up;
@@ -74,6 +76,21 @@ typedef struct VKRT_CreateInfo {
     const char* preferredDeviceName;
 } VKRT_CreateInfo;
 
+typedef struct VKRT_MeshUpload {
+    const Vertex* vertices;
+    size_t vertexCount;
+    const uint32_t* indices;
+    size_t indexCount;
+} VKRT_MeshUpload;
+
+typedef struct VKRT_TextureUpload {
+    const char* name;
+    const void* pixels;
+    uint32_t width;
+    uint32_t height;
+    uint32_t colorSpace;
+} VKRT_TextureUpload;
+
 static inline Material VKRT_materialDefault(void) {
     return (Material){
         .baseColor = {0.8f, 0.8f, 0.8f},
@@ -96,6 +113,24 @@ static inline Material VKRT_materialDefault(void) {
         .sheenRoughness = 0.5f,
         .absorptionCoefficient = 0.0f,
         .attenuationColor = {1.0f, 1.0f, 1.0f},
+        .normalTextureScale = 1.0f,
+        .baseColorTextureIndex = VKRT_INVALID_INDEX,
+        .metallicRoughnessTextureIndex = VKRT_INVALID_INDEX,
+        .normalTextureIndex = VKRT_INVALID_INDEX,
+        .emissiveTextureIndex = VKRT_INVALID_INDEX,
+        .baseColorTextureWrap = 0,
+        .metallicRoughnessTextureWrap = 0,
+        .normalTextureWrap = 0,
+        .emissiveTextureWrap = 0,
+        .opacity = 1.0f,
+        .alphaCutoff = 0.5f,
+        .alphaMode = VKRT_MATERIAL_ALPHA_MODE_OPAQUE,
+        .textureTexcoordSets = 0u,
+        .baseColorTextureTransform = {1.0f, 1.0f, 0.0f, 0.0f},
+        .metallicRoughnessTextureTransform = {1.0f, 1.0f, 0.0f, 0.0f},
+        .normalTextureTransform = {1.0f, 1.0f, 0.0f, 0.0f},
+        .emissiveTextureTransform = {1.0f, 1.0f, 0.0f, 0.0f},
+        .textureRotations = {0.0f, 0.0f, 0.0f, 0.0f},
     };
 }
 
@@ -108,6 +143,8 @@ typedef struct VKRT_SceneSettingsSnapshot {
     uint32_t rrMaxDepth;
     uint32_t rrMinDepth;
     VKRT_ToneMappingMode toneMappingMode;
+    float exposure;
+    uint8_t autoExposureEnabled;
     uint8_t autoSPPEnabled;
     uint32_t autoSPPTargetFPS;
     vec3 environmentColor;
@@ -159,6 +196,7 @@ typedef struct VKRT_MeshSnapshot {
     Material material;
     uint32_t materialIndex;
     uint32_t geometrySource;
+    uint8_t hasMaterialAssignment;
     uint8_t ownsGeometry;
     char name[VKRT_NAME_LEN];
 } VKRT_MeshSnapshot;
@@ -168,5 +206,13 @@ typedef struct VKRT_MaterialSnapshot {
     uint32_t useCount;
     char name[VKRT_NAME_LEN];
 } VKRT_MaterialSnapshot;
+
+typedef struct VKRT_TextureSnapshot {
+    uint32_t width;
+    uint32_t height;
+    uint32_t colorSpace;
+    uint32_t useCount;
+    char name[VKRT_NAME_LEN];
+} VKRT_TextureSnapshot;
 
 #define VKRT_ARRAY_COUNT(x) ((sizeof(x) / sizeof(0 [x])) / ((size_t)(!(sizeof(x) % sizeof(0 [x])))))

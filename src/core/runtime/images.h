@@ -14,6 +14,27 @@ typedef struct GPUImageState {
     VkDeviceMemory selectionMaskImageMemory;
 } GPUImageState;
 
+void vkrtDestroyImageResources(VKRT* vkrt, VkImage* image, VkImageView* view, VkDeviceMemory* memory);
+VKRT_Result vkrtCreateDeviceImage(
+    VKRT* vkrt,
+    VkExtent2D extent,
+    VkFormat format,
+    VkImageUsageFlags usage,
+    VkImage* outImage,
+    VkImageView* outView,
+    VkDeviceMemory* outMemory
+);
+VKRT_Result vkrtCreateSampledTextureImageFromPixels(
+    VKRT* vkrt,
+    const void* pixels,
+    uint32_t width,
+    uint32_t height,
+    uint32_t colorSpace,
+    VkImage* outImage,
+    VkImageView* outView,
+    VkDeviceMemory* outMemory
+);
+
 VKRT_Result createGPUImages(VKRT* vkrt);
 void destroyGPUImages(VKRT* vkrt);
 VKRT_Result createGPUImageState(VKRT* vkrt, VkExtent2D extent, GPUImageState* outState);

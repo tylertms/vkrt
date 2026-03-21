@@ -1,4 +1,5 @@
 #include "state.h"
+#include "textures.h"
 #include "vkrt_internal.h"
 
 #include <stdio.h>
@@ -46,6 +47,7 @@ VKRT_Result VKRT_getOverlayInfo(const VKRT* vkrt, VKRT_OverlayInfo* outOverlayIn
 
     memset(outOverlayInfo, 0, sizeof(*outOverlayInfo));
     outOverlayInfo->window = vkrt->runtime.window;
+    outOverlayInfo->apiVersion = vkrt->core.apiVersion;
     outOverlayInfo->instance = vkrt->core.instance;
     outOverlayInfo->physicalDevice = vkrt->core.physicalDevice;
     outOverlayInfo->device = vkrt->core.device;
@@ -54,7 +56,7 @@ VKRT_Result VKRT_getOverlayInfo(const VKRT* vkrt, VKRT_OverlayInfo* outOverlayIn
         : 0u;
     outOverlayInfo->graphicsQueue = vkrt->core.graphicsQueue;
     outOverlayInfo->descriptorPool = vkrt->core.overlayDescriptorPool;
-    outOverlayInfo->renderPass = vkrt->runtime.renderPass;
+    outOverlayInfo->colorAttachmentFormat = vkrt->runtime.swapChainImageFormat;
     outOverlayInfo->swapchainImageCount = (uint32_t)vkrt->runtime.swapChainImageCount;
     outOverlayInfo->swapchainMinImageCount = vkrt->runtime.swapChainMinImageCount;
 
@@ -71,6 +73,7 @@ VKRT_Result VKRT_getMeshSnapshot(const VKRT* vkrt, uint32_t meshIndex, VKRT_Mesh
     outMesh->material = material ? *material : VKRT_materialDefault();
     outMesh->materialIndex = mesh->info.materialIndex;
     outMesh->geometrySource = mesh->geometrySource;
+    outMesh->hasMaterialAssignment = mesh->hasMaterialAssignment;
     outMesh->ownsGeometry = mesh->ownsGeometry;
     snprintf(outMesh->name, sizeof(outMesh->name), "%s", mesh->name);
     return VKRT_SUCCESS;
@@ -92,5 +95,25 @@ VKRT_Result VKRT_getMaterialSnapshot(const VKRT* vkrt, uint32_t materialIndex, V
     outMaterial->material = material->material;
     outMaterial->useCount = vkrtCountMaterialUsers(vkrt, materialIndex);
     snprintf(outMaterial->name, sizeof(outMaterial->name), "%s", material->name);
+    return VKRT_SUCCESS;
+}
+
+VKRT_Result VKRT_getTextureCount(const VKRT* vkrt, uint32_t* outTextureCount) {
+    if (!vkrt || !outTextureCount) return VKRT_ERROR_INVALID_ARGUMENT;
+    *outTextureCount = vkrt->core.textureCount;
+    return VKRT_SUCCESS;
+}
+
+VKRT_Result VKRT_getTextureSnapshot(const VKRT* vkrt, uint32_t textureIndex, VKRT_TextureSnapshot* outTexture) {
+    if (!vkrt || !outTexture) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    const SceneTexture* texture = vkrtGetSceneTexture(vkrt, textureIndex);
+    if (!texture) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    outTexture->width = texture->width;
+    outTexture->height = texture->height;
+    outTexture->colorSpace = texture->colorSpace;
+    outTexture->useCount = vkrtCountTextureUsers(vkrt, textureIndex);
+    snprintf(outTexture->name, sizeof(outTexture->name), "%s", texture->name);
     return VKRT_SUCCESS;
 }
