@@ -91,6 +91,18 @@ ShadingBasis makeShadingBasis(float3 normal, float4 tangentData) {
     return basis;
 }
 
+float3 sanitizeShadingNormal(float3 shadingNormal, float3 geometricNormal, float3 outgoingDirection) {
+    float3 normal = safeNormalize(shadingNormal);
+    float3 geometric = safeNormalize(geometricNormal);
+    float3 outgoing = safeNormalize(outgoingDirection);
+
+    if (dot(normal, geometric) <= 1e-4 || dot(normal, outgoing) <= 1e-4) {
+        return geometric;
+    }
+
+    return normal;
+}
+
 float3 localToWorld(float3 localDir, ShadingBasis basis) {
     return basis.tangent * localDir.x + basis.bitangent * localDir.y + basis.normal * localDir.z;
 }
@@ -105,6 +117,10 @@ float3 worldToLocal(float3 worldDir, ShadingBasis basis) {
 
 float3 bsdfDiffuseColor(Material material) {
     return material.baseColor * (1.0 - material.metallic);
+}
+
+float maxComponent(float3 value) {
+    return max(value.x, max(value.y, value.z));
 }
 
 float bsdfLuminance(float3 value) {

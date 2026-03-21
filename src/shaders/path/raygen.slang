@@ -98,6 +98,7 @@ void main() {
             }
             ShadingBasis basis = makeShadingBasis(shadingNormal, payload.tangent);
             shadingNormal = applyNormalTexture(sourceMaterial, payload.texcoord0, payload.texcoord1, basis);
+            shadingNormal = sanitizeShadingNormal(shadingNormal, geometricNormal, -ray.Direction);
             basis = makeShadingBasis(shadingNormal, payload.tangent);
 
             if (sampleIndex == 0u && depth == 0u) {
@@ -185,7 +186,7 @@ void main() {
             prevVertexNeeAllowed = sampledPathNeeAllowed;
 
             if (depth + 1u >= scene.rrMinDepth) {
-                float continueProbability = clamp(max(throughput.x, max(throughput.y, throughput.z)), VKRT_RR_MIN_CONTINUE_PROB, VKRT_RR_MAX_CONTINUE_PROB);
+                float continueProbability = clamp(maxComponent(throughput), VKRT_RR_MIN_CONTINUE_PROB, VKRT_RR_MAX_CONTINUE_PROB);
                 if (rand(rng) > continueProbability) {
                     break;
                 }

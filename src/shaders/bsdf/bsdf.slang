@@ -5,7 +5,7 @@
 
 BSDFSample sampleBSDF(BSDFState state, ShadingBasis basis, inout uint rng) {
     BSDFSample sample = BSDFSample();
-    if (absCosTheta(state.wo) <= 0.0) return sample;
+    if (cosTheta(state.wo) <= 0.0) return sample;
 
     BSDFDirectionSample directionSample;
     if (!sampleBSDFDirection(state, rng, directionSample)) {

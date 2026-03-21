@@ -12,10 +12,6 @@ static const uint VKRT_TEXTURE_SLOT_METALLIC_ROUGHNESS = VKRT_MATERIAL_TEXTURE_S
 static const uint VKRT_TEXTURE_SLOT_NORMAL = VKRT_MATERIAL_TEXTURE_SLOT_NORMAL;
 static const uint VKRT_TEXTURE_SLOT_EMISSIVE = VKRT_MATERIAL_TEXTURE_SLOT_EMISSIVE;
 
-float textureMax3(float3 value) {
-    return max(value.x, max(value.y, value.z));
-}
-
 uint textureWrapModeS(uint packedWrap) {
     return packedWrap & 0xffffu;
 }
@@ -140,7 +136,7 @@ void applySurfaceTextures(inout Material material, float4 vertexColor, float2 te
 
     float3 emission = material.emissionColor * material.emissionLuminance *
         sampleMaterialTextureSlot(material, VKRT_TEXTURE_SLOT_EMISSIVE, texcoord0, texcoord1).rgb;
-    float emissionMax = textureMax3(emission);
+    float emissionMax = maxComponent(emission);
     if (emissionMax > 0.0) {
         material.emissionColor = emission / emissionMax;
         material.emissionLuminance = emissionMax;
