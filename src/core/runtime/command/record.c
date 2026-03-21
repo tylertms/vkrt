@@ -1,6 +1,7 @@
 #include "record.h"
 #include "accel/accel.h"
 #include "debug.h"
+#include "scene.h"
 #include "view.h"
 
 #include <stdlib.h>
@@ -49,13 +50,13 @@ static void endDebugLabel(VKRT* vkrt, VkCommandBuffer commandBuffer) {
 static void recordImageAccessBarrier(
     VkCommandBuffer commandBuffer,
     VkImage image,
-    VkAccessFlags srcAccessMask,
-    VkAccessFlags dstAccessMask,
-    VkPipelineStageFlags srcStageMask,
-    VkPipelineStageFlags dstStageMask
+    VkAccessFlags2 srcAccessMask,
+    VkAccessFlags2 dstAccessMask,
+    VkPipelineStageFlags2 srcStageMask,
+    VkPipelineStageFlags2 dstStageMask
 ) {
-    VkImageMemoryBarrier barrier = {0};
-    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    VkImageMemoryBarrier2 barrier = {0};
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
     barrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
     barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
     barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -68,19 +69,35 @@ static void recordImageAccessBarrier(
     barrier.subresourceRange.layerCount = 1;
     barrier.srcAccessMask = srcAccessMask;
     barrier.dstAccessMask = dstAccessMask;
+    barrier.srcStageMask = srcStageMask;
+    barrier.dstStageMask = dstStageMask;
 
-    vkCmdPipelineBarrier(
-        commandBuffer,
-        srcStageMask,
-        dstStageMask,
-        0,
-        0,
-        NULL,
-        0,
-        NULL,
-        1,
-        &barrier
-    );
+    VkDependencyInfo dependencyInfo = {0};
+    dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    dependencyInfo.imageMemoryBarrierCount = 1;
+    dependencyInfo.pImageMemoryBarriers = &barrier;
+    vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
+}
+
+static void recordMemoryAccessBarrier(
+    VkCommandBuffer commandBuffer,
+    VkAccessFlags2 srcAccessMask,
+    VkAccessFlags2 dstAccessMask,
+    VkPipelineStageFlags2 srcStageMask,
+    VkPipelineStageFlags2 dstStageMask
+) {
+    VkMemoryBarrier2 barrier = {0};
+    barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2;
+    barrier.srcAccessMask = srcAccessMask;
+    barrier.dstAccessMask = dstAccessMask;
+    barrier.srcStageMask = srcStageMask;
+    barrier.dstStageMask = dstStageMask;
+
+    VkDependencyInfo dependencyInfo = {0};
+    dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    dependencyInfo.memoryBarrierCount = 1;
+    dependencyInfo.pMemoryBarriers = &barrier;
+    vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
 }
 
 static void recordSceneUpdateCommands(VKRT* vkrt, VkCommandBuffer commandBuffer) {
@@ -120,42 +137,24 @@ static void recordSceneUpdateCommands(VKRT* vkrt, VkCommandBuffer commandBuffer)
 
 
     if (hasTransferWrites) {
-        VkMemoryBarrier transferBarrier = {0};
-        transferBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-        transferBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        transferBarrier.dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR | VK_ACCESS_SHADER_READ_BIT;
-        vkCmdPipelineBarrier(
+        recordMemoryAccessBarrier(
             commandBuffer,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR | VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
-            0,
-            1,
-            &transferBarrier,
-            0,
-            NULL,
-            0,
-            NULL
+            VK_ACCESS_2_TRANSFER_WRITE_BIT,
+            VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT_KHR | VK_ACCESS_2_SHADER_READ_BIT,
+            VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR | VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR
         );
     }
 
     if (hasBLASBuilds) {
         recordBottomLevelAccelerationStructureBuilds(vkrt, commandBuffer);
 
-        VkMemoryBarrier blasBarrier = {0};
-        blasBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-        blasBarrier.srcAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
-        blasBarrier.dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR;
-        vkCmdPipelineBarrier(
+        recordMemoryAccessBarrier(
             commandBuffer,
-            VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
-            VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR | VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
-            0,
-            1,
-            &blasBarrier,
-            0,
-            NULL,
-            0,
-            NULL
+            VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,
+            VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT_KHR,
+            VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
+            VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR | VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR
         );
     }
 
@@ -164,21 +163,12 @@ static void recordSceneUpdateCommands(VKRT* vkrt, VkCommandBuffer commandBuffer)
     }
 
     if (hasTransferWrites || hasBLASBuilds || hasTLASBuild) {
-        VkMemoryBarrier sceneReadyBarrier = {0};
-        sceneReadyBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-        sceneReadyBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
-        sceneReadyBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR;
-        vkCmdPipelineBarrier(
+        recordMemoryAccessBarrier(
             commandBuffer,
-            VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
-            VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
-            0,
-            1,
-            &sceneReadyBarrier,
-            0,
-            NULL,
-            0,
-            NULL
+            VK_ACCESS_2_TRANSFER_WRITE_BIT | VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,
+            VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT_KHR,
+            VK_PIPELINE_STAGE_2_TRANSFER_BIT | VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
+            VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR
         );
     }
 }
@@ -230,7 +220,6 @@ VKRT_Result recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex, VkBool32 presen
     VkBool32 renderFinished = renderModeActive && vkrt->renderStatus.renderModeFinished;
     VkBool32 descriptorReady = vkrt->core.descriptorSetReady[vkrt->runtime.currentFrame];
     VkBool32 shouldTrace = descriptorReady && !renderFinished;
-#if VKRT_SELECTION_ENABLED
     VkBool32 selectionOverlayEnabled = !renderModeActive &&
                                        vkrt->sceneSettings.selectionEnabled != 0u;
     VkBool32 shouldSelectionTrace = shouldTrace &&
@@ -241,11 +230,6 @@ VKRT_Result recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex, VkBool32 presen
     VkBool32 shouldSelectionPost = shouldTrace &&
                                    selectionOverlayEnabled &&
                                    vkrt->core.computePipeline != VK_NULL_HANDLE;
-#else
-    VkBool32 shouldSelectionTrace = VK_FALSE;
-    VkBool32 shouldSelectionPost = VK_FALSE;
-    (void)selectionMaskImage;
-#endif
     vkrt->runtime.frameTraced = VK_FALSE;
     vkrt->runtime.frameSelectionTraced = VK_FALSE;
 
@@ -327,19 +311,19 @@ VKRT_Result recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex, VkBool32 presen
                     recordImageAccessBarrier(
                         commandBuffer,
                         selectionMaskImage,
-                        VK_ACCESS_SHADER_WRITE_BIT,
-                        VK_ACCESS_SHADER_READ_BIT,
-                        VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
-                        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
+                        VK_ACCESS_2_SHADER_WRITE_BIT,
+                        VK_ACCESS_2_SHADER_READ_BIT,
+                        VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
+                        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT
                     );
                 }
                 recordImageAccessBarrier(
                     commandBuffer,
                     outputImage,
-                    VK_ACCESS_SHADER_WRITE_BIT,
-                    VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
-                    VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
-                    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
+                    VK_ACCESS_2_SHADER_WRITE_BIT,
+                    VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT,
+                    VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
+                    VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT
                 );
 
                 beginDebugLabel(vkrt, commandBuffer, "Selection Post", 0.56f, 0.30f, 0.84f);
@@ -364,13 +348,15 @@ VKRT_Result recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex, VkBool32 presen
                 recordImageAccessBarrier(
                     commandBuffer,
                     outputImage,
-                    VK_ACCESS_SHADER_WRITE_BIT,
-                    VK_ACCESS_TRANSFER_READ_BIT,
-                    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                    VK_PIPELINE_STAGE_TRANSFER_BIT
+                    VK_ACCESS_2_SHADER_WRITE_BIT,
+                    VK_ACCESS_2_TRANSFER_READ_BIT,
+                    VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                    VK_PIPELINE_STAGE_2_TRANSFER_BIT
                 );
                 endDebugLabel(vkrt, commandBuffer);
             }
+
+            recordAutoExposureReadback(vkrt, commandBuffer, accumulationWriteImage, renderExtent);
         }
 
         if (presentToSwapchain) {
@@ -398,13 +384,13 @@ VKRT_Result recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex, VkBool32 presen
                 vkCmdClearColorImage(commandBuffer, destImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &kViewportClearColor, 1, &clearRange);
 
                 VkExtent2D viewportExtent = {width, height};
-                vkrtQueryRenderViewCropExtent(renderExtent, viewportExtent, vkrt->renderView.zoom, &srcWidth, &srcHeight, &fillViewport);
+                vkrtQueryRenderViewCropExtent(renderExtent, viewportExtent, vkrt->renderControl.view.zoom, &srcWidth, &srcHeight, &fillViewport);
 
                 int32_t maxSrcX = (int32_t)renderExtent.width - (int32_t)srcWidth;
                 int32_t maxSrcY = (int32_t)renderExtent.height - (int32_t)srcHeight;
-                float panX = vkrt->renderView.panX;
-                float panY = vkrt->renderView.panY;
-                vkrtClampRenderViewPanOffset(renderExtent, viewportExtent, vkrt->renderView.zoom, &panX, &panY);
+                float panX = vkrt->renderControl.view.panX;
+                float panY = vkrt->renderControl.view.panY;
+                vkrtClampRenderViewPanOffset(renderExtent, viewportExtent, vkrt->renderControl.view.zoom, &panX, &panY);
                 if (maxSrcX > 0) srcX = (int32_t)((float)maxSrcX * 0.5f + panX + 0.5f);
                 if (maxSrcY > 0) srcY = (int32_t)((float)maxSrcY * 0.5f + panY + 0.5f);
                 if (srcX < 0) srcX = 0;
@@ -462,22 +448,31 @@ VKRT_Result recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex, VkBool32 presen
 
     if (presentToSwapchain) {
         beginDebugLabel(vkrt, commandBuffer, "Overlay Pass", 0.75f, 0.75f, 0.75f);
-        VkRenderPassBeginInfo renderPassBeginInfo = {0};
-        renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassBeginInfo.renderPass = vkrt->runtime.renderPass;
-        renderPassBeginInfo.framebuffer = vkrt->runtime.framebuffers[imageIndex];
-        renderPassBeginInfo.renderArea.offset = (VkOffset2D){0, 0};
-        renderPassBeginInfo.renderArea.extent = swapchainExtent;
-        renderPassBeginInfo.clearValueCount = 0;
-        renderPassBeginInfo.pClearValues = NULL;
-
-        vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-
         if (vkrt->appHooks.drawOverlay) {
-            vkrt->appHooks.drawOverlay(vkrt, commandBuffer, vkrt->appHooks.userData);
-        }
+            transitionImageLayout(commandBuffer, destImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
-        vkCmdEndRenderPass(commandBuffer);
+            VkRenderingAttachmentInfo colorAttachment = {0};
+            colorAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+            colorAttachment.imageView = vkrt->runtime.swapChainImageViews[imageIndex];
+            colorAttachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+            colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+
+            VkRenderingInfo renderingInfo = {0};
+            renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+            renderingInfo.renderArea.offset = (VkOffset2D){0, 0};
+            renderingInfo.renderArea.extent = swapchainExtent;
+            renderingInfo.layerCount = 1;
+            renderingInfo.colorAttachmentCount = 1;
+            renderingInfo.pColorAttachments = &colorAttachment;
+
+            vkCmdBeginRendering(commandBuffer, &renderingInfo);
+            vkrt->appHooks.drawOverlay(vkrt, commandBuffer, vkrt->appHooks.userData);
+            vkCmdEndRendering(commandBuffer);
+            transitionImageLayout(commandBuffer, destImage, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+        } else {
+            transitionImageLayout(commandBuffer, destImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+        }
         endDebugLabel(vkrt, commandBuffer);
 
         if (descriptorReady) {

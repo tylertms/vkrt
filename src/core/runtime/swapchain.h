@@ -17,7 +17,6 @@ VKRT_Result createSwapChain(VKRT* vkrt);
 VKRT_Result recreateSwapChain(VKRT* vkrt);
 void cleanupSwapChain(VKRT* vkrt);
 VKRT_Result createImageViews(VKRT* vkrt);
-VKRT_Result createFramebuffers(VKRT* vkrt);
 VKRT_Result querySwapChainSupport(VKRT* vkrt, SwapChainSupportDetails* outSupportDetails);
 VKRT_Result chooseSwapSurfaceFormat(const SwapChainSupportDetails* supportDetails, VkSurfaceFormatKHR* outSurfaceFormat);
 VkPresentModeKHR chooseSwapPresentMode(

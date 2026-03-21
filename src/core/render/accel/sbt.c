@@ -198,7 +198,6 @@ VKRT_Result createShaderBindingTable(VKRT* vkrt) {
     return VKRT_SUCCESS;
 }
 
-#if VKRT_SELECTION_ENABLED
 VKRT_Result createSelectionShaderBindingTable(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
 
@@ -218,4 +217,3 @@ VKRT_Result createSelectionShaderBindingTable(VKRT* vkrt) {
     LOG_TRACE("Selection shader binding table created in %.3f ms", (double)(getMicroseconds() - startTime) / 1e3);
     return VKRT_SUCCESS;
 }
-#endif

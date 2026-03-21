@@ -21,7 +21,7 @@ VKRT_Result createInstance(VKRT* vkrt, VkBool32 requirePresentation) {
         loaderApiVersion = VK_API_VERSION_1_0;
     }
 
-    const uint32_t requestedApiVersion = VK_API_VERSION_1_2;
+    const uint32_t requestedApiVersion = VK_API_VERSION_1_3;
     if (loaderApiVersion < requestedApiVersion) {
         LOG_ERROR(
             "Vulkan loader version %u.%u.%u is below the required %u.%u.%u",

@@ -126,9 +126,21 @@ static int32_t scoreDeviceSuitability(VKRT* vkrt, DeviceExtensionSupport* outExt
     rayTracingPipelineFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
     rayTracingPipelineFeatures.pNext = &accelerationStructureFeatures;
 
+    VkPhysicalDeviceDescriptorIndexingFeatures descriptorIndexingFeatures = {0};
+    descriptorIndexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
+    descriptorIndexingFeatures.pNext = &rayTracingPipelineFeatures;
+
+    VkPhysicalDeviceSynchronization2Features synchronization2Features = {0};
+    synchronization2Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
+    synchronization2Features.pNext = &descriptorIndexingFeatures;
+
+    VkPhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeatures = {0};
+    dynamicRenderingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
+    dynamicRenderingFeatures.pNext = &synchronization2Features;
+
     VkPhysicalDeviceFeatures2 physicalDeviceFeatures = {0};
     physicalDeviceFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-    physicalDeviceFeatures.pNext = &rayTracingPipelineFeatures;
+    physicalDeviceFeatures.pNext = &dynamicRenderingFeatures;
 
     vkGetPhysicalDeviceProperties(vkrt->core.physicalDevice, &deviceProperties);
     vkGetPhysicalDeviceFeatures2(vkrt->core.physicalDevice, &physicalDeviceFeatures);
@@ -154,7 +166,12 @@ static int32_t scoreDeviceSuitability(VKRT* vkrt, DeviceExtensionSupport* outExt
 
     VkBool32 requiredFeatures = bufferDeviceAddressFeatures.bufferDeviceAddress &&
                                 accelerationStructureFeatures.accelerationStructure &&
-                                rayTracingPipelineFeatures.rayTracingPipeline;
+                                rayTracingPipelineFeatures.rayTracingPipeline &&
+                                dynamicRenderingFeatures.dynamicRendering &&
+                                synchronization2Features.synchronization2 &&
+                                descriptorIndexingFeatures.shaderSampledImageArrayNonUniformIndexing &&
+                                deviceProperties.limits.maxPerStageDescriptorSampledImages >= VKRT_MAX_BINDLESS_TEXTURES &&
+                                deviceProperties.limits.maxDescriptorSetSampledImages >= VKRT_MAX_BINDLESS_TEXTURES;
 
     if (queueFamilyComplete && requiredExtensionsSupported && swapChainAdequate && requiredFeatures) {
         for (uint32_t i = 0; i < VKRT_ARRAY_COUNT(rankedDeviceTypes); i++) {
@@ -469,6 +486,21 @@ VKRT_Result createLogicalDevice(VKRT* vkrt) {
     deviceReorderFeatures.pNext = &deviceAccelerationStructureFeatures;
     deviceReorderFeatures.rayTracingInvocationReorder = VK_TRUE;
 
+    VkPhysicalDeviceDescriptorIndexingFeatures deviceDescriptorIndexingFeatures = {0};
+    deviceDescriptorIndexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
+    deviceDescriptorIndexingFeatures.pNext = &deviceRayTracingPipelineFeatures;
+    deviceDescriptorIndexingFeatures.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
+
+    VkPhysicalDeviceSynchronization2Features deviceSynchronization2Features = {0};
+    deviceSynchronization2Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
+    deviceSynchronization2Features.pNext = &deviceDescriptorIndexingFeatures;
+    deviceSynchronization2Features.synchronization2 = VK_TRUE;
+
+    VkPhysicalDeviceDynamicRenderingFeatures deviceDynamicRenderingFeatures = {0};
+    deviceDynamicRenderingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
+    deviceDynamicRenderingFeatures.pNext = &deviceSynchronization2Features;
+    deviceDynamicRenderingFeatures.dynamicRendering = VK_TRUE;
+
     const char* enabledExtensions[NUM_REQ_EXTENSIONS + NUM_OPT_EXTENSIONS + 1] = {0};
     uint32_t enabledExtensionCount = 0;
     uint32_t requiredExtensionStart = queryRequiredDeviceExtensionStartIndex(vkrt);
@@ -494,7 +526,7 @@ VKRT_Result createLogicalDevice(VKRT* vkrt) {
     createInfo.pQueueCreateInfos = queueCreateInfos;
     createInfo.queueCreateInfoCount = queueCreateInfoCount;
     createInfo.pEnabledFeatures = &deviceFeatures;
-    createInfo.pNext = &deviceRayTracingPipelineFeatures;
+    createInfo.pNext = &deviceDynamicRenderingFeatures;
     createInfo.enabledExtensionCount = enabledExtensionCount;
     createInfo.ppEnabledExtensionNames = enabledExtensions;
 

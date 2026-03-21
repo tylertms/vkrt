@@ -26,7 +26,7 @@ static void buildBLASGeometryInfo(
     outGeometry->sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
     outGeometry->geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
     outGeometry->geometry.triangles = trianglesData;
-    outGeometry->flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
+    outGeometry->flags = VK_GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION_BIT_KHR;
 
     *outBuildInfo = (VkAccelerationStructureBuildGeometryInfoKHR){0};
     outBuildInfo->sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;

@@ -1,7 +1,6 @@
 #include "swapchain.h"
 #include "images.h"
 #include "descriptor.h"
-#include "pipeline.h"
 #include "sync.h"
 #include "scene.h"
 #include "state.h"
@@ -76,7 +75,6 @@ typedef struct SwapChainState {
     VkSwapchainKHR swapChain;
     VkImage* swapChainImages;
     VkImageView* swapChainImageViews;
-    VkFramebuffer* framebuffers;
     VkSemaphore* renderFinishedSemaphores;
     size_t swapChainImageCount;
     uint32_t swapChainMinImageCount;
@@ -174,7 +172,6 @@ static void clearSwapChainBindings(VKRT* vkrt) {
     vkrt->runtime.swapChain = VK_NULL_HANDLE;
     vkrt->runtime.swapChainImages = NULL;
     vkrt->runtime.swapChainImageViews = NULL;
-    vkrt->runtime.framebuffers = NULL;
     vkrt->runtime.renderFinishedSemaphores = NULL;
     vkrt->runtime.swapChainImageCount = 0;
     vkrt->runtime.swapChainMinImageCount = 0;
@@ -191,7 +188,6 @@ static void captureSwapChainState(const VKRT* vkrt, SwapChainState* outState) {
     outState->swapChain = vkrt->runtime.swapChain;
     outState->swapChainImages = vkrt->runtime.swapChainImages;
     outState->swapChainImageViews = vkrt->runtime.swapChainImageViews;
-    outState->framebuffers = vkrt->runtime.framebuffers;
     outState->renderFinishedSemaphores = vkrt->runtime.renderFinishedSemaphores;
     outState->swapChainImageCount = vkrt->runtime.swapChainImageCount;
     outState->swapChainMinImageCount = vkrt->runtime.swapChainMinImageCount;
@@ -212,7 +208,6 @@ static void applySwapChainState(VKRT* vkrt, const SwapChainState* state) {
     vkrt->runtime.swapChain = state->swapChain;
     vkrt->runtime.swapChainImages = state->swapChainImages;
     vkrt->runtime.swapChainImageViews = state->swapChainImageViews;
-    vkrt->runtime.framebuffers = state->framebuffers;
     vkrt->runtime.renderFinishedSemaphores = state->renderFinishedSemaphores;
     vkrt->runtime.swapChainImageCount = state->swapChainImageCount;
     vkrt->runtime.swapChainMinImageCount = state->swapChainMinImageCount;
@@ -239,9 +234,6 @@ static void destroySwapChainState(VKRT* vkrt, SwapChainState* state) {
 
     if (vkrt->core.device != VK_NULL_HANDLE) {
         for (size_t i = 0; i < state->swapChainImageCount; i++) {
-            if (state->framebuffers) {
-                vkDestroyFramebuffer(vkrt->core.device, state->framebuffers[i], NULL);
-            }
             if (state->swapChainImageViews) {
                 vkDestroyImageView(vkrt->core.device, state->swapChainImageViews[i], NULL);
             }
@@ -254,7 +246,6 @@ static void destroySwapChainState(VKRT* vkrt, SwapChainState* state) {
         destroySemaphoreList(vkrt, state->renderFinishedSemaphores, state->swapChainImageCount);
     }
 
-    free(state->framebuffers);
     free(state->swapChainImageViews);
     free(state->swapChainImages);
     free(state->renderFinishedSemaphores);
@@ -433,8 +424,6 @@ VKRT_Result recreateSwapChain(VKRT* vkrt) {
     captureSwapChainState(vkrt, &previousSwapChain);
     captureGPUImageState(vkrt, &previousImages);
     VkExtent2D previousRenderExtent = vkrt->runtime.renderExtent;
-    VkRenderPass previousRenderPass = vkrt->runtime.renderPass;
-    VkRenderPass nextRenderPass = VK_NULL_HANDLE;
     VkBool32 previousSwapChainRetired = VK_FALSE;
 
     clearSwapChainBindings(vkrt);
@@ -443,10 +432,6 @@ VKRT_Result recreateSwapChain(VKRT* vkrt) {
     result = createSwapChainWithOld(vkrt, previousSwapChain.swapChain, &swapChainCreateVkResult);
     if (result != VKRT_SUCCESS && swapChainCreateVkResult == VK_ERROR_NATIVE_WINDOW_IN_USE_KHR) {
         LOG_INFO("Retrying swapchain recreation after releasing the previous swapchain");
-        if (previousRenderPass != VK_NULL_HANDLE) {
-            vkDestroyRenderPass(vkrt->core.device, previousRenderPass, NULL);
-            previousRenderPass = VK_NULL_HANDLE;
-        }
         destroySwapChainState(vkrt, &previousSwapChain);
         previousSwapChainRetired = VK_TRUE;
         result = createSwapChain(vkrt);
@@ -477,28 +462,6 @@ VKRT_Result recreateSwapChain(VKRT* vkrt) {
         goto restore_previous_state;
     }
 
-    result = createRenderPass(vkrt, &nextRenderPass);
-    if (result != VKRT_SUCCESS) {
-        if (!vkrt->renderStatus.renderModeActive) {
-            applyGPUImageState(vkrt, &previousImages);
-            updateAllDescriptorSets(vkrt);
-        }
-        goto restore_previous_state;
-    }
-    vkrt->runtime.renderPass = nextRenderPass;
-
-    result = createFramebuffers(vkrt);
-    if (result != VKRT_SUCCESS) {
-        if (!vkrt->renderStatus.renderModeActive) {
-            applyGPUImageState(vkrt, &previousImages);
-            updateAllDescriptorSets(vkrt);
-        }
-        goto restore_previous_state;
-    }
-
-    if (previousRenderPass != VK_NULL_HANDLE) {
-        vkDestroyRenderPass(vkrt->core.device, previousRenderPass, NULL);
-    }
     destroySwapChainState(vkrt, &previousSwapChain);
     if (!vkrt->renderStatus.renderModeActive) {
         destroyGPUImageState(vkrt, &previousImages);
@@ -516,8 +479,8 @@ VKRT_Result recreateSwapChain(VKRT* vkrt) {
         VKRT_setRenderViewport(vkrt, 0, 0, vkrt->runtime.swapChainExtent.width, vkrt->runtime.swapChainExtent.height);
     }
 
-    vkrt->timing.lastFrameTimestamp = 0;
-    vkrt->autoSPP.controlMs = 0.0f;
+    vkrt->renderControl.timing.lastFrameTimestamp = 0;
+    vkrt->renderControl.autoSPP.controlMs = 0.0f;
     if (!vkrt->renderStatus.renderModeActive) {
         resetSceneData(vkrt);
     }
@@ -533,10 +496,6 @@ restore_previous_state:
         destroySwapChainState(vkrt, &failedSwapChain);
     }
 
-    if (nextRenderPass != VK_NULL_HANDLE) {
-        vkDestroyRenderPass(vkrt->core.device, nextRenderPass, NULL);
-    }
-    vkrt->runtime.renderPass = previousRenderPass;
     vkrt->runtime.renderExtent = previousRenderExtent;
     if (!vkrt->renderStatus.renderModeActive) {
         applyGPUImageState(vkrt, &previousImages);
@@ -557,9 +516,6 @@ void cleanupSwapChain(VKRT* vkrt) {
     if (!vkrt) return;
 
     for (size_t i = 0; i < vkrt->runtime.swapChainImageCount; i++) {
-        if (vkrt->runtime.framebuffers) {
-            vkDestroyFramebuffer(vkrt->core.device, vkrt->runtime.framebuffers[i], NULL);
-        }
         if (vkrt->runtime.swapChainImageViews) {
             vkDestroyImageView(vkrt->core.device, vkrt->runtime.swapChainImageViews[i], NULL);
         }
@@ -570,10 +526,8 @@ void cleanupSwapChain(VKRT* vkrt) {
         vkrt->runtime.swapChain = VK_NULL_HANDLE;
     }
 
-    free(vkrt->runtime.framebuffers);
     free(vkrt->runtime.swapChainImageViews);
     free(vkrt->runtime.swapChainImages);
-    vkrt->runtime.framebuffers = NULL;
     vkrt->runtime.swapChainImageViews = NULL;
     vkrt->runtime.swapChainImages = NULL;
 }
@@ -615,36 +569,6 @@ VKRT_Result createImageViews(VKRT* vkrt) {
     return VKRT_SUCCESS;
 }
 
-VKRT_Result createFramebuffers(VKRT* vkrt) {
-    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
-
-    vkrt->runtime.framebuffers = (VkFramebuffer*)malloc(vkrt->runtime.swapChainImageCount * sizeof(VkFramebuffer));
-    if (!vkrt->runtime.framebuffers) {
-        return VKRT_ERROR_OPERATION_FAILED;
-    }
-
-    for (size_t i = 0; i < vkrt->runtime.swapChainImageCount; i++) {
-        VkFramebufferCreateInfo framebufferCreateInfo = {0};
-        framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        framebufferCreateInfo.renderPass = vkrt->runtime.renderPass;
-        framebufferCreateInfo.attachmentCount = 1;
-        framebufferCreateInfo.pAttachments = &vkrt->runtime.swapChainImageViews[i];
-        framebufferCreateInfo.width = vkrt->runtime.swapChainExtent.width;
-        framebufferCreateInfo.height = vkrt->runtime.swapChainExtent.height;
-        framebufferCreateInfo.layers = 1;
-
-        if (vkCreateFramebuffer(vkrt->core.device, &framebufferCreateInfo, NULL, &vkrt->runtime.framebuffers[i]) != VK_SUCCESS) {
-            for (size_t j = 0; j < i; j++) {
-                vkDestroyFramebuffer(vkrt->core.device, vkrt->runtime.framebuffers[j], NULL);
-            }
-            free(vkrt->runtime.framebuffers);
-            vkrt->runtime.framebuffers = NULL;
-            return VKRT_ERROR_OPERATION_FAILED;
-        }
-    }
-
-    return VKRT_SUCCESS;
-}
 
 VKRT_Result querySwapChainSupport(VKRT* vkrt, SwapChainSupportDetails* outSupportDetails) {
     if (!vkrt || !outSupportDetails) return VKRT_ERROR_INVALID_ARGUMENT;
@@ -748,15 +672,8 @@ VKRT_Result chooseSwapSurfaceFormat(const SwapChainSupportDetails* supportDetail
         }
     }
 
-    *outSurfaceFormat = supportDetails->formats[0];
-    LOG_INFO(
-        "Falling back to first available swapchain format: %s (%d), color space: %s (%d)",
-        swapChainFormatName(outSurfaceFormat->format),
-        (int)outSurfaceFormat->format,
-        swapChainColorSpaceName(outSurfaceFormat->colorSpace),
-        (int)outSurfaceFormat->colorSpace
-    );
-    return VKRT_SUCCESS;
+    LOG_ERROR("No VK_COLOR_SPACE_SRGB_NONLINEAR_KHR swapchain surface format is available");
+    return VKRT_ERROR_OPERATION_FAILED;
 }
 
 static VkPresentModeKHR chooseRankedPresentMode(

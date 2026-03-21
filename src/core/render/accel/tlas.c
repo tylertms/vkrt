@@ -271,12 +271,11 @@ static VkBool32 buildTLASInstanceForMesh(
         return VK_FALSE;
     }
 
-    MeshInfo meshInfo = mesh->info;
     *outInstance = (VkAccelerationStructureInstanceKHR){0};
-    outInstance->transform = getMeshTransform(&meshInfo);
+    outInstance->transform = getMeshWorldTransform(mesh);
     outInstance->instanceCustomIndex = meshIndex;
     outInstance->mask = 0xFF;
-    if (meshInfo.renderBackfaces) {
+    if (mesh->info.renderBackfaces) {
         outInstance->flags |= VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
     }
     outInstance->accelerationStructureReference = mesh->bottomLevelAccelerationStructure.deviceAddress;
