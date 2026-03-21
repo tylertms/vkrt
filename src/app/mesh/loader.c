@@ -1,8 +1,9 @@
 #include "loader.h"
 
 #include "debug.h"
+#include "image.h"
 #include "io.h"
-
+#include "platform.h"
 #define CGLTF_IMPLEMENTATION
 #include "cgltf.h"
 
@@ -14,12 +15,13 @@
 
 enum { kGeneratedMeshNameCapacity = 256 };
 static const size_t kMeshImportMaxPrimitiveBytes = 1024u * 1024u * 1024u;
+static const uint32_t kMeshImportTextureDecodeThreadCount = 6u;
+static const float kAlphaBlendMaskCutoff = 1.0f / 255.0f;
 
 typedef struct MeshImportFeatureReport {
-    int materialTextures;
+    int unsupportedMaterialTextures;
+    int unsupportedTextureTransforms;
     int advancedMaterials;
-    int additionalTexcoordSets;
-    int vertexColors;
     int skinning;
     int morphTargets;
     int cameras;
@@ -29,8 +31,31 @@ typedef struct MeshImportFeatureReport {
     int dracoCompression;
 } MeshImportFeatureReport;
 
-void decomposeImportedMeshTransform(mat4 worldTransform, vec3 outPosition, vec3 outRotation, vec3 outScale);
-static Material buildMaterial(const cgltf_material* sourceMaterial);
+typedef struct ImportedTextureReference {
+    const cgltf_image* image;
+    const cgltf_texture* texture;
+    uint32_t colorSpace;
+} ImportedTextureReference;
+
+typedef struct TextureDecodeThreadContext {
+    const char* resolvedPath;
+    const ImportedTextureReference* references;
+    TextureImportEntry* outputs;
+    uint32_t startIndex;
+    uint32_t endIndex;
+    int failed;
+} TextureDecodeThreadContext;
+
+static int textureViewUsesUnsupportedTransform(const cgltf_texture_view* textureView);
+static Material buildMaterial(
+    const cgltf_material* sourceMaterial,
+    const char* resolvedPath,
+    MeshImportData* importData,
+    const cgltf_image** cachedImages,
+    uint32_t* cachedColorSpaces,
+    uint32_t* cachedTextureIndices,
+    uint32_t* inoutCachedTextureCount
+);
 
 static void releaseImportEntry(MeshImportEntry* entry) {
     if (!entry) return;
@@ -46,6 +71,19 @@ static void releaseImportMaterial(MaterialImportEntry* material) {
     memset(material, 0, sizeof(*material));
 }
 
+static void releaseImportNode(NodeImportEntry* node) {
+    if (!node) return;
+    free(node->name);
+    memset(node, 0, sizeof(*node));
+}
+
+static void releaseImportTexture(TextureImportEntry* texture) {
+    if (!texture) return;
+    free(texture->name);
+    free(texture->rgba8);
+    memset(texture, 0, sizeof(*texture));
+}
+
 void meshReleaseImportData(MeshImportData* importData) {
     if (!importData) return;
 
@@ -56,6 +94,16 @@ void meshReleaseImportData(MeshImportData* importData) {
     free(importData->entries);
     importData->entries = NULL;
     importData->count = 0;
+    importData->entryCapacity = 0;
+
+    for (uint32_t i = 0; i < importData->nodeCount; i++) {
+        releaseImportNode(&importData->nodes[i]);
+    }
+
+    free(importData->nodes);
+    importData->nodes = NULL;
+    importData->nodeCount = 0;
+    importData->nodeCapacity = 0;
 
     for (uint32_t i = 0; i < importData->materialCount; i++) {
         releaseImportMaterial(&importData->materials[i]);
@@ -64,27 +112,547 @@ void meshReleaseImportData(MeshImportData* importData) {
     free(importData->materials);
     importData->materials = NULL;
     importData->materialCount = 0;
+
+    for (uint32_t i = 0; i < importData->textureCount; i++) {
+        releaseImportTexture(&importData->textures[i]);
+    }
+
+    free(importData->textures);
+    importData->textures = NULL;
+    importData->textureCount = 0;
+    importData->textureCapacity = 0;
+}
+
+static int ensureImportEntryCapacity(MeshImportData* importData, uint32_t additionalCount) {
+    if (!importData) return -1;
+    if (additionalCount == 0u) return 0;
+    if (importData->count > UINT32_MAX - additionalCount) return -1;
+
+    uint32_t requiredCount = importData->count + additionalCount;
+    if (requiredCount <= importData->entryCapacity) return 0;
+
+    uint32_t nextCapacity = importData->entryCapacity > 0u ? importData->entryCapacity : 16u;
+    while (nextCapacity < requiredCount) {
+        if (nextCapacity > UINT32_MAX / 2u) {
+            nextCapacity = requiredCount;
+            break;
+        }
+        nextCapacity *= 2u;
+    }
+
+    MeshImportEntry* resized = (MeshImportEntry*)realloc(
+        importData->entries,
+        (size_t)nextCapacity * sizeof(MeshImportEntry)
+    );
+    if (!resized) return -1;
+
+    importData->entries = resized;
+    importData->entryCapacity = nextCapacity;
+    return 0;
+}
+
+static int ensureImportTextureCapacity(MeshImportData* importData, uint32_t additionalCount) {
+    if (!importData) return -1;
+    if (additionalCount == 0u) return 0;
+    if (importData->textureCount > UINT32_MAX - additionalCount) return -1;
+
+    uint32_t requiredCount = importData->textureCount + additionalCount;
+    if (requiredCount <= importData->textureCapacity) return 0;
+
+    uint32_t nextCapacity = importData->textureCapacity > 0u ? importData->textureCapacity : 8u;
+    while (nextCapacity < requiredCount) {
+        if (nextCapacity > UINT32_MAX / 2u) {
+            nextCapacity = requiredCount;
+            break;
+        }
+        nextCapacity *= 2u;
+    }
+
+    TextureImportEntry* resized = (TextureImportEntry*)realloc(
+        importData->textures,
+        (size_t)nextCapacity * sizeof(TextureImportEntry)
+    );
+    if (!resized) return -1;
+
+    importData->textures = resized;
+    importData->textureCapacity = nextCapacity;
+    return 0;
+}
+
+static int ensureImportNodeCapacity(MeshImportData* importData, uint32_t additionalCount) {
+    if (!importData) return -1;
+    if (additionalCount == 0u) return 0;
+    if (importData->nodeCount > UINT32_MAX - additionalCount) return -1;
+
+    uint32_t requiredCount = importData->nodeCount + additionalCount;
+    if (requiredCount <= importData->nodeCapacity) return 0;
+
+    uint32_t nextCapacity = importData->nodeCapacity > 0u ? importData->nodeCapacity : 16u;
+    while (nextCapacity < requiredCount) {
+        if (nextCapacity > UINT32_MAX / 2u) {
+            nextCapacity = requiredCount;
+            break;
+        }
+        nextCapacity *= 2u;
+    }
+
+    NodeImportEntry* resized = (NodeImportEntry*)realloc(
+        importData->nodes,
+        (size_t)nextCapacity * sizeof(NodeImportEntry)
+    );
+    if (!resized) return -1;
+
+    importData->nodes = resized;
+    importData->nodeCapacity = nextCapacity;
+    return 0;
 }
 
 static int appendImportEntry(MeshImportData* importData, MeshImportEntry* entry) {
     if (!importData || !entry) return -1;
+    if (ensureImportEntryCapacity(importData, 1u) != 0) return -1;
 
-    MeshImportEntry* resized = (MeshImportEntry*)realloc(
-        importData->entries,
-        (size_t)(importData->count + 1u) * sizeof(MeshImportEntry)
-    );
-    if (!resized) {
-        return -1;
-    }
-
-    importData->entries = resized;
     importData->entries[importData->count] = *entry;
     importData->count++;
     memset(entry, 0, sizeof(*entry));
     return 0;
 }
 
-static int populateImportMaterials(const cgltf_data* data, MeshImportData* importData) {
+static int appendImportTexture(MeshImportData* importData, TextureImportEntry* texture) {
+    if (!importData || !texture) return -1;
+    if (ensureImportTextureCapacity(importData, 1u) != 0) return -1;
+
+    importData->textures[importData->textureCount] = *texture;
+    importData->textureCount++;
+    memset(texture, 0, sizeof(*texture));
+    return 0;
+}
+
+static int appendImportNode(MeshImportData* importData, NodeImportEntry* node, uint32_t* outNodeIndex) {
+    if (!importData || !node) return -1;
+    if (ensureImportNodeCapacity(importData, 1u) != 0) return -1;
+
+    uint32_t nodeIndex = importData->nodeCount;
+    importData->nodes[nodeIndex] = *node;
+    importData->nodeCount++;
+    if (outNodeIndex) *outNodeIndex = nodeIndex;
+    memset(node, 0, sizeof(*node));
+    return 0;
+}
+
+static int textureReferenceEqual(
+    const ImportedTextureReference* reference,
+    const cgltf_image* image,
+    uint32_t colorSpace
+) {
+    return reference &&
+        reference->image == image &&
+        reference->colorSpace == colorSpace;
+}
+
+static int appendImportedTextureReference(
+    ImportedTextureReference* references,
+    uint32_t* inoutReferenceCount,
+    const cgltf_texture_view* textureView,
+    uint32_t colorSpace
+) {
+    if (!references || !inoutReferenceCount) {
+        return 0;
+    }
+    if (!textureView || !textureView->texture || !textureView->texture->image) {
+        return 1;
+    }
+    if (textureViewUsesUnsupportedTransform(textureView)) {
+        return 1;
+    }
+
+    const cgltf_image* image = textureView->texture->image;
+    for (uint32_t i = 0; i < *inoutReferenceCount; i++) {
+        if (textureReferenceEqual(&references[i], image, colorSpace)) {
+            return 1;
+        }
+    }
+
+    references[*inoutReferenceCount] = (ImportedTextureReference){
+        .image = image,
+        .texture = textureView->texture,
+        .colorSpace = colorSpace,
+    };
+    (*inoutReferenceCount)++;
+    return 1;
+}
+
+static int collectImportedTextureReferences(
+    const cgltf_data* data,
+    ImportedTextureReference* references,
+    uint32_t* outReferenceCount
+) {
+    if (!data || !references || !outReferenceCount) return 0;
+    *outReferenceCount = 0u;
+
+    for (cgltf_size materialIndex = 0; materialIndex < data->materials_count; materialIndex++) {
+        const cgltf_material* material = &data->materials[materialIndex];
+        if (!appendImportedTextureReference(
+            references,
+            outReferenceCount,
+            &material->pbr_metallic_roughness.base_color_texture,
+            VKRT_TEXTURE_COLOR_SPACE_SRGB
+        )) {
+            return 0;
+        }
+        if (!appendImportedTextureReference(
+            references,
+            outReferenceCount,
+            &material->pbr_metallic_roughness.metallic_roughness_texture,
+            VKRT_TEXTURE_COLOR_SPACE_LINEAR
+        )) {
+            return 0;
+        }
+        if (!appendImportedTextureReference(
+            references,
+            outReferenceCount,
+            &material->normal_texture,
+            VKRT_TEXTURE_COLOR_SPACE_LINEAR
+        )) {
+            return 0;
+        }
+        if (!appendImportedTextureReference(
+            references,
+            outReferenceCount,
+            &material->emissive_texture,
+            VKRT_TEXTURE_COLOR_SPACE_SRGB
+        )) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+static int copyParentDirectory(const char* path, char outDirectory[VKRT_PATH_MAX]) {
+    if (!path || !outDirectory) return 0;
+    if (snprintf(outDirectory, VKRT_PATH_MAX, "%s", path) >= VKRT_PATH_MAX) return 0;
+
+    char* slash = strrchr(outDirectory, '/');
+    char* backslash = strrchr(outDirectory, '\\');
+    char* separator = slash > backslash ? slash : backslash;
+    if (!separator) {
+        outDirectory[0] = '.';
+        outDirectory[1] = '\0';
+        return 1;
+    }
+
+    if (separator == outDirectory) {
+        separator[1] = '\0';
+    } else {
+        *separator = '\0';
+    }
+    return 1;
+}
+
+static uint32_t packTextureWrapModes(cgltf_wrap_mode wrapS, cgltf_wrap_mode wrapT) {
+    uint32_t s = wrapS != 0 ? (uint32_t)wrapS : VKRT_TEXTURE_WRAP_REPEAT;
+    uint32_t t = wrapT != 0 ? (uint32_t)wrapT : VKRT_TEXTURE_WRAP_REPEAT;
+    return s | (t << 16u);
+}
+
+static uint32_t materialTextureTexcoordSetShift(uint32_t textureSlot) {
+    return textureSlot * 8u;
+}
+
+static void setMaterialTextureTexcoordSet(Material* material, uint32_t textureSlot, uint32_t texcoordSet) {
+    if (!material) return;
+
+    uint32_t shift = materialTextureTexcoordSetShift(textureSlot);
+    uint32_t mask = 0xffu << shift;
+    material->textureTexcoordSets =
+        (material->textureTexcoordSets & ~mask) | ((texcoordSet & 0xffu) << shift);
+}
+
+static uint32_t queryTextureViewTexcoordSet(const cgltf_texture_view* textureView) {
+    if (!textureView) return 0u;
+    if (textureView->has_transform && textureView->transform.has_texcoord && textureView->transform.texcoord >= 0) {
+        return (uint32_t)textureView->transform.texcoord;
+    }
+    return textureView->texcoord >= 0 ? (uint32_t)textureView->texcoord : 0u;
+}
+
+static void copyTextureTransform(float4 outTransform, float* outRotation, const cgltf_texture_view* textureView) {
+    if (!outTransform || !outRotation) return;
+    outTransform[0] = 1.0f;
+    outTransform[1] = 1.0f;
+    outTransform[2] = 0.0f;
+    outTransform[3] = 0.0f;
+    *outRotation = 0.0f;
+    if (!textureView) return;
+
+    if (textureView->has_transform) {
+        outTransform[0] = textureView->transform.scale[0];
+        outTransform[1] = textureView->transform.scale[1];
+        outTransform[2] = textureView->transform.offset[0];
+        outTransform[3] = textureView->transform.offset[1];
+        *outRotation = textureView->transform.rotation;
+    }
+}
+
+static int resolveTextureImagePath(
+    const char* resolvedPath,
+    const cgltf_image* image,
+    char outPath[VKRT_PATH_MAX]
+) {
+    if (!resolvedPath || !image || !image->uri || !image->uri[0] || !outPath) return 0;
+    if (strstr(image->uri, "data:") == image->uri) return 0;
+
+    char decodedUri[VKRT_PATH_MAX];
+    if (snprintf(decodedUri, sizeof(decodedUri), "%s", image->uri) >= (int)sizeof(decodedUri)) {
+        return 0;
+    }
+    cgltf_decode_uri(decodedUri);
+
+    if (resolveExistingPath(decodedUri, outPath, VKRT_PATH_MAX) == 0) {
+        return 1;
+    }
+
+    char sceneDirectory[VKRT_PATH_MAX];
+    if (!copyParentDirectory(resolvedPath, sceneDirectory)) return 0;
+
+    char combinedPath[VKRT_PATH_MAX];
+    if (snprintf(combinedPath, sizeof(combinedPath), "%s/%s", sceneDirectory, decodedUri) >= (int)sizeof(combinedPath)) {
+        return 0;
+    }
+
+    return resolveExistingPath(combinedPath, outPath, VKRT_PATH_MAX) == 0;
+}
+
+static int decodeTextureImage(
+    const char* resolvedPath,
+    const cgltf_image* image,
+    VKRT_LoadedImage* outImage
+) {
+    if (!resolvedPath || !image || !outImage) return 0;
+    *outImage = (VKRT_LoadedImage){0};
+
+    if (image->uri && image->uri[0] && strstr(image->uri, "data:") != image->uri) {
+        char imagePath[VKRT_PATH_MAX];
+        if (!resolveTextureImagePath(resolvedPath, image, imagePath)) {
+            return 0;
+        }
+        return vkrtLoadImageFromFile(imagePath, outImage);
+    }
+
+    if (image->buffer_view &&
+        image->buffer_view->buffer &&
+        image->buffer_view->buffer->data &&
+        image->buffer_view->size <= image->buffer_view->buffer->size &&
+        image->buffer_view->offset <= image->buffer_view->buffer->size - image->buffer_view->size) {
+        const uint8_t* bytes = (const uint8_t*)image->buffer_view->buffer->data + image->buffer_view->offset;
+        return vkrtLoadImageFromMemory(bytes, image->buffer_view->size, image->mime_type, outImage);
+    }
+
+    return 0;
+}
+
+static const char* queryImportedTextureName(const cgltf_image* image, const cgltf_texture* texture) {
+    if (image && image->name && image->name[0]) {
+        return image->name;
+    }
+    if (texture && texture->name && texture->name[0]) {
+        return texture->name;
+    }
+    return "Texture";
+}
+
+static int buildImportedTextureEntry(
+    const char* resolvedPath,
+    const cgltf_image* image,
+    const cgltf_texture* texture,
+    uint32_t colorSpace,
+    TextureImportEntry* outEntry
+) {
+    if (!resolvedPath || !image || !outEntry) return 0;
+    *outEntry = (TextureImportEntry){0};
+
+    VKRT_LoadedImage decoded = {0};
+    if (!decodeTextureImage(resolvedPath, image, &decoded)) {
+        return 0;
+    }
+
+    char* duplicatedName = stringDuplicate(queryImportedTextureName(image, texture));
+    if (!duplicatedName) {
+        vkrtFreeLoadedImage(&decoded);
+        return 0;
+    }
+
+    *outEntry = (TextureImportEntry){
+        .name = duplicatedName,
+        .rgba8 = decoded.pixels,
+        .width = decoded.width,
+        .height = decoded.height,
+        .colorSpace = colorSpace,
+    };
+    return 1;
+}
+
+static int decodeTextureReferenceRange(void* userData) {
+    TextureDecodeThreadContext* context = (TextureDecodeThreadContext*)userData;
+    if (!context) return -1;
+
+    for (uint32_t i = context->startIndex; i < context->endIndex; i++) {
+        const ImportedTextureReference* reference = &context->references[i];
+        if (!buildImportedTextureEntry(
+            context->resolvedPath,
+            reference->image,
+            reference->texture,
+            reference->colorSpace,
+            &context->outputs[i]
+        )) {
+            context->failed = 1;
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+static void releaseTextureImportEntries(TextureImportEntry* textures, uint32_t textureCount) {
+    if (!textures) return;
+    for (uint32_t i = 0; i < textureCount; i++) {
+        releaseImportTexture(&textures[i]);
+    }
+}
+
+static int decodeImportedTextureReferences(
+    MeshImportData* importData,
+    const char* resolvedPath,
+    const ImportedTextureReference* references,
+    uint32_t referenceCount,
+    const cgltf_image** outCachedImages,
+    uint32_t* outCachedColorSpaces,
+    uint32_t* outCachedTextureIndices
+) {
+    if (!importData || !resolvedPath || !references || !outCachedImages || !outCachedColorSpaces || !outCachedTextureIndices) {
+        return 0;
+    }
+    if (referenceCount == 0u) return 1;
+
+    TextureImportEntry* decodedTextures = (TextureImportEntry*)calloc(referenceCount, sizeof(*decodedTextures));
+    if (!decodedTextures) return 0;
+
+    uint32_t threadCount = referenceCount < kMeshImportTextureDecodeThreadCount
+        ? referenceCount
+        : kMeshImportTextureDecodeThreadCount;
+    TextureDecodeThreadContext* contexts = (TextureDecodeThreadContext*)calloc(threadCount, sizeof(*contexts));
+    VKRT_Thread* threads = (VKRT_Thread*)calloc(threadCount, sizeof(*threads));
+    if (!contexts || !threads) {
+        free(contexts);
+        free(threads);
+        free(decodedTextures);
+        return 0;
+    }
+
+    uint32_t chunkSize = (referenceCount + threadCount - 1u) / threadCount;
+    uint32_t launchedThreads = 0u;
+    int failed = 0;
+    for (uint32_t threadIndex = 0; threadIndex < threadCount; threadIndex++) {
+        uint32_t startIndex = threadIndex * chunkSize;
+        uint32_t endIndex = startIndex + chunkSize;
+        if (startIndex >= referenceCount) break;
+        if (endIndex > referenceCount) endIndex = referenceCount;
+
+        contexts[threadIndex] = (TextureDecodeThreadContext){
+            .resolvedPath = resolvedPath,
+            .references = references,
+            .outputs = decodedTextures,
+            .startIndex = startIndex,
+            .endIndex = endIndex,
+            .failed = 0,
+        };
+
+        if (vkrtThreadCreate(&threads[threadIndex], decodeTextureReferenceRange, &contexts[threadIndex]) != VKRT_THREAD_SUCCESS) {
+            failed = 1;
+            launchedThreads = threadIndex;
+            break;
+        }
+        launchedThreads = threadIndex + 1u;
+    }
+
+    for (uint32_t threadIndex = 0; threadIndex < launchedThreads; threadIndex++) {
+        int threadResult = 0;
+        if (vkrtThreadJoin(threads[threadIndex], &threadResult) != VKRT_THREAD_SUCCESS || threadResult != 0 || contexts[threadIndex].failed) {
+            failed = 1;
+        }
+    }
+
+    if (!failed) {
+        for (uint32_t i = 0; i < referenceCount; i++) {
+            if (appendImportTexture(importData, &decodedTextures[i]) != 0) {
+                failed = 1;
+                break;
+            }
+
+            outCachedImages[i] = references[i].image;
+            outCachedColorSpaces[i] = references[i].colorSpace;
+            outCachedTextureIndices[i] = i;
+        }
+    }
+
+    if (failed) {
+        releaseTextureImportEntries(decodedTextures, referenceCount);
+    }
+
+    free(contexts);
+    free(threads);
+    free(decodedTextures);
+    return failed ? 0 : 1;
+}
+
+static int registerImportedTexture(
+    MeshImportData* importData,
+    const char* resolvedPath,
+    const cgltf_texture_view* textureView,
+    uint32_t colorSpace,
+    const cgltf_image** cachedImages,
+    uint32_t* cachedColorSpaces,
+    uint32_t* cachedTextureIndices,
+    uint32_t* inoutCachedTextureCount,
+    uint32_t* outTextureIndex
+) {
+    if (outTextureIndex) *outTextureIndex = VKRT_INVALID_INDEX;
+    if (!importData || !textureView || !textureView->texture || !textureView->texture->image ||
+        !cachedImages || !cachedColorSpaces || !cachedTextureIndices || !inoutCachedTextureCount) {
+        return 0;
+    }
+    if (textureViewUsesUnsupportedTransform(textureView)) {
+        return 0;
+    }
+
+    const cgltf_image* image = textureView->texture->image;
+    for (uint32_t i = 0; i < *inoutCachedTextureCount; i++) {
+        if (cachedImages[i] == image && cachedColorSpaces[i] == colorSpace) {
+            if (outTextureIndex) *outTextureIndex = cachedTextureIndices[i];
+            return 1;
+        }
+    }
+
+    TextureImportEntry texture = {0};
+    if (!buildImportedTextureEntry(resolvedPath, image, textureView->texture, colorSpace, &texture)) {
+        return 0;
+    }
+    if (appendImportTexture(importData, &texture) != 0) {
+        releaseImportTexture(&texture);
+        return 0;
+    }
+
+    uint32_t textureIndex = importData->textureCount - 1u;
+    cachedImages[*inoutCachedTextureCount] = image;
+    cachedTextureIndices[*inoutCachedTextureCount] = textureIndex;
+    cachedColorSpaces[*inoutCachedTextureCount] = colorSpace;
+    (*inoutCachedTextureCount)++;
+
+    if (outTextureIndex) *outTextureIndex = textureIndex;
+    return 1;
+}
+
+static int populateImportMaterials(const cgltf_data* data, MeshImportData* importData, const char* resolvedPath) {
     if (!data || !importData) return -1;
     if (data->materials_count == 0) return 0;
     if (data->materials_count > (cgltf_size)VKRT_INVALID_INDEX) return -1;
@@ -95,6 +663,49 @@ static int populateImportMaterials(const cgltf_data* data, MeshImportData* impor
     );
     if (!materials) return -1;
 
+    uint32_t maxTextureRefs = (uint32_t)data->materials_count * VKRT_MATERIAL_TEXTURE_SLOT_COUNT;
+    ImportedTextureReference* references = maxTextureRefs > 0
+        ? (ImportedTextureReference*)calloc(maxTextureRefs, sizeof(*references))
+        : NULL;
+    const cgltf_image** cachedImages = maxTextureRefs > 0
+        ? (const cgltf_image**)calloc(maxTextureRefs, sizeof(*cachedImages))
+        : NULL;
+    uint32_t* cachedColorSpaces = maxTextureRefs > 0
+        ? (uint32_t*)calloc(maxTextureRefs, sizeof(*cachedColorSpaces))
+        : NULL;
+    uint32_t* cachedTextureIndices = maxTextureRefs > 0
+        ? (uint32_t*)calloc(maxTextureRefs, sizeof(*cachedTextureIndices))
+        : NULL;
+    uint32_t cachedTextureCount = 0u;
+    if (maxTextureRefs > 0 && (!references || !cachedImages || !cachedColorSpaces || !cachedTextureIndices)) {
+        free(materials);
+        free(references);
+        free(cachedImages);
+        free(cachedColorSpaces);
+        free(cachedTextureIndices);
+        return -1;
+    }
+
+    if (maxTextureRefs > 0) {
+        if (!collectImportedTextureReferences(data, references, &cachedTextureCount) ||
+            !decodeImportedTextureReferences(
+                importData,
+                resolvedPath,
+                references,
+                cachedTextureCount,
+                cachedImages,
+                cachedColorSpaces,
+                cachedTextureIndices
+            )) {
+            free(materials);
+            free(references);
+            free(cachedImages);
+            free(cachedColorSpaces);
+            free(cachedTextureIndices);
+            return -1;
+        }
+    }
+
     for (cgltf_size materialIndex = 0; materialIndex < data->materials_count; materialIndex++) {
         const cgltf_material* sourceMaterial = &data->materials[materialIndex];
         char generatedName[VKRT_NAME_LEN];
@@ -104,27 +715,49 @@ static int populateImportMaterials(const cgltf_data* data, MeshImportData* impor
             snprintf(generatedName, sizeof(generatedName), "Material %zu", materialIndex);
         }
 
-        materials[materialIndex].material = buildMaterial(sourceMaterial);
+        materials[materialIndex].material = buildMaterial(
+            sourceMaterial,
+            resolvedPath,
+            importData,
+            cachedImages,
+            cachedColorSpaces,
+            cachedTextureIndices,
+            &cachedTextureCount
+        );
         materials[materialIndex].name = stringDuplicate(generatedName);
         if (!materials[materialIndex].name) {
             for (cgltf_size i = 0; i <= materialIndex; i++) {
                 releaseImportMaterial(&materials[i]);
             }
             free(materials);
+            free(references);
+            free(cachedImages);
+            free(cachedColorSpaces);
+            free(cachedTextureIndices);
             return -1;
         }
     }
 
     importData->materials = materials;
     importData->materialCount = (uint32_t)data->materials_count;
+    free(references);
+    free(cachedImages);
+    free(cachedColorSpaces);
+    free(cachedTextureIndices);
     return 0;
 }
 
-static const cgltf_accessor* findAttributeAccessor(const cgltf_primitive* primitive, cgltf_attribute_type type) {
+static const cgltf_accessor* findAttributeAccessor(
+    const cgltf_primitive* primitive,
+    cgltf_attribute_type type,
+    cgltf_size attributeIndex
+) {
     if (!primitive) return NULL;
 
     for (cgltf_size i = 0; i < primitive->attributes_count; i++) {
-        if (primitive->attributes[i].type == type) {
+        if (primitive->attributes[i].type == type &&
+            primitive->attributes[i].index >= 0 &&
+            (cgltf_size)primitive->attributes[i].index == attributeIndex) {
             return primitive->attributes[i].data;
         }
     }
@@ -217,14 +850,24 @@ static int materialUsesTextureView(const cgltf_texture_view* textureView) {
     return textureView && textureView->texture != NULL;
 }
 
+static int textureViewUsesUnsupportedTransform(const cgltf_texture_view* textureView) {
+    if (!textureView) return 0;
+    return queryTextureViewTexcoordSet(textureView) > 1u;
+}
+
+static int materialUsesUnsupportedTextureTransforms(const cgltf_material* material) {
+    if (!material) return 0;
+
+    return textureViewUsesUnsupportedTransform(&material->pbr_metallic_roughness.base_color_texture) ||
+        textureViewUsesUnsupportedTransform(&material->pbr_metallic_roughness.metallic_roughness_texture) ||
+        textureViewUsesUnsupportedTransform(&material->normal_texture) ||
+        textureViewUsesUnsupportedTransform(&material->emissive_texture);
+}
+
 static int materialUsesUnsupportedTextures(const cgltf_material* material) {
     if (!material) return 0;
 
-    return materialUsesTextureView(&material->pbr_metallic_roughness.base_color_texture) ||
-        materialUsesTextureView(&material->pbr_metallic_roughness.metallic_roughness_texture) ||
-        materialUsesTextureView(&material->normal_texture) ||
-        materialUsesTextureView(&material->occlusion_texture) ||
-        materialUsesTextureView(&material->emissive_texture) ||
+    return materialUsesTextureView(&material->occlusion_texture) ||
         materialUsesTextureView(&material->clearcoat.clearcoat_texture) ||
         materialUsesTextureView(&material->clearcoat.clearcoat_roughness_texture) ||
         materialUsesTextureView(&material->clearcoat.clearcoat_normal_texture) ||
@@ -255,8 +898,7 @@ static int materialUsesUnsupportedModels(const cgltf_material* material) {
         material->has_diffuse_transmission ||
         material->has_anisotropy ||
         material->has_dispersion ||
-        material->unlit ||
-        material->alpha_mode != cgltf_alpha_mode_opaque;
+        material->unlit;
 }
 
 static void collectIgnoredImportFeatures(const cgltf_data* data, MeshImportFeatureReport* outReport) {
@@ -269,7 +911,8 @@ static void collectIgnoredImportFeatures(const cgltf_data* data, MeshImportFeatu
 
     for (cgltf_size materialIndex = 0; materialIndex < data->materials_count; materialIndex++) {
         const cgltf_material* material = &data->materials[materialIndex];
-        outReport->materialTextures |= materialUsesUnsupportedTextures(material);
+        outReport->unsupportedMaterialTextures |= materialUsesUnsupportedTextures(material);
+        outReport->unsupportedTextureTransforms |= materialUsesUnsupportedTextureTransforms(material);
         outReport->advancedMaterials |= materialUsesUnsupportedModels(material);
     }
 
@@ -290,9 +933,6 @@ static void collectIgnoredImportFeatures(const cgltf_data* data, MeshImportFeatu
 
             for (cgltf_size attributeIndex = 0; attributeIndex < primitive->attributes_count; attributeIndex++) {
                 const cgltf_attribute* attribute = &primitive->attributes[attributeIndex];
-                outReport->additionalTexcoordSets |=
-                    attribute->type == cgltf_attribute_type_texcoord && attribute->index > 0;
-                outReport->vertexColors |= attribute->type == cgltf_attribute_type_color;
                 outReport->skinning |=
                     attribute->type == cgltf_attribute_type_joints || attribute->type == cgltf_attribute_type_weights;
             }
@@ -317,10 +957,13 @@ static void logIgnoredImportFeatures(const char* resolvedPath, const cgltf_data*
     collectIgnoredImportFeatures(data, &report);
 
     char ignoredFeatures[384] = {0};
-    if (report.materialTextures) appendIgnoredFeature(ignoredFeatures, sizeof(ignoredFeatures), "material textures");
+    if (report.unsupportedMaterialTextures) {
+        appendIgnoredFeature(ignoredFeatures, sizeof(ignoredFeatures), "unsupported material textures/extensions");
+    }
+    if (report.unsupportedTextureTransforms) {
+        appendIgnoredFeature(ignoredFeatures, sizeof(ignoredFeatures), "texture transforms using texcoord sets above 1");
+    }
     if (report.advancedMaterials) appendIgnoredFeature(ignoredFeatures, sizeof(ignoredFeatures), "advanced material models");
-    if (report.additionalTexcoordSets) appendIgnoredFeature(ignoredFeatures, sizeof(ignoredFeatures), "secondary UV sets");
-    if (report.vertexColors) appendIgnoredFeature(ignoredFeatures, sizeof(ignoredFeatures), "vertex colors");
     if (report.skinning) appendIgnoredFeature(ignoredFeatures, sizeof(ignoredFeatures), "skinning data");
     if (report.morphTargets) appendIgnoredFeature(ignoredFeatures, sizeof(ignoredFeatures), "morph targets");
     if (report.cameras) appendIgnoredFeature(ignoredFeatures, sizeof(ignoredFeatures), "cameras");
@@ -480,7 +1123,15 @@ static void finalizeTangents(Vertex* vertices, size_t vertexCount) {
     }
 }
 
-static Material buildMaterial(const cgltf_material* sourceMaterial) {
+static Material buildMaterial(
+    const cgltf_material* sourceMaterial,
+    const char* resolvedPath,
+    MeshImportData* importData,
+    const cgltf_image** cachedImages,
+    uint32_t* cachedColorSpaces,
+    uint32_t* cachedTextureIndices,
+    uint32_t* inoutCachedTextureCount
+) {
     Material material = VKRT_materialDefault();
     if (!sourceMaterial) {
         return material;
@@ -490,9 +1141,75 @@ static Material buildMaterial(const cgltf_material* sourceMaterial) {
         material.baseColor[0] = sourceMaterial->pbr_metallic_roughness.base_color_factor[0];
         material.baseColor[1] = sourceMaterial->pbr_metallic_roughness.base_color_factor[1];
         material.baseColor[2] = sourceMaterial->pbr_metallic_roughness.base_color_factor[2];
+        material.opacity = sourceMaterial->pbr_metallic_roughness.base_color_factor[3];
         material.metallic = sourceMaterial->pbr_metallic_roughness.metallic_factor;
         material.roughness = sourceMaterial->pbr_metallic_roughness.roughness_factor;
-        material.diffuseRoughness = material.roughness;
+
+        uint32_t baseColorTextureIndex = VKRT_INVALID_INDEX;
+        if (registerImportedTexture(
+            importData,
+            resolvedPath,
+            &sourceMaterial->pbr_metallic_roughness.base_color_texture,
+            VKRT_TEXTURE_COLOR_SPACE_SRGB,
+            cachedImages,
+            cachedColorSpaces,
+            cachedTextureIndices,
+            inoutCachedTextureCount,
+            &baseColorTextureIndex
+        )) {
+            material.baseColorTextureIndex = baseColorTextureIndex;
+            material.baseColorTextureWrap = packTextureWrapModes(
+                sourceMaterial->pbr_metallic_roughness.base_color_texture.texture->sampler
+                    ? sourceMaterial->pbr_metallic_roughness.base_color_texture.texture->sampler->wrap_s
+                    : cgltf_wrap_mode_repeat,
+                sourceMaterial->pbr_metallic_roughness.base_color_texture.texture->sampler
+                    ? sourceMaterial->pbr_metallic_roughness.base_color_texture.texture->sampler->wrap_t
+                    : cgltf_wrap_mode_repeat
+            );
+            setMaterialTextureTexcoordSet(
+                &material,
+                VKRT_MATERIAL_TEXTURE_SLOT_BASE_COLOR,
+                queryTextureViewTexcoordSet(&sourceMaterial->pbr_metallic_roughness.base_color_texture)
+            );
+            copyTextureTransform(
+                material.baseColorTextureTransform,
+                &material.textureRotations[VKRT_MATERIAL_TEXTURE_SLOT_BASE_COLOR],
+                &sourceMaterial->pbr_metallic_roughness.base_color_texture
+            );
+        }
+
+        uint32_t metallicRoughnessTextureIndex = VKRT_INVALID_INDEX;
+        if (registerImportedTexture(
+            importData,
+            resolvedPath,
+            &sourceMaterial->pbr_metallic_roughness.metallic_roughness_texture,
+            VKRT_TEXTURE_COLOR_SPACE_LINEAR,
+            cachedImages,
+            cachedColorSpaces,
+            cachedTextureIndices,
+            inoutCachedTextureCount,
+            &metallicRoughnessTextureIndex
+        )) {
+            material.metallicRoughnessTextureIndex = metallicRoughnessTextureIndex;
+            material.metallicRoughnessTextureWrap = packTextureWrapModes(
+                sourceMaterial->pbr_metallic_roughness.metallic_roughness_texture.texture->sampler
+                    ? sourceMaterial->pbr_metallic_roughness.metallic_roughness_texture.texture->sampler->wrap_s
+                    : cgltf_wrap_mode_repeat,
+                sourceMaterial->pbr_metallic_roughness.metallic_roughness_texture.texture->sampler
+                    ? sourceMaterial->pbr_metallic_roughness.metallic_roughness_texture.texture->sampler->wrap_t
+                    : cgltf_wrap_mode_repeat
+            );
+            setMaterialTextureTexcoordSet(
+                &material,
+                VKRT_MATERIAL_TEXTURE_SLOT_METALLIC_ROUGHNESS,
+                queryTextureViewTexcoordSet(&sourceMaterial->pbr_metallic_roughness.metallic_roughness_texture)
+            );
+            copyTextureTransform(
+                material.metallicRoughnessTextureTransform,
+                &material.textureRotations[VKRT_MATERIAL_TEXTURE_SLOT_METALLIC_ROUGHNESS],
+                &sourceMaterial->pbr_metallic_roughness.metallic_roughness_texture
+            );
+        }
     }
 
     if (sourceMaterial->has_specular) {
@@ -564,17 +1281,126 @@ static Material buildMaterial(const cgltf_material* sourceMaterial) {
         material.emissionLuminance = 0.0f;
     }
 
+    uint32_t normalTextureIndex = VKRT_INVALID_INDEX;
+    if (registerImportedTexture(
+        importData,
+        resolvedPath,
+        &sourceMaterial->normal_texture,
+        VKRT_TEXTURE_COLOR_SPACE_LINEAR,
+        cachedImages,
+        cachedColorSpaces,
+        cachedTextureIndices,
+        inoutCachedTextureCount,
+        &normalTextureIndex
+    )) {
+        material.normalTextureIndex = normalTextureIndex;
+        material.normalTextureScale = sourceMaterial->normal_texture.scale > 0.0f
+            ? sourceMaterial->normal_texture.scale
+            : 1.0f;
+        material.normalTextureWrap = packTextureWrapModes(
+            sourceMaterial->normal_texture.texture->sampler
+                ? sourceMaterial->normal_texture.texture->sampler->wrap_s
+                : cgltf_wrap_mode_repeat,
+            sourceMaterial->normal_texture.texture->sampler
+                ? sourceMaterial->normal_texture.texture->sampler->wrap_t
+                : cgltf_wrap_mode_repeat
+        );
+        setMaterialTextureTexcoordSet(
+            &material,
+            VKRT_MATERIAL_TEXTURE_SLOT_NORMAL,
+            queryTextureViewTexcoordSet(&sourceMaterial->normal_texture)
+        );
+        copyTextureTransform(
+            material.normalTextureTransform,
+            &material.textureRotations[VKRT_MATERIAL_TEXTURE_SLOT_NORMAL],
+            &sourceMaterial->normal_texture
+        );
+    }
+
+    uint32_t emissiveTextureIndex = VKRT_INVALID_INDEX;
+    if (registerImportedTexture(
+        importData,
+        resolvedPath,
+        &sourceMaterial->emissive_texture,
+        VKRT_TEXTURE_COLOR_SPACE_SRGB,
+        cachedImages,
+        cachedColorSpaces,
+        cachedTextureIndices,
+        inoutCachedTextureCount,
+        &emissiveTextureIndex
+    )) {
+        material.emissiveTextureIndex = emissiveTextureIndex;
+        material.emissiveTextureWrap = packTextureWrapModes(
+            sourceMaterial->emissive_texture.texture->sampler
+                ? sourceMaterial->emissive_texture.texture->sampler->wrap_s
+                : cgltf_wrap_mode_repeat,
+            sourceMaterial->emissive_texture.texture->sampler
+                ? sourceMaterial->emissive_texture.texture->sampler->wrap_t
+                : cgltf_wrap_mode_repeat
+        );
+        setMaterialTextureTexcoordSet(
+            &material,
+            VKRT_MATERIAL_TEXTURE_SLOT_EMISSIVE,
+            queryTextureViewTexcoordSet(&sourceMaterial->emissive_texture)
+        );
+        copyTextureTransform(
+            material.emissiveTextureTransform,
+            &material.textureRotations[VKRT_MATERIAL_TEXTURE_SLOT_EMISSIVE],
+            &sourceMaterial->emissive_texture
+        );
+    }
+
+    if (sourceMaterial->alpha_mode == cgltf_alpha_mode_mask) {
+        material.alphaMode = VKRT_MATERIAL_ALPHA_MODE_MASK;
+        material.alphaCutoff = sourceMaterial->alpha_cutoff;
+    } else if (sourceMaterial->alpha_mode == cgltf_alpha_mode_blend) {
+        material.alphaMode = VKRT_MATERIAL_ALPHA_MODE_BLEND;
+        material.alphaCutoff = kAlphaBlendMaskCutoff;
+    }
+
     return material;
 }
 
-static void decomposeNodeTransform(const cgltf_node* node, vec3 outPosition, vec3 outRotation, vec3 outScale) {
-    if (!node || !outPosition || !outRotation || !outScale) return;
+static int buildNodeLocalTransformMatrix(const cgltf_node* node, mat4 outTransform) {
+    if (!node || !outTransform) return 0;
 
-    mat4 worldTransform = GLM_MAT4_IDENTITY_INIT;
-    cgltf_float rawWorldTransform[16] = {0};
-    cgltf_node_transform_world(node, rawWorldTransform);
-    memcpy(worldTransform, rawWorldTransform, sizeof(worldTransform));
-    decomposeImportedMeshTransform(worldTransform, outPosition, outRotation, outScale);
+    cgltf_float rawLocalTransform[16] = {0};
+    cgltf_node_transform_local(node, rawLocalTransform);
+    memcpy(outTransform, rawLocalTransform, sizeof(mat4));
+    mat4 basisAdjustedTransform = GLM_MAT4_IDENTITY_INIT;
+    buildImportedMeshNodeTransformMatrix(outTransform, basisAdjustedTransform);
+    glm_mat4_copy(basisAdjustedTransform, outTransform);
+    return 1;
+}
+
+static int appendNodeEntry(
+    MeshImportData* importData,
+    const cgltf_node* node,
+    uint32_t parentIndex,
+    uint32_t* outNodeIndex
+) {
+    if (!importData || !node || !outNodeIndex) return -1;
+
+    mat4 localTransform = GLM_MAT4_IDENTITY_INIT;
+    if (!buildNodeLocalTransformMatrix(node, localTransform)) return -1;
+
+    NodeImportEntry entry = {0};
+    entry.parentIndex = parentIndex;
+    entry.meshEntryCount = 0u;
+    memcpy(entry.localTransform, localTransform, sizeof(entry.localTransform));
+    if (node->name && node->name[0]) {
+        entry.name = stringDuplicate(node->name);
+        if (!entry.name) {
+            return -1;
+        }
+    }
+
+    decomposeImportedMeshTransform(localTransform, entry.position, entry.rotation, entry.scale);
+    if (appendImportNode(importData, &entry, outNodeIndex) != 0) {
+        releaseImportNode(&entry);
+        return -1;
+    }
+    return 0;
 }
 
 static void generateNormals(Vertex* vertices, size_t vertexCount, const uint32_t* indices, size_t indexCount) {
@@ -748,10 +1574,12 @@ static int buildPrimitiveEntry(
     const cgltf_primitive* primitive = &mesh->primitives[primitiveIndex];
     if (primitive->type != cgltf_primitive_type_triangles) return 0;
 
-    const cgltf_accessor* positionAccessor = findAttributeAccessor(primitive, cgltf_attribute_type_position);
-    const cgltf_accessor* normalAccessor = findAttributeAccessor(primitive, cgltf_attribute_type_normal);
-    const cgltf_accessor* tangentAccessor = findAttributeAccessor(primitive, cgltf_attribute_type_tangent);
-    const cgltf_accessor* texcoordAccessor = findAttributeAccessor(primitive, cgltf_attribute_type_texcoord);
+    const cgltf_accessor* positionAccessor = findAttributeAccessor(primitive, cgltf_attribute_type_position, 0u);
+    const cgltf_accessor* normalAccessor = findAttributeAccessor(primitive, cgltf_attribute_type_normal, 0u);
+    const cgltf_accessor* tangentAccessor = findAttributeAccessor(primitive, cgltf_attribute_type_tangent, 0u);
+    const cgltf_accessor* texcoordAccessor0 = findAttributeAccessor(primitive, cgltf_attribute_type_texcoord, 0u);
+    const cgltf_accessor* texcoordAccessor1 = findAttributeAccessor(primitive, cgltf_attribute_type_texcoord, 1u);
+    const cgltf_accessor* colorAccessor0 = findAttributeAccessor(primitive, cgltf_attribute_type_color, 0u);
     int useImportedTangents = normalAccessor && tangentAccessor;
     if (!positionAccessor || positionAccessor->count == 0) return 0;
 
@@ -762,7 +1590,14 @@ static int buildPrimitiveEntry(
         : (size_t)positionAccessor->count;
     entry.materialIndex = primitive->material ? (uint32_t)(primitive->material - data->materials) : VKRT_INVALID_INDEX;
     entry.renderBackfaces = primitive->material && primitive->material->double_sided ? 1u : 0u;
-    if (!validatePrimitiveAllocationFootprint(entry.vertexCount, entry.indexCount, !useImportedTangents && texcoordAccessor)) {
+    const cgltf_material* sourceMaterial = primitive->material;
+    uint32_t tangentTexcoordSet = 0u;
+    if (sourceMaterial) {
+        tangentTexcoordSet = queryTextureViewTexcoordSet(&sourceMaterial->normal_texture);
+        if (tangentTexcoordSet > 1u) tangentTexcoordSet = 0u;
+    }
+    const cgltf_accessor* tangentTexcoordAccessor = tangentTexcoordSet == 1u ? texcoordAccessor1 : texcoordAccessor0;
+    if (!validatePrimitiveAllocationFootprint(entry.vertexCount, entry.indexCount, !useImportedTangents && tangentTexcoordAccessor)) {
         return -1;
     }
 
@@ -777,7 +1612,7 @@ static int buildPrimitiveEntry(
     }
 
     float* texcoords = NULL;
-    if (!useImportedTangents && texcoordAccessor) {
+    if (!useImportedTangents && tangentTexcoordAccessor) {
         texcoords = (float*)calloc(entry.vertexCount * 2u, sizeof(float));
         if (!texcoords) {
             releaseImportEntry(&entry);
@@ -789,7 +1624,9 @@ static int buildPrimitiveEntry(
         float position[3] = {0.0f, 0.0f, 0.0f};
         float normal[3] = {0.0f, 0.0f, 1.0f};
         float tangent[4] = {0.0f, 0.0f, 0.0f, 1.0f};
-        float texcoord[2] = {0.0f, 0.0f};
+        float color[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+        float texcoord0[2] = {0.0f, 0.0f};
+        float texcoord1[2] = {0.0f, 0.0f};
 
         if (!cgltf_accessor_read_float(positionAccessor, (cgltf_size)vertexIndex, position, 3)) {
             free(texcoords);
@@ -797,28 +1634,63 @@ static int buildPrimitiveEntry(
             return -1;
         }
 
-        copyFloat3ToFloat4(entry.vertices[vertexIndex].position, position, 1.0f);
+        float enginePosition[3] = {position[0], -position[2], position[1]};
+        copyFloat3ToFloat4(entry.vertices[vertexIndex].position, enginePosition, 1.0f);
 
         if (normalAccessor && cgltf_accessor_read_float(normalAccessor, (cgltf_size)vertexIndex, normal, 3)) {
-            copyFloat3ToFloat4(entry.vertices[vertexIndex].normal, normal, 0.0f);
+            float engineNormal[3] = {normal[0], -normal[2], normal[1]};
+            copyFloat3ToFloat4(entry.vertices[vertexIndex].normal, engineNormal, 0.0f);
         }
 
         if (useImportedTangents && cgltf_accessor_read_float(tangentAccessor, (cgltf_size)vertexIndex, tangent, 4)) {
             entry.vertices[vertexIndex].tangent[0] = tangent[0];
-            entry.vertices[vertexIndex].tangent[1] = tangent[1];
-            entry.vertices[vertexIndex].tangent[2] = tangent[2];
+            entry.vertices[vertexIndex].tangent[1] = -tangent[2];
+            entry.vertices[vertexIndex].tangent[2] = tangent[1];
             entry.vertices[vertexIndex].tangent[3] = tangent[3];
         }
 
-        if (texcoords && texcoordAccessor) {
-            if (!cgltf_accessor_read_float(texcoordAccessor, (cgltf_size)vertexIndex, texcoord, 2)) {
+        if (colorAccessor0) {
+            cgltf_size colorComponentCount = cgltf_num_components(colorAccessor0->type);
+            if (colorComponentCount < 3u || colorComponentCount > 4u ||
+                !cgltf_accessor_read_float(colorAccessor0, (cgltf_size)vertexIndex, color, colorComponentCount)) {
                 free(texcoords);
                 releaseImportEntry(&entry);
                 return -1;
             }
+        }
 
-            texcoords[vertexIndex * 2u + 0u] = texcoord[0];
-            texcoords[vertexIndex * 2u + 1u] = texcoord[1];
+        entry.vertices[vertexIndex].color[0] = color[0];
+        entry.vertices[vertexIndex].color[1] = color[1];
+        entry.vertices[vertexIndex].color[2] = color[2];
+        entry.vertices[vertexIndex].color[3] = color[3];
+
+        if (texcoordAccessor0) {
+            if (!cgltf_accessor_read_float(texcoordAccessor0, (cgltf_size)vertexIndex, texcoord0, 2)) {
+                free(texcoords);
+                releaseImportEntry(&entry);
+                return -1;
+            }
+        }
+
+        entry.vertices[vertexIndex].texcoord0[0] = texcoord0[0];
+        entry.vertices[vertexIndex].texcoord0[1] = texcoord0[1];
+
+        if (texcoordAccessor1) {
+            if (!cgltf_accessor_read_float(texcoordAccessor1, (cgltf_size)vertexIndex, texcoord1, 2)) {
+                free(texcoords);
+                releaseImportEntry(&entry);
+                return -1;
+            }
+        }
+
+
+        entry.vertices[vertexIndex].texcoord1[0] = texcoord1[0];
+        entry.vertices[vertexIndex].texcoord1[1] = texcoord1[1];
+
+        if (texcoords) {
+            const float* tangentTexcoords = tangentTexcoordSet == 1u ? texcoord1 : texcoord0;
+            texcoords[vertexIndex * 2u + 0u] = tangentTexcoords[0];
+            texcoords[vertexIndex * 2u + 1u] = tangentTexcoords[1];
         }
     }
 
@@ -858,14 +1730,22 @@ static int buildPrimitiveEntry(
 
     free(texcoords);
 
-    decomposeNodeTransform(node, entry.position, entry.rotation, entry.scale);
+    entry.nodeIndex = VKRT_INVALID_INDEX;
+    glm_vec3_zero(entry.position);
+    glm_vec3_zero(entry.rotation);
+    glm_vec3_one(entry.scale);
 
     *outEntry = entry;
     return 1;
 }
 
-static int collectNodeEntries(const cgltf_data* data, const cgltf_node* node, MeshImportData* importData) {
+static int collectNodeEntries(const cgltf_data* data, const cgltf_node* node, uint32_t parentNodeIndex, MeshImportData* importData) {
     if (!data || !node || !importData) return -1;
+
+    uint32_t nodeIndex = VKRT_INVALID_INDEX;
+    if (appendNodeEntry(importData, node, parentNodeIndex, &nodeIndex) != 0) {
+        return -1;
+    }
 
     if (node->mesh) {
         for (cgltf_size primitiveIndex = 0; primitiveIndex < node->mesh->primitives_count; primitiveIndex++) {
@@ -876,15 +1756,17 @@ static int collectNodeEntries(const cgltf_data* data, const cgltf_node* node, Me
                 return -1;
             }
             if (buildResult == 0) continue;
+            entry.nodeIndex = nodeIndex;
             if (appendImportEntry(importData, &entry) != 0) {
                 releaseImportEntry(&entry);
                 return -1;
             }
+            importData->nodes[nodeIndex].meshEntryCount++;
         }
     }
 
     for (cgltf_size childIndex = 0; childIndex < node->children_count; childIndex++) {
-        if (collectNodeEntries(data, node->children[childIndex], importData) != 0) {
+        if (collectNodeEntries(data, node->children[childIndex], nodeIndex, importData) != 0) {
             return -1;
         }
     }
@@ -894,6 +1776,8 @@ static int collectNodeEntries(const cgltf_data* data, const cgltf_node* node, Me
 
 int meshLoadFromFile(const char* filePath, MeshImportData* outImportData) {
     if (!filePath || !filePath[0] || !outImportData) return -1;
+
+    uint64_t totalStartTime = getMicroseconds();
 
     char resolvedPath[VKRT_PATH_MAX];
     if (resolveExistingPath(filePath, resolvedPath, sizeof(resolvedPath)) != 0) {
@@ -906,6 +1790,7 @@ int meshLoadFromFile(const char* filePath, MeshImportData* outImportData) {
     cgltf_options options = {0};
     cgltf_data* data = NULL;
 
+    uint64_t parseStartTime = getMicroseconds();
     if (cgltf_parse_file(&options, resolvedPath, &data) != cgltf_result_success) {
         LOG_ERROR("Failed to parse GLTF '%s'", resolvedPath);
         return -1;
@@ -917,19 +1802,38 @@ int meshLoadFromFile(const char* filePath, MeshImportData* outImportData) {
         return -1;
     }
 
+    LOG_TRACE(
+        "glTF parsed. File: %s, Nodes: %zu, Meshes: %zu, Materials: %zu, in %.3f ms",
+        resolvedPath,
+        data->nodes_count,
+        data->meshes_count,
+        data->materials_count,
+        (double)(getMicroseconds() - parseStartTime) / 1e3
+    );
+
     logIgnoredImportFeatures(resolvedPath, data);
 
-    if (populateImportMaterials(data, outImportData) != 0) {
+    uint64_t materialStartTime = getMicroseconds();
+    if (populateImportMaterials(data, outImportData, resolvedPath) != 0) {
         cgltf_free(data);
         meshReleaseImportData(outImportData);
         LOG_ERROR("Failed to extract material entries from '%s'", resolvedPath);
         return -1;
     }
 
+    LOG_TRACE(
+        "glTF materials extracted. File: %s, Materials: %u, Textures: %u, in %.3f ms",
+        resolvedPath,
+        outImportData->materialCount,
+        outImportData->textureCount,
+        (double)(getMicroseconds() - materialStartTime) / 1e3
+    );
+
+    uint64_t geometryStartTime = getMicroseconds();
     int result = 0;
     if (data->scene && data->scene->nodes_count > 0) {
         for (cgltf_size nodeIndex = 0; nodeIndex < data->scene->nodes_count; nodeIndex++) {
-            if (collectNodeEntries(data, data->scene->nodes[nodeIndex], outImportData) != 0) {
+            if (collectNodeEntries(data, data->scene->nodes[nodeIndex], VKRT_INVALID_INDEX, outImportData) != 0) {
                 result = -1;
                 break;
             }
@@ -937,7 +1841,7 @@ int meshLoadFromFile(const char* filePath, MeshImportData* outImportData) {
     } else {
         for (cgltf_size nodeIndex = 0; nodeIndex < data->nodes_count; nodeIndex++) {
             if (data->nodes[nodeIndex].parent) continue;
-            if (collectNodeEntries(data, &data->nodes[nodeIndex], outImportData) != 0) {
+            if (collectNodeEntries(data, &data->nodes[nodeIndex], VKRT_INVALID_INDEX, outImportData) != 0) {
                 result = -1;
                 break;
             }
@@ -957,6 +1861,21 @@ int meshLoadFromFile(const char* filePath, MeshImportData* outImportData) {
         LOG_ERROR("No triangle mesh primitives were found in '%s'", resolvedPath);
         return -1;
     }
+
+    LOG_TRACE(
+        "glTF geometry extracted. File: %s, Meshes: %u, in %.3f ms",
+        resolvedPath,
+        outImportData->count,
+        (double)(getMicroseconds() - geometryStartTime) / 1e3
+    );
+    LOG_TRACE(
+        "glTF import decode complete. File: %s, Meshes: %u, Materials: %u, Textures: %u, cumulative: %.3f ms",
+        resolvedPath,
+        outImportData->count,
+        outImportData->materialCount,
+        outImportData->textureCount,
+        (double)(getMicroseconds() - totalStartTime) / 1e3
+    );
 
     return 0;
 }
