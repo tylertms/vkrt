@@ -73,20 +73,41 @@ typedef struct SessionRenderTimer {
     float completedSeconds;
 } SessionRenderTimer;
 
+typedef struct SessionSceneObject {
+    uint32_t parentIndex;
+    uint32_t meshIndex;
+    vec3 localPosition;
+    vec3 localRotation;
+    vec3 localScale;
+    mat4 localTransform;
+    char name[VKRT_NAME_LEN];
+} SessionSceneObject;
+
 typedef struct SessionEditorState {
     uint32_t propertiesPanelIndex;
+    uint32_t selectedSceneObjectIndex;
     char* renderSequenceFolderPath;
     EditorUIState* uiState;
     DialogState* dialogState;
     uint8_t requestMeshImportDialog;
+    uint8_t requestTextureImportDialog;
     uint8_t requestRenderSaveDialog;
     uint8_t requestRenderSequenceFolderDialog;
+    uint32_t requestedTextureMaterialIndex;
+    uint32_t requestedTextureSlot;
     SessionRenderSettings renderConfig;
+    SessionSceneObject* sceneObjects;
+    uint32_t sceneObjectCount;
+    uint32_t sceneObjectCapacity;
 } SessionEditorState;
 
 typedef struct SessionCommandQueue {
+    uint32_t sceneObjectToRemove;
     uint32_t meshToRemove;
     char* meshImportPath;
+    char* textureImportPath;
+    uint32_t textureImportMaterialIndex;
+    uint32_t textureImportSlot;
     char* saveImagePath;
     SessionRenderCommand renderCommand;
     SessionRenderSettings pendingRenderJob;
@@ -95,6 +116,7 @@ typedef struct SessionCommandQueue {
 typedef struct SessionRuntimeState {
     RenderSequencer sequencer;
     SessionRenderTimer renderTimer;
+    uint32_t lastSyncedSelectedMeshIndex;
 } SessionRuntimeState;
 
 typedef struct Session {
@@ -107,15 +129,21 @@ void sessionInit(Session* session);
 void sessionDeinit(Session* session);
 
 void sessionRequestMeshImportDialog(Session* session);
+void sessionRequestTextureImportDialog(Session* session, uint32_t materialIndex, uint32_t textureSlot);
 void sessionRequestRenderSaveDialog(Session* session);
 void sessionRequestRenderSequenceFolderDialog(Session* session);
 int sessionTakeMeshImportDialogRequest(Session* session);
+int sessionTakeTextureImportDialogRequest(Session* session, uint32_t* outMaterialIndex, uint32_t* outTextureSlot);
 int sessionTakeRenderSaveDialogRequest(Session* session);
 int sessionTakeRenderSequenceFolderDialogRequest(Session* session);
 
 void sessionQueueMeshImport(Session* session, const char* path);
+void sessionQueueTextureImport(Session* session, uint32_t materialIndex, uint32_t textureSlot, const char* path);
+void sessionQueueSceneObjectRemoval(Session* session, uint32_t objectIndex);
 void sessionQueueMeshRemoval(Session* session, uint32_t meshIndex);
+int sessionTakeSceneObjectRemoval(Session* session, uint32_t* outObjectIndex);
 int sessionTakeMeshImport(Session* session, char** outPath);
+int sessionTakeTextureImport(Session* session, uint32_t* outMaterialIndex, uint32_t* outTextureSlot, char** outPath);
 int sessionTakeMeshRemoval(Session* session, uint32_t* outMeshIndex);
 
 void sessionQueueRenderSave(Session* session, const char* path);
@@ -125,6 +153,34 @@ int sessionTakeRenderCommand(Session* session, SessionRenderCommand* outCommand,
 int sessionTakeRenderSave(Session* session, char** outPath);
 void sessionSetRenderSequenceFolder(Session* session, const char* path);
 const char* sessionGetRenderSequenceFolder(const Session* session);
+
+uint32_t sessionGetSceneObjectCount(const Session* session);
+const SessionSceneObject* sessionGetSceneObject(const Session* session, uint32_t objectIndex);
+uint32_t sessionGetSelectedSceneObject(const Session* session);
+void sessionSetSelectedSceneObject(Session* session, uint32_t objectIndex);
+int sessionAddSceneObject(
+    Session* session,
+    const char* name,
+    uint32_t parentIndex,
+    uint32_t meshIndex,
+    vec3 localPosition,
+    vec3 localRotation,
+    vec3 localScale,
+    uint32_t* outObjectIndex
+);
+void sessionTruncateSceneObjects(Session* session, uint32_t objectCount);
+uint32_t sessionFindSceneObjectForMesh(const Session* session, uint32_t meshIndex);
+void sessionSelectSceneObjectForMesh(Session* session, uint32_t meshIndex);
+int sessionSetSceneObjectName(Session* session, uint32_t objectIndex, const char* name);
+int sessionSetSceneObjectMesh(Session* session, uint32_t objectIndex, uint32_t meshIndex);
+int sessionSetSceneObjectLocalTransform(Session* session, uint32_t objectIndex, vec3 position, vec3 rotation, vec3 scale);
+int sessionSetSceneObjectLocalTransformMatrix(Session* session, uint32_t objectIndex, mat4 localTransform);
+int sessionSetSceneObjectLocalTransformForMesh(Session* session, uint32_t meshIndex, vec3 position, vec3 rotation, vec3 scale);
+void sessionRemoveSceneObjectSubtree(Session* session, uint32_t objectIndex);
+void sessionRemoveMeshReferencesNoPrune(Session* session, uint32_t meshIndex);
+void sessionRemoveMeshReferences(Session* session, uint32_t meshIndex);
+int sessionSyncSceneObjectTransforms(VKRT* vkrt, Session* session);
+uint32_t sessionCountSceneObjectChildren(const Session* session, uint32_t objectIndex);
 
 uint32_t sessionComputeAnimationFrameCount(const SessionRenderAnimationSettings* animation);
 void sessionSanitizeAnimationSettings(SessionRenderAnimationSettings* animation);
