@@ -108,7 +108,7 @@ DirectLightResult sampleDirectLight(
     float shadowDist = dist - VKRT_SHADOW_DISTANCE_OFFSET;
     if (shadowDist <= 0.0) return result;
 
-    ShadowRayResult shadow = traceShadowRay(shadowOrigin, wi, shadowDist);
+    ShadowRayResult shadow = traceShadowRay(shadowOrigin, wi, shadowDist, rng);
     if (!shadow.neeSupported) {
         result.neeSupported = false;
         return result;

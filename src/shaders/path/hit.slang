@@ -24,6 +24,9 @@ void main(inout Payload payload, in BuiltInTriangleIntersectionAttributes attr) 
         RayTCurrent(),
         packOctNormal(hit.shadingNormal),
         packOctNormal(hit.geometricNormal),
-        hit.tangent
+        hit.tangent,
+        hit.color,
+        hit.texcoord0,
+        hit.texcoord1
     );
 }

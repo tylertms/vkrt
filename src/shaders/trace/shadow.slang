@@ -3,27 +3,13 @@
 
 #include "../scene/resources.slang"
 
-static const uint VKRT_SHADOW_VISIBILITY_OCCLUDED = 0u;
-static const uint VKRT_SHADOW_VISIBILITY_VISIBLE = 1u;
-static const uint VKRT_SHADOW_VISIBILITY_UNSUPPORTED_TRANSMISSION = 2u;
-
-struct ShadowPayload {
-    uint visibility;
-
-    static ShadowPayload make() {
-        ShadowPayload payload;
-        payload.visibility = VKRT_SHADOW_VISIBILITY_OCCLUDED;
-        return payload;
-    }
-};
-
 struct ShadowRayResult {
     bool visible;
     bool neeSupported;
 };
 
-ShadowRayResult traceShadowRay(float3 origin, float3 direction, float tMax) {
-    ShadowPayload payload = ShadowPayload.make();
+ShadowRayResult traceShadowRay(float3 origin, float3 direction, float tMax, inout uint rng) {
+    ShadowPayload payload = ShadowPayload.make(rng);
 
     RayDesc ray;
     ray.Origin = origin;
@@ -41,6 +27,8 @@ ShadowRayResult traceShadowRay(float3 origin, float3 direction, float tMax) {
         ray,
         payload
     );
+
+    rng = payload.rng;
 
     ShadowRayResult result;
     result.visible = payload.visibility == VKRT_SHADOW_VISIBILITY_VISIBLE;

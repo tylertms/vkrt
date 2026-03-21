@@ -1,4 +1,4 @@
-#include "../trace/shadow.slang"
+#include "payload.slang"
 
 [shader("miss")]
 void main(inout ShadowPayload payload) {

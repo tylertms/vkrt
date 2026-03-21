@@ -1,26 +1,36 @@
 embed_spv = find_program(meson.project_source_root() / 'scripts' / 'embed_spv.py')
 
-shader_programs = [
-  ['rgen',          'path/raygen.slang',   'rgen.spv',          'raygeneration', ['rt'],        'shaderRgen'         ],
-  ['rchit',         'path/hit.slang',  'rchit.spv',         'closesthit',    ['rt'],        'shaderRchit'        ],
-  ['rmiss',         'path/miss.slang',  'rmiss.spv',         'miss',          ['rt'],        'shaderRmiss'        ],
-  ['shadowRchit',   'path/shadow_hit.slang', 'shadowRchit.spv', 'closesthit', ['rt'],        'shaderShadowRchit'  ],
-  ['shadowMiss',    'path/shadow_miss.slang', 'shadowMiss.spv',    'miss',          ['rt'],        'shaderShadowMiss'   ],
-  ['rgenSer',       'path/raygen.slang',   'rgenSer.spv',       'raygeneration', ['rt', 'ser'], 'shaderRgenSer'      ],
-  ['rchitSer',      'path/hit.slang',  'rchitSer.spv',      'closesthit',    ['rt', 'ser'], 'shaderRchitSer'     ],
-  ['rmissSer',      'path/miss.slang',  'rmissSer.spv',      'miss',          ['rt', 'ser'], 'shaderRmissSer'     ],
-  ['shadowRchitSer','path/shadow_hit.slang', 'shadowRchitSer.spv', 'closesthit', ['rt', 'ser'], 'shaderShadowRchitSer'],
-  ['shadowMissSer', 'path/shadow_miss.slang', 'shadowMissSer.spv', 'miss',          ['rt', 'ser'], 'shaderShadowMissSer'],
+shader_common_spirv_capabilities = [
+  '-capability', 'spvShaderNonUniformEXT',
+  '-capability', 'spvMinLod',
+  '-capability', 'spvSparseResidency',
+  '-capability', 'spvFragmentFullyCoveredEXT',
+  '-capability', 'SPV_KHR_non_semantic_info',
+  '-capability', 'SPV_GOOGLE_user_type',
 ]
 
-if selection_enabled
-  shader_programs += [
-    ['comp',        'post/outline.slang',    'select.spv',      'compute',       [],     'shaderComp'       ],
-    ['selectRgen',  'select/raygen.slang',  'selectRgen.spv',  'raygeneration', ['rt'], 'shaderSelectRgen' ],
-    ['selectRchit', 'select/hit.slang', 'selectRchit.spv', 'closesthit',    ['rt'], 'shaderSelectRchit'],
-    ['selectRmiss', 'select/miss.slang', 'selectRmiss.spv', 'miss',          ['rt'], 'shaderSelectRmiss'],
-  ]
-endif
+shader_programs = [
+  ['rgen',          'path/raygen.slang',         'rgen.spv',           'raygeneration', ['rt'],        'shaderRgen'          ],
+  ['rchit',         'path/hit.slang',            'rchit.spv',          'closesthit',    ['rt'],        'shaderRchit'         ],
+  ['rmiss',         'path/miss.slang',           'rmiss.spv',          'miss',          ['rt'],        'shaderRmiss'         ],
+  ['shadowRchit',   'path/shadow_hit.slang',     'shadowRchit.spv',    'closesthit',    ['rt'],        'shaderShadowRchit'   ],
+  ['rahit',         'path/any.slang',            'rahit.spv',          'anyhit',        ['rt'],        'shaderRahit'         ],
+  ['shadowRahit',   'path/shadow_any.slang',     'shadowRahit.spv',    'anyhit',        ['rt'],        'shaderShadowRahit'   ],
+  ['shadowMiss',    'path/shadow_miss.slang',    'shadowMiss.spv',     'miss',          ['rt'],        'shaderShadowMiss'    ],
+  ['rgenSer',       'path/raygen.slang',         'rgenSer.spv',        'raygeneration', ['rt', 'ser'], 'shaderRgenSer'       ],
+  ['rchitSer',      'path/hit.slang',            'rchitSer.spv',       'closesthit',    ['rt', 'ser'], 'shaderRchitSer'      ],
+  ['rmissSer',      'path/miss.slang',           'rmissSer.spv',       'miss',          ['rt', 'ser'], 'shaderRmissSer'      ],
+  ['shadowRchitSer','path/shadow_hit.slang',     'shadowRchitSer.spv', 'closesthit',    ['rt', 'ser'], 'shaderShadowRchitSer'],
+  ['shadowMissSer', 'path/shadow_miss.slang',    'shadowMissSer.spv',  'miss',          ['rt', 'ser'], 'shaderShadowMissSer' ],
+]
+
+shader_programs += [
+  ['comp',        'post/outline.slang',   'select.spv',      'compute',       [],     'shaderComp'       ],
+  ['selectRgen',  'select/raygen.slang',  'selectRgen.spv',  'raygeneration', ['rt'], 'shaderSelectRgen' ],
+  ['selectRchit', 'select/hit.slang',     'selectRchit.spv', 'closesthit',    ['rt'], 'shaderSelectRchit'],
+  ['selectRahit', 'select/any.slang',     'selectRahit.spv', 'anyhit',        ['rt'], 'shaderSelectRahit'],
+  ['selectRmiss', 'select/miss.slang',    'selectRmiss.spv', 'miss',          ['rt'], 'shaderSelectRmiss'],
+]
 
 embedded_shader_sources = []
 foreach shader_program : shader_programs
@@ -30,7 +40,7 @@ foreach shader_program : shader_programs
   shader_stage = shader_program[3]
   shader_features = shader_program[4]
   shader_symbol_name = shader_program[5]
-  shader_capabilities = []
+  shader_capabilities = shader_common_spirv_capabilities
   shader_extra_args = []
 
   if 'rt' in shader_features
@@ -38,8 +48,11 @@ foreach shader_program : shader_programs
   endif
 
   if 'ser' in shader_features
-    shader_capabilities += ['-capability', 'spvShaderInvocationReorderEXT']
-    shader_extra_args += ['-DVKRT_SER_ENABLED', '-warnings-disable', '41012']
+    shader_capabilities += [
+      '-capability', 'spvShaderInvocationReorderEXT',
+      '-capability', 'spvShaderInvocationReorderNV',
+    ]
+    shader_extra_args += ['-DVKRT_SER_ENABLED']
   endif
 
   shader_target = custom_target(

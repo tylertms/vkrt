@@ -25,5 +25,7 @@
 [[vk::binding(15, 0)]] StructuredBuffer<uint> meshAliasIdx;
 [[vk::binding(16, 0)]] StructuredBuffer<float> triAliasQ;
 [[vk::binding(17, 0)]] StructuredBuffer<uint> triAliasIdx;
+[[vk::binding(18, 0)]] SamplerState textureSamplers[VKRT_TEXTURE_SAMPLER_VARIANT_COUNT];
+[[vk::binding(19, 0)]] Texture2D<float4> sceneTextures[VKRT_MAX_BINDLESS_TEXTURES];
 
 #endif

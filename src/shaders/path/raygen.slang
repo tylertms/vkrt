@@ -4,9 +4,11 @@
 #include "../sample/random.slang"
 #include "../camera/ray.slang"
 #include "../geometry/packing.slang"
+#include "../material/textures.slang"
 #include "../film/tonemap.slang"
 #include "../camera/viewport.slang"
 #include "../trace/scene.slang"
+#include "../utility/debug.slang"
 #include "payload.slang"
 
 [shader("raygeneration")]
@@ -43,7 +45,7 @@ void main() {
         debugEarlyOut = true;
 
         if (captureSelection) {
-            Payload pickPayload = Payload.make();
+            Payload pickPayload = Payload.make(0u);
             traceSceneRay(pickPayload, makePrimaryRay(pixel, float2(0.0)), 0u, 0u, 0u);
             firstHitInstance = pickPayload.instanceIndex;
         }
@@ -66,28 +68,14 @@ void main() {
         uint bounceCount = 0u;
 
         for (uint depth = 0u; depth < scene.rrMaxDepth; depth++) {
-            Payload payload = Payload.make();
+            Payload payload = Payload.make(rng);
             uint sceneRayHint = (medium.refractiveActive ? 1u : 0u) |
                 (medium.absorptionActive ? 2u : 0u);
             traceSceneRay(payload, ray, depth, sceneRayHint, kSceneSerHintBits);
+            rng = payload.rng;
 
             if (sampleIndex == 0u && depth == 0u) {
                 firstHitInstance = payload.instanceIndex;
-
-                if (payload.didHit != 0u) {
-                    if (debugMode == VKRT_DEBUG_MODE_NORMALS) {
-                        float3 shadingNormal = unpackOctNormal(payload.packedShadingNormal);
-                        frameRadiance = shadingNormal * 0.5 + 0.5;
-                        debugEarlyOut = true;
-                        break;
-                    }
-
-                    if (debugMode == VKRT_DEBUG_MODE_DEPTH) {
-                        frameRadiance = float3(1.0 / (1.0 + payload.hitDistance));
-                        debugEarlyOut = true;
-                        break;
-                    }
-                }
             }
 
             if (payload.didHit == 0u) {
@@ -101,6 +89,7 @@ void main() {
             float3 shadingNormal = unpackOctNormal(payload.packedShadingNormal);
             float3 geometricNormal = unpackOctNormal(payload.packedGeometricNormal);
             Material material = materials[payload.materialIndex];
+            Material sourceMaterial = material;
             if (medium.absorptionActive) {
                 throughput *= mediumTransmittance(medium, payload.hitDistance);
                 if (!any(throughput > 0.0)) {
@@ -108,6 +97,30 @@ void main() {
                 }
             }
             ShadingBasis basis = makeShadingBasis(shadingNormal, payload.tangent);
+            shadingNormal = applyNormalTexture(sourceMaterial, payload.texcoord0, payload.texcoord1, basis);
+            basis = makeShadingBasis(shadingNormal, payload.tangent);
+
+            if (sampleIndex == 0u && depth == 0u) {
+                if (debugMode == VKRT_DEBUG_MODE_NORMALS) {
+                    frameRadiance = shadingNormal * 0.5 + 0.5;
+                    debugEarlyOut = true;
+                    break;
+                }
+
+                if (debugMode == VKRT_DEBUG_MODE_DEPTH) {
+                    frameRadiance = float3(1.0 / (1.0 + payload.hitDistance));
+                    debugEarlyOut = true;
+                    break;
+                }
+
+                if (isTextureMapDebugMode(debugMode)) {
+                    frameRadiance = evaluateTextureMapDebug(sourceMaterial, payload.texcoord0, payload.texcoord1, debugMode);
+                    debugEarlyOut = true;
+                    break;
+                }
+            }
+
+            applySurfaceTextures(material, payload.color, payload.texcoord0, payload.texcoord1);
             float3 wo = worldToLocal(-ray.Direction, basis);
             BSDFState state = makeBSDFState(material, wo, payload.frontFace);
             bool currentVertexNeeAllowed = !medium.refractiveActive;
@@ -207,13 +220,13 @@ void main() {
 
     if (debugEarlyOut) {
         accumulationWriteImage[pixel] = float4(frameRadiance, 0.0);
-        outputImage[pixel] = float4(frameRadiance, 1.0);
+        outputImage[pixel] = float4(encodeDisplayColor(frameRadiance), 1.0);
     } else {
         float previousWeight = float(previousSamples);
         float newWeight = float(spp);
         float totalWeight = previousWeight + newWeight;
         float3 accumulated = (previous.xyz * previousWeight + frameRadiance * newWeight) / max(totalWeight, 1.0);
-        float3 mapped = toneMap(accumulated);
+        float3 mapped = mapSceneColorToDisplay(accumulated);
 
         accumulationWriteImage[pixel] = float4(accumulated, totalWeight);
         outputImage[pixel] = float4(mapped, 1.0);
