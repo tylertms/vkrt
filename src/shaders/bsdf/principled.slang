@@ -34,9 +34,6 @@ struct BSDFBranchWeights {
 struct BSDFState {
     Material material;
     float3 wo;
-    float3 diffuseColor;
-    float3 subsurfaceColor;
-    float3 sheenColor;
     GGXParams ggx;
     ClearcoatParams clearcoat;
     uint frontFace;
@@ -62,14 +59,6 @@ float coatDirectionalAttenuation(Material material, float3 w) {
 
     float coatFresnel = 0.25 * material.clearcoat * scalarSchlickFresnel(absCosTheta(w), 0.04);
     return 1.0 - saturate(coatFresnel);
-}
-
-float coatLayerReflectionAttenuation(BSDFState state, float3 wi) {
-    return coatDirectionalAttenuation(state.material, state.wo) * coatDirectionalAttenuation(state.material, wi);
-}
-
-float coatLayerTransmissionAttenuation(BSDFState state) {
-    return coatDirectionalAttenuation(state.material, state.wo);
 }
 
 float sheenDirectionalAttenuation(float3 sheenColor, float3 w, float sheenRoughness) {
@@ -100,9 +89,18 @@ float3 dielectricDirectionalAttenuation(Material material, float3 w) {
     return saturate(1.0 - dielectricDirectionalAlbedo(material, w));
 }
 
-float dielectricDirectionalWeightAttenuation(Material material, float3 w) {
-    float3 attenuation = dielectricDirectionalAttenuation(material, w);
-    return saturate(bsdfLuminance(attenuation));
+float reflectionStackAttenuation(Material material, float viewCoatAttenuation, float3 wi) {
+    return viewCoatAttenuation * coatDirectionalAttenuation(material, wi);
+}
+
+float transmissionStackAttenuation(float viewSheenAttenuation, float viewCoatAttenuation) {
+    return viewSheenAttenuation * viewCoatAttenuation;
+}
+
+float materialTransmissionStackAttenuation(Material material, float3 wo) {
+    return transmissionStackAttenuation(
+        sheenDirectionalAttenuation(bsdfSheenColor(material), wo, material.sheenRoughness),
+        coatDirectionalAttenuation(material, wo));
 }
 
 BSDFBranchWeights normalizeBranchWeights(BSDFBranchWeights weights) {
@@ -129,36 +127,38 @@ BSDFBranchWeights normalizeBranchWeights(BSDFBranchWeights weights) {
     return weights;
 }
 
-BSDFBranchWeights makeBSDFBranchWeights(Material material, float3 wo, float3 diffuseColor, float3 sheenColor, uint frontFace) {
+BSDFBranchWeights makeBSDFBranchWeights(Material material, float3 wo, uint frontFace) {
     BSDFBranchWeights weights = BSDFBranchWeights();
+    float3 diffuseColor = bsdfDiffuseColor(material);
+    float3 sheenColor = bsdfSheenColor(material);
     float nonMetal = 1.0 - material.metallic;
     float baseColorWeight = max(bsdfLuminance(material.baseColor), 1e-3);
     float diffuseColorWeight = max(bsdfLuminance(diffuseColor), 1e-3);
     float baseScatter = nonMetal * (1.0 - material.transmission);
     float transmissionWeight = material.transmission * max(bsdfLuminance(bsdfTransmissionColor(material)), 1e-3);
-
+    float dielectricSpecularWeight = nonMetal * max(bsdfDielectricSpecularF0Luminance(material) + transmissionWeight, 0.0);
     weights.sheen = bsdfLuminance(sheenColor);
 
     if (material.transmission > 0.0 && frontFace == 0u) {
         weights.sheen = 0.0;
         weights.coat = 0.0;
         weights.metal = material.metallic * baseColorWeight;
-        weights.dielectric = nonMetal * max(bsdfDielectricSpecularF0Luminance(material) + transmissionWeight, 0.0);
+        weights.dielectric = dielectricSpecularWeight;
         weights.diffuse = 0.0;
         weights.subsurface = 0.0;
         return normalizeBranchWeights(weights);
     }
 
-    float sheenAttenuation = sheenDirectionalAttenuation(sheenColor, wo, material.sheenRoughness);
-    float coatAttenuation = coatDirectionalAttenuation(material, wo);
-    float dielectricAttenuation = dielectricDirectionalWeightAttenuation(material, wo);
+    float viewSheenAttenuation = sheenDirectionalAttenuation(sheenColor, wo, material.sheenRoughness);
+    float viewCoatAttenuation = coatDirectionalAttenuation(material, wo);
+    float dielectricWeightAttenuation = bsdfLuminance(dielectricDirectionalAttenuation(material, wo));
 
-    weights.coat = sheenAttenuation * material.clearcoat * 0.25;
-    weights.metal = sheenAttenuation * coatAttenuation * material.metallic * baseColorWeight;
-    weights.dielectric = sheenAttenuation * coatAttenuation * nonMetal * max(bsdfDielectricSpecularF0Luminance(material) + transmissionWeight, 0.0);
-    weights.diffuse = sheenAttenuation * coatAttenuation * dielectricAttenuation *
+    weights.coat = viewSheenAttenuation * material.clearcoat * 0.25;
+    weights.metal = viewSheenAttenuation * viewCoatAttenuation * material.metallic * baseColorWeight;
+    weights.dielectric = viewSheenAttenuation * viewCoatAttenuation * dielectricSpecularWeight;
+    weights.diffuse = viewSheenAttenuation * viewCoatAttenuation * dielectricWeightAttenuation *
         baseScatter * (1.0 - material.subsurface) * diffuseColorWeight;
-    weights.subsurface = sheenAttenuation * coatAttenuation * dielectricAttenuation *
+    weights.subsurface = viewSheenAttenuation * viewCoatAttenuation * dielectricWeightAttenuation *
         baseScatter * material.subsurface * diffuseColorWeight;
 
     return normalizeBranchWeights(weights);
@@ -169,12 +169,9 @@ BSDFState makeBSDFState(Material material, float3 wo, uint frontFace) {
     state.material = material;
     state.wo = wo;
     state.frontFace = frontFace;
-    state.diffuseColor = bsdfDiffuseColor(material);
-    state.subsurfaceColor = state.diffuseColor * (1.0 - material.transmission);
-    state.sheenColor = bsdfSheenColor(material);
     state.ggx = makeGGXParams(material, wo);
     state.clearcoat = makeClearcoatParams(material);
-    state.sampleWeights = makeBSDFBranchWeights(material, wo, state.diffuseColor, state.sheenColor, frontFace);
+    state.sampleWeights = makeBSDFBranchWeights(material, wo, frontFace);
     return state;
 }
 
@@ -184,70 +181,83 @@ BSDFEval evalReflectionStack(BSDFState state, float3 wi) {
         return eval;
     }
 
-    BSDFEval sheen = BSDFEval();
-    BSDFEval coat = BSDFEval();
-    BSDFEval metal = BSDFEval();
-    BSDFEval dielectric = BSDFEval();
-    BSDFEval diffuse = BSDFEval();
-    BSDFEval subsurface = BSDFEval();
+    bool interiorInterface = useInteriorDielectricInterface(state);
+    float3 sheenValue = float3(0.0);
+    float3 coatValue = float3(0.0);
+    float3 metalValue = float3(0.0);
+    float3 dielectricValue = float3(0.0);
+    float3 substrateValue = float3(0.0);
+    float3 sheenColor = float3(0.0);
+
+    if (state.sampleWeights.sheen > 0.0 || !interiorInterface) {
+        sheenColor = bsdfSheenColor(state.material);
+    }
 
     if (state.sampleWeights.sheen > 0.0) {
-        sheen = evalSheen(state.sheenColor, state.material.sheenRoughness, state.wo, wi);
+        BSDFEval sheen = evalSheen(sheenColor, state.material.sheenRoughness, state.wo, wi);
+        sheenValue = sheen.value;
+        eval.pdf += state.sampleWeights.sheen * sheen.pdf;
     }
 
     if (state.sampleWeights.coat > 0.0) {
-        coat = evalClearcoat(state.material.clearcoat, state.wo, wi, state.clearcoat);
+        BSDFEval coat = evalClearcoat(state.material.clearcoat, state.wo, wi, state.clearcoat);
+        coatValue = coat.value;
+        eval.pdf += state.sampleWeights.coat * coat.pdf;
     }
 
     if (state.sampleWeights.metal > 0.0) {
-        metal = evalGGX(state.material, state.wo, wi, state.ggx);
+        BSDFEval metal = evalGGX(state.material, state.wo, wi, state.ggx);
+        metalValue = metal.value;
+        eval.pdf += state.sampleWeights.metal * metal.pdf;
     }
 
     if (state.sampleWeights.dielectric > 0.0) {
-        dielectric = evalDielectricReflection(state.material, state.wo, wi, state.frontFace, state.ggx);
+        BSDFEval dielectric = evalDielectricReflection(state.material, state.wo, wi, state.frontFace, state.ggx);
+        dielectricValue = dielectric.value;
+        eval.pdf += state.sampleWeights.dielectric * dielectric.pdf;
     }
 
-    if (state.sampleWeights.diffuse > 0.0) {
-        float3 diffuseWeight = state.diffuseColor * ((1.0 - state.material.transmission) * (1.0 - state.material.subsurface));
-        if (state.material.diffuseRoughness <= 0.0) {
-            diffuse = evalLambertian(diffuseWeight, wi);
-        } else {
-            diffuse = evalOrenNayar(diffuseWeight, state.material.diffuseRoughness, state.wo, wi);
+    if (state.sampleWeights.diffuse > 0.0 || state.sampleWeights.subsurface > 0.0) {
+        float3 diffuseColor = bsdfDiffuseColor(state.material);
+
+        if (state.sampleWeights.diffuse > 0.0) {
+            float3 diffuseWeight = diffuseColor * ((1.0 - state.material.transmission) * (1.0 - state.material.subsurface));
+            BSDFEval diffuse = state.material.diffuseRoughness <= 0.0
+                ? evalLambertian(diffuseWeight, wi)
+                : evalOrenNayar(diffuseWeight, state.material.diffuseRoughness, state.wo, wi);
+            substrateValue += diffuse.value;
+            eval.pdf += state.sampleWeights.diffuse * diffuse.pdf;
+        }
+
+        if (state.sampleWeights.subsurface > 0.0) {
+            float3 subsurfaceColor = diffuseColor * (1.0 - state.material.transmission);
+            BSDFEval subsurface = evalFakeSubsurface(
+                subsurfaceColor * state.material.subsurface,
+                state.material.diffuseRoughness,
+                state.wo,
+                wi);
+            substrateValue += subsurface.value;
+            eval.pdf += state.sampleWeights.subsurface * subsurface.pdf;
         }
     }
 
-    if (state.sampleWeights.subsurface > 0.0) {
-        subsurface = evalFakeSubsurface(
-            state.subsurfaceColor * state.material.subsurface,
-            state.material.diffuseRoughness,
-            state.wo,
-            wi);
-    }
-
-    if (useInteriorDielectricInterface(state)) {
-        eval.value = state.material.metallic * metal.value +
-            (1.0 - state.material.metallic) * dielectric.value;
-        eval.pdf = state.sampleWeights.metal * metal.pdf +
-            state.sampleWeights.dielectric * dielectric.pdf;
+    if (interiorInterface) {
+        float nonMetal = 1.0 - state.material.metallic;
+        eval.value = state.material.metallic * metalValue +
+            nonMetal * dielectricValue;
         return eval;
     }
 
-    float coatAttenuation = coatLayerReflectionAttenuation(state, wi);
-    float3 dielectricAttenuation = dielectricDirectionalAttenuation(state.material, state.wo);
-    float sheenAttenuation = sheenDirectionalAttenuation(state.sheenColor, state.wo, state.material.sheenRoughness);
-    float3 baseValue = coat.value + coatAttenuation * (
-        state.material.metallic * metal.value +
-        (1.0 - state.material.metallic) * (dielectric.value + dielectricAttenuation * (diffuse.value + subsurface.value))
+    float viewSheenAttenuation = sheenDirectionalAttenuation(sheenColor, state.wo, state.material.sheenRoughness);
+    float viewCoatAttenuation = coatDirectionalAttenuation(state.material, state.wo);
+    float3 viewDielectricAttenuation = dielectricDirectionalAttenuation(state.material, state.wo);
+    float nonMetal = 1.0 - state.material.metallic;
+    float3 baseValue = coatValue + reflectionStackAttenuation(state.material, viewCoatAttenuation, wi) * (
+        state.material.metallic * metalValue +
+        nonMetal * (dielectricValue + viewDielectricAttenuation * substrateValue)
     );
 
-    eval.value = sheen.value + sheenAttenuation * baseValue;
-
-    eval.pdf = state.sampleWeights.sheen * sheen.pdf +
-        state.sampleWeights.coat * coat.pdf +
-        state.sampleWeights.metal * metal.pdf +
-        state.sampleWeights.dielectric * dielectric.pdf +
-        state.sampleWeights.diffuse * diffuse.pdf +
-        state.sampleWeights.subsurface * subsurface.pdf;
+    eval.value = sheenValue + viewSheenAttenuation * baseValue;
 
     return eval;
 }
@@ -264,7 +274,7 @@ BSDFEval evalBSDF(BSDFState state, float3 wi) {
         state.frontFace,
         state.ggx,
         useInteriorDielectricInterface(state) ? 1.0 :
-            coatLayerTransmissionAttenuation(state) * sheenDirectionalAttenuation(state.sheenColor, state.wo, state.material.sheenRoughness)
+            materialTransmissionStackAttenuation(state.material, state.wo)
     );
 
     transmission.pdf *= state.sampleWeights.dielectric;
