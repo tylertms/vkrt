@@ -12,6 +12,27 @@ enum {
     kOverviewDriverTextCapacity = 64,
 };
 
+static const ImVec2 kOverviewTableCellPadding = {4.0f, 2.0f};
+static const float kOverviewFramePaddingY = 2.0f;
+
+static bool beginCompactTable(const char* id) {
+    if (!id) return false;
+
+    ImVec2 framePadding = ImGui_GetStyle()->FramePadding;
+    framePadding.y = kOverviewFramePaddingY;
+    ImGui_PushStyleVarImVec2(ImGuiStyleVar_FramePadding, framePadding);
+    if (!inspectorBeginKeyValueTableWithCellPadding(id, kOverviewTableCellPadding)) {
+        ImGui_PopStyleVar();
+        return false;
+    }
+    return true;
+}
+
+static void endCompactTable(void) {
+    inspectorEndKeyValueTable();
+    ImGui_PopStyleVar();
+}
+
 static void drawStatusSummary(const VKRT_RenderStatusSnapshot* status, const VKRT_SceneSettingsSnapshot* settings) {
     if (!status || !settings) return;
 
@@ -29,13 +50,13 @@ static void drawStatusSummary(const VKRT_RenderStatusSnapshot* status, const VKR
     snprintf(fpsText, sizeof(fpsText), "%u", status->framesPerSecond);
     snprintf(sppText, sizeof(sppText), "%u", settings->samplesPerPixel);
 
-    if (inspectorBeginKeyValueTable("##monitor_status")) {
+    if (beginCompactTable("##monitor_status")) {
         inspectorKeyValueRow("Mode", mode);
         inspectorKeyValueRow("FPS", fpsText);
         inspectorKeyValueRow("Render Time", renderTimeText);
         inspectorKeyValueRow("SPP", sppText);
         inspectorKeyValueRow("Accumulation", accumulationText);
-        inspectorEndKeyValueTable();
+        endCompactTable();
     }
 }
 
@@ -47,11 +68,11 @@ static void drawSystemSummary(const VKRT_RuntimeSnapshot* runtime, const VKRT_Sy
     formatDriverVersionText(system->vendorID, system->driverVersion, driverText, sizeof(driverText));
     snprintf(viewportText, sizeof(viewportText), "%ux%u", runtime->displayViewportRect[2], runtime->displayViewportRect[3]);
 
-    if (inspectorBeginKeyValueTable("##monitor_system")) {
+    if (beginCompactTable("##monitor_system")) {
         inspectorKeyValueRow("GPU", system->deviceName);
         inspectorKeyValueRow("Driver", driverText);
         inspectorKeyValueRow("Viewport", viewportText);
-        inspectorEndKeyValueTable();
+        endCompactTable();
     }
 }
 

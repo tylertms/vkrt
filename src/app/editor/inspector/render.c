@@ -14,11 +14,6 @@
 static const float kMicrosecondsPerSecond = 1000000.0f;
 static const int kRenderOutputDimensionMin = 1;
 static const int kRenderOutputDimensionMax = 16384;
-static const float kAnimationTimeDragSpeed = 0.01f;
-static const float kAnimationTimeMin = 0.0f;
-static const float kAnimationTimeMax = 1000.0f;
-static const float kAnimationStepDragSpeed = 0.005f;
-static const float kAnimationStepMin = 0.001f;
 
 enum {
     kRenderFolderPathCapacity = 256,
@@ -104,7 +99,7 @@ static void drawIdleOutputSection(VKRT* vkrt, Session* session, const VKRT_Scene
     };
     int targetSamples = (int)session->editor.renderConfig.targetSamples;
 
-    if (!ImGui_CollapsingHeader("Output", ImGuiTreeNodeFlags_DefaultOpen)) return;
+    if (!inspectorBeginCollapsingHeaderSection("Output", ImGuiTreeNodeFlags_DefaultOpen)) return;
 
     inspectorIndentSection();
     if (ImGui_DragInt2Ex("Output Size", outputSize, 1.0f, kRenderOutputDimensionMin, kRenderOutputDimensionMax, "%d", ImGuiSliderFlags_AlwaysClamp)) {
@@ -118,156 +113,13 @@ static void drawIdleOutputSection(VKRT* vkrt, Session* session, const VKRT_Scene
     }
     tooltipOnHover("Total samples to render. Set to 0 for manual stop.");
     inspectorUnindentSection();
-}
-
-static void drawTimelineEditor(SessionRenderAnimationSettings* animation) {
-    SessionSceneTimelineSettings* sceneTimeline = &animation->sceneTimeline;
-    bool timelineEnabled = sceneTimeline->enabled != 0;
-
-    if (!ImGui_CollapsingHeader("Timeline", ImGuiTreeNodeFlags_None)) return;
-
-    if (ImGui_Checkbox("Enabled##render_timeline_enabled", &timelineEnabled)) {
-        sceneTimeline->enabled = timelineEnabled ? 1 : 0;
-        sessionSanitizeAnimationSettings(animation);
-    }
-    tooltipOnHover("Step emission values at discrete points in source time.");
-
-    ImGui_BeginDisabled(!timelineEnabled);
-    bool timelineEdited = false;
-    bool timeActivelyEditing = false;
-
-    if (inspectorPaddedButton(ICON_FA_PLUS " Add")) {
-        if (sceneTimeline->keyframeCount < SESSION_SCENE_TIMELINE_KEYFRAME_CAPACITY) {
-            SessionSceneTimelineKeyframe newKey = {
-                .time = 0.0f,
-                .emissionScale = 1.0f,
-                .emissionTint = {1.0f, 1.0f, 1.0f},
-            };
-            if (sceneTimeline->keyframeCount > 0) {
-                newKey = sceneTimeline->keyframes[sceneTimeline->keyframeCount - 1];
-                newKey.time += SESSION_SCENE_TIMELINE_DEFAULT_INCREMENT;
-            }
-            sceneTimeline->keyframes[sceneTimeline->keyframeCount] = newKey;
-            sceneTimeline->keyframeCount++;
-            timelineEdited = true;
-        }
-    }
-
-    if (sceneTimeline->keyframeCount > 1) {
-        ImGui_SameLine();
-        if (inspectorPaddedButton(ICON_FA_MINUS " Remove")) {
-            sceneTimeline->keyframeCount--;
-            timelineEdited = true;
-        }
-    }
-
-    for (uint32_t keyIndex = 0; keyIndex < sceneTimeline->keyframeCount; keyIndex++) {
-        SessionSceneTimelineKeyframe* key = &sceneTimeline->keyframes[keyIndex];
-        ImGui_PushIDInt((int)keyIndex);
-        ImGui_SeparatorText("Marker");
-
-        ImGui_DragFloatEx(
-            "Time",
-            &key->time,
-            0.01f,
-            SESSION_SCENE_TIMELINE_TIME_MIN,
-            SESSION_SCENE_TIMELINE_TIME_MAX,
-            "%.3f",
-            ImGuiSliderFlags_AlwaysClamp
-        );
-        timelineEdited |= ImGui_IsItemDeactivatedAfterEdit();
-        timeActivelyEditing |= ImGui_IsItemActive();
-
-        timelineEdited |= ImGui_DragFloatEx(
-            "Emission Scale",
-            &key->emissionScale,
-            0.01f,
-            SESSION_SCENE_TIMELINE_EMISSION_SCALE_MIN,
-            SESSION_SCENE_TIMELINE_EMISSION_SCALE_MAX,
-            "%.3f",
-            ImGuiSliderFlags_AlwaysClamp
-        );
-
-        timelineEdited |= ImGui_ColorEdit3("Emission Tint", key->emissionTint, ImGuiColorEditFlags_Float);
-        ImGui_PopID();
-    }
-
-    if (timelineEdited && !timeActivelyEditing) {
-        sessionSanitizeAnimationSettings(animation);
-    }
-
-    ImGui_EndDisabled();
-}
-
-static void drawIdleAnimationSection(Session* session) {
-    SessionRenderAnimationSettings* animation = &session->editor.renderConfig.animation;
-    bool animationEnabled = animation->enabled != 0;
-    uint32_t frameCount = sessionComputeAnimationFrameCount(animation);
-    const char* sequenceFolder = sessionGetRenderSequenceFolder(session);
-    if (!sequenceFolder || !sequenceFolder[0]) sequenceFolder = "(not set)";
-
-    if (!ImGui_CollapsingHeader("Sequence", ImGuiTreeNodeFlags_None)) return;
-
-    inspectorIndentSection();
-    if (ImGui_Checkbox("Enabled##render_animation_enabled", &animationEnabled)) {
-        animation->enabled = animationEnabled ? 1 : 0;
-        if (!animationEnabled) {
-            sessionSanitizeAnimationSettings(animation);
-        }
-    }
-    tooltipOnHover("Render a sequence by stepping light travel time from Min to Max.");
-
-    float timeMin = animation->minTime;
-    float timeMax = animation->maxTime;
-    float timeStep = animation->timeStep;
-
-    ImGui_BeginDisabled(!animationEnabled);
-
-    if (ImGui_DragFloatEx("Time Min", &timeMin, kAnimationTimeDragSpeed, kAnimationTimeMin, kAnimationTimeMax, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
-        animation->minTime = timeMin;
-        sessionSanitizeAnimationSettings(animation);
-        frameCount = sessionComputeAnimationFrameCount(animation);
-    }
-
-    if (ImGui_DragFloatEx("Time Max", &timeMax, kAnimationTimeDragSpeed, kAnimationTimeMin, kAnimationTimeMax, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
-        animation->maxTime = timeMax;
-        sessionSanitizeAnimationSettings(animation);
-        frameCount = sessionComputeAnimationFrameCount(animation);
-    }
-
-    if (ImGui_DragFloatEx("Step", &timeStep, kAnimationStepDragSpeed, kAnimationStepMin, kAnimationTimeMax, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
-        animation->timeStep = timeStep;
-        sessionSanitizeAnimationSettings(animation);
-        frameCount = sessionComputeAnimationFrameCount(animation);
-    }
-
-    ImGui_TextDisabled("Frames: %u", frameCount);
-
-    if (inspectorPaddedButton(ICON_FA_FOLDER_OPEN " Select Folder")) {
-        sessionRequestRenderSequenceFolderDialog(session);
-    }
-
-    char folderPathBuffer[kRenderFolderPathCapacity];
-    snprintf(folderPathBuffer, sizeof(folderPathBuffer), "%s", sequenceFolder);
-    ImGui_InputTextEx("Folder", folderPathBuffer, sizeof(folderPathBuffer), ImGuiInputTextFlags_ReadOnly, NULL, NULL);
-    tooltipOnHover(sequenceFolder);
-
-    drawTimelineEditor(animation);
-
-    if (session->editor.renderConfig.targetSamples == 0) {
-        ImGui_Spacing();
-        ImGui_TextWrapped("Sequence mode needs finite samples. 0 will be promoted to 1.");
-    }
-
-    ImGui_EndDisabled();
-    inspectorUnindentSection();
+    inspectorEndCollapsingHeaderSection();
 }
 
 static void drawIdleRenderState(VKRT* vkrt, Session* session, const SessionRenderTimer* timer, const VKRT_SceneSettingsSnapshot* settings) {
     bool animationEnabled = session->editor.renderConfig.animation.enabled != 0;
 
     drawIdleOutputSection(vkrt, session, settings);
-    drawIdleAnimationSection(session);
 
     ImGui_Spacing();
 

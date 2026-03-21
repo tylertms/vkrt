@@ -22,6 +22,7 @@
 typedef enum DialogKind {
     DIALOG_KIND_NONE = 0,
     DIALOG_KIND_IMPORT_MESH,
+    DIALOG_KIND_IMPORT_TEXTURE,
     DIALOG_KIND_SAVE_RENDER,
     DIALOG_KIND_PICK_SEQUENCE_FOLDER,
 } DialogKind;
@@ -30,6 +31,8 @@ enum { kDialogDefaultNameCapacity = 256 };
 
 typedef struct DialogRequest {
     DialogKind kind;
+    uint32_t materialIndex;
+    uint32_t textureSlot;
     char defaultPath[VKRT_PATH_MAX];
     char defaultName[kDialogDefaultNameCapacity];
     nfdwindowhandle_t parentWindow;
@@ -50,7 +53,7 @@ typedef struct DialogState {
     uint8_t requestActive;
     uint8_t responsePending;
     DialogRequest request;
-    DialogKind responseKind;
+    DialogRequest response;
     char* responsePath;
 } DialogState;
 
@@ -63,6 +66,8 @@ static const char* queryDialogKindLabel(DialogKind kind) {
     switch (kind) {
         case DIALOG_KIND_IMPORT_MESH:
             return "mesh import";
+        case DIALOG_KIND_IMPORT_TEXTURE:
+            return "texture import";
         case DIALOG_KIND_SAVE_RENDER:
             return "render save";
         case DIALOG_KIND_PICK_SEQUENCE_FOLDER:
@@ -126,11 +131,27 @@ static char* runDialogRequest(const DialogRequest* request) {
             dialogResult = NFD_OpenDialogU8_With(&selectedPath, &args);
             break;
         }
-        case DIALOG_KIND_SAVE_RENDER: {
-            nfdu8filteritem_t filters[] = {{"PNG image", "png"}};
-            nfdsavedialogu8args_t args = {
+        case DIALOG_KIND_IMPORT_TEXTURE: {
+            nfdu8filteritem_t filters[] = {{"Image", "png,jpg,jpeg,bmp,tga,tif,tiff"}};
+            nfdopendialogu8args_t args = {
                 .filterList = filters,
                 .filterCount = 1,
+                .defaultPath = defaultPath,
+                .parentWindow = request->parentWindow,
+            };
+            dialogResult = NFD_OpenDialogU8_With(&selectedPath, &args);
+            break;
+        }
+        case DIALOG_KIND_SAVE_RENDER: {
+            nfdu8filteritem_t filters[] = {
+                {"PNG image", "png"},
+                {"JPEG image", "jpg,jpeg"},
+                {"BMP image", "bmp"},
+                {"TGA image", "tga"},
+            };
+            nfdsavedialogu8args_t args = {
+                .filterList = filters,
+                .filterCount = 4,
                 .defaultPath = defaultPath,
                 .defaultName = request->defaultName[0] ? request->defaultName : "render.png",
                 .parentWindow = request->parentWindow,
@@ -211,7 +232,7 @@ static int dialogWorkerMain(void* userData) {
         char* selectedPath = runDialogRequest(&request);
 
         vkrtMutexLock(&state->mutex);
-        state->responseKind = request.kind;
+        state->response = request;
         state->responsePath = selectedPath;
         state->responsePending = 1u;
         state->requestActive = 0u;
@@ -318,16 +339,24 @@ void editorUIShutdownDialogs(Session* session) {
     session->editor.dialogState = NULL;
 }
 
-static void applyDialogResponse(Session* session, DialogKind kind, char* selectedPath) {
+static void applyDialogResponse(Session* session, const DialogRequest* request, char* selectedPath) {
     if (!session) {
         free(selectedPath);
         return;
     }
 
     if (selectedPath && selectedPath[0]) {
-        switch (kind) {
+        switch (request ? request->kind : DIALOG_KIND_NONE) {
             case DIALOG_KIND_IMPORT_MESH:
                 sessionQueueMeshImport(session, selectedPath);
+                break;
+            case DIALOG_KIND_IMPORT_TEXTURE:
+                sessionQueueTextureImport(
+                    session,
+                    request->materialIndex,
+                    request->textureSlot,
+                    selectedPath
+                );
                 break;
             case DIALOG_KIND_SAVE_RENDER:
                 sessionQueueRenderSave(session, selectedPath);
@@ -353,14 +382,14 @@ static void drainDialogResponse(Session* session) {
         return;
     }
 
-    DialogKind kind = state->responseKind;
+    DialogRequest response = state->response;
     char* selectedPath = state->responsePath;
-    state->responseKind = DIALOG_KIND_NONE;
+    state->response = (DialogRequest){0};
     state->responsePath = NULL;
     state->responsePending = 0u;
     vkrtMutexUnlock(&state->mutex);
 
-    applyDialogResponse(session, kind, selectedPath);
+    applyDialogResponse(session, &response, selectedPath);
 }
 
 static int queueDialogRequest(DialogState* state, const DialogRequest* request) {
@@ -389,7 +418,21 @@ static void executeDialogSynchronously(DialogState* state, Session* session, con
         return;
     }
     char* selectedPath = runDialogRequest(request);
-    applyDialogResponse(session, request->kind, selectedPath);
+    applyDialogResponse(session, request, selectedPath);
+}
+
+static int dispatchPreparedDialogRequest(Session* session, const DialogRequest* request) {
+    DialogState* state = getDialogState(session);
+    if (!state) return 1;
+    if (!request) return 0;
+
+    if (queueDialogRequest(state, request)) return 1;
+    if (!dialogBackendAvailable(state)) {
+        LOG_ERROR("File dialog backend unavailable for %s request", queryDialogKindLabel(request->kind));
+        return 1;
+    }
+    executeDialogSynchronously(state, session, request);
+    return 1;
 }
 
 static int tryScheduleImportMeshDialog(Session* session) {
@@ -405,14 +448,29 @@ static int tryScheduleImportMeshDialog(Session* session) {
     if (!prepareDialogRequest(state, DIALOG_KIND_IMPORT_MESH, defaultPath, NULL, &request)) {
         return 1;
     }
+    return dispatchPreparedDialogRequest(session, &request);
+}
 
-    if (queueDialogRequest(state, &request)) return 1;
-    if (!dialogBackendAvailable(state)) {
-        LOG_ERROR("File dialog backend unavailable for %s request", queryDialogKindLabel(request.kind));
+static int tryScheduleImportTextureDialog(Session* session) {
+    uint32_t materialIndex = VKRT_INVALID_INDEX;
+    uint32_t textureSlot = VKRT_INVALID_INDEX;
+    if (!sessionTakeTextureImportDialogRequest(session, &materialIndex, &textureSlot)) return 0;
+
+    DialogState* state = getDialogState(session);
+    if (!state) return 1;
+
+    char defaultPath[VKRT_PATH_MAX];
+    defaultPath[0] = '\0';
+    resolveExistingParentPath("assets", NULL, defaultPath, sizeof(defaultPath));
+
+    DialogRequest request = {0};
+    if (!prepareDialogRequest(state, DIALOG_KIND_IMPORT_TEXTURE, defaultPath, NULL, &request)) {
         return 1;
     }
-    executeDialogSynchronously(state, session, &request);
-    return 1;
+    request.materialIndex = materialIndex;
+    request.textureSlot = textureSlot;
+
+    return dispatchPreparedDialogRequest(session, &request);
 }
 
 static int tryScheduleRenderSaveDialog(Session* session) {
@@ -429,13 +487,7 @@ static int tryScheduleRenderSaveDialog(Session* session) {
         return 1;
     }
 
-    if (queueDialogRequest(state, &request)) return 1;
-    if (!dialogBackendAvailable(state)) {
-        LOG_ERROR("File dialog backend unavailable for %s request", queryDialogKindLabel(request.kind));
-        return 1;
-    }
-    executeDialogSynchronously(state, session, &request);
-    return 1;
+    return dispatchPreparedDialogRequest(session, &request);
 }
 
 static int tryScheduleSequenceFolderDialog(Session* session) {
@@ -452,13 +504,7 @@ static int tryScheduleSequenceFolderDialog(Session* session) {
         return 1;
     }
 
-    if (queueDialogRequest(state, &request)) return 1;
-    if (!dialogBackendAvailable(state)) {
-        LOG_ERROR("File dialog backend unavailable for %s request", queryDialogKindLabel(request.kind));
-        return 1;
-    }
-    executeDialogSynchronously(state, session, &request);
-    return 1;
+    return dispatchPreparedDialogRequest(session, &request);
 }
 
 void editorUIProcessDialogs(Session* session) {
@@ -475,6 +521,7 @@ void editorUIProcessDialogs(Session* session) {
     }
 
     if (tryScheduleImportMeshDialog(session)) return;
+    if (tryScheduleImportTextureDialog(session)) return;
     if (tryScheduleRenderSaveDialog(session)) return;
     (void)tryScheduleSequenceFolderDialog(session);
 }

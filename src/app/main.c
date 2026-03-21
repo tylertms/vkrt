@@ -86,8 +86,8 @@ int main(int argc, char* argv[]) {
 
         char* savePath = NULL;
         if (sessionTakeRenderSave(&session, &savePath)) {
-            if (VKRT_saveRenderPNG(vkrt, savePath) != VKRT_SUCCESS) {
-                LOG_ERROR("Saving render PNG failed. Path: %s", savePath);
+            if (VKRT_saveRenderImage(vkrt, savePath) != VKRT_SUCCESS) {
+                LOG_ERROR("Saving render image failed. Path: %s", savePath);
             }
             free(savePath);
         }

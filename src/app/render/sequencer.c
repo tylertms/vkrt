@@ -355,7 +355,7 @@ void renderSequencerUpdate(VKRT* vkrt, Session* session) {
 
     char framePath[kRenderSequenceFramePathCapacity];
     if (buildFramePath(framePath, sizeof(framePath), sequencer) != 0 ||
-        VKRT_saveRenderPNG(vkrt, framePath) != VKRT_SUCCESS) {
+        VKRT_saveRenderImage(vkrt, framePath) != VKRT_SUCCESS) {
         LOG_ERROR(
             "Saving render sequence frame failed. Frame: %u, Path: %s",
             sequencer->frameIndex,

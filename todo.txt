@@ -1,17 +1,18 @@
 - equirectangular environment mapping
-- shader execution reordering, look at hints and shadow/selection rays still
-- look at dispatch overhead with shadow rays, NEE/MNEE, perhaps we can limit invocation penalties
-- texture mapping to objects and full gltf loading
 - scene load/save
 - get rid of windows menu bar and make custom one
 - add license and proper readme
 - light animation system doesn't work right now
 - real animation/keyframe system for more than lighting
-- improve scaling/spacing, make it look a little nicer, especially left pane
 - in display two units, the second unit can only be the second largest one below the first, so 7m 0s not 7m 503ms
 - light speckles still, not as bad, check pbr book
 - hero wavelength or some other method of adding wavelength-dependent refraction
 - add denoiser, NRD maybe? doesn't need to be realtime
-- improve logging and debug modes
-- some settings maybe should be render-only like MNEE
-- organize src/shaders better, maybe more like blender cycles
+- maybe look into improving movement controls
+- move/rotate/scale with keybinds in viewport and potential post-rt widget draw
+- raster mode or single-ray RT mode just for scene viewing and movement
+- NEE with environment lighting and env texture mapping, emissive textures too maybe??
+- always use same number of decimals in transform dragfloats
+- make the plus a bit bigger on material add icon
+- 0 roughness 0 metallic might not be energy conserving
+- add support for different types of lights

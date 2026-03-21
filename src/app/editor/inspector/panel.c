@@ -114,9 +114,19 @@ static void drawPropertiesPanelSelector(Session* session) {
 }
 
 static void drawSceneWindowContent(VKRT* vkrt, Session* session) {
-    ImGui_SeparatorText(ICON_FA_CUBES " Scene");
-    inspectorDrawSceneBrowserSection(vkrt, session);
     inspectorDrawSceneOverviewSection(vkrt);
+    ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing});
+    ImGui_SeparatorText(ICON_FA_CUBES " Scene");
+    ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing});
+    if (ImGui_BeginChild(
+        "##scene_browser_list",
+        (ImVec2){0.0f, 0.0f},
+        ImGuiChildFlags_Borders | ImGuiChildFlags_AlwaysUseWindowPadding,
+        ImGuiWindowFlags_None
+    )) {
+        inspectorDrawSceneBrowserSection(vkrt, session);
+    }
+    ImGui_EndChild();
 }
 
 static void drawPropertiesWindowContent(VKRT* vkrt, Session* session) {

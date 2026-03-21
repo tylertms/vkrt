@@ -9,6 +9,8 @@ const float kInspectorSectionIndent = 12.0f;
 const float kInspectorSpacerHairline = 1.0f;
 const float kInspectorSpacerMedium = 6.0f;
 static const ImVec2 kTooltipPadding = {8.0f, 4.0f};
+static const ImVec2 kInspectorTableCellPadding = {4.0f, 0.0f};
+static const float kCollapsingHeaderBottomSpacing = 2.0f;
 
 void inspectorIndentSection(void) {
     ImGui_IndentEx(kInspectorSectionIndent);
@@ -18,11 +20,22 @@ void inspectorUnindentSection(void) {
     ImGui_UnindentEx(kInspectorSectionIndent);
 }
 
-bool inspectorBeginKeyValueTable(const char* id) {
+bool inspectorBeginCollapsingHeaderSection(const char* label, ImGuiTreeNodeFlags flags) {
+    if (!label) return false;
+    return ImGui_CollapsingHeader(label, flags);
+}
+
+void inspectorEndCollapsingHeaderSection(void) {
+    ImGui_Dummy((ImVec2){0.0f, kCollapsingHeaderBottomSpacing});
+}
+
+bool inspectorBeginKeyValueTableWithCellPadding(const char* id, ImVec2 cellPadding) {
     if (!id) return false;
 
+    ImGui_PushStyleVarImVec2(ImGuiStyleVar_CellPadding, cellPadding);
     ImGuiTableFlags flags = ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings;
     if (!ImGui_BeginTableEx(id, 2, flags, (ImVec2){-1.0f, 0.0f}, 0.0f)) {
+        ImGui_PopStyleVar();
         return false;
     }
 
@@ -38,18 +51,27 @@ bool inspectorBeginKeyValueTable(const char* id) {
     return true;
 }
 
+bool inspectorBeginKeyValueTable(const char* id) {
+    return inspectorBeginKeyValueTableWithCellPadding(id, kInspectorTableCellPadding);
+}
+
 void inspectorKeyValueRow(const char* label, const char* value) {
     if (!label || !value) return;
 
     ImGui_TableNextRow();
     ImGui_TableSetColumnIndex(0);
+    ImGui_AlignTextToFramePadding();
     ImGui_TextDisabled("%s", label);
     ImGui_TableSetColumnIndex(1);
-    ImGui_TextWrapped("%s", value);
+    ImGui_AlignTextToFramePadding();
+    ImGui_PushTextWrapPos(0.0f);
+    ImGui_TextUnformatted(value);
+    ImGui_PopTextWrapPos();
 }
 
 void inspectorEndKeyValueTable(void) {
     ImGui_EndTable();
+    ImGui_PopStyleVar();
 }
 
 bool inspectorPaddedButton(const char* label) {

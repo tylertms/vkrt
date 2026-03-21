@@ -11,6 +11,8 @@ static const float kCameraPoseDegenerateThreshold = 1e-8f;
 static const float kCameraPoseNudgeDistance = 0.001f;
 static const float kCameraFovMinDeg = 10.0f;
 static const float kCameraFovMaxDeg = 140.0f;
+static const float kExposureMin = 0.03125f;
+static const float kExposureMax = 32.0f;
 static const float kEnvironmentStrengthMax = 1000000.0f;
 static const int kPathDepthMin = 0;
 static const int kPathDepthMax = 64;
@@ -27,7 +29,7 @@ void inspectorDrawCameraTab(VKRT* vkrt) {
 
     bool renderModeActive = status.renderModeActive != 0;
 
-    if (ImGui_CollapsingHeader("Camera Pose", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (inspectorBeginCollapsingHeaderSection("Camera Pose", ImGuiTreeNodeFlags_DefaultOpen)) {
         inspectorIndentSection();
         ImGui_BeginDisabled(renderModeActive);
 
@@ -61,9 +63,10 @@ void inspectorDrawCameraTab(VKRT* vkrt) {
 
         ImGui_EndDisabled();
         inspectorUnindentSection();
+        inspectorEndCollapsingHeaderSection();
     }
 
-    if (ImGui_CollapsingHeader("Shading", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (inspectorBeginCollapsingHeaderSection("Shading", ImGuiTreeNodeFlags_DefaultOpen)) {
         inspectorIndentSection();
         ImGui_BeginDisabled(renderModeActive);
 
@@ -73,6 +76,33 @@ void inspectorDrawCameraTab(VKRT* vkrt) {
             VKRT_Result result = VKRT_setToneMappingMode(vkrt, (VKRT_ToneMappingMode)toneMappingMode);
             if (result != VKRT_SUCCESS) {
                 LOG_ERROR("Updating tone mapping mode failed (%d)", (int)result);
+            }
+        }
+
+        bool autoExposureEnabled = settings.autoExposureEnabled != 0;
+        if (ImGui_Checkbox("Auto Exposure", &autoExposureEnabled)) {
+            VKRT_Result result = VKRT_setAutoExposureEnabled(vkrt, autoExposureEnabled ? 1u : 0u);
+            if (result != VKRT_SUCCESS) {
+                LOG_ERROR("Updating auto exposure failed (%d)", (int)result);
+            }
+        }
+        if (!autoExposureEnabled) {
+            float exposure = settings.exposure;
+            if (ImGui_DragFloatEx(
+                "Exposure",
+                &exposure,
+                0.01f,
+                kExposureMin,
+                kExposureMax,
+                "%.3f",
+                ImGuiSliderFlags_AlwaysClamp
+            )) {
+                VKRT_Result result = VKRT_setExposure(vkrt, exposure);
+                if (result != VKRT_SUCCESS) {
+                    LOG_ERROR("Updating exposure failed (%d)", (int)result);
+                } else {
+                    settings.exposure = exposure;
+                }
             }
         }
 
@@ -105,15 +135,18 @@ void inspectorDrawCameraTab(VKRT* vkrt) {
         }
 
         inspectorUnindentSection();
+        inspectorEndCollapsingHeaderSection();
     }
 
-    if (ImGui_CollapsingHeader("Debug", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (inspectorBeginCollapsingHeaderSection("Debug", ImGuiTreeNodeFlags_DefaultOpen)) {
         inspectorIndentSection();
         ImGui_BeginDisabled(renderModeActive);
 
         const char* debugModeLabels[] = {
             "None", "Normals", "Depth", "Bounce Count",
-            "NEE Only", "BSDF Only", "Selection Mask"
+            "NEE Only", "BSDF Only", "Selection Mask",
+            "Base Color Map", "Metallic Map", "Roughness Map",
+            "Normal Map", "Emissive Map"
         };
         int debugModeValue = (int)settings.debugMode;
         if (debugModeValue < 0 || debugModeValue >= (int)VKRT_DEBUG_MODE_COUNT) debugModeValue = 0;
@@ -135,9 +168,10 @@ void inspectorDrawCameraTab(VKRT* vkrt) {
 
         ImGui_EndDisabled();
         inspectorUnindentSection();
+        inspectorEndCollapsingHeaderSection();
     }
 
-    if (ImGui_CollapsingHeader("Performance", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (inspectorBeginCollapsingHeaderSection("Performance", ImGuiTreeNodeFlags_DefaultOpen)) {
         inspectorIndentSection();
         ImGui_BeginDisabled(renderModeActive);
 
@@ -192,6 +226,7 @@ void inspectorDrawCameraTab(VKRT* vkrt) {
 
         ImGui_EndDisabled();
         inspectorUnindentSection();
+        inspectorEndCollapsingHeaderSection();
     }
 
     if (renderModeActive) {

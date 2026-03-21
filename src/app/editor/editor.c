@@ -75,13 +75,14 @@ static bool overlayInfoMatches(const VKRT_OverlayInfo* a, const VKRT_OverlayInfo
     if (!a || !b) return false;
 
     return a->window == b->window &&
+        a->apiVersion == b->apiVersion &&
         a->instance == b->instance &&
         a->physicalDevice == b->physicalDevice &&
         a->device == b->device &&
         a->graphicsQueueFamily == b->graphicsQueueFamily &&
         a->graphicsQueue == b->graphicsQueue &&
         a->descriptorPool == b->descriptorPool &&
-        a->renderPass == b->renderPass &&
+        a->colorAttachmentFormat == b->colorAttachmentFormat &&
         a->swapchainImageCount == b->swapchainImageCount &&
         a->swapchainMinImageCount == b->swapchainMinImageCount;
 }
@@ -90,6 +91,7 @@ static void populateVulkanInitInfo(const VKRT_OverlayInfo* overlay, ImGui_ImplVu
     if (!overlay || !outInitInfo) return;
 
     *outInitInfo = (ImGui_ImplVulkan_InitInfo){
+        .ApiVersion = overlay->apiVersion,
         .Instance = overlay->instance,
         .PhysicalDevice = overlay->physicalDevice,
         .Device = overlay->device,
@@ -101,7 +103,12 @@ static void populateVulkanInitInfo(const VKRT_OverlayInfo* overlay, ImGui_ImplVu
         .MinImageCount = overlay->swapchainMinImageCount,
         .ImageCount = overlay->swapchainImageCount,
         .CheckVkResultFn = VK_NULL_HANDLE,
-        .RenderPass = overlay->renderPass,
+        .UseDynamicRendering = true,
+        .PipelineRenderingCreateInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+            .colorAttachmentCount = 1,
+            .pColorAttachmentFormats = &overlay->colorAttachmentFormat,
+        },
     };
 }
 
@@ -120,17 +127,20 @@ static bool queryEditorOverlayInfo(VKRT* vkrt, VKRT_OverlayInfo* outOverlay) {
 static bool initializeEditorVulkanBackend(EditorUIState* state, const VKRT_OverlayInfo* overlay) {
     if (!state || !overlay) return false;
 
+    state->overlay = *overlay;
+
     ImGui_ImplVulkan_InitInfo initInfo = {0};
-    populateVulkanInitInfo(overlay, &initInfo);
+    populateVulkanInitInfo(&state->overlay, &initInfo);
     if (!cImGui_ImplVulkan_Init(&initInfo)) {
+        memset(&state->overlay, 0, sizeof(state->overlay));
         return false;
     }
     if (!cImGui_ImplVulkan_CreateFontsTexture()) {
         cImGui_ImplVulkan_Shutdown();
+        memset(&state->overlay, 0, sizeof(state->overlay));
         return false;
     }
 
-    state->overlay = *overlay;
     state->vulkanBackendInitialized = true;
     return true;
 }
@@ -461,8 +471,8 @@ static bool drawViewportWindow(
     return viewportHovered;
 }
 
-static void applyCompletedViewportSelection(VKRT* vkrt) {
-    if (!vkrt) return;
+static void applyCompletedViewportSelection(VKRT* vkrt, Session* session) {
+    if (!vkrt || !session) return;
 
     uint32_t meshIndex = VKRT_INVALID_INDEX;
     uint8_t ready = 0;
@@ -476,7 +486,9 @@ static void applyCompletedViewportSelection(VKRT* vkrt) {
     result = VKRT_setSelectedMesh(vkrt, meshIndex);
     if (result != VKRT_SUCCESS) {
         LOG_ERROR("Applying viewport selection failed (%d)", (int)result);
+        return;
     }
+    sessionSelectSceneObjectForMesh(session, meshIndex);
 }
 
 static bool queryViewportMousePixel(uint32_t* outX, uint32_t* outY) {
@@ -536,17 +548,18 @@ static void requestViewportSelection(
     }
 }
 
-static void clearViewportSelectionOnEscape(VKRT* vkrt) {
-    if (!vkrt) return;
+static void clearViewportSelectionOnEscape(VKRT* vkrt, Session* session) {
+    if (!vkrt || !session) return;
     if (!ImGui_IsKeyPressed(ImGuiKey_Escape)) return;
 
     VKRT_Result result = VKRT_setSelectedMesh(vkrt, VKRT_INVALID_INDEX);
     if (result != VKRT_SUCCESS) {
         LOG_ERROR("Clearing viewport selection failed (%d)", (int)result);
     }
+    sessionSetSelectedSceneObject(session, VKRT_INVALID_INDEX);
 }
 
-static void queueSelectedMeshRemovalOnDelete(
+static void queueSelectedSceneObjectRemovalOnDelete(
     VKRT* vkrt,
     Session* session,
     const VKRT_RenderStatusSnapshot* status
@@ -560,15 +573,22 @@ static void queueSelectedMeshRemovalOnDelete(
     }
     if (!ImGui_IsKeyPressed(ImGuiKey_Delete) && !ImGui_IsKeyPressed(ImGuiKey_Backspace)) return;
 
-    uint32_t selectedMeshIndex = VKRT_INVALID_INDEX;
-    VKRT_Result result = VKRT_getSelectedMesh(vkrt, &selectedMeshIndex);
-    if (result != VKRT_SUCCESS) {
-        LOG_ERROR("Querying selected mesh failed (%d)", (int)result);
-        return;
+    uint32_t selectedObjectIndex = sessionGetSelectedSceneObject(session);
+    if (selectedObjectIndex == VKRT_INVALID_INDEX) {
+        uint32_t selectedMeshIndex = VKRT_INVALID_INDEX;
+        VKRT_Result result = VKRT_getSelectedMesh(vkrt, &selectedMeshIndex);
+        if (result != VKRT_SUCCESS) {
+            LOG_ERROR("Querying selected mesh failed (%d)", (int)result);
+            return;
+        }
+        if (selectedMeshIndex != VKRT_INVALID_INDEX) {
+            sessionSelectSceneObjectForMesh(session, selectedMeshIndex);
+            selectedObjectIndex = sessionGetSelectedSceneObject(session);
+        }
     }
-    if (selectedMeshIndex == VKRT_INVALID_INDEX) return;
+    if (selectedObjectIndex == VKRT_INVALID_INDEX) return;
 
-    sessionQueueMeshRemoval(session, selectedMeshIndex);
+    sessionQueueSceneObjectRemoval(session, selectedObjectIndex);
 }
 
 static void applyEditorCameraInput(
@@ -752,14 +772,14 @@ void editorUIUpdate(VKRT* vkrt, Session* session) {
     cImGui_ImplGlfw_NewFrame();
     cImGui_ImplVulkan_NewFrame();
     ImGui_NewFrame();
-    applyCompletedViewportSelection(vkrt);
-    clearViewportSelectionOnEscape(vkrt);
+    applyCompletedViewportSelection(vkrt, session);
+    clearViewportSelectionOnEscape(vkrt, session);
 
     VKRT_RenderStatusSnapshot status = {0};
     bool hasStatus = VKRT_getRenderStatus(vkrt, &status) == VKRT_SUCCESS;
     VKRT_RuntimeSnapshot runtime = {0};
     bool hasRuntime = VKRT_getRuntimeSnapshot(vkrt, &runtime) == VKRT_SUCCESS;
-    queueSelectedMeshRemovalOnDelete(vkrt, session, hasStatus ? &status : NULL);
+    queueSelectedSceneObjectRemovalOnDelete(vkrt, session, hasStatus ? &status : NULL);
 
     drawMainMenuBar(vkrt, session, hasStatus ? &status : NULL);
     drawWorkspaceDockspace(state);
