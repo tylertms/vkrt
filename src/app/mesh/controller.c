@@ -619,7 +619,7 @@ void meshControllerLoadDefaultAssets(VKRT* vkrt, Session* session) {
     lightMaterial.emissionColor[0] = 1.0f;
     lightMaterial.emissionColor[1] = 1.0f;
     lightMaterial.emissionColor[2] = 1.0f;
-    lightMaterial.emissionLuminance = 70.0f;
+    lightMaterial.emissionLuminance = 30.0f;
 
     Material dragonMaterial = VKRT_materialDefault();
     dragonMaterial.baseColor[0] = 0.74f;
