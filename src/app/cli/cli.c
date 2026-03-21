@@ -299,7 +299,6 @@ void CLIPrintVersion(void) {
 }
 
 void CLIPrintHelp(void) {
-    CLIPrintVersion();
     printf("\nCross-platform hardware pathtracer in C using Vulkan. \n");
     printf("\nUsage: vkrt [options]\n");
     printf("\nOptions:\n");
@@ -332,5 +331,5 @@ void CLIPrintHelp(void) {
     printf("  Import: glTF mesh (.glb, .gltf; geometry + scalar material factors)\n");
     printf("  Export: Image (.png, .jpg, .jpeg, .bmp, .tga)\n");
     printf("\nRequirements:\n");
-    printf("  Vulkan 1.2+ with ray tracing pipeline support\n");
+    printf("  Vulkan 1.3+ with ray tracing pipeline support\n");
 }

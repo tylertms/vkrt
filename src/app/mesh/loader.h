@@ -30,13 +30,13 @@ typedef struct MeshImportEntry {
 } MeshImportEntry;
 
 typedef struct NodeImportEntry {
+    mat4 localTransform;
     char* name;
     uint32_t parentIndex;
     uint32_t meshEntryCount;
     vec3 position;
     vec3 rotation;
     vec3 scale;
-    mat4 localTransform;
 } NodeImportEntry;
 
 typedef struct MeshImportData {

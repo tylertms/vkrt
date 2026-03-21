@@ -110,8 +110,8 @@ app_includes = [
 
 core_build_includes = [
   project_includes,
-  external_includes,
   core_includes,
+  external_includes,
 ]
 
 core_internal_includes = include_directories(

@@ -74,12 +74,12 @@ typedef struct SessionRenderTimer {
 } SessionRenderTimer;
 
 typedef struct SessionSceneObject {
+    mat4 localTransform;
     uint32_t parentIndex;
     uint32_t meshIndex;
     vec3 localPosition;
     vec3 localRotation;
     vec3 localScale;
-    mat4 localTransform;
     char name[VKRT_NAME_LEN];
 } SessionSceneObject;
 
