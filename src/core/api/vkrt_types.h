@@ -149,6 +149,7 @@ typedef struct VKRT_SceneSettingsSnapshot {
     uint32_t autoSPPTargetFPS;
     vec3 environmentColor;
     float environmentStrength;
+    uint32_t environmentTextureIndex;
     float timeBase;
     float timeStep;
     uint32_t debugMode;

@@ -4,7 +4,6 @@
 #include "constants.h"
 
 #ifndef VKRT_SHADER
-#include <stddef.h>
 #include <stdint.h>
 #include "cglm.h"
 
@@ -113,6 +112,7 @@ struct SceneData {
     float timeBase;
     float timeStep;
     float4 environmentLight;
+    uint environmentTextureIndex;
     uint debugMode;
     uint misNeeEnabled;
     uint timelineEnabled;

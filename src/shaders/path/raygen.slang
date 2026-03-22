@@ -1,6 +1,7 @@
 #include "../scene/resources.slang"
 #include "../bsdf/bsdf.slang"
 #include "../light/direct.slang"
+#include "../light/environment.slang"
 #include "../sample/random.slang"
 #include "../camera/ray.slang"
 #include "../geometry/packing.slang"
@@ -80,7 +81,7 @@ void main() {
 
             if (payload.didHit == 0u) {
                 if (!neeOnlyDebug && !mediumHasActiveBoundary(medium)) {
-                    radiance += throughput * scene.environmentLight.xyz;
+                    radiance += throughput * sampleEnvironmentRadiance(ray.Direction);
                 }
                 break;
             }

@@ -234,6 +234,11 @@ void sessionRequestMeshImportDialog(Session* session) {
     session->editor.requestMeshImportDialog = 1;
 }
 
+void sessionRequestEnvironmentImportDialog(Session* session) {
+    if (!session) return;
+    session->editor.requestEnvironmentImportDialog = 1;
+}
+
 void sessionRequestTextureImportDialog(Session* session, uint32_t materialIndex, uint32_t textureSlot) {
     if (!session) return;
     session->editor.requestTextureImportDialog = 1;
@@ -265,6 +270,12 @@ int sessionTakeTextureImportDialogRequest(Session* session, uint32_t* outMateria
     if (outTextureSlot) *outTextureSlot = session->editor.requestedTextureSlot;
     session->editor.requestedTextureMaterialIndex = VKRT_INVALID_INDEX;
     session->editor.requestedTextureSlot = VKRT_INVALID_INDEX;
+    return 1;
+}
+
+int sessionTakeEnvironmentImportDialogRequest(Session* session) {
+    if (!session || !session->editor.requestEnvironmentImportDialog) return 0;
+    session->editor.requestEnvironmentImportDialog = 0;
     return 1;
 }
 
@@ -302,6 +313,14 @@ void sessionQueueTextureImport(Session* session, uint32_t materialIndex, uint32_
     session->commands.textureImportSlot = textureSlot;
 }
 
+void sessionQueueEnvironmentImport(Session* session, const char* path) {
+    if (!session) return;
+
+    clearOwnedString(&session->commands.environmentImportPath);
+    if (!path || !path[0]) return;
+    session->commands.environmentImportPath = stringDuplicate(path);
+}
+
 void sessionQueueSceneObjectRemoval(Session* session, uint32_t objectIndex) {
     if (!session) return;
     session->commands.sceneObjectToRemove =
@@ -318,11 +337,10 @@ int sessionTakeMeshImport(Session* session, char** outPath) {
 
     char* path = session->commands.meshImportPath;
     session->commands.meshImportPath = NULL;
-    if (outPath) {
-        *outPath = path;
-    } else {
-        free(path);
-    }
+
+    if (outPath) *outPath = path;
+    else free(path);
+
     return 1;
 }
 
@@ -331,16 +349,28 @@ int sessionTakeTextureImport(Session* session, uint32_t* outMaterialIndex, uint3
 
     char* path = session->commands.textureImportPath;
     session->commands.textureImportPath = NULL;
+
     if (outMaterialIndex) *outMaterialIndex = session->commands.textureImportMaterialIndex;
     if (outTextureSlot) *outTextureSlot = session->commands.textureImportSlot;
+
     session->commands.textureImportMaterialIndex = VKRT_INVALID_INDEX;
     session->commands.textureImportSlot = VKRT_INVALID_INDEX;
 
-    if (outPath) {
-        *outPath = path;
-    } else {
-        free(path);
-    }
+    if (outPath) *outPath = path;
+    else free(path);
+
+    return 1;
+}
+
+int sessionTakeEnvironmentImport(Session* session, char** outPath) {
+    if (!session || !session->commands.environmentImportPath) return 0;
+
+    char* path = session->commands.environmentImportPath;
+    session->commands.environmentImportPath = NULL;
+
+    if (outPath) *outPath = path;
+    else free(path);
+
     return 1;
 }
 

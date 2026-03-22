@@ -1,5 +1,6 @@
 #include "textures.h"
 
+#include "environment.h"
 #include "image.h"
 #include "images.h"
 #include "io.h"
@@ -474,6 +475,7 @@ VKRT_Result vkrtSceneRemoveTexture(VKRT* vkrt, uint32_t textureIndex) {
         }
     }
 
+    vkrtRemapEnvironmentTextureIndexAfterRemoval(vkrt, textureIndex);
     vkrtMarkTextureResourcesDirty(vkrt);
     vkrtMarkMaterialResourcesDirty(vkrt);
     resetSceneData(vkrt);

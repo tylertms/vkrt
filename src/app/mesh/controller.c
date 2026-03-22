@@ -573,6 +573,15 @@ void meshControllerApplySessionActions(VKRT* vkrt, Session* session) {
         free(textureImportPath);
     }
 
+    char* environmentImportPath = NULL;
+    if (sessionTakeEnvironmentImport(session, &environmentImportPath)) {
+        VKRT_Result result = VKRT_setEnvironmentTextureFromFile(vkrt, environmentImportPath);
+        if (result != VKRT_SUCCESS) {
+            LOG_ERROR("Environment import failed (%d). File: %s", (int)result, environmentImportPath);
+        }
+        free(environmentImportPath);
+    }
+
     uint32_t removeObjectIndex = VKRT_INVALID_INDEX;
     if (sessionTakeSceneObjectRemoval(session, &removeObjectIndex)) {
         if (!removeSceneObjectHierarchy(vkrt, session, removeObjectIndex)) {

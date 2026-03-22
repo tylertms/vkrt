@@ -37,6 +37,8 @@ VKRT_Result VKRT_setToneMappingMode(VKRT* vkrt, VKRT_ToneMappingMode toneMapping
 VKRT_Result VKRT_setExposure(VKRT* vkrt, float exposure);
 VKRT_Result VKRT_setAutoExposureEnabled(VKRT* vkrt, uint8_t enabled);
 VKRT_Result VKRT_setEnvironmentLight(VKRT* vkrt, vec3 color, float strength);
+VKRT_Result VKRT_setEnvironmentTextureFromFile(VKRT* vkrt, const char* path);
+VKRT_Result VKRT_clearEnvironmentTexture(VKRT* vkrt);
 VKRT_Result VKRT_setDebugMode(VKRT* vkrt, uint32_t mode);
 VKRT_Result VKRT_setMISNEEEnabled(VKRT* vkrt, uint32_t enabled);
 VKRT_Result VKRT_setTimeRange(VKRT* vkrt, float timeBase, float timeStep);

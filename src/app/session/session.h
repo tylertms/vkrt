@@ -91,6 +91,7 @@ typedef struct SessionEditorState {
     DialogState* dialogState;
     uint8_t requestMeshImportDialog;
     uint8_t requestTextureImportDialog;
+    uint8_t requestEnvironmentImportDialog;
     uint8_t requestRenderSaveDialog;
     uint8_t requestRenderSequenceFolderDialog;
     uint32_t requestedTextureMaterialIndex;
@@ -108,6 +109,7 @@ typedef struct SessionCommandQueue {
     char* textureImportPath;
     uint32_t textureImportMaterialIndex;
     uint32_t textureImportSlot;
+    char* environmentImportPath;
     char* saveImagePath;
     SessionRenderCommand renderCommand;
     SessionRenderSettings pendingRenderJob;
@@ -130,20 +132,24 @@ void sessionDeinit(Session* session);
 
 void sessionRequestMeshImportDialog(Session* session);
 void sessionRequestTextureImportDialog(Session* session, uint32_t materialIndex, uint32_t textureSlot);
+void sessionRequestEnvironmentImportDialog(Session* session);
 void sessionRequestRenderSaveDialog(Session* session);
 void sessionRequestRenderSequenceFolderDialog(Session* session);
 int sessionTakeMeshImportDialogRequest(Session* session);
 int sessionTakeTextureImportDialogRequest(Session* session, uint32_t* outMaterialIndex, uint32_t* outTextureSlot);
+int sessionTakeEnvironmentImportDialogRequest(Session* session);
 int sessionTakeRenderSaveDialogRequest(Session* session);
 int sessionTakeRenderSequenceFolderDialogRequest(Session* session);
 
 void sessionQueueMeshImport(Session* session, const char* path);
 void sessionQueueTextureImport(Session* session, uint32_t materialIndex, uint32_t textureSlot, const char* path);
+void sessionQueueEnvironmentImport(Session* session, const char* path);
 void sessionQueueSceneObjectRemoval(Session* session, uint32_t objectIndex);
 void sessionQueueMeshRemoval(Session* session, uint32_t meshIndex);
 int sessionTakeSceneObjectRemoval(Session* session, uint32_t* outObjectIndex);
 int sessionTakeMeshImport(Session* session, char** outPath);
 int sessionTakeTextureImport(Session* session, uint32_t* outMaterialIndex, uint32_t* outTextureSlot, char** outPath);
+int sessionTakeEnvironmentImport(Session* session, char** outPath);
 int sessionTakeMeshRemoval(Session* session, uint32_t* outMeshIndex);
 
 void sessionQueueRenderSave(Session* session, const char* path);

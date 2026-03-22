@@ -23,6 +23,7 @@ typedef enum DialogKind {
     DIALOG_KIND_NONE = 0,
     DIALOG_KIND_IMPORT_MESH,
     DIALOG_KIND_IMPORT_TEXTURE,
+    DIALOG_KIND_IMPORT_ENVIRONMENT,
     DIALOG_KIND_SAVE_RENDER,
     DIALOG_KIND_PICK_SEQUENCE_FOLDER,
 } DialogKind;
@@ -64,16 +65,12 @@ static DialogState* getDialogState(Session* session) {
 
 static const char* queryDialogKindLabel(DialogKind kind) {
     switch (kind) {
-        case DIALOG_KIND_IMPORT_MESH:
-            return "mesh import";
-        case DIALOG_KIND_IMPORT_TEXTURE:
-            return "texture import";
-        case DIALOG_KIND_SAVE_RENDER:
-            return "render save";
-        case DIALOG_KIND_PICK_SEQUENCE_FOLDER:
-            return "sequence folder";
-        default:
-            return "unknown";
+        case DIALOG_KIND_IMPORT_MESH:           return "mesh import";
+        case DIALOG_KIND_IMPORT_TEXTURE:        return "texture import";
+        case DIALOG_KIND_IMPORT_ENVIRONMENT:    return "environment import";
+        case DIALOG_KIND_SAVE_RENDER:           return "render save";
+        case DIALOG_KIND_PICK_SEQUENCE_FOLDER:  return "sequence folder";
+        default: return "unknown";
     }
 }
 
@@ -133,6 +130,17 @@ static char* runDialogRequest(const DialogRequest* request) {
         }
         case DIALOG_KIND_IMPORT_TEXTURE: {
             nfdu8filteritem_t filters[] = {{"Image", "png,jpg,jpeg,bmp,tga,tif,tiff"}};
+            nfdopendialogu8args_t args = {
+                .filterList = filters,
+                .filterCount = 1,
+                .defaultPath = defaultPath,
+                .parentWindow = request->parentWindow,
+            };
+            dialogResult = NFD_OpenDialogU8_With(&selectedPath, &args);
+            break;
+        }
+        case DIALOG_KIND_IMPORT_ENVIRONMENT: {
+            nfdu8filteritem_t filters[] = {{"Image", "exr,hdr,pic,png,jpg,jpeg,bmp,tga,tif,tiff"}};
             nfdopendialogu8args_t args = {
                 .filterList = filters,
                 .filterCount = 1,
@@ -358,6 +366,9 @@ static void applyDialogResponse(Session* session, const DialogRequest* request, 
                     selectedPath
                 );
                 break;
+            case DIALOG_KIND_IMPORT_ENVIRONMENT:
+                sessionQueueEnvironmentImport(session, selectedPath);
+                break;
             case DIALOG_KIND_SAVE_RENDER:
                 sessionQueueRenderSave(session, selectedPath);
                 break;
@@ -473,6 +484,23 @@ static int tryScheduleImportTextureDialog(Session* session) {
     return dispatchPreparedDialogRequest(session, &request);
 }
 
+static int tryScheduleImportEnvironmentDialog(Session* session) {
+    if (!sessionTakeEnvironmentImportDialogRequest(session)) return 0;
+    DialogState* state = getDialogState(session);
+    if (!state) return 1;
+
+    char defaultPath[VKRT_PATH_MAX];
+    defaultPath[0] = '\0';
+    resolveExistingParentPath("assets/environments", NULL, defaultPath, sizeof(defaultPath));
+
+    DialogRequest request = {0};
+    if (!prepareDialogRequest(state, DIALOG_KIND_IMPORT_ENVIRONMENT, defaultPath, NULL, &request)) {
+        return 1;
+    }
+
+    return dispatchPreparedDialogRequest(session, &request);
+}
+
 static int tryScheduleRenderSaveDialog(Session* session) {
     if (!sessionTakeRenderSaveDialogRequest(session)) return 0;
     DialogState* state = getDialogState(session);
@@ -522,6 +550,7 @@ void editorUIProcessDialogs(Session* session) {
 
     if (tryScheduleImportMeshDialog(session)) return;
     if (tryScheduleImportTextureDialog(session)) return;
+    if (tryScheduleImportEnvironmentDialog(session)) return;
     if (tryScheduleRenderSaveDialog(session)) return;
     (void)tryScheduleSequenceFolderDialog(session);
 }

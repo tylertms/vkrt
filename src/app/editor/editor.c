@@ -6,6 +6,7 @@
 #include "dcimgui_impl_glfw.h"
 #include "dcimgui_impl_vulkan.h"
 #include "dcimgui_internal.h"
+#include "session.h"
 #include "theme.h"
 #include "debug.h"
 #include "numeric.h"
@@ -271,8 +272,10 @@ static void drawMainMenuBar(VKRT* vkrt, Session* session, const VKRT_RenderStatu
     if (!ImGui_BeginMainMenuBar()) return;
 
     if (ImGui_BeginMenu("File")) {
-        if (ImGui_MenuItem("Import Mesh")) {
-            sessionRequestMeshImportDialog(session);
+        if (ImGui_BeginMenu("Import")) {
+            if (ImGui_MenuItem("Mesh")) sessionRequestMeshImportDialog(session);
+            if (ImGui_MenuItem("Environment")) sessionRequestEnvironmentImportDialog(session);
+            ImGui_EndMenu();
         }
 
         bool canSaveRender = status &&
