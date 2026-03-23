@@ -312,7 +312,11 @@ const SceneTexture* vkrtGetSceneTexture(const VKRT* vkrt, uint32_t textureIndex)
 
 uint32_t vkrtCountTextureUsers(const VKRT* vkrt, uint32_t textureIndex) {
     if (!vkrt || textureIndex >= vkrt->core.textureCount || !vkrt->core.textures) return 0u;
-    return vkrt->core.textures[textureIndex].useCount;
+    uint32_t useCount = vkrt->core.textures[textureIndex].useCount;
+    if (vkrt->sceneSettings.environmentTextureIndex == textureIndex) {
+        useCount++;
+    }
+    return useCount;
 }
 
 void vkrtAdjustMaterialTextureUseCounts(VKRT* vkrt, const Material* material, int delta) {
@@ -489,6 +493,13 @@ VKRT_Result vkrtSceneRemoveTexture(VKRT* vkrt, uint32_t textureIndex) {
     VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
     if (stateReady != VKRT_SUCCESS) return stateReady;
     if (textureIndex >= vkrt->core.textureCount) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    if (vkrt->sceneSettings.environmentTextureIndex == textureIndex) {
+        VKRT_Result result = vkrtSceneClearEnvironmentTexture(vkrt);
+        if (result != VKRT_SUCCESS) return result;
+        if (textureIndex >= vkrt->core.textureCount) return VKRT_SUCCESS;
+    }
+
     if (vkrtCountTextureUsers(vkrt, textureIndex) != 0u) return VKRT_ERROR_OPERATION_FAILED;
 
     VKRT_Result result = vkrtWaitForAllInFlightFrames(vkrt);

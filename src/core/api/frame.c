@@ -131,6 +131,7 @@ VKRT_Result VKRT_updateScene(VKRT* vkrt) {
     VkBool32 sceneDirty = vkrt->core.sceneResourceRevision != vkrt->core.sceneRevision;
     VkBool32 selectionDirty = vkrt->core.selectionResourceRevision != vkrt->core.selectionRevision;
     VkBool32 lightDirty = vkrt->core.lightResourceRevision != vkrt->core.lightRevision;
+    VkBool32 lightsRebuilt = VK_FALSE;
     if (materialDirty || sceneDirty || selectionDirty || lightDirty) {
         VKRT_Result result = vkrtWaitForAllInFlightFrames(vkrt);
         if (result != VKRT_SUCCESS) {
@@ -147,6 +148,7 @@ VKRT_Result VKRT_updateScene(VKRT* vkrt) {
         if (result != VKRT_SUCCESS) {
             return result;
         }
+        lightsRebuilt = VK_TRUE;
     }
 
     VKRT_Result result = vkrtScenePreparePendingGeometryUploads(vkrt);
@@ -159,13 +161,24 @@ VKRT_Result VKRT_updateScene(VKRT* vkrt) {
         return result;
     }
 
-    if (sceneDirty) {
-        if (!materialDirty && lightDirty) {
+    if (lightDirty) {
+        if (!lightsRebuilt) {
             result = vkrtSceneRebuildLightBuffers(vkrt);
             if (result != VKRT_SUCCESS) {
                 return result;
             }
+            lightsRebuilt = VK_TRUE;
         }
+    }
+
+    if (lightsRebuilt && !sceneDirty) {
+        result = vkrtSceneRebuildMeshInfoBuffer(vkrt);
+        if (result != VKRT_SUCCESS) {
+            return result;
+        }
+    }
+
+    if (sceneDirty) {
         result = vkrtSceneRebuildTopLevelAccelerationStructures(vkrt);
         if (result != VKRT_SUCCESS) {
             return result;

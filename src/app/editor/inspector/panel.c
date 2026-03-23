@@ -29,8 +29,7 @@ static void drawObjectTab(VKRT* vkrt, Session* session) {
 }
 
 static void drawCameraTabContent(VKRT* vkrt, Session* session) {
-    (void)session;
-    inspectorDrawCameraTab(vkrt);
+    inspectorDrawCameraTab(vkrt, session);
 }
 
 static const InspectorPropertiesTab kInspectorPropertiesTabs[] = {

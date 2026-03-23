@@ -1,5 +1,6 @@
 #include "common.h"
 #include "debug.h"
+#include "session.h"
 #include "vkrt.h"
 
 #include "IconsFontAwesome6.h"
@@ -17,8 +18,25 @@ static const float kEnvironmentStrengthMax = 1000000.0f;
 static const int kPathDepthMin = 0;
 static const int kPathDepthMax = 64;
 
-void inspectorDrawCameraTab(VKRT* vkrt) {
-    if (!vkrt) return;
+static void formatEnvironmentTextureLabel(VKRT* vkrt, uint32_t textureIndex, char* out, size_t outSize) {
+    if (!out || outSize == 0u) return;
+
+    if (!vkrt || textureIndex == VKRT_INVALID_INDEX) {
+        snprintf(out, outSize, "None");
+        return;
+    }
+
+    VKRT_TextureSnapshot texture = {0};
+    if (VKRT_getTextureSnapshot(vkrt, textureIndex, &texture) == VKRT_SUCCESS) {
+        snprintf(out, outSize, "%s", texture.name[0] ? texture.name : "Texture");
+        return;
+    }
+
+    snprintf(out, outSize, "Texture #%u", textureIndex);
+}
+
+void inspectorDrawCameraTab(VKRT* vkrt, Session* session) {
+    if (!vkrt || !session) return;
 
     VKRT_SceneSettingsSnapshot settings = {0};
     VKRT_RenderStatusSnapshot status = {0};
@@ -106,8 +124,18 @@ void inspectorDrawCameraTab(VKRT* vkrt) {
             }
         }
 
+        ImGui_EndDisabled();
+
+        inspectorUnindentSection();
+        inspectorEndCollapsingHeaderSection();
+    }
+
+    if (inspectorBeginCollapsingHeaderSection("Environment", ImGuiTreeNodeFlags_DefaultOpen)) {
+        inspectorIndentSection();
+        ImGui_BeginDisabled(renderModeActive);
+
         float environmentStrength = settings.environmentStrength;
-        if (ImGui_DragFloatEx("Env Strength", &environmentStrength, 0.01f, 0.0f, kEnvironmentStrengthMax, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+        if (ImGui_DragFloatEx("Strength", &environmentStrength, 0.01f, 0.0f, kEnvironmentStrengthMax, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
             VKRT_Result result = VKRT_setEnvironmentLight(vkrt, settings.environmentColor, environmentStrength);
             if (result != VKRT_SUCCESS) {
                 LOG_ERROR("Updating environment strength failed (%d)", (int)result);
@@ -117,23 +145,54 @@ void inspectorDrawCameraTab(VKRT* vkrt) {
         }
 
         vec3 environmentColor = {settings.environmentColor[0], settings.environmentColor[1], settings.environmentColor[2]};
-        if (ImGui_ColorEdit3("Env Color", environmentColor, ImGuiColorEditFlags_Float)) {
+        if (ImGui_ColorEdit3("Color", environmentColor, ImGuiColorEditFlags_Float)) {
             VKRT_Result result = VKRT_setEnvironmentLight(vkrt, environmentColor, settings.environmentStrength);
             if (result != VKRT_SUCCESS) {
                 LOG_ERROR("Updating environment color failed (%d)", (int)result);
             }
         }
 
-        ImGui_EndDisabled();
+        if (inspectorBeginKeyValueTable("##environment_texture")) {
+            char environmentTextureLabel[VKRT_NAME_LEN];
+            formatEnvironmentTextureLabel(
+                vkrt,
+                settings.environmentTextureIndex,
+                environmentTextureLabel,
+                sizeof(environmentTextureLabel)
+            );
 
-        ImGui_Spacing();
-        if (inspectorPaddedButton(ICON_FA_ARROWS_ROTATE " Reset Accumulation")) {
-            VKRT_Result result = VKRT_invalidateAccumulation(vkrt);
-            if (result != VKRT_SUCCESS) {
-                LOG_ERROR("Resetting accumulation failed (%d)", (int)result);
-            }
+            ImGui_TableNextRow();
+            ImGui_TableSetColumnIndex(0);
+            ImGui_AlignTextToFramePadding();
+            ImGui_TextDisabled("Texture");
+
+            ImGui_TableSetColumnIndex(1);
+            ImGui_AlignTextToFramePadding();
+            ImGui_TextUnformatted(environmentTextureLabel);
+            inspectorEndKeyValueTable();
         }
 
+        if (inspectorPaddedButton(ICON_FA_FOLDER_OPEN " Load")) {
+            sessionRequestEnvironmentImportDialog(session);
+        }
+        tooltipOnHover("Load environment texture.");
+
+        ImGui_SameLine();
+        ImGui_BeginDisabled(settings.environmentTextureIndex == VKRT_INVALID_INDEX);
+        if (inspectorPaddedButton(ICON_FA_XMARK " Clear")) {
+            VKRT_Result result = VKRT_clearEnvironmentTexture(vkrt);
+            if (result != VKRT_SUCCESS) {
+                LOG_ERROR("Clearing environment texture failed (%d)", (int)result);
+            }
+        }
+        if (settings.environmentTextureIndex != VKRT_INVALID_INDEX) {
+            tooltipOnHover("Clear environment texture.");
+        } else {
+            tooltipOnHover("No environment texture is loaded.");
+        }
+        ImGui_EndDisabled();
+
+        ImGui_EndDisabled();
         inspectorUnindentSection();
         inspectorEndCollapsingHeaderSection();
     }

@@ -90,8 +90,8 @@ void inspectorPrepareRenderState(VKRT* vkrt, Session* session) {
     updateRenderTimer(&status, timer, nowUs);
 }
 
-static void drawIdleOutputSection(VKRT* vkrt, Session* session, const VKRT_SceneSettingsSnapshot* settings) {
-    if (!vkrt || !session || !settings) return;
+static void drawIdleOutputSection(Session* session) {
+    if (!session) return;
 
     int outputSize[2] = {
         (int)session->editor.renderConfig.width,
@@ -116,12 +116,10 @@ static void drawIdleOutputSection(VKRT* vkrt, Session* session, const VKRT_Scene
     inspectorEndCollapsingHeaderSection();
 }
 
-static void drawIdleRenderState(VKRT* vkrt, Session* session, const SessionRenderTimer* timer, const VKRT_SceneSettingsSnapshot* settings) {
+static void drawIdleRenderState(Session* session, const SessionRenderTimer* timer) {
     bool animationEnabled = session->editor.renderConfig.animation.enabled != 0;
 
-    drawIdleOutputSection(vkrt, session, settings);
-
-    ImGui_Spacing();
+    drawIdleOutputSection(session);
 
     const char* startLabel = animationEnabled
         ? ICON_FA_CLAPPERBOARD " Start Sequence"
@@ -148,12 +146,11 @@ static void drawIdleRenderState(VKRT* vkrt, Session* session, const SessionRende
 static void drawRenderProgressSection(
     const VKRT_RenderStatusSnapshot* status,
     const VKRT_RuntimeSnapshot* runtime,
-    const VKRT_SceneSettingsSnapshot* settings,
     const RenderSequencer* sequencer,
     float elapsedActiveSeconds,
     float completedSeconds
 ) {
-    if (!status || !runtime || !settings || !sequencer) return;
+    if (!status || !runtime || !sequencer) return;
 
     ImGui_TextDisabled("Output %ux%u", runtime->renderWidth, runtime->renderHeight);
     if (status->renderTargetSamples > 0) {
@@ -266,11 +263,9 @@ void inspectorDrawRenderTab(VKRT* vkrt, Session* session) {
     if (!vkrt || !session) return;
     inspectorPrepareRenderState(vkrt, session);
 
-    VKRT_SceneSettingsSnapshot settings = {0};
     VKRT_RenderStatusSnapshot status = {0};
     VKRT_RuntimeSnapshot runtime = {0};
-    if (VKRT_getSceneSettings(vkrt, &settings) != VKRT_SUCCESS ||
-        VKRT_getRenderStatus(vkrt, &status) != VKRT_SUCCESS ||
+    if (VKRT_getRenderStatus(vkrt, &status) != VKRT_SUCCESS ||
         VKRT_getRuntimeSnapshot(vkrt, &runtime) != VKRT_SUCCESS) {
         return;
     }
@@ -279,11 +274,11 @@ void inspectorDrawRenderTab(VKRT* vkrt, Session* session) {
     SessionRenderTimer* timer = &session->runtime.renderTimer;
 
     if (!status.renderModeActive) {
-        drawIdleRenderState(vkrt, session, timer, &settings);
+        drawIdleRenderState(session, timer);
         return;
     }
 
     float elapsedActiveSeconds = queryActiveRenderSeconds(timer, nowUs);
-    drawRenderProgressSection(&status, &runtime, &settings, &session->runtime.sequencer, elapsedActiveSeconds, timer->completedSeconds);
+    drawRenderProgressSection(&status, &runtime, &session->runtime.sequencer, elapsedActiveSeconds, timer->completedSeconds);
     drawRenderActionsSection(vkrt, session, &status, &session->runtime.sequencer);
 }

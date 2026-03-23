@@ -271,10 +271,24 @@ static void drawMainMenuBar(VKRT* vkrt, Session* session, const VKRT_RenderStatu
     if (!vkrt || !session) return;
     if (!ImGui_BeginMainMenuBar()) return;
 
+    VKRT_SceneSettingsSnapshot settings = {0};
+    bool haveSettings = VKRT_getSceneSettings(vkrt, &settings) == VKRT_SUCCESS;
+    bool canClearEnvironment = haveSettings && settings.environmentTextureIndex != VKRT_INVALID_INDEX;
+
     if (ImGui_BeginMenu("File")) {
         if (ImGui_BeginMenu("Import")) {
             if (ImGui_MenuItem("Mesh")) sessionRequestMeshImportDialog(session);
-            if (ImGui_MenuItem("Environment")) sessionRequestEnvironmentImportDialog(session);
+            ImGui_EndMenu();
+        }
+
+        if (ImGui_BeginMenu("Environment")) {
+            if (ImGui_MenuItem("Load")) sessionRequestEnvironmentImportDialog(session);
+            if (ImGui_MenuItemEx("Clear", NULL, false, canClearEnvironment)) {
+                VKRT_Result result = VKRT_clearEnvironmentTexture(vkrt);
+                if (result != VKRT_SUCCESS) {
+                    LOG_ERROR("Clearing environment texture failed (%d)", (int)result);
+                }
+            }
             ImGui_EndMenu();
         }
 

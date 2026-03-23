@@ -49,10 +49,13 @@ foreach shader_program : shader_programs
 
   if 'ser' in shader_features
     shader_capabilities += [
-      '-capability', 'spvShaderInvocationReorderEXT',
-      '-capability', 'spvShaderInvocationReorderNV',
+      '-capability', 'SPV_EXT_shader_invocation_reorder',
+      '-capability', 'spvShaderInvocationReorderEXT'
     ]
-    shader_extra_args += ['-DVKRT_SER_ENABLED']
+    shader_extra_args += [
+      '-DVKRT_SER_ENABLED',
+      '-Wno-41012',
+    ]
   endif
 
   shader_target = custom_target(
