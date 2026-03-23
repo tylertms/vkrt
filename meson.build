@@ -10,6 +10,8 @@ project('vkrt', ['c', 'cpp'],
 )
 
 sys = host_machine.system()
+is_linux = sys == 'linux'
+is_windows = sys == 'windows'
 
 cc = meson.get_compiler('c')
 cpp = meson.get_compiler('cpp')
@@ -20,7 +22,7 @@ cpp_args = []
 app_link_args = []
 define_prefix = cc.get_argument_syntax() == 'msvc' ? '/D' : '-D'
 
-if sys == 'linux' and cc.get_argument_syntax() == 'gcc'
+if is_linux and cc.get_argument_syntax() == 'gcc'
   c_args += [define_prefix + '_GNU_SOURCE']
 endif
 
@@ -128,8 +130,12 @@ glfw_options.add_cmake_defines({
   'GLFW_BUILD_EXAMPLES': 'OFF',
   'GLFW_BUILD_TESTS': 'OFF',
   'GLFW_INSTALL': 'OFF',
-  'GLFW_BUILD_WAYLAND': 'ON',
+  'GLFW_BUILD_WIN32': is_windows ? 'ON' : 'OFF',
+  'GLFW_BUILD_COCOA': 'OFF',
+  'GLFW_BUILD_X11': is_linux ? 'ON' : 'OFF',
+  'GLFW_BUILD_WAYLAND': is_linux ? 'ON' : 'OFF',
   'CMAKE_MSVC_RUNTIME_LIBRARY': 'MultiThreaded$<$<CONFIG:Debug>:Debug>',
+  'CMAKE_SUPPRESS_DEVELOPER_WARNINGS': 'TRUE',
 })
 glfw_project = cmake.subproject('glfw', options: glfw_options)
 glfw_dep = glfw_project.dependency('glfw')
@@ -148,7 +154,14 @@ spng_project = subproject(
 )
 spng_dep = spng_project.get_variable('spng_dep')
 
-turbojpeg_project = subproject('libjpeg-turbo', default_options: ['default_library=static'])
+turbojpeg_project = subproject(
+  'libjpeg-turbo',
+  default_options: [
+    'default_library=static',
+    'tests=disabled',
+    'warning_level=0',
+  ]
+)
 turbojpeg_dep = turbojpeg_project.get_variable('turbojpeg_dep')
 
 c_args += [define_prefix + 'VKRT_GLFW_VERSION="' + glfw_dep.version() + '"']
@@ -209,10 +222,10 @@ if not file_dialogs_opt.disabled()
   nfd_deps = []
   nfd_cpp_args = []
 
-  if sys == 'windows'
+  if is_windows
     nfd_source = files('external/nfd/src/nfd_win.cpp')
     file_dialogs_enabled = true
-  elif sys == 'linux'
+  elif is_linux
     nfd_backend = get_option('nfd_backend')
 
     dbus_dep = dependency('dbus-1', required: false, method: 'pkg-config')
