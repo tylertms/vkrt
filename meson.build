@@ -120,28 +120,36 @@ core_internal_includes = include_directories(
 
 vulkan_dep = dependency('vulkan', required: true)
 
-glfw_dep = dependency('glfw3', required: false, allow_fallback: false)
-if not glfw_dep.found()
-  glfw_options = cmake.subproject_options()
-  glfw_options.append_compile_args('c', cc.get_argument_syntax() == 'msvc' ? '/w' : '-w')
-  glfw_options.add_cmake_defines({
-    'BUILD_SHARED_LIBS': 'OFF',
-    'GLFW_BUILD_DOCS': 'OFF',
-    'GLFW_BUILD_EXAMPLES': 'OFF',
-    'GLFW_BUILD_TESTS': 'OFF',
-    'GLFW_INSTALL': 'OFF',
-    'GLFW_BUILD_WAYLAND': 'ON',
-    'CMAKE_MSVC_RUNTIME_LIBRARY': 'MultiThreaded',
-  })
-  glfw_project = cmake.subproject('glfw', options: glfw_options)
-  glfw_dep = glfw_project.dependency('glfw')
-endif
+glfw_options = cmake.subproject_options()
+glfw_options.append_compile_args('c', cc.get_argument_syntax() == 'msvc' ? '/w' : '-w')
+glfw_options.add_cmake_defines({
+  'BUILD_SHARED_LIBS': 'OFF',
+  'GLFW_BUILD_DOCS': 'OFF',
+  'GLFW_BUILD_EXAMPLES': 'OFF',
+  'GLFW_BUILD_TESTS': 'OFF',
+  'GLFW_INSTALL': 'OFF',
+  'GLFW_BUILD_WAYLAND': 'ON',
+  'CMAKE_MSVC_RUNTIME_LIBRARY': 'MultiThreaded$<$<CONFIG:Debug>:Debug>',
+})
+glfw_project = cmake.subproject('glfw', options: glfw_options)
+glfw_dep = glfw_project.dependency('glfw')
 
 threads_dep = dependency('threads')
 rt_dep = dependency('rt', required: false)
-spng_dep = dependency('spng', required: true)
-turbojpeg_dep = dependency('libturbojpeg', required: true)
-zlib_dep = dependency('zlib', required: true)
+zlib_project = subproject('zlib', default_options: ['default_library=static'])
+zlib_dep = zlib_project.get_variable('zlib_dep')
+
+spng_project = subproject(
+  'spng',
+  default_options: [
+    'default_library=static',
+    'static_zlib=true',
+  ]
+)
+spng_dep = spng_project.get_variable('spng_dep')
+
+turbojpeg_project = subproject('libjpeg-turbo', default_options: ['default_library=static'])
+turbojpeg_dep = turbojpeg_project.get_variable('turbojpeg_dep')
 
 c_args += [define_prefix + 'VKRT_GLFW_VERSION="' + glfw_dep.version() + '"']
 c_args += [define_prefix + 'VKRT_SPNG_VERSION="' + spng_dep.version() + '"']
