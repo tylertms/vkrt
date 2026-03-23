@@ -121,12 +121,14 @@ def should_bundle_library(name: str) -> bool:
 def stage_bundle(binary_path: Path, app_dir: Path, repo_root: Path) -> None:
     app_bin_dir = app_dir / "usr" / "bin"
     app_lib_dir = app_dir / "usr" / "lib"
+    app_icon_path = app_dir / "vkrt.png"
     app_bin_dir.mkdir(parents=True, exist_ok=True)
     app_lib_dir.mkdir(parents=True, exist_ok=True)
 
     copy_file(binary_path, app_bin_dir / "vkrt", mode=0o755)
     copy_tree(repo_root / "assets", app_bin_dir / "assets")
     copy_file(repo_root / "README.md", app_bin_dir / "README.md", mode=0o644)
+    copy_file(repo_root / "assets" / "images" / "icon.png", app_icon_path, mode=0o644)
 
     write_text(
         app_dir / "vkrt.desktop",
@@ -136,6 +138,7 @@ def stage_bundle(binary_path: Path, app_dir: Path, repo_root: Path) -> None:
                 "Type=Application",
                 "Name=vkrt",
                 "Exec=vkrt",
+                "Icon=vkrt",
                 "Categories=Graphics;",
                 "Terminal=false",
                 "",

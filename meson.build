@@ -282,11 +282,12 @@ spng_dep = spng_project.get_variable('spng_dep')
 
 turbojpeg_project = subproject(
   'libjpeg-turbo',
-  default_options: [
-    'default_library=static',
-    'tests=disabled',
-    'warning_level=0',
-  ]
+  default_options: {
+    'default_library': 'static',
+    'tests': 'disabled',
+    'warning_level': '0',
+    'c_args': is_linux ? ['-D_DEFAULT_SOURCE', '-include', 'strings.h'] : [],
+  }
 )
 turbojpeg_dep = turbojpeg_project.get_variable('turbojpeg_dep')
 
