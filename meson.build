@@ -23,7 +23,12 @@ app_link_args = []
 define_prefix = cc.get_argument_syntax() == 'msvc' ? '/D' : '-D'
 
 if is_linux and cc.get_argument_syntax() == 'gcc'
-  c_args += [define_prefix + '_GNU_SOURCE']
+  linux_feature_test_args = [
+    define_prefix + '_GNU_SOURCE',
+    define_prefix + '_POSIX_C_SOURCE=200112L',
+  ]
+  c_args += linux_feature_test_args
+  cpp_args += linux_feature_test_args
 endif
 
 if is_windows
