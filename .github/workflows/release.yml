@@ -135,13 +135,13 @@ jobs:
       - name: Install Linux Packages
         run: |
           sudo apt-get update
-          sudo apt-get install -y libdbus-1-dev pkg-config libfuse2 desktop-file-utils libwayland-dev libxkbcommon-dev wayland-protocols libxrandr-dev libxinerama-dev libxi-dev libxcursor-dev
+          sudo apt-get install -y libdbus-1-dev pkg-config libfuse2 desktop-file-utils libwayland-dev libxkbcommon-dev wayland-protocols libx11-dev libxrandr-dev libxinerama-dev libxi-dev libxcursor-dev libxext-dev
 
       - name: Install Meson and Ninja
         run: python -m pip install meson ninja
 
       - name: Configure
-        run: meson setup build --buildtype=release -Dnfd_backend=portal -Dvkrt_version='${{ github.ref_name }}'
+        run: meson setup build --buildtype=release -Dlinux_window_backend=both -Dnfd_backend=portal -Dvkrt_version='${{ github.ref_name }}'
 
       - name: Build
         run: meson compile -C build
@@ -149,44 +149,15 @@ jobs:
       - name: Test
         run: ./build/vkrt --help && ./build/vkrt --version
 
-      - name: Build AppImage
+      - name: Package Linux Release
+        env:
+          APPIMAGETOOL_VERSION: ${{ env.APPIMAGETOOL_VERSION }}
+          APPIMAGETOOL_SHA256: ${{ env.APPIMAGETOOL_SHA256 }}
         run: |
-          mkdir -p AppDir/usr/bin AppDir/usr/lib
+          python scripts/build_appimage.py --appimage
 
-          cp build/vkrt AppDir/usr/bin/
-          cp -r assets AppDir/usr/bin/
-          cp README.md AppDir/usr/bin/
-
-          DBUS_LIB=$(ldconfig -p | grep 'libdbus-1.so.3 ' | head -1 | awk '{print $NF}')
-          [ -n "$DBUS_LIB" ] && cp "$DBUS_LIB" AppDir/usr/lib/
-
-          printf '[Desktop Entry]\nType=Application\nName=vkrt\nExec=vkrt\nIcon=vkrt\nCategories=Graphics;\nTerminal=false\n' > AppDir/vkrt.desktop
-          python3 -c "
-          import struct, zlib
-          def png(w,h,rgb):
-              def chunk(ty,data):
-                  return struct.pack('>I',len(data))+ty+data+struct.pack('>I',zlib.crc32(ty+data)&0xffffffff)
-              raw=b''.join(b'\x00'+bytes(rgb)*w for _ in range(h))
-              return b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',w,h,8,2,0,0,0))+chunk(b'IDAT',zlib.compress(raw))+chunk(b'IEND',b'')
-          open('AppDir/vkrt.png','wb').write(png(64,64,(42,42,42)))
-          "
-
-          printf '#!/bin/bash\nHERE="$(dirname "$(readlink -f "$0")")"\nexport LD_LIBRARY_PATH="${HERE}/usr/lib:${LD_LIBRARY_PATH}"\ncd "${HERE}/usr/bin"\nexec "./vkrt" "$@"\n' > AppDir/AppRun
-          chmod +x AppDir/AppRun
-
-          wget -q "https://github.com/AppImage/appimagetool/releases/download/${{ env.APPIMAGETOOL_VERSION }}/appimagetool-x86_64.AppImage" -O appimagetool
-          echo "${{ env.APPIMAGETOOL_SHA256 }}  appimagetool" | sha256sum -c -
-          chmod +x appimagetool
-
-          ARCH=x86_64 ./appimagetool AppDir vkrt-linux-x86_64.AppImage
-
-      - name: Stage Tarball
-        run: |
-          mkdir -p vkrt-linux-x64
-          cp build/vkrt vkrt-linux-x64/
-          cp -r assets vkrt-linux-x64/
-          cp README.md vkrt-linux-x64/
-          tar -czf vkrt-linux-x64.tar.gz -C vkrt-linux-x64 .
+      - name: Test Packaged Linux Bundle
+        run: ./vkrt-linux-x64/vkrt --help && ./vkrt-linux-x64/vkrt --version
 
       - name: Upload Release Assets
         if: github.ref_type == 'tag'

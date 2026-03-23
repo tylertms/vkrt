@@ -28,7 +28,7 @@ jobs:
           - name: Ubuntu
             os: ubuntu-22.04
             archive_name: vkrt-linux-x64
-            meson_args: --buildtype=release -Dnfd_backend=portal
+            meson_args: --buildtype=release -Dlinux_window_backend=both -Dnfd_backend=portal
 
     steps:
       - name: Checkout
@@ -104,7 +104,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libdbus-1-dev pkg-config libwayland-dev libxkbcommon-dev wayland-protocols libxrandr-dev libxinerama-dev libxi-dev libxcursor-dev
+          sudo apt-get install -y libdbus-1-dev pkg-config libwayland-dev libxkbcommon-dev wayland-protocols libx11-dev libxrandr-dev libxinerama-dev libxi-dev libxcursor-dev libxext-dev
 
       - name: Install Meson and Ninja
         run: python -m pip install meson ninja
@@ -138,12 +138,18 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          artifact_dir="dist/${{ matrix.archive_name }}"
-          mkdir -p "${artifact_dir}"
-          cp build/vkrt "${artifact_dir}/"
+          mkdir -p dist
+          BUNDLE_DIR="dist/${{ matrix.archive_name }}" TARBALL_PATH="dist/${{ matrix.archive_name }}.tar.gz" python scripts/build_appimage.py
+
+      - name: Test Linux Package
+        if: runner.os == 'Linux'
+        shell: bash
+        run: ./dist/${{ matrix.archive_name }}/vkrt --help && ./dist/${{ matrix.archive_name }}/vkrt --version
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.archive_name }}
-          path: dist/${{ matrix.archive_name }}
+          path: |
+            dist/${{ matrix.archive_name }}
+            dist/${{ matrix.archive_name }}.tar.gz
