@@ -1,5 +1,6 @@
 #include "textures.h"
 
+#include "debug.h"
 #include "environment.h"
 #include "image.h"
 #include "images.h"
@@ -79,12 +80,23 @@ static int textureSlotExpectsColor(uint32_t textureSlot) {
         textureSlot == VKRT_MATERIAL_TEXTURE_SLOT_EMISSIVE;
 }
 
+static int textureCompatibleWithSlot(uint32_t textureSlot, const SceneTexture* texture) {
+    if (!texture) return 0;
+    if (textureSlotExpectsColor(textureSlot)) {
+        return texture->colorSpace == VKRT_TEXTURE_COLOR_SPACE_SRGB ||
+            texture->colorSpace == VKRT_TEXTURE_COLOR_SPACE_LINEAR;
+    }
+    return texture->colorSpace == VKRT_TEXTURE_COLOR_SPACE_LINEAR;
+}
+
 static void destroySceneTextureResources(VKRT* vkrt, SceneTexture* texture) {
     if (!texture) return;
     vkrtDestroyImageResources(vkrt, &texture->image, &texture->view, &texture->memory);
     texture->width = 0u;
     texture->height = 0u;
+    texture->format = VKRT_TEXTURE_FORMAT_RGBA8_UNORM;
     texture->colorSpace = VKRT_TEXTURE_COLOR_SPACE_SRGB;
+    texture->useCount = 0u;
     texture->name[0] = '\0';
 }
 
@@ -144,16 +156,43 @@ static VKRT_Result ensureTextureFallback(VKRT* vkrt) {
     if (vkrt->core.textureFallbackView != VK_NULL_HANDLE) return VKRT_SUCCESS;
 
     static const uint8_t kFallbackPixel[4] = {255u, 255u, 255u, 255u};
-    return vkrtCreateSampledTextureImageFromPixels(
+    return vkrtCreateSampledTextureImageFromData(
         vkrt,
         kFallbackPixel,
         1u,
         1u,
-        VKRT_TEXTURE_COLOR_SPACE_LINEAR,
+        VK_FORMAT_R8G8B8A8_UNORM,
+        4u,
         &vkrt->core.textureFallbackImage,
         &vkrt->core.textureFallbackView,
         &vkrt->core.textureFallbackMemory
     );
+}
+
+static int queryTextureVkFormat(uint32_t format, uint32_t colorSpace, VkFormat* outFormat) {
+    if (!outFormat) return 0;
+
+    switch (format) {
+        case VKRT_TEXTURE_FORMAT_RGBA8_UNORM:
+            *outFormat = colorSpace == VKRT_TEXTURE_COLOR_SPACE_SRGB
+                ? VK_FORMAT_R8G8B8A8_SRGB
+                : VK_FORMAT_R8G8B8A8_UNORM;
+            return 1;
+        case VKRT_TEXTURE_FORMAT_RGBA16_UNORM:
+            if (colorSpace != VKRT_TEXTURE_COLOR_SPACE_LINEAR) return 0;
+            *outFormat = VK_FORMAT_R16G16B16A16_UNORM;
+            return 1;
+        case VKRT_TEXTURE_FORMAT_RGBA16_SFLOAT:
+            if (colorSpace != VKRT_TEXTURE_COLOR_SPACE_LINEAR) return 0;
+            *outFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
+            return 1;
+        case VKRT_TEXTURE_FORMAT_RGBA32_SFLOAT:
+            if (colorSpace != VKRT_TEXTURE_COLOR_SPACE_LINEAR) return 0;
+            *outFormat = VK_FORMAT_R32G32B32A32_SFLOAT;
+            return 1;
+        default:
+            return 0;
+    }
 }
 
 static int uploadSceneTexture(
@@ -162,18 +201,31 @@ static int uploadSceneTexture(
     const void* pixels,
     uint32_t width,
     uint32_t height,
+    uint32_t format,
     uint32_t colorSpace,
     SceneTexture* outTexture
 ) {
     if (!name || !pixels || !outTexture) return 0;
 
     *outTexture = (SceneTexture){0};
-    if (vkrtCreateSampledTextureImageFromPixels(
+    VkFormat vkFormat = VK_FORMAT_UNDEFINED;
+    size_t byteSize = 0u;
+
+    if (!queryTextureVkFormat(format, colorSpace, &vkFormat)) {
+        LOG_ERROR("Unsupported texture upload format/color space combination (%u, %u)", format, colorSpace);
+        return 0;
+    }
+    if (!vkrtTryComputeTextureByteSize(width, height, format, &byteSize)) {
+        return 0;
+    }
+
+    if (vkrtCreateSampledTextureImageFromData(
         vkrt,
         pixels,
         width,
         height,
-        colorSpace,
+        vkFormat,
+        (VkDeviceSize)byteSize,
         &outTexture->image,
         &outTexture->view,
         &outTexture->memory
@@ -183,27 +235,20 @@ static int uploadSceneTexture(
 
     outTexture->width = width;
     outTexture->height = height;
+    outTexture->format = format;
     outTexture->colorSpace = colorSpace;
     snprintf(outTexture->name, sizeof(outTexture->name), "%s", name[0] ? name : "Texture");
     return 1;
 }
 
-static VKRT_Result appendSceneTextureFromPixels(
+static VKRT_Result appendSceneTexture(
     VKRT* vkrt,
-    const char* name,
-    const void* pixels,
-    uint32_t width,
-    uint32_t height,
-    uint32_t colorSpace,
+    SceneTexture* texture,
     uint32_t* outTextureIndex
 ) {
+    if (!vkrt || !texture) return VKRT_ERROR_INVALID_ARGUMENT;
     if (outTextureIndex) *outTextureIndex = VKRT_INVALID_INDEX;
     if (vkrt->core.textureCount >= VKRT_MAX_BINDLESS_TEXTURES) {
-        return VKRT_ERROR_OPERATION_FAILED;
-    }
-
-    SceneTexture texture = {0};
-    if (!uploadSceneTexture(vkrt, name ? name : "Texture", pixels, width, height, colorSpace, &texture)) {
         return VKRT_ERROR_OPERATION_FAILED;
     }
 
@@ -213,12 +258,12 @@ static VKRT_Result appendSceneTextureFromPixels(
         (size_t)(textureIndex + 1u) * sizeof(SceneTexture)
     );
     if (!resized) {
-        destroySceneTextureResources(vkrt, &texture);
+        destroySceneTextureResources(vkrt, texture);
         return VKRT_ERROR_OUT_OF_MEMORY;
     }
 
     vkrt->core.textures = resized;
-    vkrt->core.textures[textureIndex] = texture;
+    vkrt->core.textures[textureIndex] = *texture;
     vkrt->core.textureCount = textureIndex + 1u;
     if (outTextureIndex) *outTextureIndex = textureIndex;
     return VKRT_SUCCESS;
@@ -293,6 +338,7 @@ VKRT_Result vkrtSceneAddTextureFromPixels(
     const void* pixels,
     uint32_t width,
     uint32_t height,
+    uint32_t format,
     uint32_t colorSpace,
     uint32_t* outTextureIndex
 ) {
@@ -300,12 +346,12 @@ VKRT_Result vkrtSceneAddTextureFromPixels(
     VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
     if (stateReady != VKRT_SUCCESS) return stateReady;
     if (!pixels || width == 0u || height == 0u) return VKRT_ERROR_INVALID_ARGUMENT;
-    if (!vkrtTextureColorSpaceValid(colorSpace)) {
+    if (!vkrtTextureFormatCompatibleWithColorSpace(format, colorSpace)) {
         return VKRT_ERROR_INVALID_ARGUMENT;
     }
 
     size_t byteSize = 0u;
-    if (!vkrtTryComputeRGBA8ByteSize(width, height, &byteSize)) {
+    if (!vkrtTryComputeTextureByteSize(width, height, format, &byteSize)) {
         return VKRT_ERROR_INVALID_ARGUMENT;
     }
     (void)byteSize;
@@ -316,7 +362,12 @@ VKRT_Result vkrtSceneAddTextureFromPixels(
     result = vkrtEnsureTextureBindings(vkrt);
     if (result != VKRT_SUCCESS) return result;
 
-    result = appendSceneTextureFromPixels(vkrt, name ? name : "Texture", pixels, width, height, colorSpace, outTextureIndex);
+    SceneTexture texture = {0};
+    if (!uploadSceneTexture(vkrt, name ? name : "Texture", pixels, width, height, format, colorSpace, &texture)) {
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+
+    result = appendSceneTexture(vkrt, &texture, outTextureIndex);
     if (result != VKRT_SUCCESS) return result;
 
     vkrtMarkTextureResourcesDirty(vkrt);
@@ -342,7 +393,7 @@ VKRT_Result vkrtSceneAddTexturesBatch(
         if (!vkrtTextureUploadValid(upload)) return VKRT_ERROR_INVALID_ARGUMENT;
 
         size_t byteSize = 0u;
-        if (!vkrtTryComputeRGBA8ByteSize(upload->width, upload->height, &byteSize)) {
+        if (!vkrtTryComputeTextureByteSize(upload->width, upload->height, upload->format, &byteSize)) {
             return VKRT_ERROR_INVALID_ARGUMENT;
         }
         (void)byteSize;
@@ -356,15 +407,21 @@ VKRT_Result vkrtSceneAddTexturesBatch(
 
     uint32_t addedCount = 0u;
     for (size_t i = 0; i < uploadCount; i++) {
-        result = appendSceneTextureFromPixels(
+        SceneTexture texture = {0};
+        if (!uploadSceneTexture(
             vkrt,
             uploads[i].name ? uploads[i].name : "Texture",
             uploads[i].pixels,
             uploads[i].width,
             uploads[i].height,
+            uploads[i].format,
             uploads[i].colorSpace,
-            outTextureIndices ? &outTextureIndices[i] : NULL
-        );
+            &texture
+        )) {
+            result = VKRT_ERROR_OPERATION_FAILED;
+        } else {
+            result = appendSceneTexture(vkrt, &texture, outTextureIndices ? &outTextureIndices[i] : NULL);
+        }
         if (result == VKRT_SUCCESS) {
             addedCount++;
             continue;
@@ -409,7 +466,7 @@ VKRT_Result vkrtSceneAddTextureFromFile(
     }
 
     VKRT_LoadedImage image = {0};
-    if (!vkrtLoadImageFromFile(resolvedPath, &image)) {
+    if (!vkrtLoadImageFromFile(resolvedPath, colorSpace, &image)) {
         return VKRT_ERROR_OPERATION_FAILED;
     }
 
@@ -420,7 +477,8 @@ VKRT_Result vkrtSceneAddTextureFromFile(
         image.pixels,
         image.width,
         image.height,
-        colorSpace,
+        image.format,
+        image.colorSpace,
         outTextureIndex
     );
     vkrtFreeLoadedImage(&image);
@@ -501,9 +559,7 @@ VKRT_Result vkrtSceneSetMaterialTexture(
     if (textureIndex != VKRT_INVALID_INDEX) {
         const SceneTexture* texture = vkrtGetSceneTexture(vkrt, textureIndex);
         if (!texture) return VKRT_ERROR_INVALID_ARGUMENT;
-        if (textureSlotExpectsColor(textureSlot)) {
-            if (texture->colorSpace != VKRT_TEXTURE_COLOR_SPACE_SRGB) return VKRT_ERROR_INVALID_ARGUMENT;
-        } else if (texture->colorSpace != VKRT_TEXTURE_COLOR_SPACE_LINEAR) {
+        if (!textureCompatibleWithSlot(textureSlot, texture)) {
             return VKRT_ERROR_INVALID_ARGUMENT;
         }
     }

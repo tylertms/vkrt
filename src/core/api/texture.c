@@ -6,14 +6,16 @@ VKRT_Result VKRT_addTextureFromPixels(
     const void* pixels,
     uint32_t width,
     uint32_t height,
+    uint32_t format,
     uint32_t colorSpace,
     uint32_t* outTextureIndex
 ) {
     if (outTextureIndex) *outTextureIndex = VKRT_INVALID_INDEX;
-    if (!vkrt || !pixels || width == 0u || height == 0u || !vkrtTextureColorSpaceValid(colorSpace)) {
+    if (!vkrt || !pixels || width == 0u || height == 0u ||
+        !vkrtTextureFormatCompatibleWithColorSpace(format, colorSpace)) {
         return VKRT_ERROR_INVALID_ARGUMENT;
     }
-    return vkrtSceneAddTextureFromPixels(vkrt, name, pixels, width, height, colorSpace, outTextureIndex);
+    return vkrtSceneAddTextureFromPixels(vkrt, name, pixels, width, height, format, colorSpace, outTextureIndex);
 }
 
 VKRT_Result VKRT_addTextureFromFile(

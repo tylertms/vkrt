@@ -9,9 +9,10 @@ typedef struct MaterialImportEntry {
 
 typedef struct TextureImportEntry {
     char* name;
-    uint8_t* rgba8;
+    void* pixels;
     uint32_t width;
     uint32_t height;
+    uint32_t format;
     uint32_t colorSpace;
 } TextureImportEntry;
 

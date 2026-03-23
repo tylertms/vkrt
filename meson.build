@@ -75,8 +75,8 @@ external_includes = include_directories(
   'external/imgui/icons',
   'external/cglm/include',
   'external/cgltf/include',
-  'external/stb',
   'external/nfd/src/include',
+  'external/tinyexr',
   is_system: true,
 )
 
@@ -139,12 +139,22 @@ endif
 
 threads_dep = dependency('threads')
 rt_dep = dependency('rt', required: false)
+spng_dep = dependency('spng', required: true)
+turbojpeg_dep = dependency('libturbojpeg', required: true)
+zlib_dep = dependency('zlib', required: true)
+
+c_args += [define_prefix + 'VKRT_GLFW_VERSION="' + glfw_dep.version() + '"']
+c_args += [define_prefix + 'VKRT_SPNG_VERSION="' + spng_dep.version() + '"']
+c_args += [define_prefix + 'VKRT_TURBOJPEG_VERSION="' + turbojpeg_dep.version() + '"']
 
 core_dependencies = [
   vulkan_dep,
   glfw_dep,
   threads_dep,
   rt_dep,
+  spng_dep,
+  turbojpeg_dep,
+  zlib_dep,
 ]
 
 app_dependencies = [

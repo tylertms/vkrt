@@ -29,7 +29,10 @@ void applyCameraInput(VKRT* vkrt, const VKRT_CameraInput* input) {
     glm_vec3_cross(right, viewDir, up);
     glm_vec3_normalize(up);
 
-    if (input->panning) {
+    int hasPanDelta = input->panDx != 0.0f || input->panDy != 0.0f;
+    int hasOrbitDelta = input->orbitDx != 0.0f || input->orbitDy != 0.0f;
+
+    if (input->panning && hasPanDelta) {
         float s = panSpeed * dist;
         float mx = -input->panDx * s;
         float my = input->panDy * s;
@@ -41,7 +44,7 @@ void applyCameraInput(VKRT* vkrt, const VKRT_CameraInput* input) {
         updateCamera(vkrt);
     }
 
-    if (input->orbiting) {
+    if (input->orbiting && hasOrbitDelta) {
         const float PI_2 = 1.5707963267948966f;
         const float EPS = 0.001f;
 

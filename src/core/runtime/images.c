@@ -115,23 +115,20 @@ VKRT_Result vkrtCreateDeviceImage(
     return createImageWithMemory(vkrt, extent, format, usage, outImage, outView, outMemory);
 }
 
-VKRT_Result vkrtCreateSampledTextureImageFromPixels(
+VKRT_Result vkrtCreateSampledTextureImageFromData(
     VKRT* vkrt,
     const void* pixels,
     uint32_t width,
     uint32_t height,
-    uint32_t colorSpace,
+    VkFormat format,
+    VkDeviceSize byteSize,
     VkImage* outImage,
     VkImageView* outView,
     VkDeviceMemory* outMemory
 ) {
-    if (!vkrt || !pixels || width == 0u || height == 0u || !outImage || !outView || !outMemory) {
+    if (!vkrt || !pixels || width == 0u || height == 0u || !outImage || !outView || !outMemory || byteSize == 0u) {
         return VKRT_ERROR_INVALID_ARGUMENT;
     }
-
-    VkFormat format = colorSpace == VKRT_TEXTURE_COLOR_SPACE_SRGB
-        ? VK_FORMAT_R8G8B8A8_SRGB
-        : VK_FORMAT_R8G8B8A8_UNORM;
 
     VKRT_Result result = createImageWithMemory(
         vkrt,
@@ -146,7 +143,6 @@ VKRT_Result vkrtCreateSampledTextureImageFromPixels(
         return result;
     }
 
-    VkDeviceSize byteSize = (VkDeviceSize)width * (VkDeviceSize)height * 4u;
     VkBuffer stagingBuffer = VK_NULL_HANDLE;
     VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
     result = createBuffer(

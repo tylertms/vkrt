@@ -112,6 +112,7 @@ VKRT_Result VKRT_getTextureSnapshot(const VKRT* vkrt, uint32_t textureIndex, VKR
 
     outTexture->width = texture->width;
     outTexture->height = texture->height;
+    outTexture->format = texture->format;
     outTexture->colorSpace = texture->colorSpace;
     outTexture->useCount = vkrtCountTextureUsers(vkrt, textureIndex);
     snprintf(outTexture->name, sizeof(outTexture->name), "%s", texture->name);

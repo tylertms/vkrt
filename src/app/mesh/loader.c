@@ -80,7 +80,7 @@ static void releaseImportNode(NodeImportEntry* node) {
 static void releaseImportTexture(TextureImportEntry* texture) {
     if (!texture) return;
     free(texture->name);
-    free(texture->rgba8);
+    free(texture->pixels);
     memset(texture, 0, sizeof(*texture));
 }
 
@@ -426,6 +426,7 @@ static int resolveTextureImagePath(
 static int decodeTextureImage(
     const char* resolvedPath,
     const cgltf_image* image,
+    uint32_t colorSpace,
     VKRT_LoadedImage* outImage
 ) {
     if (!resolvedPath || !image || !outImage) return 0;
@@ -436,7 +437,7 @@ static int decodeTextureImage(
         if (!resolveTextureImagePath(resolvedPath, image, imagePath)) {
             return 0;
         }
-        return vkrtLoadImageFromFile(imagePath, outImage);
+        return vkrtLoadImageFromFile(imagePath, colorSpace, outImage);
     }
 
     if (image->buffer_view &&
@@ -445,7 +446,7 @@ static int decodeTextureImage(
         image->buffer_view->size <= image->buffer_view->buffer->size &&
         image->buffer_view->offset <= image->buffer_view->buffer->size - image->buffer_view->size) {
         const uint8_t* bytes = (const uint8_t*)image->buffer_view->buffer->data + image->buffer_view->offset;
-        return vkrtLoadImageFromMemory(bytes, image->buffer_view->size, image->mime_type, outImage);
+        return vkrtLoadImageFromMemory(bytes, image->buffer_view->size, image->mime_type, colorSpace, outImage);
     }
 
     return 0;
@@ -472,7 +473,7 @@ static int buildImportedTextureEntry(
     *outEntry = (TextureImportEntry){0};
 
     VKRT_LoadedImage decoded = {0};
-    if (!decodeTextureImage(resolvedPath, image, &decoded)) {
+    if (!decodeTextureImage(resolvedPath, image, colorSpace, &decoded)) {
         return 0;
     }
 
@@ -484,10 +485,11 @@ static int buildImportedTextureEntry(
 
     *outEntry = (TextureImportEntry){
         .name = duplicatedName,
-        .rgba8 = decoded.pixels,
+        .pixels = decoded.pixels,
         .width = decoded.width,
         .height = decoded.height,
-        .colorSpace = colorSpace,
+        .format = decoded.format,
+        .colorSpace = decoded.colorSpace,
     };
     return 1;
 }

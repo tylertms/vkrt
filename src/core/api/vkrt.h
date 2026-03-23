@@ -70,6 +70,7 @@ VKRT_Result VKRT_addTextureFromPixels(
     const void* pixels,
     uint32_t width,
     uint32_t height,
+    uint32_t format,
     uint32_t colorSpace,
     uint32_t* outTextureIndex
 );

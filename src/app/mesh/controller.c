@@ -406,9 +406,10 @@ int meshControllerImportMesh(VKRT* vkrt, Session* session, const char* path, con
             const TextureImportEntry* texture = &importData.textures[textureIndex];
             textureUploads[textureIndex] = (VKRT_TextureUpload){
                 .name = texture->name,
-                .pixels = texture->rgba8,
+                .pixels = texture->pixels,
                 .width = texture->width,
                 .height = texture->height,
+                .format = texture->format,
                 .colorSpace = texture->colorSpace,
             };
         }

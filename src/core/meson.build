@@ -36,6 +36,7 @@ vkrt_sources = files(
   'api/render.c',
   'api/query.c',
   'api/texture.c',
+  'utility/exr.cpp',
   'utility/export.c',
   'utility/image.c',
   'utility/io.c',
@@ -44,6 +45,7 @@ vkrt_sources = files(
 
 vkrt = static_library('vkrt_core',
   c_args: c_args,
+  cpp_args: cpp_args,
   sources: vkrt_sources,
   dependencies: core_dependencies,
   include_directories: [core_build_includes, core_internal_includes],

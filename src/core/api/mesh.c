@@ -54,7 +54,14 @@ static void sanitizeMaterialTextureSlot(
     }
 
     const SceneTexture* texture = vkrtGetSceneTexture(vkrt, *textureIndex);
-    if (!texture || texture->colorSpace != expectedColorSpace) {
+    int valid = 0;
+    if (texture) {
+        valid = expectedColorSpace == VKRT_TEXTURE_COLOR_SPACE_SRGB
+            ? (texture->colorSpace == VKRT_TEXTURE_COLOR_SPACE_SRGB ||
+                texture->colorSpace == VKRT_TEXTURE_COLOR_SPACE_LINEAR)
+            : texture->colorSpace == VKRT_TEXTURE_COLOR_SPACE_LINEAR;
+    }
+    if (!valid) {
         *textureIndex = VKRT_INVALID_INDEX;
         *textureWrap = 0u;
         assignMaterialTextureTexcoordSet(textureTexcoordSets, textureSlot, 0u);

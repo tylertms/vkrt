@@ -39,6 +39,7 @@ typedef struct SceneTexture {
     VkDeviceMemory memory;
     uint32_t width;
     uint32_t height;
+    uint32_t format;
     uint32_t colorSpace;
     uint32_t useCount;
     char name[VKRT_NAME_LEN];

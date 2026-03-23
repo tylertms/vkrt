@@ -129,7 +129,7 @@ static char* runDialogRequest(const DialogRequest* request) {
             break;
         }
         case DIALOG_KIND_IMPORT_TEXTURE: {
-            nfdu8filteritem_t filters[] = {{"Image", "png,jpg,jpeg,bmp,tga,tif,tiff"}};
+            nfdu8filteritem_t filters[] = {{"Image", "png,jpg,jpeg,exr"}};
             nfdopendialogu8args_t args = {
                 .filterList = filters,
                 .filterCount = 1,
@@ -140,7 +140,7 @@ static char* runDialogRequest(const DialogRequest* request) {
             break;
         }
         case DIALOG_KIND_IMPORT_ENVIRONMENT: {
-            nfdu8filteritem_t filters[] = {{"Image", "exr,hdr,pic,png,jpg,jpeg,bmp,tga,tif,tiff"}};
+            nfdu8filteritem_t filters[] = {{"Image", "exr,png,jpg,jpeg"}};
             nfdopendialogu8args_t args = {
                 .filterList = filters,
                 .filterCount = 1,
@@ -154,12 +154,11 @@ static char* runDialogRequest(const DialogRequest* request) {
             nfdu8filteritem_t filters[] = {
                 {"PNG image", "png"},
                 {"JPEG image", "jpg,jpeg"},
-                {"BMP image", "bmp"},
-                {"TGA image", "tga"},
+                {"OpenEXR image", "exr"},
             };
             nfdsavedialogu8args_t args = {
                 .filterList = filters,
-                .filterCount = 4,
+                .filterCount = 3,
                 .defaultPath = defaultPath,
                 .defaultName = request->defaultName[0] ? request->defaultName : "render.png",
                 .parentWindow = request->parentWindow,

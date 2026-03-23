@@ -3,17 +3,23 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "constants.h"
+#include "formats.h"
+
 typedef struct VKRT_LoadedImage {
-    uint8_t* pixels;
+    void* pixels;
     uint32_t width;
     uint32_t height;
+    uint32_t format;
+    uint32_t colorSpace;
 } VKRT_LoadedImage;
 
-int vkrtLoadImageFromFile(const char* path, VKRT_LoadedImage* outImage);
+int vkrtLoadImageFromFile(const char* path, uint32_t preferredColorSpace, VKRT_LoadedImage* outImage);
 int vkrtLoadImageFromMemory(
     const void* data,
     size_t size,
     const char* mimeType,
+    uint32_t preferredColorSpace,
     VKRT_LoadedImage* outImage
 );
 void vkrtFreeLoadedImage(VKRT_LoadedImage* image);

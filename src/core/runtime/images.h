@@ -24,12 +24,13 @@ VKRT_Result vkrtCreateDeviceImage(
     VkImageView* outView,
     VkDeviceMemory* outMemory
 );
-VKRT_Result vkrtCreateSampledTextureImageFromPixels(
+VKRT_Result vkrtCreateSampledTextureImageFromData(
     VKRT* vkrt,
-    const void* pixels,
+    const void* pixelData,
     uint32_t width,
     uint32_t height,
-    uint32_t colorSpace,
+    VkFormat format,
+    VkDeviceSize byteSize,
     VkImage* outImage,
     VkImageView* outView,
     VkDeviceMemory* outMemory

@@ -2,19 +2,28 @@
 
 #include <dcimgui.h>
 #include <errno.h>
-#include <nfd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include <GLFW/glfw3.h>
-#include <stb_image.h>
 #include <types.h>
 #include <version.h>
 #include <vulkan/vulkan.h>
 
 #ifndef VKRT_VERSION
 #define VKRT_VERSION "dev"
+#endif
+
+#ifndef VKRT_GLFW_VERSION
+#define VKRT_GLFW_VERSION "unknown"
+#endif
+
+#ifndef VKRT_SPNG_VERSION
+#define VKRT_SPNG_VERSION "unknown"
+#endif
+
+#ifndef VKRT_TURBOJPEG_VERSION
+#define VKRT_TURBOJPEG_VERSION "unknown"
 #endif
 
 static const uint32_t kBenchmarkWidth = 3840u;
@@ -287,11 +296,11 @@ void CLIPrintVersion(void) {
         VK_API_VERSION_PATCH(runtimeVersion)
     );
     printf(" ImGui      %s\n", IMGUI_VERSION);
-    printf(" glfw       %d.%d.%d\n", GLFW_VERSION_MAJOR, GLFW_VERSION_MINOR, GLFW_VERSION_REVISION);
+    printf(" glfw       %s\n", VKRT_GLFW_VERSION);
     printf(" cglm       %d.%d.%d\n", CGLM_VERSION_MAJOR, CGLM_VERSION_MINOR, CGLM_VERSION_PATCH);
     printf(" cgltf      1.15\n");
-    printf(" stb_image  2.30\n");
-    printf(" nfd-ext    1.30\n");
+    printf(" libspng    %s\n", VKRT_SPNG_VERSION);
+    printf(" turbojpeg  %s\n", VKRT_TURBOJPEG_VERSION);
     printf("===================================\n");
     printf(" https://github.com/tylertms/vkrt\n");
     printf("===================================\n");
@@ -329,7 +338,9 @@ void CLIPrintHelp(void) {
     printf("  Scroll wheel               Zoom render view\n");
     printf("\nFile Formats:\n");
     printf("  Import: glTF mesh (.glb, .gltf; geometry + scalar material factors)\n");
-    printf("  Export: Image (.png, .jpg, .jpeg, .bmp, .tga)\n");
+    printf("  Texture import: Image (.png, .jpg, .jpeg, .exr)\n");
+    printf("  Environment import: Image (.exr, .png, .jpg, .jpeg)\n");
+    printf("  Export: Image (.png, .jpg, .jpeg, .exr)\n");
     printf("\nRequirements:\n");
     printf("  Vulkan 1.3+ with ray tracing pipeline support\n");
 }
