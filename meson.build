@@ -26,6 +26,11 @@ if is_linux and cc.get_argument_syntax() == 'gcc'
   c_args += [define_prefix + '_GNU_SOURCE']
 endif
 
+if is_windows
+  c_args += ['/D_CRT_SECURE_NO_WARNINGS']
+  cpp_args += ['/D_CRT_SECURE_NO_WARNINGS']
+endif
+
 c_args += [define_prefix + 'VKRT_VERSION="' + get_option('vkrt_version') + '"']
 c_args += [define_prefix + 'GLFW_INCLUDE_NONE']
 cpp_args += [define_prefix + 'GLFW_INCLUDE_NONE']
@@ -123,7 +128,7 @@ core_internal_includes = include_directories(
 vulkan_dep = dependency('vulkan', required: true)
 
 glfw_options = cmake.subproject_options()
-glfw_options.append_compile_args('c', cc.get_argument_syntax() == 'msvc' ? '/w' : '-w')
+glfw_options.set_override_option('warning_level', '0')
 glfw_options.add_cmake_defines({
   'BUILD_SHARED_LIBS': 'OFF',
   'GLFW_BUILD_DOCS': 'OFF',
@@ -134,6 +139,7 @@ glfw_options.add_cmake_defines({
   'GLFW_BUILD_COCOA': 'OFF',
   'GLFW_BUILD_X11': is_linux ? 'ON' : 'OFF',
   'GLFW_BUILD_WAYLAND': is_linux ? 'ON' : 'OFF',
+  'GLFW_ENABLE_WARNINGS': 'OFF',
   'CMAKE_MSVC_RUNTIME_LIBRARY': 'MultiThreaded$<$<CONFIG:Debug>:Debug>',
   'CMAKE_SUPPRESS_DEVELOPER_WARNINGS': 'TRUE',
 })
@@ -150,6 +156,8 @@ spng_project = subproject(
   default_options: [
     'default_library=static',
     'static_zlib=true',
+    'build_examples=false',
+    'warning_level=0',
   ]
 )
 spng_dep = spng_project.get_variable('spng_dep')
@@ -163,6 +171,11 @@ turbojpeg_project = subproject(
   ]
 )
 turbojpeg_dep = turbojpeg_project.get_variable('turbojpeg_dep')
+
+core_cpp_args = cpp_args
+if is_windows and cpp.get_argument_syntax() == 'msvc'
+  core_cpp_args += ['/wd4245', '/wd4702']
+endif
 
 c_args += [define_prefix + 'VKRT_GLFW_VERSION="' + glfw_dep.version() + '"']
 c_args += [define_prefix + 'VKRT_SPNG_VERSION="' + spng_dep.version() + '"']

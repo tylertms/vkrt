@@ -99,6 +99,10 @@ struct EmissiveTriangle {
     float4 e2Pad;
 };
 
+#if defined(_MSC_VER) && !defined(VKRT_SHADER)
+#pragma warning(push)
+#pragma warning(disable : 4324)
+#endif
 struct SceneData {
     float4x4 viewInverse;
     float4x4 projInverse;
@@ -124,6 +128,9 @@ struct SceneData {
     float4 timelineTimeScale[VKRT_SCENE_TIMELINE_MAX_KEYFRAMES];
     float4 timelineTint[VKRT_SCENE_TIMELINE_MAX_KEYFRAMES];
 };
+#if defined(_MSC_VER) && !defined(VKRT_SHADER)
+#pragma warning(pop)
+#endif
 
 struct Selection {
     uint pixel;

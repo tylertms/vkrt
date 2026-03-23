@@ -6,7 +6,14 @@
 
 #define TINYEXR_USE_MINIZ 0
 #define TINYEXR_IMPLEMENTATION
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4245 4702)
+#endif
 #include "tinyexr.h"
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 
 #include <cstdlib>
 #include <cstring>

@@ -5,7 +5,14 @@
 #include "dcimgui.h"
 #include "dcimgui_impl_glfw.h"
 #include "dcimgui_impl_vulkan.h"
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 5287)
+#endif
 #include "dcimgui_internal.h"
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 #include "session.h"
 #include "theme.h"
 #include "debug.h"
@@ -45,8 +52,8 @@ static EditorUIState* getEditorUIState(Session* session) {
     return session->editor.uiState;
 }
 
-static ImGuiDockNodeFlags composeDockNodeFlags(int baseFlags, int extraFlags) {
-    return (ImGuiDockNodeFlags)(baseFlags | extraFlags);
+static ImGuiDockNodeFlags composeDockNodeFlags(ImGuiDockNodeFlags baseFlags, ImGuiDockNodeFlags extraFlags) {
+    return (ImGuiDockNodeFlags)((int)baseFlags | (int)extraFlags);
 }
 
 static uint32_t absDiffU32(uint32_t a, uint32_t b) {
@@ -362,31 +369,37 @@ static void initializeDockLayout(EditorUIState* state) {
     ImGuiDockNode* sceneDockNode = ImGui_DockBuilderGetNode(sceneDockID);
     if (sceneDockNode) {
         ImGuiDockNodeFlags localFlags = composeDockNodeFlags(
-            (int)sceneDockNode->LocalFlags,
-            (int)ImGuiDockNodeFlags_NoTabBar |
-            (int)ImGuiDockNodeFlags_NoWindowMenuButton |
-            (int)ImGuiDockNodeFlags_NoCloseButton
+            (ImGuiDockNodeFlags)sceneDockNode->LocalFlags,
+            (ImGuiDockNodeFlags)(
+                (int)ImGuiDockNodeFlags_NoTabBar |
+                (int)ImGuiDockNodeFlags_NoWindowMenuButton |
+                (int)ImGuiDockNodeFlags_NoCloseButton
+            )
         );
         ImGuiDockNode_SetLocalFlags(sceneDockNode, localFlags);
     }
     ImGuiDockNode* propertiesDockNode = ImGui_DockBuilderGetNode(propertiesDockID);
     if (propertiesDockNode) {
         ImGuiDockNodeFlags localFlags = composeDockNodeFlags(
-            (int)propertiesDockNode->LocalFlags,
-            (int)ImGuiDockNodeFlags_NoTabBar |
-            (int)ImGuiDockNodeFlags_NoWindowMenuButton |
-            (int)ImGuiDockNodeFlags_NoCloseButton
+            (ImGuiDockNodeFlags)propertiesDockNode->LocalFlags,
+            (ImGuiDockNodeFlags)(
+                (int)ImGuiDockNodeFlags_NoTabBar |
+                (int)ImGuiDockNodeFlags_NoWindowMenuButton |
+                (int)ImGuiDockNodeFlags_NoCloseButton
+            )
         );
         ImGuiDockNode_SetLocalFlags(propertiesDockNode, localFlags);
     }
     ImGuiDockNode* viewportDockNode = ImGui_DockBuilderGetNode(viewportDockID);
     if (viewportDockNode) {
         ImGuiDockNodeFlags localFlags = composeDockNodeFlags(
-            (int)viewportDockNode->LocalFlags,
-            (int)ImGuiDockNodeFlags_NoTabBar |
-            (int)ImGuiDockNodeFlags_NoUndocking |
-            (int)ImGuiDockNodeFlags_NoWindowMenuButton |
-            (int)ImGuiDockNodeFlags_NoCloseButton
+            (ImGuiDockNodeFlags)viewportDockNode->LocalFlags,
+            (ImGuiDockNodeFlags)(
+                (int)ImGuiDockNodeFlags_NoTabBar |
+                (int)ImGuiDockNodeFlags_NoUndocking |
+                (int)ImGuiDockNodeFlags_NoWindowMenuButton |
+                (int)ImGuiDockNodeFlags_NoCloseButton
+            )
         );
         ImGuiDockNode_SetLocalFlags(viewportDockNode, localFlags);
     }
@@ -434,11 +447,13 @@ static bool drawViewportWindow(
 
     ImGuiWindowClass viewportWindowClass = {0};
     viewportWindowClass.DockNodeFlagsOverrideSet = composeDockNodeFlags(
-        0,
-        (int)ImGuiDockNodeFlags_NoTabBar |
-        (int)ImGuiDockNodeFlags_NoUndocking |
-        (int)ImGuiDockNodeFlags_NoWindowMenuButton |
-        (int)ImGuiDockNodeFlags_NoCloseButton
+        ImGuiDockNodeFlags_None,
+        (ImGuiDockNodeFlags)(
+            (int)ImGuiDockNodeFlags_NoTabBar |
+            (int)ImGuiDockNodeFlags_NoUndocking |
+            (int)ImGuiDockNodeFlags_NoWindowMenuButton |
+            (int)ImGuiDockNodeFlags_NoCloseButton
+        )
     );
     ImGui_SetNextWindowClass(&viewportWindowClass);
 

@@ -4,7 +4,14 @@
 #include "sections.h"
 
 #include "IconsFontAwesome6.h"
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 5287)
+#endif
 #include "dcimgui_internal.h"
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 
 enum {
     INSPECTOR_PROPERTIES_TAB_OBJECT = 0,
