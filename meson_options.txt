@@ -1,4 +1,12 @@
 option(
+  'linux_window_backend',
+  type: 'combo',
+  choices: ['auto', 'x11', 'wayland', 'both'],
+  value: 'auto',
+  description: 'Select the GLFW window backend on Linux. auto enables the available backend(s).',
+)
+
+option(
   'nfd_backend',
   type: 'combo',
   choices: ['auto', 'portal', 'gtk'],
