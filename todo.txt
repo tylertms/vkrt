@@ -1,4 +1,3 @@
-- equirectangular environment mapping
 - scene load/save
 - get rid of windows menu bar and make custom one
 - add license and proper readme
