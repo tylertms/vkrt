@@ -90,7 +90,6 @@ void inspectorDrawSceneOverviewSection(VKRT* vkrt) {
         return;
     }
 
-    ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing});
     ImGui_SeparatorText(ICON_FA_GAUGE " Status");
     inspectorIndentSection();
     drawStatusSummary(&status, &settings);
