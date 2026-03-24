@@ -150,6 +150,11 @@ core_internal_includes = include_directories(
 )
 
 vulkan_dep = dependency('vulkan', required: true)
+windows_system_deps = []
+
+if is_windows
+  windows_system_deps += cc.find_library('dwmapi', required: true)
+endif
 
 linux_glfw_backend = 'auto'
 linux_x11_probe_deps = []
@@ -308,6 +313,7 @@ core_dependencies = [
   spng_dep,
   turbojpeg_dep,
   zlib_dep,
+  windows_system_deps,
 ]
 
 app_dependencies = [
@@ -315,6 +321,7 @@ app_dependencies = [
   glfw_dep,
   threads_dep,
   rt_dep,
+  windows_system_deps,
 ]
 
 imgui_dependencies = [

@@ -24,6 +24,16 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if defined (_WIN32)
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include <GLFW/glfw3native.h>
+#include <dwmapi.h>
+
+#ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
+#define DWMWA_USE_IMMERSIVE_DARK_MODE 20
+#endif
+#endif
+
 static inline void logStepTime(const char* stepName, uint64_t startTime) {
     LOG_TRACE("%s in %.3f ms", stepName, (double)(getMicroseconds() - startTime) / 1e3);
 }
@@ -345,6 +355,20 @@ VKRT_Result VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInf
             LOG_ERROR("Failed to create GLFW window");
             goto init_failed;
         }
+
+#if defined(_WIN32)
+        BOOL value = TRUE;
+        HRESULT hr = DwmSetWindowAttribute(
+            glfwGetWin32Window(vkrt->runtime.window),
+            DWMWA_USE_IMMERSIVE_DARK_MODE,
+            &value,
+            sizeof(value)
+        );
+
+        if (!SUCCEEDED(hr)) {
+            LOG_INFO("Did not use immersive title bar");
+        }
+#endif
 
         glfwSetWindowUserPointer(vkrt->runtime.window, vkrt);
         glfwSetFramebufferSizeCallback(vkrt->runtime.window, VKRT_framebufferResizedCallback);
