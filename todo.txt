@@ -1,5 +1,4 @@
 - scene load/save
-- get rid of windows menu bar and make custom one
 - add license and proper readme
 - light animation system doesn't work right now
 - real animation/keyframe system for more than lighting

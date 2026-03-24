@@ -658,6 +658,9 @@ static int populateImportMaterials(const cgltf_data* data, MeshImportData* impor
     if (!data || !importData) return -1;
     if (data->materials_count == 0) return 0;
     if (data->materials_count > (cgltf_size)VKRT_INVALID_INDEX) return -1;
+    if (data->materials_count > ((cgltf_size)UINT32_MAX / (cgltf_size)VKRT_MATERIAL_TEXTURE_SLOT_COUNT)) {
+        return -1;
+    }
 
     MaterialImportEntry* materials = (MaterialImportEntry*)calloc(
         (size_t)data->materials_count,

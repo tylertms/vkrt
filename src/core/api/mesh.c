@@ -411,6 +411,9 @@ VKRT_Result VKRT_addMaterial(VKRT* vkrt, const Material* material, const char* n
     VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
     if (stateReady != VKRT_SUCCESS) return stateReady;
 
+    VKRT_Result defaultMaterialResult = vkrtEnsureDefaultMaterial(vkrt);
+    if (defaultMaterialResult != VKRT_SUCCESS) return defaultMaterialResult;
+
     uint32_t materialIndex = vkrt->core.materialCount;
     SceneMaterial* resized = (SceneMaterial*)realloc(
         vkrt->core.materials,

@@ -221,6 +221,7 @@ void sessionDeinit(Session* session) {
 
     clearOwnedString(&session->commands.meshImportPath);
     clearOwnedString(&session->commands.textureImportPath);
+    clearOwnedString(&session->commands.environmentImportPath);
     clearOwnedString(&session->commands.saveImagePath);
     clearOwnedString(&session->editor.renderSequenceFolderPath);
     free(session->editor.sceneObjects);

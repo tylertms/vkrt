@@ -193,7 +193,10 @@ VKRT_Result VKRT_startRender(VKRT* vkrt, uint32_t width, uint32_t height, uint32
 }
 
 VKRT_Result VKRT_stopRenderSampling(VKRT* vkrt) {
-    if (!vkrt || !vkrt->renderStatus.renderModeActive) return VKRT_ERROR_INVALID_ARGUMENT;
+    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+    if (!vkrt->renderStatus.renderModeActive || vkrt->renderStatus.renderModeFinished) {
+        return VKRT_SUCCESS;
+    }
     VkBool32 usedRenderPresentProfile = vkrtUsesRenderPresentProfile(vkrt);
     vkrt->renderStatus.renderModeFinished = 1;
     vkrtRefreshPresentModeIfNeeded(vkrt, usedRenderPresentProfile);
@@ -201,7 +204,8 @@ VKRT_Result VKRT_stopRenderSampling(VKRT* vkrt) {
 }
 
 VKRT_Result VKRT_stopRender(VKRT* vkrt) {
-    if (!vkrt || !vkrt->renderStatus.renderModeActive) return VKRT_ERROR_INVALID_ARGUMENT;
+    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+    if (!vkrt->renderStatus.renderModeActive) return VKRT_SUCCESS;
 
     VkBool32 usedRenderPresentProfile = vkrtUsesRenderPresentProfile(vkrt);
     if (updateRenderExtent(vkrt, vkrt->runtime.swapChainExtent) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;

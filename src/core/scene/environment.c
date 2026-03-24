@@ -48,7 +48,18 @@ VKRT_Result vkrtSceneSetEnvironmentTextureFromFile(VKRT* vkrt, const char* path)
     );
     if (result != VKRT_SUCCESS) return result;
 
-    return replaceEnvironmentTexture(vkrt, textureIndex);
+    result = replaceEnvironmentTexture(vkrt, textureIndex);
+    if (result == VKRT_SUCCESS) {
+        return VKRT_SUCCESS;
+    }
+
+    if (textureIndex < vkrt->core.textureCount && vkrtCountTextureUsers(vkrt, textureIndex) == 0u) {
+        VKRT_Result cleanupResult = vkrtSceneRemoveTexture(vkrt, textureIndex);
+        if (cleanupResult != VKRT_SUCCESS) {
+            return cleanupResult;
+        }
+    }
+    return result;
 }
 
 VKRT_Result vkrtSceneClearEnvironmentTexture(VKRT* vkrt) {
