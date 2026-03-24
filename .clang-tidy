@@ -1,0 +1,9 @@
+Checks: >-
+  -*,
+  clang-analyzer-*,
+  bugprone-*,
+  readability-braces-around-statements,
+  readability-misleading-indentation
+FormatStyle: file
+HeaderFilterRegex: '^(src)/'
+WarningsAsErrors: '*'
