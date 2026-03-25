@@ -1,9 +1,10 @@
 #include "cli/cli.h"
 #include "session.h"
+#include "mesh/controller.h"
 #include "render/benchmark.h"
-#include "render/sequencer.h"
+#include "render/controller.h"
 #include "editor/editor.h"
-#include "controller.h"
+#include "scene/controller.h"
 #include "vkrt.h"
 #include "vkrt_overlay.h"
 #include "debug.h"
@@ -52,7 +53,11 @@ int main(int argc, char* argv[]) {
     }
 
     if (launchOptions.loadDefaultScene) {
-        meshControllerLoadDefaultAssets(vkrt, &session);
+        if (!sceneControllerLoadDefaultScene(vkrt, &session)) {
+            LOG_ERROR("Loading default scene failed");
+            exitCode = EXIT_FAILURE;
+            goto cleanup;
+        }
     }
 
     if (launchOptions.startupImportPath) {
@@ -72,24 +77,15 @@ int main(int argc, char* argv[]) {
         VKRT_poll(vkrt);
 
         editorUIProcessDialogs(&session);
+        sceneControllerApplySessionActions(vkrt, &session);
         meshControllerApplySessionActions(vkrt, &session);
-        renderSequencerHandleCommands(vkrt, &session);
+        renderControllerApplySessionActions(vkrt, &session);
         editorUIUpdate(vkrt, &session);
 
         if (VKRT_draw(vkrt) != VKRT_SUCCESS) {
             LOG_ERROR("Frame render failed");
             exitCode = EXIT_FAILURE;
             break;
-        }
-
-        renderSequencerUpdate(vkrt, &session);
-
-        char* savePath = NULL;
-        if (sessionTakeRenderSave(&session, &savePath)) {
-            if (VKRT_saveRenderImage(vkrt, savePath) != VKRT_SUCCESS) {
-                LOG_ERROR("Saving render image failed. Path: %s", savePath);
-            }
-            free(savePath);
         }
     }
 

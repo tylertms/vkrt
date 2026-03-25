@@ -123,7 +123,6 @@ static void drawSceneWindowContent(VKRT* vkrt, Session* session) {
     inspectorDrawSceneOverviewSection(vkrt);
     ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing});
     ImGui_SeparatorText(ICON_FA_CUBES " Scene");
-    ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing});
     if (ImGui_BeginChild(
         "##scene_browser_list",
         (ImVec2){0.0f, 0.0f},

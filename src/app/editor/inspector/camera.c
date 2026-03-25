@@ -180,10 +180,7 @@ void inspectorDrawCameraTab(VKRT* vkrt, Session* session) {
         ImGui_SameLine();
         ImGui_BeginDisabled(settings.environmentTextureIndex == VKRT_INVALID_INDEX);
         if (inspectorPaddedButton(ICON_FA_XMARK " Clear")) {
-            VKRT_Result result = VKRT_clearEnvironmentTexture(vkrt);
-            if (result != VKRT_SUCCESS) {
-                LOG_ERROR("Clearing environment texture failed (%d)", (int)result);
-            }
+            sessionQueueEnvironmentClear(session);
         }
         if (settings.environmentTextureIndex != VKRT_INVALID_INDEX) {
             tooltipOnHover("Clear environment texture.");

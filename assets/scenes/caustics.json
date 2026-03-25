@@ -1,0 +1,99 @@
+{
+	"format":	"vkrt.scene",
+	"version":	1,
+	"meshImports":	["../models/plane.glb", "../models/sphere.glb", "../models/suzanne.glb"],
+	"textureImports":	[],
+	"materials":	[{
+			"index":	1,
+			"name":	"floor",
+			"material":	{
+				"baseColor":	[1, 0.37000000476837158, 0],
+				"roughness":	1,
+				"diffuseRoughness":	1
+			}
+		}, {
+			"index":	2,
+			"name":	"light",
+			"material":	{
+				"baseColor":	[0, 0, 0],
+				"roughness":	1,
+				"emissionLuminance":	8000,
+				"diffuseRoughness":	1
+			}
+		}, {
+			"index":	3,
+			"name":	"suzanne",
+			"material":	{
+				"baseColor":	[1, 1, 1],
+				"roughness":	0,
+				"transmission":	1
+			}
+		}],
+	"meshes":	[{
+			"name":	"floor",
+			"materialIndex":	1,
+			"hasMaterialAssignment":	true,
+			"renderBackfaces":	false,
+			"opacity":	1,
+			"importIndex":	0,
+			"importLocalIndex":	0
+		}, {
+			"name":	"light",
+			"materialIndex":	2,
+			"hasMaterialAssignment":	true,
+			"renderBackfaces":	false,
+			"opacity":	1,
+			"importIndex":	1,
+			"importLocalIndex":	0
+		}, {
+			"name":	"suzanne",
+			"materialIndex":	3,
+			"hasMaterialAssignment":	true,
+			"renderBackfaces":	false,
+			"opacity":	1,
+			"importIndex":	2,
+			"importLocalIndex":	0
+		}],
+	"sceneObjects":	[{
+			"name":	"floor",
+			"parentIndex":	null,
+			"meshIndex":	0,
+			"localPosition":	[0, 0, 0],
+			"localRotation":	[0, 0, 0],
+			"localScale":	[1000, 1000, 1]
+		}, {
+			"name":	"light",
+			"parentIndex":	null,
+			"meshIndex":	1,
+			"localPosition":	[4.04099988937378, -0.88300001621246338, 2.1210000514984131],
+			"localRotation":	[0, 0, 0],
+			"localScale":	[0.10000000149011612, 0.10000000149011612, 0.10000000149011612]
+		}, {
+			"name":	"suzanne",
+			"parentIndex":	null,
+			"meshIndex":	2,
+			"localPosition":	[0.18600000441074371, 0.00999999977648258, 0.5],
+			"localRotation":	[-36.299999237060547, 0, 125.30000305175781],
+			"localScale":	[1, 1, 1]
+		}],
+	"sceneSettings":	{
+		"camera":	{
+			"position":	[0.79292559623718262, 6.79802942276001, 3.060741662979126],
+			"target":	[-0.18434619903564453, -0.20318904519081116, 0.41767531633377075],
+			"up":	[0, 0, 1],
+			"vfov":	26.899999618530273
+		},
+		"samplesPerPixel":	1,
+		"rrMinDepth":	4,
+		"rrMaxDepth":	8,
+		"toneMappingMode":	1,
+		"exposure":	1,
+		"autoExposureEnabled":	false,
+		"autoSPPEnabled":	true,
+		"environmentColor":	[0, 0, 0],
+		"environmentStrength":	0,
+		"debugMode":	0,
+		"misNeeEnabled":	true,
+		"selectedMeshIndex":	2
+	}
+}

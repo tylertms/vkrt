@@ -1,7 +1,6 @@
 #include "session.h"
 #include "debug.h"
 #include "io.h"
-#include "numeric.h"
 #include "vkrt.h"
 
 #include <math.h>
@@ -10,35 +9,24 @@
 #include <stdlib.h>
 #include <string.h>
 
-static const char* kDefaultRenderSequenceFolder = "captures/sequence";
-static const float kDefaultTimelineStartTime = 0.0f;
-static const float kDefaultTimelineEndTime = 0.5f;
-static const float kDefaultTimelineEmissionScale = 1.0f;
-static const float kDefaultAnimationStep = 0.05f;
-static const uint32_t kDefaultTimelineKeyframeCount = 2u;
 static const uint32_t kDefaultRenderTargetSamples = 1024u;
-
-static void sessionResetTimelineDefaults(SessionSceneTimelineSettings* timeline) {
-    if (!timeline) return;
-
-    timeline->enabled = 0;
-    timeline->keyframeCount = kDefaultTimelineKeyframeCount;
-    timeline->keyframes[0] = (SessionSceneTimelineKeyframe){
-        .time = kDefaultTimelineStartTime,
-        .emissionScale = kDefaultTimelineEmissionScale,
-        .emissionTint = {1.0f, 1.0f, 1.0f},
-    };
-    timeline->keyframes[1] = (SessionSceneTimelineKeyframe){
-        .time = kDefaultTimelineEndTime,
-        .emissionScale = kDefaultTimelineEmissionScale,
-        .emissionTint = {1.0f, 1.0f, 1.0f},
-    };
-}
 
 static void clearOwnedString(char** value) {
     if (!value || !*value) return;
     free(*value);
     *value = NULL;
+}
+
+static void clearMeshImportPath(char** path) {
+    if (!path || !*path) return;
+    free(*path);
+    *path = NULL;
+}
+
+static void clearTextureRecord(SessionTextureRecord* record) {
+    if (!record) return;
+    free(record->sourcePath);
+    memset(record, 0, sizeof(*record));
 }
 
 static void buildLocalTransformMatrix(const vec3 position, const vec3 rotationDegrees, const vec3 scale, mat4 outMatrix) {
@@ -98,6 +86,111 @@ static int ensureSceneObjectCapacity(Session* session, uint32_t additionalCount)
     session->editor.sceneObjects = resized;
     session->editor.sceneObjectCapacity = nextCapacity;
     return 1;
+}
+
+static int ensureMeshImportBatchCapacity(Session* session, uint32_t additionalCount) {
+    if (!session) return 0;
+    if (additionalCount == 0u) return 1;
+    if (session->editor.meshImportBatchCount > UINT32_MAX - additionalCount) return 0;
+
+    uint32_t requiredCount = session->editor.meshImportBatchCount + additionalCount;
+    if (requiredCount <= session->editor.meshImportBatchCapacity) return 1;
+
+    uint32_t nextCapacity = session->editor.meshImportBatchCapacity > 0u ? session->editor.meshImportBatchCapacity : 8u;
+    while (nextCapacity < requiredCount) {
+        if (nextCapacity > UINT32_MAX / 2u) {
+            nextCapacity = requiredCount;
+            break;
+        }
+        nextCapacity *= 2u;
+    }
+
+    char** resized = (char**)realloc(
+        session->editor.meshImportPaths,
+        (size_t)nextCapacity * sizeof(*resized)
+    );
+    if (!resized) return 0;
+
+    session->editor.meshImportPaths = resized;
+    session->editor.meshImportBatchCapacity = nextCapacity;
+    return 1;
+}
+
+static int ensureMeshRecordCapacity(Session* session, uint32_t additionalCount) {
+    if (!session) return 0;
+    if (additionalCount == 0u) return 1;
+    if (session->editor.meshRecordCount > UINT32_MAX - additionalCount) return 0;
+
+    uint32_t requiredCount = session->editor.meshRecordCount + additionalCount;
+    if (requiredCount <= session->editor.meshRecordCapacity) return 1;
+
+    uint32_t nextCapacity = session->editor.meshRecordCapacity > 0u ? session->editor.meshRecordCapacity : 16u;
+    while (nextCapacity < requiredCount) {
+        if (nextCapacity > UINT32_MAX / 2u) {
+            nextCapacity = requiredCount;
+            break;
+        }
+        nextCapacity *= 2u;
+    }
+
+    SessionMeshRecord* resized = (SessionMeshRecord*)realloc(
+        session->editor.meshRecords,
+        (size_t)nextCapacity * sizeof(*resized)
+    );
+    if (!resized) return 0;
+
+    session->editor.meshRecords = resized;
+    session->editor.meshRecordCapacity = nextCapacity;
+    return 1;
+}
+
+static int ensureTextureRecordCapacity(Session* session, uint32_t additionalCount) {
+    if (!session) return 0;
+    if (additionalCount == 0u) return 1;
+    if (session->editor.textureRecordCount > UINT32_MAX - additionalCount) return 0;
+
+    uint32_t requiredCount = session->editor.textureRecordCount + additionalCount;
+    if (requiredCount <= session->editor.textureRecordCapacity) return 1;
+
+    uint32_t nextCapacity = session->editor.textureRecordCapacity > 0u ? session->editor.textureRecordCapacity : 8u;
+    while (nextCapacity < requiredCount) {
+        if (nextCapacity > UINT32_MAX / 2u) {
+            nextCapacity = requiredCount;
+            break;
+        }
+        nextCapacity *= 2u;
+    }
+
+    SessionTextureRecord* resized = (SessionTextureRecord*)realloc(
+        session->editor.textureRecords,
+        (size_t)nextCapacity * sizeof(*resized)
+    );
+    if (!resized) return 0;
+
+    session->editor.textureRecords = resized;
+    session->editor.textureRecordCapacity = nextCapacity;
+    return 1;
+}
+
+static void clearSceneAssetState(Session* session) {
+    if (!session) return;
+
+    session->editor.sceneObjectCount = 0u;
+    session->editor.selectedSceneObjectIndex = VKRT_INVALID_INDEX;
+    session->runtime.lastSyncedSelectedMeshIndex = VKRT_INVALID_INDEX;
+
+    for (uint32_t i = 0; i < session->editor.meshImportBatchCount; i++) {
+        clearMeshImportPath(&session->editor.meshImportPaths[i]);
+    }
+    session->editor.meshImportBatchCount = 0u;
+
+    session->editor.meshRecordCount = 0u;
+
+    for (uint32_t i = 0; i < session->editor.textureRecordCount; i++) {
+        clearTextureRecord(&session->editor.textureRecords[i]);
+    }
+    session->editor.textureRecordCount = 0u;
+    clearOwnedString(&session->editor.environmentTexturePath);
 }
 
 static void removeSceneObjectAt(Session* session, uint32_t objectIndex) {
@@ -199,35 +292,43 @@ void sessionInit(Session* session) {
     session->runtime.lastSyncedSelectedMeshIndex = VKRT_INVALID_INDEX;
     session->commands.renderCommand = SESSION_RENDER_COMMAND_NONE;
     session->editor.renderConfig.targetSamples = kDefaultRenderTargetSamples;
-    session->editor.renderConfig.animation.minTime = kDefaultTimelineStartTime;
-    session->editor.renderConfig.animation.maxTime = kDefaultTimelineEndTime;
-    session->editor.renderConfig.animation.timeStep = kDefaultAnimationStep;
-    sessionResetTimelineDefaults(&session->editor.renderConfig.animation.sceneTimeline);
-
-    char capturesPath[VKRT_PATH_MAX];
-    if (resolveExistingPath("captures", capturesPath, sizeof(capturesPath)) == 0) {
-        char sequencePath[VKRT_PATH_MAX];
-        if (snprintf(sequencePath, sizeof(sequencePath), "%s/sequence", capturesPath) < (int)sizeof(sequencePath)) {
-            sessionSetRenderSequenceFolder(session, sequencePath);
-            return;
-        }
-    }
-
-    sessionSetRenderSequenceFolder(session, kDefaultRenderSequenceFolder);
 }
 
 void sessionDeinit(Session* session) {
     if (!session) return;
 
+    clearOwnedString(&session->commands.sceneOpenPath);
+    clearOwnedString(&session->commands.sceneSavePath);
     clearOwnedString(&session->commands.meshImportPath);
     clearOwnedString(&session->commands.textureImportPath);
     clearOwnedString(&session->commands.environmentImportPath);
     clearOwnedString(&session->commands.saveImagePath);
-    clearOwnedString(&session->editor.renderSequenceFolderPath);
+    clearOwnedString(&session->editor.currentScenePath);
+    clearOwnedString(&session->editor.environmentTexturePath);
+
+    for (uint32_t i = 0; i < session->editor.meshImportBatchCount; i++) {
+        clearMeshImportPath(&session->editor.meshImportPaths[i]);
+    }
+    for (uint32_t i = 0; i < session->editor.textureRecordCount; i++) {
+        clearTextureRecord(&session->editor.textureRecords[i]);
+    }
+
     free(session->editor.sceneObjects);
-    session->editor.sceneObjects = NULL;
+    free(session->editor.meshImportPaths);
+    free(session->editor.meshRecords);
+    free(session->editor.textureRecords);
+    memset(&session->editor.sceneObjects, 0, sizeof(session->editor.sceneObjects));
     session->editor.sceneObjectCount = 0;
     session->editor.sceneObjectCapacity = 0;
+    session->editor.meshImportPaths = NULL;
+    session->editor.meshImportBatchCount = 0;
+    session->editor.meshImportBatchCapacity = 0;
+    session->editor.meshRecords = NULL;
+    session->editor.meshRecordCount = 0;
+    session->editor.meshRecordCapacity = 0;
+    session->editor.textureRecords = NULL;
+    session->editor.textureRecordCount = 0;
+    session->editor.textureRecordCapacity = 0;
 }
 
 void sessionRequestMeshImportDialog(Session* session) {
@@ -240,6 +341,16 @@ void sessionRequestEnvironmentImportDialog(Session* session) {
     session->editor.requestEnvironmentImportDialog = 1;
 }
 
+void sessionRequestSceneOpenDialog(Session* session) {
+    if (!session) return;
+    session->editor.requestSceneOpenDialog = 1;
+}
+
+void sessionRequestSceneSaveDialog(Session* session) {
+    if (!session) return;
+    session->editor.requestSceneSaveDialog = 1;
+}
+
 void sessionRequestTextureImportDialog(Session* session, uint32_t materialIndex, uint32_t textureSlot) {
     if (!session) return;
     session->editor.requestTextureImportDialog = 1;
@@ -250,11 +361,6 @@ void sessionRequestTextureImportDialog(Session* session, uint32_t materialIndex,
 void sessionRequestRenderSaveDialog(Session* session) {
     if (!session) return;
     session->editor.requestRenderSaveDialog = 1;
-}
-
-void sessionRequestRenderSequenceFolderDialog(Session* session) {
-    if (!session) return;
-    session->editor.requestRenderSequenceFolderDialog = 1;
 }
 
 int sessionTakeMeshImportDialogRequest(Session* session) {
@@ -280,15 +386,21 @@ int sessionTakeEnvironmentImportDialogRequest(Session* session) {
     return 1;
 }
 
-int sessionTakeRenderSaveDialogRequest(Session* session) {
-    if (!session || !session->editor.requestRenderSaveDialog) return 0;
-    session->editor.requestRenderSaveDialog = 0;
+int sessionTakeSceneOpenDialogRequest(Session* session) {
+    if (!session || !session->editor.requestSceneOpenDialog) return 0;
+    session->editor.requestSceneOpenDialog = 0;
     return 1;
 }
 
-int sessionTakeRenderSequenceFolderDialogRequest(Session* session) {
-    if (!session || !session->editor.requestRenderSequenceFolderDialog) return 0;
-    session->editor.requestRenderSequenceFolderDialog = 0;
+int sessionTakeSceneSaveDialogRequest(Session* session) {
+    if (!session || !session->editor.requestSceneSaveDialog) return 0;
+    session->editor.requestSceneSaveDialog = 0;
+    return 1;
+}
+
+int sessionTakeRenderSaveDialogRequest(Session* session) {
+    if (!session || !session->editor.requestRenderSaveDialog) return 0;
+    session->editor.requestRenderSaveDialog = 0;
     return 1;
 }
 
@@ -298,6 +410,22 @@ void sessionQueueMeshImport(Session* session, const char* path) {
     clearOwnedString(&session->commands.meshImportPath);
     if (!path || !path[0]) return;
     session->commands.meshImportPath = stringDuplicate(path);
+}
+
+void sessionQueueSceneOpen(Session* session, const char* path) {
+    if (!session) return;
+
+    clearOwnedString(&session->commands.sceneOpenPath);
+    if (!path || !path[0]) return;
+    session->commands.sceneOpenPath = stringDuplicate(path);
+}
+
+void sessionQueueSceneSave(Session* session, const char* path) {
+    if (!session) return;
+
+    clearOwnedString(&session->commands.sceneSavePath);
+    if (!path || !path[0]) return;
+    session->commands.sceneSavePath = stringDuplicate(path);
 }
 
 void sessionQueueTextureImport(Session* session, uint32_t materialIndex, uint32_t textureSlot, const char* path) {
@@ -322,6 +450,11 @@ void sessionQueueEnvironmentImport(Session* session, const char* path) {
     session->commands.environmentImportPath = stringDuplicate(path);
 }
 
+void sessionQueueEnvironmentClear(Session* session) {
+    if (!session) return;
+    session->commands.clearEnvironmentRequested = 1u;
+}
+
 void sessionQueueSceneObjectRemoval(Session* session, uint32_t objectIndex) {
     if (!session) return;
     session->commands.sceneObjectToRemove =
@@ -338,6 +471,30 @@ int sessionTakeMeshImport(Session* session, char** outPath) {
 
     char* path = session->commands.meshImportPath;
     session->commands.meshImportPath = NULL;
+
+    if (outPath) *outPath = path;
+    else free(path);
+
+    return 1;
+}
+
+int sessionTakeSceneOpen(Session* session, char** outPath) {
+    if (!session || !session->commands.sceneOpenPath) return 0;
+
+    char* path = session->commands.sceneOpenPath;
+    session->commands.sceneOpenPath = NULL;
+
+    if (outPath) *outPath = path;
+    else free(path);
+
+    return 1;
+}
+
+int sessionTakeSceneSave(Session* session, char** outPath) {
+    if (!session || !session->commands.sceneSavePath) return 0;
+
+    char* path = session->commands.sceneSavePath;
+    session->commands.sceneSavePath = NULL;
 
     if (outPath) *outPath = path;
     else free(path);
@@ -375,6 +532,12 @@ int sessionTakeEnvironmentImport(Session* session, char** outPath) {
     return 1;
 }
 
+int sessionTakeEnvironmentClear(Session* session) {
+    if (!session || !session->commands.clearEnvironmentRequested) return 0;
+    session->commands.clearEnvironmentRequested = 0u;
+    return 1;
+}
+
 int sessionTakeSceneObjectRemoval(Session* session, uint32_t* outObjectIndex) {
     if (!session || session->commands.sceneObjectToRemove == VKRT_INVALID_INDEX) return 0;
 
@@ -400,19 +563,39 @@ void sessionQueueRenderSave(Session* session, const char* path) {
     session->commands.saveImagePath = stringDuplicate(path);
 }
 
-void sessionSetRenderSequenceFolder(Session* session, const char* path) {
+void sessionSetCurrentScenePath(Session* session, const char* path) {
     if (!session) return;
 
-    clearOwnedString(&session->editor.renderSequenceFolderPath);
+    clearOwnedString(&session->editor.currentScenePath);
     if (!path || !path[0]) return;
-    session->editor.renderSequenceFolderPath = stringDuplicate(path);
+    session->editor.currentScenePath = stringDuplicate(path);
 }
 
-const char* sessionGetRenderSequenceFolder(const Session* session) {
-    if (!session || !session->editor.renderSequenceFolderPath || !session->editor.renderSequenceFolderPath[0]) {
+const char* sessionGetCurrentScenePath(const Session* session) {
+    if (!session || !session->editor.currentScenePath || !session->editor.currentScenePath[0]) {
         return "";
     }
-    return session->editor.renderSequenceFolderPath;
+    return session->editor.currentScenePath;
+}
+
+void sessionSetEnvironmentTexturePath(Session* session, const char* path) {
+    if (!session) return;
+
+    clearOwnedString(&session->editor.environmentTexturePath);
+    if (!path || !path[0]) return;
+    session->editor.environmentTexturePath = stringDuplicate(path);
+}
+
+void sessionClearEnvironmentTexturePath(Session* session) {
+    if (!session) return;
+    clearOwnedString(&session->editor.environmentTexturePath);
+}
+
+const char* sessionGetEnvironmentTexturePath(const Session* session) {
+    if (!session || !session->editor.environmentTexturePath || !session->editor.environmentTexturePath[0]) {
+        return "";
+    }
+    return session->editor.environmentTexturePath;
 }
 
 uint32_t sessionGetSceneObjectCount(const Session* session) {
@@ -577,6 +760,107 @@ uint32_t sessionCountSceneObjectChildren(const Session* session, uint32_t object
     return count;
 }
 
+void sessionResetSceneState(Session* session) {
+    clearSceneAssetState(session);
+}
+
+int sessionRegisterMeshImportBatch(Session* session, const char* sourcePath, uint32_t meshCount) {
+    if (!session || !sourcePath || !sourcePath[0] || meshCount == 0u) return 0;
+    if (!ensureMeshImportBatchCapacity(session, 1u) || !ensureMeshRecordCapacity(session, meshCount)) {
+        return 0;
+    }
+
+    char* sourcePathCopy = stringDuplicate(sourcePath);
+    if (!sourcePathCopy) return 0;
+
+    uint32_t batchListIndex = session->editor.meshImportBatchCount++;
+    session->editor.meshImportPaths[batchListIndex] = sourcePathCopy;
+
+    for (uint32_t i = 0; i < meshCount; i++) {
+        session->editor.meshRecords[session->editor.meshRecordCount + i] = (SessionMeshRecord){
+            .importBatchIndex = batchListIndex,
+            .importLocalIndex = i,
+        };
+    }
+    session->editor.meshRecordCount += meshCount;
+    return 1;
+}
+
+int sessionAppendImportedTextureRecords(Session* session, uint32_t textureCount) {
+    if (!session) return 0;
+    if (textureCount == 0u) return 1;
+    if (!ensureTextureRecordCapacity(session, textureCount)) return 0;
+
+    /* Keep texture-record indices aligned with VKRT texture indices for imported meshes. */
+    uint32_t baseIndex = session->editor.textureRecordCount;
+    for (uint32_t i = 0; i < textureCount; i++) {
+        session->editor.textureRecords[baseIndex + i] = (SessionTextureRecord){0};
+    }
+    session->editor.textureRecordCount += textureCount;
+    return 1;
+}
+
+int sessionAppendStandaloneTextureRecord(Session* session, const char* sourcePath, uint32_t colorSpace) {
+    if (!session || !sourcePath || !sourcePath[0]) return 0;
+    if (!ensureTextureRecordCapacity(session, 1u)) return 0;
+
+    char* sourcePathCopy = stringDuplicate(sourcePath);
+    if (!sourcePathCopy) return 0;
+
+    uint32_t textureIndex = session->editor.textureRecordCount++;
+    session->editor.textureRecords[textureIndex] = (SessionTextureRecord){
+        .sourcePath = sourcePathCopy,
+        .colorSpace = colorSpace,
+    };
+    return 1;
+}
+
+void sessionTruncateTextureRecords(Session* session, uint32_t textureCount) {
+    if (!session || textureCount >= session->editor.textureRecordCount) return;
+
+    for (uint32_t i = textureCount; i < session->editor.textureRecordCount; i++) {
+        clearTextureRecord(&session->editor.textureRecords[i]);
+    }
+    session->editor.textureRecordCount = textureCount;
+}
+
+void sessionRemoveMeshRecord(Session* session, uint32_t meshIndex) {
+    if (!session || meshIndex >= session->editor.meshRecordCount) return;
+
+    uint32_t lastIndex = session->editor.meshRecordCount - 1u;
+    if (meshIndex != lastIndex) {
+        memmove(
+            &session->editor.meshRecords[meshIndex],
+            &session->editor.meshRecords[meshIndex + 1u],
+            (size_t)(lastIndex - meshIndex) * sizeof(SessionMeshRecord)
+        );
+    }
+    session->editor.meshRecordCount = lastIndex;
+}
+
+const char* sessionGetMeshImportPath(const Session* session, uint32_t batchIndex) {
+    if (!session || batchIndex >= session->editor.meshImportBatchCount) return NULL;
+    return session->editor.meshImportPaths[batchIndex];
+}
+
+uint32_t sessionGetMeshRecordCount(const Session* session) {
+    return session ? session->editor.meshRecordCount : 0u;
+}
+
+const SessionMeshRecord* sessionGetMeshRecord(const Session* session, uint32_t meshIndex) {
+    if (!session || meshIndex >= session->editor.meshRecordCount) return NULL;
+    return &session->editor.meshRecords[meshIndex];
+}
+
+uint32_t sessionGetTextureRecordCount(const Session* session) {
+    return session ? session->editor.textureRecordCount : 0u;
+}
+
+const SessionTextureRecord* sessionGetTextureRecord(const Session* session, uint32_t textureIndex) {
+    if (!session || textureIndex >= session->editor.textureRecordCount) return NULL;
+    return &session->editor.textureRecords[textureIndex];
+}
+
 int sessionTakeRenderSave(Session* session, char** outPath) {
     if (!session || !session->commands.saveImagePath) return 0;
 
@@ -590,28 +874,26 @@ int sessionTakeRenderSave(Session* session, char** outPath) {
     return 1;
 }
 
-void sessionQueueRenderStart(Session* session, uint32_t width, uint32_t height, uint32_t targetSamples, const SessionRenderAnimationSettings* animation) {
+void sessionQueueRenderStart(Session* session, uint32_t width, uint32_t height, uint32_t targetSamples) {
     if (!session) return;
 
     if (width == 0) width = 1;
     if (height == 0) height = 1;
 
-    SessionRenderAnimationSettings animationSettings = {0};
-    if (animation) {
-        animationSettings = *animation;
-    }
-    sessionSanitizeAnimationSettings(&animationSettings);
-
     session->commands.renderCommand = SESSION_RENDER_COMMAND_START;
     session->commands.pendingRenderJob.width = width;
     session->commands.pendingRenderJob.height = height;
     session->commands.pendingRenderJob.targetSamples = targetSamples;
-    session->commands.pendingRenderJob.animation = animationSettings;
 }
 
 void sessionQueueRenderStop(Session* session) {
     if (!session) return;
     session->commands.renderCommand = SESSION_RENDER_COMMAND_STOP;
+}
+
+void sessionQueueRenderResetAccumulation(Session* session) {
+    if (!session) return;
+    session->commands.renderCommand = SESSION_RENDER_COMMAND_RESET_ACCUMULATION;
 }
 
 int sessionTakeRenderCommand(Session* session, SessionRenderCommand* outCommand, SessionRenderSettings* outSettings) {
@@ -624,53 +906,4 @@ int sessionTakeRenderCommand(Session* session, SessionRenderCommand* outCommand,
     if (outCommand) *outCommand = command;
     if (outSettings) *outSettings = settings;
     return 1;
-}
-
-static void sessionSanitizeTimelineSettings(SessionSceneTimelineSettings* timeline) {
-    if (!timeline) return;
-
-    if (timeline->keyframeCount == 0 || timeline->keyframeCount > SESSION_SCENE_TIMELINE_KEYFRAME_CAPACITY) {
-        sessionResetTimelineDefaults(timeline);
-    }
-
-    for (uint32_t keyIndex = 0; keyIndex < timeline->keyframeCount; keyIndex++) {
-        SessionSceneTimelineKeyframe* key = &timeline->keyframes[keyIndex];
-        key->time = vkrtFiniteClampf(key->time, kDefaultTimelineStartTime, SESSION_SCENE_TIMELINE_TIME_MIN, SESSION_SCENE_TIMELINE_TIME_MAX);
-
-        key->emissionScale = vkrtFiniteClampf(key->emissionScale, 0.0f, SESSION_SCENE_TIMELINE_EMISSION_SCALE_MIN, SESSION_SCENE_TIMELINE_EMISSION_SCALE_MAX);
-
-        for (int channel = 0; channel < 3; channel++) {
-            key->emissionTint[channel] = vkrtFiniteClampf(key->emissionTint[channel], 1.0f, SESSION_SCENE_TIMELINE_EMISSION_TINT_MIN, SESSION_SCENE_TIMELINE_EMISSION_TINT_MAX);
-        }
-    }
-
-    qsort(
-        timeline->keyframes,
-        timeline->keyframeCount,
-        sizeof(timeline->keyframes[0]),
-        vkrtCompareSceneTimelineKeyframesByTime
-    );
-}
-
-void sessionSanitizeAnimationSettings(SessionRenderAnimationSettings* animation) {
-    if (!animation) return;
-    animation->minTime = vkrtFiniteClampf(animation->minTime, 0.0f, 0.0f, INFINITY);
-    animation->maxTime = vkrtFiniteOrf(animation->maxTime, animation->minTime);
-    if (animation->maxTime < animation->minTime) animation->maxTime = animation->minTime;
-    animation->timeStep = vkrtFiniteOrf(animation->timeStep, kDefaultAnimationStep);
-    if (animation->timeStep <= 0.0f) animation->timeStep = kDefaultAnimationStep;
-    sessionSanitizeTimelineSettings(&animation->sceneTimeline);
-}
-
-uint32_t sessionComputeAnimationFrameCount(const SessionRenderAnimationSettings* animation) {
-    if (!animation) return 0;
-    if (!isfinite(animation->minTime) || !isfinite(animation->maxTime) || !isfinite(animation->timeStep)) return 0;
-    if (animation->timeStep <= 0.0f || animation->maxTime < animation->minTime) return 0;
-
-    double span = (double)animation->maxTime - (double)animation->minTime;
-    double steps = floor(span / (double)animation->timeStep + 1e-6);
-    if (!isfinite(steps) || steps < 0.0) return 0;
-    double count = steps + 1.0;
-    if (count > (double)UINT32_MAX) return UINT32_MAX;
-    return (uint32_t)count;
 }

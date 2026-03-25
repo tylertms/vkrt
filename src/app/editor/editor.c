@@ -274,51 +274,149 @@ static float queryTopMenuBarHeight(void) {
     return ImGui_GetFrameHeight();
 }
 
-static void drawMainMenuBar(VKRT* vkrt, Session* session, const VKRT_RenderStatusSnapshot* status) {
-    if (!vkrt || !session) return;
+typedef enum EditorMenuAction {
+    EDITOR_MENU_ACTION_OPEN_SCENE = 0,
+    EDITOR_MENU_ACTION_SAVE_SCENE,
+    EDITOR_MENU_ACTION_SAVE_SCENE_AS,
+    EDITOR_MENU_ACTION_IMPORT_MESH,
+    EDITOR_MENU_ACTION_LOAD_ENVIRONMENT,
+    EDITOR_MENU_ACTION_CLEAR_ENVIRONMENT,
+    EDITOR_MENU_ACTION_SAVE_RENDER,
+    EDITOR_MENU_ACTION_RESET_ACCUMULATION,
+} EditorMenuAction;
+
+static void queueEditorMenuAction(Session* session, EditorMenuAction action, const char* currentScenePath) {
+    if (!session) return;
+
+    switch (action) {
+        case EDITOR_MENU_ACTION_OPEN_SCENE:
+            sessionRequestSceneOpenDialog(session);
+            break;
+        case EDITOR_MENU_ACTION_SAVE_SCENE:
+            if (currentScenePath && currentScenePath[0]) {
+                sessionQueueSceneSave(session, currentScenePath);
+            }
+            break;
+        case EDITOR_MENU_ACTION_SAVE_SCENE_AS:
+            sessionRequestSceneSaveDialog(session);
+            break;
+        case EDITOR_MENU_ACTION_IMPORT_MESH:
+            sessionRequestMeshImportDialog(session);
+            break;
+        case EDITOR_MENU_ACTION_LOAD_ENVIRONMENT:
+            sessionRequestEnvironmentImportDialog(session);
+            break;
+        case EDITOR_MENU_ACTION_CLEAR_ENVIRONMENT:
+            sessionQueueEnvironmentClear(session);
+            break;
+        case EDITOR_MENU_ACTION_SAVE_RENDER:
+            sessionRequestRenderSaveDialog(session);
+            break;
+        case EDITOR_MENU_ACTION_RESET_ACCUMULATION:
+            sessionQueueRenderResetAccumulation(session);
+            break;
+        default:
+            break;
+    }
+}
+
+static void applyMainMenuShortcuts(
+    Session* session,
+    const VKRT_RenderStatusSnapshot* status,
+    const char* currentScenePath,
+    bool canClearEnvironment
+) {
+    if (!session) return;
+
+    ImGuiIO* io = ImGui_GetIO();
+    if (io->WantTextInput || ImGui_IsAnyItemActive() || ImGui_IsPopupOpen(NULL, ImGuiPopupFlags_AnyPopupId)) {
+        return;
+    }
+
+    bool haveCurrentScenePath = currentScenePath && currentScenePath[0];
+    bool canSaveRender = status &&
+        status->renderModeActive &&
+        status->renderModeFinished;
+
+    if (ImGui_IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_O)) {
+        queueEditorMenuAction(session, EDITOR_MENU_ACTION_OPEN_SCENE, currentScenePath);
+    }
+    if (haveCurrentScenePath && ImGui_IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_S)) {
+        queueEditorMenuAction(session, EDITOR_MENU_ACTION_SAVE_SCENE, currentScenePath);
+    }
+    if (ImGui_IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S)) {
+        queueEditorMenuAction(session, EDITOR_MENU_ACTION_SAVE_SCENE_AS, currentScenePath);
+    }
+    if (ImGui_IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_I)) {
+        queueEditorMenuAction(session, EDITOR_MENU_ACTION_IMPORT_MESH, currentScenePath);
+    }
+    if (ImGui_IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_E)) {
+        queueEditorMenuAction(session, EDITOR_MENU_ACTION_LOAD_ENVIRONMENT, currentScenePath);
+    }
+    if (canClearEnvironment && ImGui_IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiMod_Alt | ImGuiKey_E)) {
+        queueEditorMenuAction(session, EDITOR_MENU_ACTION_CLEAR_ENVIRONMENT, currentScenePath);
+    }
+    if (canSaveRender && ImGui_IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_R)) {
+        queueEditorMenuAction(session, EDITOR_MENU_ACTION_SAVE_RENDER, currentScenePath);
+    }
+    if (status && ImGui_IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_R)) {
+        queueEditorMenuAction(session, EDITOR_MENU_ACTION_RESET_ACCUMULATION, currentScenePath);
+    }
+}
+
+static void drawMainMenuBar(
+    Session* session,
+    const VKRT_RenderStatusSnapshot* status,
+    const char* currentScenePath,
+    bool canClearEnvironment
+) {
+    if (!session) return;
     if (!ImGui_BeginMainMenuBar()) return;
 
-    VKRT_SceneSettingsSnapshot settings = {0};
-    bool haveSettings = VKRT_getSceneSettings(vkrt, &settings) == VKRT_SUCCESS;
-    bool canClearEnvironment = haveSettings && settings.environmentTextureIndex != VKRT_INVALID_INDEX;
+    bool haveCurrentScenePath = currentScenePath && currentScenePath[0];
 
     if (ImGui_BeginMenu("File")) {
+        if (ImGui_MenuItemEx("Open", "\tCtrl+O", false, true)) {
+            queueEditorMenuAction(session, EDITOR_MENU_ACTION_OPEN_SCENE, currentScenePath);
+        }
+        if (ImGui_MenuItemEx("Save", "\tCtrl+S", false, haveCurrentScenePath)) {
+            queueEditorMenuAction(session, EDITOR_MENU_ACTION_SAVE_SCENE, currentScenePath);
+        }
+        if (ImGui_MenuItemEx("Save As", "\tCtrl+Shift+S", false, true)) {
+            queueEditorMenuAction(session, EDITOR_MENU_ACTION_SAVE_SCENE_AS, currentScenePath);
+        }
+
+        ImGui_Separator();
+
         if (ImGui_BeginMenu("Import")) {
-            if (ImGui_MenuItem("Mesh")) sessionRequestMeshImportDialog(session);
+            if (ImGui_MenuItemEx("Mesh", "\tCtrl+I", false, true)) {
+                queueEditorMenuAction(session, EDITOR_MENU_ACTION_IMPORT_MESH, currentScenePath);
+            }
             ImGui_EndMenu();
         }
 
         if (ImGui_BeginMenu("Environment")) {
-            if (ImGui_MenuItem("Load")) sessionRequestEnvironmentImportDialog(session);
-            if (ImGui_MenuItemEx("Clear", NULL, false, canClearEnvironment)) {
-                VKRT_Result result = VKRT_clearEnvironmentTexture(vkrt);
-                if (result != VKRT_SUCCESS) {
-                    LOG_ERROR("Clearing environment texture failed (%d)", (int)result);
-                }
+            if (ImGui_MenuItemEx("Load", "\tCtrl+Shift+E", false, true)) {
+                queueEditorMenuAction(session, EDITOR_MENU_ACTION_LOAD_ENVIRONMENT, currentScenePath);
+            }
+            if (ImGui_MenuItemEx("Clear", "\tCtrl+Alt+E", false, canClearEnvironment)) {
+                queueEditorMenuAction(session, EDITOR_MENU_ACTION_CLEAR_ENVIRONMENT, currentScenePath);
             }
             ImGui_EndMenu();
         }
 
         bool canSaveRender = status &&
             status->renderModeActive &&
-            status->renderModeFinished &&
-            !session->runtime.sequencer.active;
-        if (ImGui_MenuItemEx("Save Render", NULL, false, canSaveRender)) {
-            sessionRequestRenderSaveDialog(session);
+            status->renderModeFinished;
+        if (ImGui_MenuItemEx("Save Render", "\tCtrl+Shift+R", false, canSaveRender)) {
+            queueEditorMenuAction(session, EDITOR_MENU_ACTION_SAVE_RENDER, currentScenePath);
         }
-
-        ImGui_Separator();
-        ImGui_MenuItemEx("Open Scene", NULL, false, false);
-        ImGui_MenuItemEx("Recent Scenes", NULL, false, false);
         ImGui_EndMenu();
     }
 
     if (ImGui_BeginMenu("View")) {
-        if (ImGui_MenuItemEx("Reset Accumulation", NULL, false, status != NULL)) {
-            VKRT_Result result = VKRT_invalidateAccumulation(vkrt);
-            if (result != VKRT_SUCCESS) {
-                LOG_ERROR("Resetting accumulation failed (%d)", (int)result);
-            }
+        if (ImGui_MenuItemEx("Reset Accumulation", "\tCtrl+R", false, status != NULL)) {
+            queueEditorMenuAction(session, EDITOR_MENU_ACTION_RESET_ACCUMULATION, currentScenePath);
         }
 
         ImGui_Separator();
@@ -820,11 +918,16 @@ void editorUIUpdate(VKRT* vkrt, Session* session) {
 
     VKRT_RenderStatusSnapshot status = {0};
     bool hasStatus = VKRT_getRenderStatus(vkrt, &status) == VKRT_SUCCESS;
+    VKRT_SceneSettingsSnapshot sceneSettings = {0};
+    bool haveSceneSettings = VKRT_getSceneSettings(vkrt, &sceneSettings) == VKRT_SUCCESS;
+    bool canClearEnvironment = haveSceneSettings && sceneSettings.environmentTextureIndex != VKRT_INVALID_INDEX;
+    const char* currentScenePath = sessionGetCurrentScenePath(session);
     VKRT_RuntimeSnapshot runtime = {0};
     bool hasRuntime = VKRT_getRuntimeSnapshot(vkrt, &runtime) == VKRT_SUCCESS;
     queueSelectedSceneObjectRemovalOnDelete(vkrt, session, hasStatus ? &status : NULL);
+    applyMainMenuShortcuts(session, hasStatus ? &status : NULL, currentScenePath, canClearEnvironment);
 
-    drawMainMenuBar(vkrt, session, hasStatus ? &status : NULL);
+    drawMainMenuBar(session, hasStatus ? &status : NULL, currentScenePath, canClearEnvironment);
     drawWorkspaceDockspace(state);
 
     bool viewportHovered = false;

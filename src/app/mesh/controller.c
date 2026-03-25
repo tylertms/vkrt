@@ -8,15 +8,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-typedef struct DefaultMeshSpec {
-    const char* assetPath;
-    const char* importName;
-    vec3 position;
-    vec3 rotation;
-    vec3 scale;
-    Material material;
-} DefaultMeshSpec;
-
 static uint32_t colorSpaceForTextureSlot(uint32_t textureSlot) {
     switch (textureSlot) {
         case VKRT_MATERIAL_TEXTURE_SLOT_BASE_COLOR:
@@ -153,6 +144,7 @@ static int removeSceneObjectHierarchy(VKRT* vkrt, Session* session, uint32_t obj
             free(meshIndices);
             return 0;
         }
+        sessionRemoveMeshRecord(session, meshIndices[i]);
         sessionRemoveMeshReferencesNoPrune(session, meshIndices[i]);
     }
 
@@ -182,40 +174,6 @@ static void remapImportedMaterialTextures(Material* material, const uint32_t* te
         }
         *slots[i] = textureIndexMap[*slots[i]];
     }
-}
-
-static void applyMeshMaterial(VKRT* vkrt, uint32_t meshIndex, const DefaultMeshSpec* spec) {
-    if (!vkrt || !spec || meshIndex == VKRT_INVALID_INDEX) return;
-
-    uint32_t materialIndex = VKRT_INVALID_INDEX;
-    VKRT_Result result = VKRT_addMaterial(vkrt, &spec->material, spec->importName, &materialIndex);
-    if (result == VKRT_SUCCESS) {
-        result = VKRT_setMeshMaterialIndex(vkrt, meshIndex, materialIndex);
-        if (result != VKRT_SUCCESS) {
-            (void)VKRT_removeMaterial(vkrt, materialIndex);
-        }
-    }
-    if (result != VKRT_SUCCESS) {
-        LOG_ERROR("Setting %s material failed (%d)", spec->importName, (int)result);
-    }
-}
-
-static void importDefaultMesh(VKRT* vkrt, Session* session, const DefaultMeshSpec* spec) {
-    if (!vkrt || !session || !spec) return;
-
-    uint32_t meshIndex = VKRT_INVALID_INDEX;
-    if (!meshControllerImportMesh(vkrt, session, spec->assetPath, spec->importName, &meshIndex)) {
-        return;
-    }
-
-    vec3 position = {spec->position[0], spec->position[1], spec->position[2]};
-    vec3 rotation = {spec->rotation[0], spec->rotation[1], spec->rotation[2]};
-    vec3 scale = {spec->scale[0], spec->scale[1], spec->scale[2]};
-    if (sessionSetSceneObjectLocalTransformForMesh(session, meshIndex, position, rotation, scale) &&
-        !sessionSyncSceneObjectTransforms(vkrt, session)) {
-        LOG_ERROR("Setting %s transform failed", spec->importName);
-    }
-    applyMeshMaterial(vkrt, meshIndex, spec);
 }
 
 static int buildImportedSceneObjects(
@@ -318,6 +276,7 @@ int meshControllerImportMesh(VKRT* vkrt, Session* session, const char* path, con
     uint32_t materialCountBeforeImport = 0;
     uint32_t textureCountBeforeImport = 0;
     uint32_t objectCountBeforeImport = sessionGetSceneObjectCount(session);
+    uint32_t textureRecordCountBeforeImport = sessionGetTextureRecordCount(session);
     if (VKRT_getMeshCount(vkrt, &meshCountBeforeImport) != VKRT_SUCCESS) return 0;
     if (VKRT_getMaterialCount(vkrt, &materialCountBeforeImport) != VKRT_SUCCESS) return 0;
     if (VKRT_getTextureCount(vkrt, &textureCountBeforeImport) != VKRT_SUCCESS) return 0;
@@ -513,6 +472,20 @@ int meshControllerImportMesh(VKRT* vkrt, Session* session, const char* path, con
         return 0;
     }
 
+    if (!sessionAppendImportedTextureRecords(session, importData.textureCount) ||
+        !sessionRegisterMeshImportBatch(session, path, configuredMeshCount)) {
+        LOG_ERROR("Recording imported asset provenance failed. File: %s", path);
+        sessionTruncateTextureRecords(session, textureRecordCountBeforeImport);
+        rollbackImportedSceneObjects(session, objectCountBeforeImport);
+        rollbackImportedMeshes(vkrt, meshCountBeforeImport);
+        rollbackImportedMaterials(vkrt, materialCountBeforeImport);
+        rollbackImportedTextures(vkrt, textureCountBeforeImport);
+        free(importedTextureIndices);
+        free(importedMaterialIndices);
+        meshReleaseImportData(&importData);
+        return 0;
+    }
+
     LOG_TRACE(
         "Imported mesh metadata applied. File: %s, Meshes: %u, in %.3f ms",
         path,
@@ -555,16 +528,27 @@ void meshControllerApplySessionActions(VKRT* vkrt, Session* session) {
     uint32_t textureSlot = VKRT_INVALID_INDEX;
     if (sessionTakeTextureImport(session, &materialIndex, &textureSlot, &textureImportPath)) {
         uint32_t textureIndex = VKRT_INVALID_INDEX;
+        uint32_t colorSpace = colorSpaceForTextureSlot(textureSlot);
+        VKRT_MaterialSnapshot previousMaterial = {0};
+        VKRT_Result previousMaterialResult = VKRT_getMaterialSnapshot(vkrt, materialIndex, &previousMaterial);
         VKRT_Result result = VKRT_addTextureFromFile(
             vkrt,
             textureImportPath,
             NULL,
-            colorSpaceForTextureSlot(textureSlot),
+            colorSpace,
             &textureIndex
         );
         if (result == VKRT_SUCCESS) {
             result = VKRT_setMaterialTexture(vkrt, materialIndex, textureSlot, textureIndex);
-            if (result != VKRT_SUCCESS) {
+            if (result == VKRT_SUCCESS) {
+                if (!sessionAppendStandaloneTextureRecord(session, textureImportPath, colorSpace)) {
+                    if (previousMaterialResult == VKRT_SUCCESS) {
+                        (void)VKRT_setMaterial(vkrt, materialIndex, &previousMaterial.material);
+                    }
+                    (void)VKRT_removeTexture(vkrt, textureIndex);
+                    result = VKRT_ERROR_OUT_OF_MEMORY;
+                }
+            } else {
                 (void)VKRT_removeTexture(vkrt, textureIndex);
             }
         }
@@ -579,8 +563,19 @@ void meshControllerApplySessionActions(VKRT* vkrt, Session* session) {
         VKRT_Result result = VKRT_setEnvironmentTextureFromFile(vkrt, environmentImportPath);
         if (result != VKRT_SUCCESS) {
             LOG_ERROR("Environment import failed (%d). File: %s", (int)result, environmentImportPath);
+        } else {
+            sessionSetEnvironmentTexturePath(session, environmentImportPath);
         }
         free(environmentImportPath);
+    }
+
+    if (sessionTakeEnvironmentClear(session)) {
+        VKRT_Result result = VKRT_clearEnvironmentTexture(vkrt);
+        if (result != VKRT_SUCCESS) {
+            LOG_ERROR("Clearing environment texture failed (%d)", (int)result);
+        } else {
+            sessionClearEnvironmentTexturePath(session);
+        }
     }
 
     uint32_t removeObjectIndex = VKRT_INVALID_INDEX;
@@ -599,204 +594,9 @@ void meshControllerApplySessionActions(VKRT* vkrt, Session* session) {
             if (result != VKRT_SUCCESS) {
                 LOG_ERROR("Removing mesh failed (%d)", (int)result);
             } else {
+                sessionRemoveMeshRecord(session, removeIndex);
                 sessionRemoveMeshReferences(session, removeIndex);
             }
         }
     }
 }
-
-
-void meshControllerLoadDefaultAssets(VKRT* vkrt, Session* session) {
-    const char* planePath = "assets/models/plane.glb";
-    const char* spherePath = "assets/models/sphere.glb";
-    const char* dragonPath = "assets/models/dragon.glb";
-
-    Material neutralWhite = VKRT_materialDefault();
-    neutralWhite.roughness = 1.0f;
-    neutralWhite.diffuseRoughness = 0.0f;
-
-    Material leftWallMaterial = neutralWhite;
-    leftWallMaterial.baseColor[0] = 0.80f;
-    leftWallMaterial.baseColor[1] = 0.14f;
-    leftWallMaterial.baseColor[2] = 0.12f;
-
-    Material rightWallMaterial = neutralWhite;
-    rightWallMaterial.baseColor[0] = 0.13f;
-    rightWallMaterial.baseColor[1] = 0.70f;
-    rightWallMaterial.baseColor[2] = 0.16f;
-
-    Material lightMaterial = neutralWhite;
-    lightMaterial.emissionColor[0] = 1.0f;
-    lightMaterial.emissionColor[1] = 1.0f;
-    lightMaterial.emissionColor[2] = 1.0f;
-    lightMaterial.emissionLuminance = 30.0f;
-
-    Material dragonMaterial = VKRT_materialDefault();
-    dragonMaterial.baseColor[0] = 0.74f;
-    dragonMaterial.baseColor[1] = 0.73f;
-    dragonMaterial.baseColor[2] = 0.72f;
-    dragonMaterial.roughness = 0.0f;
-    dragonMaterial.metallic = 0.0f;
-
-    Material sphereMaterial = VKRT_materialDefault();
-    sphereMaterial.baseColor[0] = 1.0f;
-    sphereMaterial.baseColor[1] = 1.0f;
-    sphereMaterial.baseColor[2] = 1.0f;
-    sphereMaterial.roughness = 0.0f;
-    sphereMaterial.metallic = 1.0f;
-
-    const DefaultMeshSpec defaultMeshes[] = {
-        {
-            .assetPath = planePath,
-            .importName = "cornell_floor",
-            .position = {0.0f, 0.0f, -1.0f},
-            .rotation = {0.0f, 180.0f, -90.0f},
-            .scale = {1.0f, 1.0f, 1.0f},
-            .material = neutralWhite,
-        },
-        {
-            .assetPath = planePath,
-            .importName = "cornell_ceiling",
-            .position = {0.0f, 0.0f, 1.0f},
-            .rotation = {0.0f, 0.0f, -90.0f},
-            .scale = {1.0f, 1.0f, 1.0f},
-            .material = neutralWhite,
-        },
-        {
-            .assetPath = planePath,
-            .importName = "cornell_back_wall",
-            .position = {0.0f, 1.0f, 0.0f},
-            .rotation = {0.0f, 90.0f, -90.0f},
-            .scale = {1.0f, 1.0f, 1.0f},
-            .material = neutralWhite,
-        },
-        {
-            .assetPath = planePath,
-            .importName = "cornell_left_wall",
-            .position = {-1.0f, 0.0f, 0.0f},
-            .rotation = {-90.0f, 0.0f, -90.0f},
-            .scale = {1.0f, 1.0f, 1.0f},
-            .material = leftWallMaterial,
-        },
-        {
-            .assetPath = planePath,
-            .importName = "cornell_right_wall",
-            .position = {1.0f, 0.0f, 0.0f},
-            .rotation = {90.0f, 0.0f, -90.0f},
-            .scale = {1.0f, 1.0f, 1.0f},
-            .material = rightWallMaterial,
-        },
-        {
-            .assetPath = spherePath,
-            .importName = "cornell_light",
-            .position = {0.0f, 0.0f, 1.0f},
-            .rotation = {0.0f, 0.0f, 0.0f},
-            .scale = {0.2f, 0.2f, 0.05f},
-            .material = lightMaterial,
-        },
-        {
-            .assetPath = dragonPath,
-            .importName = "dragon",
-            .position = {-0.1f, 0.32f, -1.45f},
-            .rotation = {90.0f, 0.0f, 35.0f},
-            .scale = {8.0f, 8.0f, 8.0f},
-            .material = dragonMaterial,
-        },
-        {
-            .assetPath = spherePath,
-            .importName = "sphere",
-            .position = {0.42f, -0.15f, -0.70f},
-            .rotation = {0.0f, 0.0f, 0.0f},
-            .scale = {0.3f, 0.3f, 0.3f},
-            .material = sphereMaterial,
-        },
-    };
-
-    for (size_t i = 0; i < sizeof(defaultMeshes) / sizeof(defaultMeshes[0]); i++) {
-        importDefaultMesh(vkrt, session, &defaultMeshes[i]);
-    }
-
-    vec3 cameraPosition = {0.0f, -5.17f, 0.0f};
-    vec3 cameraTarget = {0.0f, 0.0f, 0.0f};
-    vec3 cameraUp = {0.0f, 0.0f, 1.0f};
-    VKRT_Result result = VKRT_cameraSetPose(vkrt, cameraPosition, cameraTarget, cameraUp, 26.9f);
-    if (result != VKRT_SUCCESS) LOG_ERROR("Setting default camera pose failed (%d)", (int)result);
-}
-
-
-/*
-void meshControllerLoadDefaultAssets(VKRT* vkrt, Session* session) {
-    const char* planePath = "assets/models/plane.glb";
-    const char* spherePath = "assets/models/sphere.glb";
-    const char* suzannePath = "assets/models/suzanne.glb";
-
-    Material neutralWhite = VKRT_materialDefault();
-    neutralWhite.roughness = 1.0f;
-    neutralWhite.diffuseRoughness = 1.0f;
-
-    Material floorMaterial = neutralWhite;
-    floorMaterial.baseColor[0] = 1.00f;
-    floorMaterial.baseColor[1] = 0.37f;
-    floorMaterial.baseColor[2] = 0.00f;
-
-    Material lightMaterial = neutralWhite;
-    lightMaterial.baseColor[0] = 0.0f;
-    lightMaterial.baseColor[1] = 0.0f;
-    lightMaterial.baseColor[2] = 0.0f;
-    lightMaterial.emissionColor[0] = 1.0f;
-    lightMaterial.emissionColor[1] = 1.0f;
-    lightMaterial.emissionColor[2] = 1.0f;
-    lightMaterial.emissionLuminance = 8000.0f;
-
-    Material suzanneMaterial = neutralWhite;
-    suzanneMaterial.baseColor[0] = 1.0f;
-    suzanneMaterial.baseColor[1] = 1.0f;
-    suzanneMaterial.baseColor[2] = 1.0f;
-    suzanneMaterial.roughness = 0.0f;
-    suzanneMaterial.diffuseRoughness = 0.0f;
-    suzanneMaterial.transmission = 1.0f;
-
-
-    const DefaultMeshSpec defaultMeshes[] = {
-        {
-            .assetPath = planePath,
-            .importName = "floor",
-            .position = {0.0f, 0.0f, 0.0f},
-            .rotation = {0.0f, 0.0f, 0.0f},
-            .scale = {1000.0f, 1000.0f, 1.0f},
-            .material = floorMaterial,
-        },
-        {
-            .assetPath = spherePath,
-            .importName = "light",
-            .position = {1.95f, -1.4f, 4.30f},
-            .rotation = {0.0f, 0.0f, 0.0f},
-            .scale = {0.1f, 0.1f, 0.1f},
-            .material = lightMaterial,
-        },
-        {
-            .assetPath = suzannePath,
-            .importName = "suzanne",
-            .position = {0.0f, 0.01f, 0.5f},
-            .rotation = {0.0f, 0.0f, 109.95f},
-            .scale = {1.0f, 1.0f, 1.0f},
-            .material = suzanneMaterial,
-        }
-    };
-
-    for (size_t i = 0; i < sizeof(defaultMeshes) / sizeof(defaultMeshes[0]); i++) {
-        importDefaultMesh(vkrt, session, &defaultMeshes[i]);
-    }
-
-    vec3 cameraPosition = {-5.973f, 2.651f, -2.664f};
-    vec3 cameraTarget = {0.0f, -0.260f, 0.500f};
-    vec3 cameraUp = {0.0f, 0.0f, 1.0f};
-    VKRT_Result result = VKRT_cameraSetPose(vkrt, cameraPosition, cameraTarget, cameraUp, 26.9f);
-    if (result != VKRT_SUCCESS) LOG_ERROR("Setting default camera pose failed (%d)", (int)result);
-
-    vec3 environmentColor = {0.0f, 0.0f, 0.0f};
-    float environmentStrength = 0.0f;
-    result = VKRT_setEnvironmentLight(vkrt, environmentColor, environmentStrength);
-    if (result != VKRT_SUCCESS) LOG_ERROR("Setting default environment light failed (%d)", (int)result);
-}
-*/

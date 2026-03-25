@@ -1,0 +1,203 @@
+{
+	"format":	"vkrt.scene",
+	"version":	1,
+	"meshImports":	["../models/plane.glb", "../models/plane.glb", "../models/plane.glb", "../models/plane.glb", "../models/plane.glb", "../models/sphere.glb", "../models/dragon.glb", "../models/sphere.glb"],
+	"textureImports":	[],
+	"materials":	[{
+			"index":	1,
+			"name":	"cornell_floor",
+			"material":	{
+				"roughness":	1
+			}
+		}, {
+			"index":	2,
+			"name":	"cornell_ceiling",
+			"material":	{
+				"roughness":	1
+			}
+		}, {
+			"index":	3,
+			"name":	"cornell_back_wall",
+			"material":	{
+				"roughness":	1
+			}
+		}, {
+			"index":	4,
+			"name":	"cornell_left_wall",
+			"material":	{
+				"baseColor":	[0.800000011920929, 0.14000000059604645, 0.119999997317791],
+				"roughness":	1
+			}
+		}, {
+			"index":	5,
+			"name":	"cornell_right_wall",
+			"material":	{
+				"baseColor":	[0.12999999523162842, 0.699999988079071, 0.15999999642372131],
+				"roughness":	1
+			}
+		}, {
+			"index":	6,
+			"name":	"cornell_light",
+			"material":	{
+				"roughness":	1,
+				"emissionLuminance":	30
+			}
+		}, {
+			"index":	7,
+			"name":	"dragon",
+			"material":	{
+				"baseColor":	[0.740000009536743, 0.73000001907348633, 0.72000002861022949],
+				"roughness":	0
+			}
+		}, {
+			"index":	8,
+			"name":	"sphere",
+			"material":	{
+				"baseColor":	[1, 1, 1],
+				"roughness":	0,
+				"metallic":	1
+			}
+		}],
+	"meshes":	[{
+			"name":	"cornell_floor",
+			"materialIndex":	1,
+			"hasMaterialAssignment":	true,
+			"renderBackfaces":	false,
+			"opacity":	1,
+			"importIndex":	0,
+			"importLocalIndex":	0
+		}, {
+			"name":	"cornell_ceiling",
+			"materialIndex":	2,
+			"hasMaterialAssignment":	true,
+			"renderBackfaces":	false,
+			"opacity":	1,
+			"importIndex":	1,
+			"importLocalIndex":	0
+		}, {
+			"name":	"cornell_back_wall",
+			"materialIndex":	3,
+			"hasMaterialAssignment":	true,
+			"renderBackfaces":	false,
+			"opacity":	1,
+			"importIndex":	2,
+			"importLocalIndex":	0
+		}, {
+			"name":	"cornell_left_wall",
+			"materialIndex":	4,
+			"hasMaterialAssignment":	true,
+			"renderBackfaces":	false,
+			"opacity":	1,
+			"importIndex":	3,
+			"importLocalIndex":	0
+		}, {
+			"name":	"cornell_right_wall",
+			"materialIndex":	5,
+			"hasMaterialAssignment":	true,
+			"renderBackfaces":	false,
+			"opacity":	1,
+			"importIndex":	4,
+			"importLocalIndex":	0
+		}, {
+			"name":	"cornell_light",
+			"materialIndex":	6,
+			"hasMaterialAssignment":	true,
+			"renderBackfaces":	false,
+			"opacity":	1,
+			"importIndex":	5,
+			"importLocalIndex":	0
+		}, {
+			"name":	"dragon",
+			"materialIndex":	7,
+			"hasMaterialAssignment":	true,
+			"renderBackfaces":	false,
+			"opacity":	1,
+			"importIndex":	6,
+			"importLocalIndex":	0
+		}, {
+			"name":	"sphere",
+			"materialIndex":	8,
+			"hasMaterialAssignment":	true,
+			"renderBackfaces":	false,
+			"opacity":	1,
+			"importIndex":	7,
+			"importLocalIndex":	0
+		}],
+	"sceneObjects":	[{
+			"name":	"cornell_floor",
+			"parentIndex":	null,
+			"meshIndex":	0,
+			"localPosition":	[0, 0, -1],
+			"localRotation":	[180, -5.0089556680177338e-06, 89.999992370605469],
+			"localScale":	[1, 1, 0.99999994039535522]
+		}, {
+			"name":	"cornell_ceiling",
+			"parentIndex":	null,
+			"meshIndex":	1,
+			"localPosition":	[0, 0, 1],
+			"localRotation":	[0, 0, -90],
+			"localScale":	[1, 1, 0.99999994039535522]
+		}, {
+			"name":	"cornell_back_wall",
+			"parentIndex":	null,
+			"meshIndex":	2,
+			"localPosition":	[0, 1, 0],
+			"localRotation":	[90, 90, 0],
+			"localScale":	[0.99999994039535522, 0.99999994039535522, 1]
+		}, {
+			"name":	"cornell_left_wall",
+			"parentIndex":	null,
+			"meshIndex":	3,
+			"localPosition":	[-1, 0, 0],
+			"localRotation":	[-90, 0, -90],
+			"localScale":	[0.99999994039535522, 0.99999994039535522, 1]
+		}, {
+			"name":	"cornell_right_wall",
+			"parentIndex":	null,
+			"meshIndex":	4,
+			"localPosition":	[1, 0, 0],
+			"localRotation":	[90, 0, -90],
+			"localScale":	[0.99999994039535522, 0.99999994039535522, 1]
+		}, {
+			"name":	"cornell_light",
+			"parentIndex":	null,
+			"meshIndex":	5,
+			"localPosition":	[0, 0, 1],
+			"localRotation":	[0, 0, 0],
+			"localScale":	[0.20000000298023224, 0.20000000298023224, 0.05000000074505806]
+		}, {
+			"name":	"dragon",
+			"parentIndex":	null,
+			"meshIndex":	6,
+			"localPosition":	[-0.10000000149011612, 0.31999999284744263, -1.4500000476837158],
+			"localRotation":	[90, 0, 35.000007629394531],
+			"localScale":	[7.9999995231628418, 8, 8]
+		}, {
+			"name":	"sphere",
+			"parentIndex":	null,
+			"meshIndex":	7,
+			"localPosition":	[0.41999998688697815, -0.15000000596046448, -0.699999988079071],
+			"localRotation":	[0, 0, 0],
+			"localScale":	[0.300000011920929, 0.300000011920929, 0.300000011920929]
+		}],
+	"sceneSettings":	{
+		"camera":	{
+			"position":	[0, -5.1700000762939453, 0],
+			"target":	[0, 0, 0],
+			"up":	[0, 0, 1],
+			"vfov":	26.899999618530273
+		},
+		"samplesPerPixel":	1,
+		"rrMinDepth":	4,
+		"rrMaxDepth":	8,
+		"toneMappingMode":	1,
+		"exposure":	1,
+		"autoExposureEnabled":	false,
+		"autoSPPEnabled":	true,
+		"environmentColor":	[0.25, 0.25, 0.25],
+		"environmentStrength":	1,
+		"debugMode":	0,
+		"misNeeEnabled":	true,
+		"selectedMeshIndex":	null
+	}
+}

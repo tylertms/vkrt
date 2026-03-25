@@ -16,7 +16,6 @@ static const int kRenderOutputDimensionMin = 1;
 static const int kRenderOutputDimensionMax = 16384;
 
 enum {
-    kRenderFolderPathCapacity = 256,
     kRenderTimeTextCapacity = 32,
     kRenderProgressOverlayCapacity = 96,
 };
@@ -45,7 +44,6 @@ static void initializeRenderConfig(VKRT* vkrt, Session* session) {
         session->editor.renderConfig.width = width;
         session->editor.renderConfig.height = height;
     }
-    sessionSanitizeAnimationSettings(&session->editor.renderConfig.animation);
 }
 
 static void updateRenderTimer(const VKRT_RenderStatusSnapshot* status, SessionRenderTimer* timer, uint64_t nowUs) {
@@ -117,22 +115,14 @@ static void drawIdleOutputSection(Session* session) {
 }
 
 static void drawIdleRenderState(Session* session, const SessionRenderTimer* timer) {
-    bool animationEnabled = session->editor.renderConfig.animation.enabled != 0;
-
     drawIdleOutputSection(session);
 
-    const char* startLabel = animationEnabled
-        ? ICON_FA_CLAPPERBOARD " Start Sequence"
-        : ICON_FA_CAMERA " Start Render";
-    if (inspectorPaddedButton(startLabel)) {
-        uint32_t startSamples = session->editor.renderConfig.targetSamples;
-        if (animationEnabled && startSamples == 0) startSamples = 1;
+    if (inspectorPaddedButton(ICON_FA_CAMERA " Start Render")) {
         sessionQueueRenderStart(
             session,
             session->editor.renderConfig.width,
             session->editor.renderConfig.height,
-            startSamples,
-            &session->editor.renderConfig.animation
+            session->editor.renderConfig.targetSamples
         );
     }
 
@@ -146,11 +136,10 @@ static void drawIdleRenderState(Session* session, const SessionRenderTimer* time
 static void drawRenderProgressSection(
     const VKRT_RenderStatusSnapshot* status,
     const VKRT_RuntimeSnapshot* runtime,
-    const RenderSequencer* sequencer,
     float elapsedActiveSeconds,
     float completedSeconds
 ) {
-    if (!status || !runtime || !sequencer) return;
+    if (!status || !runtime) return;
 
     ImGui_TextDisabled("Output %ux%u", runtime->renderWidth, runtime->renderHeight);
     if (status->renderTargetSamples > 0) {
@@ -181,29 +170,6 @@ static void drawRenderProgressSection(
         ImGui_ProgressBar(0.0f, (ImVec2){-1.0f, 0.0f}, overlay);
     }
 
-    if (sequencer->active) {
-        float sequenceProgress = 0.0f;
-        if (sequencer->frameCount > 0u) {
-            uint32_t frameShown = sequencer->frameIndex + 1u;
-            if (frameShown > sequencer->frameCount) frameShown = sequencer->frameCount;
-            sequenceProgress = (float)frameShown / (float)sequencer->frameCount;
-        }
-        if (sequenceProgress < 0.0f) sequenceProgress = 0.0f;
-        if (sequenceProgress > 1.0f) sequenceProgress = 1.0f;
-
-        char sequenceOverlay[kRenderProgressOverlayCapacity];
-        snprintf(
-            sequenceOverlay,
-            sizeof(sequenceOverlay),
-            "Frame %u / %u",
-            sequencer->frameIndex + 1u,
-            sequencer->frameCount
-        );
-        ImGui_ProgressBar(sequenceProgress, (ImVec2){-1.0f, 0.0f}, sequenceOverlay);
-    }
-
-    ImGui_Spacing();
-
     if (status->renderModeFinished) {
         float elapsedDoneSeconds = completedSeconds > 0.0f ? completedSeconds : elapsedActiveSeconds;
         char elapsedText[kRenderTimeTextCapacity];
@@ -211,9 +177,7 @@ static void drawRenderProgressSection(
         ImGui_Text(ICON_FA_CHECK " Complete  " ICON_FA_CLOCK " %s", elapsedText);
     } else {
         float etaSeconds = -1.0f;
-        if (sequencer->active && sequencer->hasEstimatedRemaining) {
-            etaSeconds = fmaxf(sequencer->estimatedRemainingSeconds, 0.0f);
-        } else if (status->renderTargetSamples > 0 && status->totalSamples > 0 && elapsedActiveSeconds > 0.0f) {
+        if (status->renderTargetSamples > 0 && status->totalSamples > 0 && elapsedActiveSeconds > 0.0f) {
             float samplesPerSecond = (float)status->totalSamples / elapsedActiveSeconds;
             if (samplesPerSecond > 0.0f && status->renderTargetSamples > status->totalSamples) {
                 etaSeconds = (float)(status->renderTargetSamples - status->totalSamples) / samplesPerSecond;
@@ -230,29 +194,23 @@ static void drawRenderProgressSection(
     }
 }
 
-static void drawRenderActionsSection(VKRT* vkrt, Session* session, const VKRT_RenderStatusSnapshot* status, const RenderSequencer* sequencer) {
-    if (!vkrt || !session || !status || !sequencer) return;
+static void drawRenderActionsSection(VKRT* vkrt, Session* session, const VKRT_RenderStatusSnapshot* status) {
+    if (!vkrt || !session || !status) return;
 
     ImGui_Spacing();
 
     if (!status->renderModeFinished) {
-        if (sequencer->active) {
-            if (inspectorPaddedButton(ICON_FA_STOP " Stop Sequence")) {
-                sessionQueueRenderStop(session);
-            }
-        } else if (inspectorPaddedButton(ICON_FA_STOP " Stop Render")) {
+        if (inspectorPaddedButton(ICON_FA_STOP " Stop Render")) {
             VKRT_Result result = VKRT_stopRenderSampling(vkrt);
             if (result != VKRT_SUCCESS) {
                 LOG_ERROR("Stopping render sampling failed (%d)", (int)result);
             }
         }
     } else {
-        if (!sequencer->active) {
-            if (inspectorPaddedButton(ICON_FA_FLOPPY_DISK " Save Image")) {
-                sessionRequestRenderSaveDialog(session);
-            }
-            ImGui_SameLine();
+        if (inspectorPaddedButton(ICON_FA_FLOPPY_DISK " Save Image")) {
+            sessionRequestRenderSaveDialog(session);
         }
+        ImGui_SameLine();
         if (inspectorPaddedButton(ICON_FA_ARROW_RIGHT_FROM_BRACKET " Exit Render")) {
             sessionQueueRenderStop(session);
         }
@@ -279,6 +237,6 @@ void inspectorDrawRenderTab(VKRT* vkrt, Session* session) {
     }
 
     float elapsedActiveSeconds = queryActiveRenderSeconds(timer, nowUs);
-    drawRenderProgressSection(&status, &runtime, &session->runtime.sequencer, elapsedActiveSeconds, timer->completedSeconds);
-    drawRenderActionsSection(vkrt, session, &status, &session->runtime.sequencer);
+    drawRenderProgressSection(&status, &runtime, elapsedActiveSeconds, timer->completedSeconds);
+    drawRenderActionsSection(vkrt, session, &status);
 }

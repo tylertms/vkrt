@@ -148,7 +148,7 @@ static int writeFileBytes(FILE* file, const void* data, size_t size) {
     return fwrite(data, 1u, size, file) == size;
 }
 
-static int writePNG16File(const char* path, const uint16_t* rgba16, uint32_t width, uint32_t height) {
+static int writePNGFile(const char* path, const uint16_t* rgba16, uint32_t width, uint32_t height) {
     size_t rgba16ByteCount = 0u;
     if (!tryComputeImageByteCount(width, height, 8u, &rgba16ByteCount)) {
         LOG_ERROR("PNG export size overflow for '%s'", path);
@@ -181,7 +181,7 @@ static int writePNG16File(const char* path, const uint16_t* rgba16, uint32_t wid
         error = spng_set_ihdr(context, &header);
     }
     if (error == 0) {
-        error = spng_encode_image(context, rgba16, rgba16ByteCount, SPNG_FMT_RGBA16, SPNG_ENCODE_FINALIZE);
+        error = spng_encode_image(context, rgba16, rgba16ByteCount, SPNG_FMT_PNG, SPNG_ENCODE_FINALIZE);
     }
 
     spng_ctx_free(context);
@@ -266,7 +266,7 @@ static int writeRenderImageFile(
 
     const uint16_t* rgba16 = (const uint16_t*)pixels;
     if (format == RENDER_IMAGE_FORMAT_PNG) {
-        if (!writePNG16File(path, rgba16, width, height)) {
+        if (!writePNGFile(path, rgba16, width, height)) {
             remove(path);
             LOG_ERROR("Render export failed for '%s'", path);
             return -1;
