@@ -106,6 +106,7 @@ external_includes = include_directories(
   'external/imgui/icons',
   'external/cglm/include',
   'external/cgltf/include',
+  'external/cjson',
   'external/nfd/src/include',
   'external/tinyexr',
   is_system: true,
@@ -124,6 +125,7 @@ app_local_includes = include_directories(
   'src/app/session',
   'src/app/mesh',
   'src/app/render',
+  'src/app/scene',
   'src/app/editor',
 )
 
@@ -349,13 +351,19 @@ dcimgui = static_library('dcimgui',
   override_options: ['warning_level=0'],
 )
 
+cjson = static_library('cjson',
+  include_directories: include_directories('external/cjson'),
+  sources: files('external/cjson/cJSON.c'),
+  override_options: ['warning_level=0'],
+)
+
 subdir('src')
 
 file_dialogs_opt = get_option('file_dialogs')
 file_dialogs_enabled = false
 file_dialogs_backend = 'disabled'
 app_dialog_source = files('src/app/editor/dialogs_stub.c')
-app_link_with = [vkrt, dcimgui]
+app_link_with = [vkrt, dcimgui, cjson]
 
 if not file_dialogs_opt.disabled()
   nfd_source = []
