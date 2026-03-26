@@ -42,23 +42,18 @@ static VKRT_Result prepareTLASBuild(
     const VkAccelerationStructureInstanceKHR* instanceData = instances ? instances : &emptyInstance;
     uint32_t sizeQueryCount = instanceCount > 0u ? instanceCount : 1u;
 
-    VKRT_Result result = createHostBufferFromData(
+    VKRT_Result result = createDeviceBufferFromData(
         vkrt,
         instanceData,
         sizeof(*instanceData) * sizeQueryCount,
         VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
         &resources->instanceBuffer->buffer,
         &resources->instanceBuffer->memory,
-        NULL
+        &instanceDeviceAddress
     );
     if (result != VKRT_SUCCESS) {
         return result;
     }
-
-    VkBufferDeviceAddressInfo instanceAddressInfo = {0};
-    instanceAddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
-    instanceAddressInfo.buffer = resources->instanceBuffer->buffer;
-    instanceDeviceAddress = vkrt->core.procs.vkGetBufferDeviceAddressKHR(vkrt->core.device, &instanceAddressInfo);
 
     VkAccelerationStructureGeometryInstancesDataKHR geometryInstancesData = {0};
     geometryInstancesData.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;

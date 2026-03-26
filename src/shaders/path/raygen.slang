@@ -132,7 +132,7 @@ void main() {
 
             applySurfaceTextures(material, payload.color, payload.texcoord0, payload.texcoord1);
             if (depth == 0u) {
-                sampleAlbedo = max(material.baseColor, float3(0.0));
+                sampleAlbedo = materialDenoiserAlbedo(material);
                 sampleNormal = shadingNormal;
             }
 
