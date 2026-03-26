@@ -9,6 +9,12 @@ typedef struct GPUImageState {
     VkImage accumulationImages[2];
     VkImageView accumulationImageViews[2];
     VkDeviceMemory accumulationImageMemories[2];
+    VkImage albedoImages[2];
+    VkImageView albedoImageViews[2];
+    VkDeviceMemory albedoImageMemories[2];
+    VkImage normalImages[2];
+    VkImageView normalImageViews[2];
+    VkDeviceMemory normalImageMemories[2];
     VkImage selectionMaskImage;
     VkImageView selectionMaskImageView;
     VkDeviceMemory selectionMaskImageMemory;

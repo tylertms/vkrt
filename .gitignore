@@ -5,8 +5,9 @@ captures/
 
 scripts/__pycache__/
 
-/subprojects/*
-!/subprojects/*.wrap
+subprojects/*
+!subprojects/*.wrap
+!subprojects/packagefiles/
 
 .vscode/
 .cache/

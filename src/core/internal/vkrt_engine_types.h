@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stddef.h>
+
 #include <vulkan/vulkan.h>
 
 #include "vkrt_types.h"
@@ -72,6 +74,13 @@ typedef struct RenderImageExporter {
     struct RenderImageExportJob* head;
     struct RenderImageExportJob* tail;
     uint32_t pendingJobCount;
+    void* completedViewportPixels;
+    size_t completedViewportByteCount;
+    uint32_t completedViewportWidth;
+    uint32_t completedViewportHeight;
+    uint64_t completedViewportRenderSequence;
+    int completedViewportReady;
+    int completedViewportSucceeded;
     int stop;
     int primitivesInitialized;
     int threadRunning;

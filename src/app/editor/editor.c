@@ -335,8 +335,7 @@ static void applyMainMenuShortcuts(
 
     bool haveCurrentScenePath = currentScenePath && currentScenePath[0];
     bool canSaveRender = status &&
-        status->renderModeActive &&
-        status->renderModeFinished;
+        VKRT_renderStatusIsComplete(status);
 
     if (ImGui_IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_O)) {
         queueEditorMenuAction(session, EDITOR_MENU_ACTION_OPEN_SCENE, currentScenePath);
@@ -406,8 +405,7 @@ static void drawMainMenuBar(
         }
 
         bool canSaveRender = status &&
-            status->renderModeActive &&
-            status->renderModeFinished;
+            VKRT_renderStatusIsComplete(status);
         if (ImGui_MenuItemEx("Save Render", "\tCtrl+Shift+R", false, canSaveRender)) {
             queueEditorMenuAction(session, EDITOR_MENU_ACTION_SAVE_RENDER, currentScenePath);
         }
@@ -556,7 +554,7 @@ static bool drawViewportWindow(
     ImGui_SetNextWindowClass(&viewportWindowClass);
 
     ImGui_PushStyleVarImVec2(ImGuiStyleVar_WindowPadding, (ImVec2){0.0f, 0.0f});
-    const char* viewportWindowLabel = status->renderModeActive
+    const char* viewportWindowLabel = VKRT_renderStatusIsActive(status)
         ? "Render###ViewWindow"
         : "Viewport###ViewWindow";
     ImGui_Begin(
@@ -675,7 +673,7 @@ static void requestViewportSelection(
     bool viewportHovered
 ) {
     if (!vkrt || !status || !runtime || !viewportHovered) return;
-    if (status->renderModeActive) return;
+    if (VKRT_renderStatusIsActive(status)) return;
 
     if (!ImGui_IsMouseClicked(ImGuiMouseButton_Left)) return;
 
@@ -706,7 +704,7 @@ static void queueSelectedSceneObjectRemovalOnDelete(
     const VKRT_RenderStatusSnapshot* status
 ) {
     if (!vkrt || !session || !status) return;
-    if (status->renderModeActive) return;
+    if (VKRT_renderStatusIsActive(status)) return;
 
     ImGuiIO* io = ImGui_GetIO();
     if (io->WantTextInput || ImGui_IsAnyItemActive() || ImGui_IsPopupOpen(NULL, ImGuiPopupFlags_AnyPopupId)) {
@@ -741,7 +739,7 @@ static void applyEditorCameraInput(
     if (!vkrt || !status || !runtime) return;
 
     ImGuiIO* io = ImGui_GetIO();
-    if (status->renderModeActive) {
+    if (VKRT_renderStatusIsActive(status)) {
         if (!viewportHovered) return;
 
         float zoom = 1.0f;

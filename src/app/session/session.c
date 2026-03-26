@@ -292,6 +292,8 @@ void sessionInit(Session* session) {
     session->runtime.lastSyncedSelectedMeshIndex = VKRT_INVALID_INDEX;
     session->commands.renderCommand = SESSION_RENDER_COMMAND_NONE;
     session->editor.renderConfig.targetSamples = kDefaultRenderTargetSamples;
+    VKRT_defaultRenderExportSettings(&session->editor.renderExportSettings);
+    session->commands.saveImageSettings = session->editor.renderExportSettings;
 }
 
 void sessionDeinit(Session* session) {
@@ -558,6 +560,7 @@ void sessionQueueRenderSave(Session* session, const char* path) {
     if (!session) return;
 
     clearOwnedString(&session->commands.saveImagePath);
+    session->commands.saveImageSettings = session->editor.renderExportSettings;
     if (!path || !path[0]) return;
 
     session->commands.saveImagePath = stringDuplicate(path);
@@ -791,7 +794,6 @@ int sessionAppendImportedTextureRecords(Session* session, uint32_t textureCount)
     if (textureCount == 0u) return 1;
     if (!ensureTextureRecordCapacity(session, textureCount)) return 0;
 
-    /* Keep texture-record indices aligned with VKRT texture indices for imported meshes. */
     uint32_t baseIndex = session->editor.textureRecordCount;
     for (uint32_t i = 0; i < textureCount; i++) {
         session->editor.textureRecords[baseIndex + i] = (SessionTextureRecord){0};
@@ -861,11 +863,12 @@ const SessionTextureRecord* sessionGetTextureRecord(const Session* session, uint
     return &session->editor.textureRecords[textureIndex];
 }
 
-int sessionTakeRenderSave(Session* session, char** outPath) {
+int sessionTakeRenderSave(Session* session, char** outPath, VKRT_RenderExportSettings* outSettings) {
     if (!session || !session->commands.saveImagePath) return 0;
 
     char* path = session->commands.saveImagePath;
     session->commands.saveImagePath = NULL;
+    if (outSettings) *outSettings = session->commands.saveImageSettings;
     if (outPath) {
         *outPath = path;
     } else {
@@ -874,21 +877,40 @@ int sessionTakeRenderSave(Session* session, char** outPath) {
     return 1;
 }
 
-void sessionQueueRenderStart(Session* session, uint32_t width, uint32_t height, uint32_t targetSamples) {
+void sessionQueueRenderStart(Session* session, const SessionRenderSettings* settings) {
     if (!session) return;
 
-    if (width == 0) width = 1;
-    if (height == 0) height = 1;
+    SessionRenderSettings nextSettings = {0};
+    if (settings) nextSettings = *settings;
+    if (nextSettings.width == 0) nextSettings.width = 1;
+    if (nextSettings.height == 0) nextSettings.height = 1;
 
     session->commands.renderCommand = SESSION_RENDER_COMMAND_START;
-    session->commands.pendingRenderJob.width = width;
-    session->commands.pendingRenderJob.height = height;
-    session->commands.pendingRenderJob.targetSamples = targetSamples;
+    session->commands.pendingRenderJob = nextSettings;
+    session->commands.pendingRenderJob.denoiseEnabled = nextSettings.denoiseEnabled ? 1u : 0u;
+}
+
+void sessionQueueRenderSetDenoise(Session* session, uint8_t enabled) {
+    if (!session) return;
+    session->commands.renderCommand = SESSION_RENDER_COMMAND_SET_DENOISE;
+    session->commands.pendingRenderJob.denoiseEnabled = enabled ? 1u : 0u;
+}
+
+void sessionQueueRenderStopSampling(Session* session, uint8_t denoiseEnabled) {
+    if (!session) return;
+    session->commands.renderCommand = SESSION_RENDER_COMMAND_STOP_SAMPLING;
+    session->commands.pendingRenderJob.denoiseEnabled = denoiseEnabled ? 1u : 0u;
 }
 
 void sessionQueueRenderStop(Session* session) {
     if (!session) return;
     session->commands.renderCommand = SESSION_RENDER_COMMAND_STOP;
+}
+
+void sessionQueueRenderDenoise(Session* session) {
+    if (!session) return;
+    session->commands.renderCommand = SESSION_RENDER_COMMAND_DENOISE;
+    session->commands.pendingRenderJob.denoiseEnabled = 1u;
 }
 
 void sessionQueueRenderResetAccumulation(Session* session) {

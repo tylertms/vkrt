@@ -1,0 +1,6 @@
+[wrap-file]
+directory = oidn-2.4.1.x86_64.linux
+source_url = https://github.com/RenderKit/oidn/releases/download/v2.4.1/oidn-2.4.1.x86_64.linux.tar.gz
+source_filename = oidn-2.4.1.x86_64.linux.tar.gz
+source_hash = b69ca2443a226ef692ca46bdc4f89995b1e99091f2665b906cbe07e9673e48cc
+patch_directory = oidn

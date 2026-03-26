@@ -183,7 +183,7 @@ int benchmarkRun(VKRT* vkrt, const CLIBenchmarkOptions* options) {
             return EXIT_SUCCESS;
         }
 
-        if (status.renderModeFinished) {
+        if (VKRT_renderStatusIsComplete(&status)) {
             LOG_ERROR("Benchmark render finished before reaching the timed sample target");
             return EXIT_FAILURE;
         }

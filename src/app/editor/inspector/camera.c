@@ -45,7 +45,7 @@ void inspectorDrawCameraTab(VKRT* vkrt, Session* session) {
         return;
     }
 
-    bool renderModeActive = status.renderModeActive != 0;
+    bool renderModeActive = VKRT_renderStatusIsActive(&status) != 0;
 
     if (inspectorBeginCollapsingHeaderSection("Camera Pose", ImGuiTreeNodeFlags_DefaultOpen)) {
         inspectorIndentSection();
@@ -175,7 +175,7 @@ void inspectorDrawCameraTab(VKRT* vkrt, Session* session) {
         if (inspectorPaddedButton(ICON_FA_FOLDER_OPEN " Load")) {
             sessionRequestEnvironmentImportDialog(session);
         }
-        tooltipOnHover("Load environment texture.");
+        tooltipOnHover("Load an environment texture for image-based lighting.");
 
         ImGui_SameLine();
         ImGui_BeginDisabled(settings.environmentTextureIndex == VKRT_INVALID_INDEX);
@@ -183,9 +183,9 @@ void inspectorDrawCameraTab(VKRT* vkrt, Session* session) {
             sessionQueueEnvironmentClear(session);
         }
         if (settings.environmentTextureIndex != VKRT_INVALID_INDEX) {
-            tooltipOnHover("Clear environment texture.");
+            tooltipOnHover("Remove the environment texture and use the solid sky color.");
         } else {
-            tooltipOnHover("No environment texture is loaded.");
+            tooltipOnHover("No texture loaded.");
         }
         ImGui_EndDisabled();
 
@@ -220,7 +220,7 @@ void inspectorDrawCameraTab(VKRT* vkrt, Session* session) {
                 LOG_ERROR("Updating NEE toggle failed (%d)", (int)result);
             }
         }
-        tooltipOnHover("Next Event Estimation with MIS. Samples emissive geometry directly for lower variance.");
+        tooltipOnHover("Samples lights directly to reduce noise from emissive lighting.");
 
         ImGui_EndDisabled();
         inspectorUnindentSection();

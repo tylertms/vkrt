@@ -10,15 +10,15 @@ project('vkrt', ['c', 'cpp'],
 sys = host_machine.system()
 is_linux = sys == 'linux'
 is_windows = sys == 'windows'
-is_darwin = sys == 'darwin'
 
-if not is_linux and not is_windows and not is_darwin
+if not is_linux and not is_windows
   error('Unsupported host system: ' + sys)
 endif
 
 cc = meson.get_compiler('c')
 cpp = meson.get_compiler('cpp')
 cmake = import('cmake')
+fs = import('fs')
 
 buildtype = get_option('buildtype')
 profiling_enabled = get_option('profiling')
@@ -226,7 +226,7 @@ elif linux_window_backend != 'auto'
 endif
 
 glfw_build_win32 = is_windows
-glfw_build_cocoa = is_darwin
+glfw_build_cocoa = false
 glfw_build_x11 = is_linux and (linux_glfw_backend == 'x11' or linux_glfw_backend == 'both')
 glfw_build_wayland = is_linux and (linux_glfw_backend == 'wayland' or linux_glfw_backend == 'both')
 
@@ -298,14 +298,35 @@ turbojpeg_project = subproject(
 )
 turbojpeg_dep = turbojpeg_project.get_variable('turbojpeg_dep')
 
-core_cpp_args = cpp_args
-if is_windows and cpp_is_msvc
-  core_cpp_args += ['/wd4245', '/wd4702']
+oidn_runtime_files = []
+oidn_enabled = true
+oidn_subproject_name = ''
+oidn_cpu = host_machine.cpu_family()
+
+if is_windows and oidn_cpu == 'x86_64'
+  oidn_subproject_name = 'oidn_windows_x86_64'
+elif is_linux and oidn_cpu == 'x86_64'
+  oidn_subproject_name = 'oidn_linux_x86_64'
+else
+  error('Bundled OIDN is not configured for ' + sys + ' ' + oidn_cpu)
 endif
+
+oidn_project = subproject(oidn_subproject_name, required: true)
+oidn_dep = oidn_project.get_variable('oidn_dep')
+oidn_runtime_files = oidn_project.get_variable('oidn_runtime_files')
+oidn_version = oidn_project.get_variable('oidn_version')
 
 c_args += [c_define_prefix + 'VKRT_GLFW_VERSION="' + glfw_dep.version() + '"']
 c_args += [c_define_prefix + 'VKRT_SPNG_VERSION="' + spng_dep.version() + '"']
 c_args += [c_define_prefix + 'VKRT_TURBOJPEG_VERSION="' + turbojpeg_dep.version() + '"']
+c_args += [c_define_prefix + 'VKRT_OIDN_VERSION="' + oidn_version + '"']
+c_args += [c_define_prefix + 'VKRT_OIDN_ENABLED=' + (oidn_enabled ? '1' : '0')]
+cpp_args += [cpp_define_prefix + 'VKRT_OIDN_ENABLED=' + (oidn_enabled ? '1' : '0')]
+
+core_cpp_args = cpp_args
+if is_windows and cpp_is_msvc
+  core_cpp_args += ['/wd4245', '/wd4702']
+endif
 
 core_dependencies = [
   vulkan_dep,
@@ -317,6 +338,8 @@ core_dependencies = [
   zlib_dep,
   windows_system_deps,
 ]
+
+core_dependencies += [oidn_dep]
 
 app_dependencies = [
   vulkan_dep,
@@ -455,11 +478,17 @@ executable('vkrt',
   link_with: app_link_with,
 )
 
+foreach oidn_runtime_file : oidn_runtime_files
+  configure_file(
+    input: oidn_runtime_file,
+    output: fs.name(oidn_runtime_file),
+    copy: true,
+  )
+endforeach
+
 glfw_backend_summary = 'unknown'
 if glfw_build_win32
   glfw_backend_summary = 'win32'
-elif glfw_build_cocoa
-  glfw_backend_summary = 'cocoa'
 elif glfw_build_x11 and glfw_build_wayland
   glfw_backend_summary = 'x11 + wayland'
 elif glfw_build_x11

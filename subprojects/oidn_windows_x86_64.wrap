@@ -1,0 +1,6 @@
+[wrap-file]
+directory = oidn-2.4.1.x64.windows
+source_url = https://github.com/RenderKit/oidn/releases/download/v2.4.1/oidn-2.4.1.x64.windows.zip
+source_filename = oidn-2.4.1.x64.windows.zip
+source_hash = 682d94ba57525ed177d73412e0ed903f576867bd048f830a5c6f63c56b25e8b8
+patch_directory = oidn

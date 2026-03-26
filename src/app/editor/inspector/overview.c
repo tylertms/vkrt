@@ -36,9 +36,16 @@ static void endCompactTable(void) {
 static void drawStatusSummary(const VKRT_RenderStatusSnapshot* status, const VKRT_SceneSettingsSnapshot* settings) {
     if (!status || !settings) return;
 
-    const char* mode = status->renderModeActive
-        ? (status->renderModeFinished ? "Complete" : "Rendering")
-        : "Preview";
+    const char* mode = "Preview";
+    if (VKRT_renderStatusIsActive(status)) {
+        if (VKRT_renderStatusIsDenoising(status)) {
+            mode = "Denoising";
+        } else if (VKRT_renderStatusIsComplete(status)) {
+            mode = "Complete";
+        } else {
+            mode = "Rendering";
+        }
+    }
 
     char renderTimeText[kOverviewTimeTextCapacity];
     char accumulationText[kOverviewTimeTextCapacity];

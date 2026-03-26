@@ -224,6 +224,12 @@ static void clearGPUImageBindings(VKRT* vkrt) {
         vkrt->core.accumulationImages[i] = VK_NULL_HANDLE;
         vkrt->core.accumulationImageViews[i] = VK_NULL_HANDLE;
         vkrt->core.accumulationImageMemories[i] = VK_NULL_HANDLE;
+        vkrt->core.albedoImages[i] = VK_NULL_HANDLE;
+        vkrt->core.albedoImageViews[i] = VK_NULL_HANDLE;
+        vkrt->core.albedoImageMemories[i] = VK_NULL_HANDLE;
+        vkrt->core.normalImages[i] = VK_NULL_HANDLE;
+        vkrt->core.normalImageViews[i] = VK_NULL_HANDLE;
+        vkrt->core.normalImageMemories[i] = VK_NULL_HANDLE;
     }
 
     vkrt->core.selectionMaskImage = VK_NULL_HANDLE;
@@ -231,7 +237,7 @@ static void clearGPUImageBindings(VKRT* vkrt) {
     vkrt->core.selectionMaskImageMemory = VK_NULL_HANDLE;
 }
 
-static uint32_t queryGPUImageSlots(GPUImageState* state, GPUImageSlot slots[4]) {
+static uint32_t queryGPUImageSlots(GPUImageState* state, GPUImageSlot slots[8]) {
     if (!state || !slots) return 0;
 
     slots[0] = (GPUImageSlot){
@@ -249,20 +255,48 @@ static uint32_t queryGPUImageSlots(GPUImageState* state, GPUImageSlot slots[4]) 
         .usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
     };
     slots[2] = (GPUImageSlot){
+        .image = &state->albedoImages[0],
+        .view = &state->albedoImageViews[0],
+        .memory = &state->albedoImageMemories[0],
+        .format = VK_FORMAT_R16G16B16A16_SFLOAT,
+        .usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
+    };
+    slots[3] = (GPUImageSlot){
+        .image = &state->albedoImages[1],
+        .view = &state->albedoImageViews[1],
+        .memory = &state->albedoImageMemories[1],
+        .format = VK_FORMAT_R16G16B16A16_SFLOAT,
+        .usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
+    };
+    slots[4] = (GPUImageSlot){
+        .image = &state->normalImages[0],
+        .view = &state->normalImageViews[0],
+        .memory = &state->normalImageMemories[0],
+        .format = VK_FORMAT_R16G16B16A16_SFLOAT,
+        .usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
+    };
+    slots[5] = (GPUImageSlot){
+        .image = &state->normalImages[1],
+        .view = &state->normalImageViews[1],
+        .memory = &state->normalImageMemories[1],
+        .format = VK_FORMAT_R16G16B16A16_SFLOAT,
+        .usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
+    };
+    slots[6] = (GPUImageSlot){
         .image = &state->outputImage,
         .view = &state->outputImageView,
         .memory = &state->outputImageMemory,
         .format = VK_FORMAT_R16G16B16A16_UNORM,
         .usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
     };
-    slots[3] = (GPUImageSlot){
+    slots[7] = (GPUImageSlot){
         .image = &state->selectionMaskImage,
         .view = &state->selectionMaskImageView,
         .memory = &state->selectionMaskImageMemory,
         .format = VK_FORMAT_R32_UINT,
         .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
     };
-    return 4;
+    return 8;
 }
 
 void captureGPUImageState(const VKRT* vkrt, GPUImageState* outState) {
@@ -278,6 +312,12 @@ void captureGPUImageState(const VKRT* vkrt, GPUImageState* outState) {
         outState->accumulationImages[i] = vkrt->core.accumulationImages[i];
         outState->accumulationImageViews[i] = vkrt->core.accumulationImageViews[i];
         outState->accumulationImageMemories[i] = vkrt->core.accumulationImageMemories[i];
+        outState->albedoImages[i] = vkrt->core.albedoImages[i];
+        outState->albedoImageViews[i] = vkrt->core.albedoImageViews[i];
+        outState->albedoImageMemories[i] = vkrt->core.albedoImageMemories[i];
+        outState->normalImages[i] = vkrt->core.normalImages[i];
+        outState->normalImageViews[i] = vkrt->core.normalImageViews[i];
+        outState->normalImageMemories[i] = vkrt->core.normalImageMemories[i];
     }
     outState->selectionMaskImage = vkrt->core.selectionMaskImage;
     outState->selectionMaskImageView = vkrt->core.selectionMaskImageView;
@@ -297,6 +337,12 @@ void applyGPUImageState(VKRT* vkrt, const GPUImageState* state) {
         vkrt->core.accumulationImages[i] = state->accumulationImages[i];
         vkrt->core.accumulationImageViews[i] = state->accumulationImageViews[i];
         vkrt->core.accumulationImageMemories[i] = state->accumulationImageMemories[i];
+        vkrt->core.albedoImages[i] = state->albedoImages[i];
+        vkrt->core.albedoImageViews[i] = state->albedoImageViews[i];
+        vkrt->core.albedoImageMemories[i] = state->albedoImageMemories[i];
+        vkrt->core.normalImages[i] = state->normalImages[i];
+        vkrt->core.normalImageViews[i] = state->normalImageViews[i];
+        vkrt->core.normalImageMemories[i] = state->normalImageMemories[i];
     }
     vkrt->core.selectionMaskImage = state->selectionMaskImage;
     vkrt->core.selectionMaskImageView = state->selectionMaskImageView;
@@ -313,7 +359,7 @@ void applyGPUImageState(VKRT* vkrt, const GPUImageState* state) {
 void destroyGPUImageState(VKRT* vkrt, GPUImageState* state) {
     if (!vkrt || !state || vkrt->core.device == VK_NULL_HANDLE) return;
 
-    GPUImageSlot slots[4] = {0};
+    GPUImageSlot slots[8] = {0};
     uint32_t slotCount = queryGPUImageSlots(state, slots);
 
     for (uint32_t i = 0; i < slotCount; i++) {
@@ -332,7 +378,7 @@ VKRT_Result createGPUImageState(VKRT* vkrt, VkExtent2D extent, GPUImageState* ou
         return VKRT_ERROR_INVALID_ARGUMENT;
     }
 
-    GPUImageSlot slots[4] = {0};
+    GPUImageSlot slots[8] = {0};
     uint32_t slotCount = queryGPUImageSlots(outState, slots);
 
     for (uint32_t i = 0; i < slotCount; i++) {

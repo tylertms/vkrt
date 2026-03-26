@@ -49,25 +49,26 @@ static void initializeRenderConfig(VKRT* vkrt, Session* session) {
 static void updateRenderTimer(const VKRT_RenderStatusSnapshot* status, SessionRenderTimer* timer, uint64_t nowUs) {
     if (!status || !timer) return;
 
-    uint8_t renderModeFinished = status->renderModeActive && status->renderModeFinished;
-    if (status->renderModeActive && !timer->wasActive) {
+    uint8_t renderModeActive = VKRT_renderStatusIsActive(status);
+    uint8_t renderModeFinished = VKRT_renderStatusIsComplete(status);
+    if (renderModeActive && !timer->wasActive) {
         timer->startTimeUs = nowUs;
         timer->completedSeconds = 0.0f;
     }
 
-    if (status->renderModeActive && renderModeFinished && timer->completedSeconds <= 0.0f &&
+    if (renderModeActive && renderModeFinished && timer->completedSeconds <= 0.0f &&
         timer->startTimeUs > 0 && nowUs >= timer->startTimeUs) {
         timer->completedSeconds = (float)(nowUs - timer->startTimeUs) / kMicrosecondsPerSecond;
     }
 
-    if (!status->renderModeActive && timer->wasActive) {
+    if (!renderModeActive && timer->wasActive) {
         if (timer->completedSeconds <= 0.0f && timer->startTimeUs > 0 && nowUs >= timer->startTimeUs) {
             timer->completedSeconds = (float)(nowUs - timer->startTimeUs) / kMicrosecondsPerSecond;
         }
         timer->startTimeUs = 0;
     }
 
-    timer->wasActive = status->renderModeActive;
+    timer->wasActive = renderModeActive;
 }
 
 static float queryActiveRenderSeconds(const SessionRenderTimer* timer, uint64_t nowUs) {
@@ -88,7 +89,7 @@ void inspectorPrepareRenderState(VKRT* vkrt, Session* session) {
     updateRenderTimer(&status, timer, nowUs);
 }
 
-static void drawIdleOutputSection(Session* session) {
+static void drawIdleOutputControls(Session* session) {
     if (!session) return;
 
     int outputSize[2] = {
@@ -97,9 +98,6 @@ static void drawIdleOutputSection(Session* session) {
     };
     int targetSamples = (int)session->editor.renderConfig.targetSamples;
 
-    if (!inspectorBeginCollapsingHeaderSection("Output", ImGuiTreeNodeFlags_DefaultOpen)) return;
-
-    inspectorIndentSection();
     if (ImGui_DragInt2Ex("Output Size", outputSize, 1.0f, kRenderOutputDimensionMin, kRenderOutputDimensionMax, "%d", ImGuiSliderFlags_AlwaysClamp)) {
         session->editor.renderConfig.width = clampRenderDimension(outputSize[0]);
         session->editor.renderConfig.height = clampRenderDimension(outputSize[1]);
@@ -109,21 +107,44 @@ static void drawIdleOutputSection(Session* session) {
         if (targetSamples < 0) targetSamples = 0;
         session->editor.renderConfig.targetSamples = (uint32_t)targetSamples;
     }
-    tooltipOnHover("Total samples to render. Set to 0 for manual stop.");
-    inspectorUnindentSection();
-    inspectorEndCollapsingHeaderSection();
+    tooltipOnHover("0 runs until stopped.");
+}
+
+static void drawFinalImageControls(Session* session, const VKRT_RenderStatusSnapshot* status) {
+    if (!session) return;
+    if (status && !VKRT_renderStatusIsSampling(status)) return;
+
+    bool denoiseEnabled = session->editor.renderExportSettings.denoiseEnabled != 0u;
+
+#if !VKRT_OIDN_ENABLED
+    ImGui_BeginDisabled(true);
+    ImGui_Checkbox("Denoise (OIDN)", &denoiseEnabled);
+    ImGui_EndDisabled();
+    tooltipOnHover("Requires OIDN support in this build.");
+    return;
+#endif
+
+    if (ImGui_Checkbox("Denoise (OIDN)", &denoiseEnabled)) {
+        session->editor.renderExportSettings.denoiseEnabled = denoiseEnabled ? 1u : 0u;
+        if (status) {
+            sessionQueueRenderSetDenoise(session, session->editor.renderExportSettings.denoiseEnabled);
+        }
+    }
+    tooltipOnHover("CPU denoiser using color, albedo, and normal buffers.");
 }
 
 static void drawIdleRenderState(Session* session, const SessionRenderTimer* timer) {
-    drawIdleOutputSection(session);
+    drawIdleOutputControls(session);
+    drawFinalImageControls(session, NULL);
 
     if (inspectorPaddedButton(ICON_FA_CAMERA " Start Render")) {
-        sessionQueueRenderStart(
-            session,
-            session->editor.renderConfig.width,
-            session->editor.renderConfig.height,
-            session->editor.renderConfig.targetSamples
-        );
+        SessionRenderSettings settings = {
+            .width = session->editor.renderConfig.width,
+            .height = session->editor.renderConfig.height,
+            .targetSamples = session->editor.renderConfig.targetSamples,
+            .denoiseEnabled = session->editor.renderExportSettings.denoiseEnabled,
+        };
+        sessionQueueRenderStart(session, &settings);
     }
 
     if (timer->completedSeconds > 0.0f) {
@@ -147,73 +168,106 @@ static void drawRenderProgressSection(
         if (shownSamples > status->renderTargetSamples) {
             shownSamples = status->renderTargetSamples;
         }
-        float progress = (float)shownSamples / (float)status->renderTargetSamples;
+        float progress = VKRT_renderStatusIsDenoising(status)
+            ? 1.0f
+            : (float)shownSamples / (float)status->renderTargetSamples;
         if (progress < 0.0f) progress = 0.0f;
         if (progress > 1.0f) progress = 1.0f;
+
         char overlay[kRenderProgressOverlayCapacity];
-        snprintf(
-            overlay,
-            sizeof(overlay),
-            "%" PRIu64 " / %u samples",
-            shownSamples,
-            status->renderTargetSamples
-        );
+        if (VKRT_renderStatusIsDenoising(status)) {
+            snprintf(overlay, sizeof(overlay), "Denoising...");
+        } else {
+            snprintf(
+                overlay,
+                sizeof(overlay),
+                "%" PRIu64 " / %u samples",
+                shownSamples,
+                status->renderTargetSamples
+            );
+        }
         ImGui_ProgressBar(progress, (ImVec2){-1.0f, 0.0f}, overlay);
     } else {
         char overlay[kRenderProgressOverlayCapacity];
-        snprintf(
-            overlay,
-            sizeof(overlay),
-            "%" PRIu64 " samples",
-            status->totalSamples
+        if (VKRT_renderStatusIsDenoising(status)) {
+            snprintf(overlay, sizeof(overlay), "Denoising...");
+        } else {
+            snprintf(
+                overlay,
+                sizeof(overlay),
+                "%" PRIu64 " samples",
+                status->totalSamples
+            );
+        }
+        ImGui_ProgressBar(
+            VKRT_renderStatusIsBusy(status) ? 1.0f : 0.0f,
+            (ImVec2){-1.0f, 0.0f},
+            overlay
         );
-        ImGui_ProgressBar(0.0f, (ImVec2){-1.0f, 0.0f}, overlay);
     }
 
-    if (status->renderModeFinished) {
+    if (VKRT_renderStatusIsDenoising(status)) {
+        ImGui_Text("Denoising...");
+        return;
+    }
+
+    if (VKRT_renderStatusIsComplete(status)) {
         float elapsedDoneSeconds = completedSeconds > 0.0f ? completedSeconds : elapsedActiveSeconds;
         char elapsedText[kRenderTimeTextCapacity];
         formatTime(fmaxf(elapsedDoneSeconds, 0.0f), elapsedText, sizeof(elapsedText));
         ImGui_Text(ICON_FA_CHECK " Complete  " ICON_FA_CLOCK " %s", elapsedText);
-    } else {
-        float etaSeconds = -1.0f;
-        if (status->renderTargetSamples > 0 && status->totalSamples > 0 && elapsedActiveSeconds > 0.0f) {
-            float samplesPerSecond = (float)status->totalSamples / elapsedActiveSeconds;
-            if (samplesPerSecond > 0.0f && status->renderTargetSamples > status->totalSamples) {
-                etaSeconds = (float)(status->renderTargetSamples - status->totalSamples) / samplesPerSecond;
-            }
-        }
+        return;
+    }
 
-        if (etaSeconds >= 0.0f) {
-            char etaText[kRenderTimeTextCapacity];
-            formatTime(etaSeconds, etaText, sizeof(etaText));
-            ImGui_Text("Rendering  " ICON_FA_CLOCK " ETA %s", etaText);
-        } else {
-            ImGui_Text("Rendering...");
+    float etaSeconds = -1.0f;
+    if (status->renderTargetSamples > 0 && status->totalSamples > 0 && elapsedActiveSeconds > 0.0f) {
+        float samplesPerSecond = (float)status->totalSamples / elapsedActiveSeconds;
+        if (samplesPerSecond > 0.0f && status->renderTargetSamples > status->totalSamples) {
+            etaSeconds = (float)(status->renderTargetSamples - status->totalSamples) / samplesPerSecond;
         }
+    }
+
+    if (etaSeconds >= 0.0f) {
+        char etaText[kRenderTimeTextCapacity];
+        formatTime(etaSeconds, etaText, sizeof(etaText));
+        ImGui_Text("Rendering  " ICON_FA_CLOCK " ETA %s", etaText);
+    } else {
+        ImGui_Text("Rendering...");
     }
 }
 
-static void drawRenderActionsSection(VKRT* vkrt, Session* session, const VKRT_RenderStatusSnapshot* status) {
-    if (!vkrt || !session || !status) return;
+static void drawRenderActionsSection(Session* session, const VKRT_RenderStatusSnapshot* status) {
+    if (!session || !status) return;
 
     ImGui_Spacing();
 
-    if (!status->renderModeFinished) {
+    if (VKRT_renderStatusIsSampling(status)) {
         if (inspectorPaddedButton(ICON_FA_STOP " Stop Render")) {
-            VKRT_Result result = VKRT_stopRenderSampling(vkrt);
-            if (result != VKRT_SUCCESS) {
-                LOG_ERROR("Stopping render sampling failed (%d)", (int)result);
-            }
+            sessionQueueRenderStopSampling(session, session->editor.renderExportSettings.denoiseEnabled);
         }
-    } else {
-        if (inspectorPaddedButton(ICON_FA_FLOPPY_DISK " Save Image")) {
-            sessionRequestRenderSaveDialog(session);
+        return;
+    }
+
+    if (VKRT_renderStatusIsBusy(status)) {
+        return;
+    }
+
+#if VKRT_OIDN_ENABLED
+    if (status->renderPhase == VKRT_RENDER_PHASE_COMPLETE_RAW) {
+        if (inspectorPaddedButton("Denoise")) {
+            session->editor.renderExportSettings.denoiseEnabled = 1u;
+            sessionQueueRenderDenoise(session);
         }
         ImGui_SameLine();
-        if (inspectorPaddedButton(ICON_FA_ARROW_RIGHT_FROM_BRACKET " Exit Render")) {
-            sessionQueueRenderStop(session);
-        }
+    }
+#endif
+
+    if (inspectorPaddedButton(ICON_FA_FLOPPY_DISK " Save Image")) {
+        sessionRequestRenderSaveDialog(session);
+    }
+    ImGui_SameLine();
+    if (inspectorPaddedButton(ICON_FA_ARROW_RIGHT_FROM_BRACKET " Exit Render")) {
+        sessionQueueRenderStop(session);
     }
 }
 
@@ -231,12 +285,13 @@ void inspectorDrawRenderTab(VKRT* vkrt, Session* session) {
     uint64_t nowUs = getMicroseconds();
     SessionRenderTimer* timer = &session->runtime.renderTimer;
 
-    if (!status.renderModeActive) {
+    if (!VKRT_renderStatusIsActive(&status)) {
         drawIdleRenderState(session, timer);
         return;
     }
 
     float elapsedActiveSeconds = queryActiveRenderSeconds(timer, nowUs);
     drawRenderProgressSection(&status, &runtime, elapsedActiveSeconds, timer->completedSeconds);
-    drawRenderActionsSection(vkrt, session, &status);
+    drawFinalImageControls(session, &status);
+    drawRenderActionsSection(session, &status);
 }

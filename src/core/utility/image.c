@@ -29,7 +29,7 @@ static const char* imageSourceLabel(const char* mimeType) {
     return mimeType && mimeType[0] ? mimeType : "memory";
 }
 
-static int tryComputeImageByteCount(uint32_t width, uint32_t height, uint32_t channels, size_t* outByteCount) {
+int vkrtTryComputeImageByteCount(uint32_t width, uint32_t height, uint32_t channels, size_t* outByteCount) {
     if (!outByteCount || width == 0u || height == 0u || channels == 0u) return 0;
     size_t pixelCount = (size_t)width * (size_t)height;
     if (pixelCount > SIZE_MAX / (size_t)channels) return 0;
@@ -158,7 +158,7 @@ static int decodePNGImage(
     }
 
     size_t expectedByteCount = 0u;
-    if (!tryComputeImageByteCount(
+    if (!vkrtTryComputeImageByteCount(
         header.width,
         header.height,
         decodeAsRGBA16 ? 8u : 4u,
@@ -239,7 +239,7 @@ static int decodeJPEGImage(
     }
 
     size_t rgbaByteCount = 0u;
-    if (!tryComputeImageByteCount((uint32_t)width, (uint32_t)height, 4u, &rgbaByteCount)) {
+    if (!vkrtTryComputeImageByteCount((uint32_t)width, (uint32_t)height, 4u, &rgbaByteCount)) {
         LOG_ERROR("JPEG image dimensions overflow for %s", sourceLabel);
         tjDestroy(handle);
         return 0;

@@ -407,7 +407,7 @@ static void drawMeshMaterialBindingEditor(VKRT* vkrt, uint32_t meshIndex, const 
             LOG_ERROR("Creating unique material failed (%d)", (int)result);
         }
     }
-    tooltipOnHover("Create a unique material from the current shading state and assign it.");
+    tooltipOnHover("Create a new material and assign it to this mesh.");
 
     uint8_t canDeleteMaterial = mesh->hasMaterialAssignment && mesh->materialIndex != 0u;
     uint32_t currentAssignedMaterialIndex = mesh->materialIndex;
@@ -421,11 +421,11 @@ static void drawMeshMaterialBindingEditor(VKRT* vkrt, uint32_t meshIndex, const 
         }
     }
     if (canDeleteMaterial) {
-        tooltipOnHover("Delete this material. Any meshes using it will revert to defaults.");
+        tooltipOnHover("Delete this material from the scene.");
     } else if (mesh->hasMaterialAssignment && currentAssignedMaterialIndex == 0u) {
-        tooltipOnHover("The reserved default material cannot be deleted.");
+        tooltipOnHover("Default material can't be deleted.");
     } else {
-        tooltipOnHover("No explicit material is assigned to this mesh.");
+        tooltipOnHover("No material assigned.");
     }
     ImGui_EndDisabled();
 }
@@ -755,8 +755,8 @@ static void drawSelectedSceneObjectEditor(VKRT* vkrt, Session* session, uint32_t
         sessionQueueSceneObjectRemoval(session, objectIndex);
     }
     tooltipOnHover(hasMesh
-        ? "Remove this object and any child objects from the scene."
-        : "Remove this group and all child objects from the scene.");
+        ? "Remove this object and its children."
+        : "Remove this group and its children.");
 
     ImGui_EndDisabled();
 
@@ -829,5 +829,5 @@ void inspectorDrawSelectionTab(VKRT* vkrt, Session* session) {
         return;
     }
 
-    drawSelectedSceneObjectEditor(vkrt, session, selectedObjectIndex, status.renderModeActive != 0);
+    drawSelectedSceneObjectEditor(vkrt, session, selectedObjectIndex, VKRT_renderStatusIsActive(&status) != 0);
 }

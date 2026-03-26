@@ -128,11 +128,8 @@ jobs:
 
       - name: Package Windows Artifact
         if: runner.os == 'Windows'
-        shell: pwsh
         run: |
-          $artifactDir = Join-Path $PWD "dist/${{ matrix.archive_name }}"
-          New-Item -ItemType Directory -Force -Path $artifactDir | Out-Null
-          Copy-Item build\vkrt.exe $artifactDir
+          python scripts/stage_release.py --platform windows --bundle-dir dist/${{ matrix.archive_name }}
 
       - name: Package Linux Artifact
         if: runner.os == 'Linux'

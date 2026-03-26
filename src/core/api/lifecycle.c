@@ -320,9 +320,10 @@ VKRT_Result VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInf
     vkrt->core.lightRevision = 1;
     vkrt->core.emissiveMeshCount = 0;
     vkrt->core.emissiveTriangleCount = 0;
-    vkrt->renderStatus.renderModeActive = 0;
-    vkrt->renderStatus.renderModeFinished = 0;
+    vkrt->renderStatus.renderPhase = VKRT_RENDER_PHASE_INACTIVE;
+    vkrt->renderStatus.renderDenoiseEnabled = VKRT_OIDN_ENABLED ? 1u : 0u;
     vkrt->renderStatus.renderTargetSamples = 0;
+    vkrt->renderControl.finalImageDenoiseEnabled = VKRT_OIDN_ENABLED ? 1u : 0u;
 
     const char* title = createInfo->title ? createInfo->title : "VKRT";
     uint32_t displayWidth = VKRT_DEFAULT_WIDTH;

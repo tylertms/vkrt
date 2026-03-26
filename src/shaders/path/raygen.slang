@@ -19,12 +19,16 @@ void main() {
     int2 pixel = int2(DispatchRaysIndex().xy);
     if (!insideViewport(pixel)) {
         accumulationWriteImage[pixel] = float4(0.0);
+        albedoWriteImage[pixel] = float4(0.0);
+        normalWriteImage[pixel] = float4(0.0);
         outputImage[pixel] = float4(0.0);
         return;
     }
 
     uint spp = max(scene.samplesPerPixel, 1u);
     float4 previous = accumulationReadImage[pixel];
+    float4 previousAlbedo = albedoReadImage[pixel];
+    float4 previousNormal = normalReadImage[pixel];
     uint previousSamples = (uint)(previous.w + 0.5);
 
     int2 selectionPixel = int2(int(selection[0].pixel & 0xffffu), int((selection[0].pixel >> 16) & 0xffffu));
@@ -38,6 +42,8 @@ void main() {
     bool neeEnabled = scene.misNeeEnabled != 0u && scene.emissiveMeshCount > 0u;
 
     float3 frameRadiance = float3(0.0);
+    float3 frameAlbedo = float3(0.0);
+    float3 frameNormal = float3(0.0);
     bool debugEarlyOut = false;
 
     if (debugMode == VKRT_DEBUG_MODE_SELECTION_MASK) {
@@ -54,6 +60,8 @@ void main() {
 
     for (uint sampleIndex = 0u; sampleIndex < spp && !debugEarlyOut; sampleIndex++) {
         float3 radiance = float3(0.0);
+        float3 sampleAlbedo = float3(0.0);
+        float3 sampleNormal = float3(0.0);
         float3 throughput = float3(1.0);
         MediumState medium;
         medium.refractiveActive = false;
@@ -123,6 +131,11 @@ void main() {
             }
 
             applySurfaceTextures(material, payload.color, payload.texcoord0, payload.texcoord1);
+            if (depth == 0u) {
+                sampleAlbedo = max(material.baseColor, float3(0.0));
+                sampleNormal = shadingNormal;
+            }
+
             float3 wo = worldToLocal(-ray.Direction, basis);
             BSDFState state = makeBSDFState(material, wo, payload.frontFace);
             bool currentVertexNeeAllowed = !medium.refractiveActive;
@@ -209,11 +222,15 @@ void main() {
 
         if (!debugEarlyOut) {
             frameRadiance += radiance;
+            frameAlbedo += sampleAlbedo;
+            frameNormal += sampleNormal;
         }
     }
 
     if (!debugEarlyOut) {
         frameRadiance /= float(spp);
+        frameAlbedo /= float(spp);
+        frameNormal /= float(spp);
     }
 
     if (captureSelection) {
@@ -222,15 +239,21 @@ void main() {
 
     if (debugEarlyOut) {
         accumulationWriteImage[pixel] = float4(frameRadiance, 0.0);
+        albedoWriteImage[pixel] = float4(0.0);
+        normalWriteImage[pixel] = float4(0.0);
         outputImage[pixel] = float4(encodeDisplayColor(frameRadiance), 1.0);
     } else {
         float previousWeight = float(previousSamples);
         float newWeight = float(spp);
         float totalWeight = previousWeight + newWeight;
         float3 accumulated = (previous.xyz * previousWeight + frameRadiance * newWeight) / max(totalWeight, 1.0);
+        float3 accumulatedAlbedo = (previousAlbedo.xyz * previousWeight + frameAlbedo * newWeight) / max(totalWeight, 1.0);
+        float3 accumulatedNormal = (previousNormal.xyz * previousWeight + frameNormal * newWeight) / max(totalWeight, 1.0);
         float3 mapped = mapSceneColorToDisplay(accumulated);
 
         accumulationWriteImage[pixel] = float4(accumulated, totalWeight);
+        albedoWriteImage[pixel] = float4(accumulatedAlbedo, totalWeight);
+        normalWriteImage[pixel] = float4(accumulatedNormal, totalWeight);
         outputImage[pixel] = float4(mapped, 1.0);
     }
 }

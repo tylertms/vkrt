@@ -4,6 +4,7 @@
 #include "lighting.h"
 #include "state.h"
 #include "descriptor.h"
+#include "export.h"
 #include "scene.h"
 #include "swapchain.h"
 #include "accel/accel.h"
@@ -65,6 +66,9 @@ static uint32_t queryRenderedSamplesPerPixel(const VKRT* vkrt) {
 VKRT_Result VKRT_beginFrame(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
 
+    syncCompletedViewportDenoise(vkrt);
+    processPendingViewportDenoise(vkrt);
+
     vkrt->runtime.frameAcquired = VK_FALSE;
     vkrt->runtime.frameOffscreen = VK_FALSE;
     vkrt->runtime.frameSubmitted = VK_FALSE;
@@ -89,7 +93,7 @@ VKRT_Result VKRT_beginFrame(VKRT* vkrt) {
     uint32_t framebufferWidth = 0;
     uint32_t framebufferHeight = 0;
     if (!queryDrawableFramebufferExtent(vkrt, &framebufferWidth, &framebufferHeight)) {
-        if (vkrt->renderStatus.renderModeActive && !vkrt->renderStatus.renderModeFinished) {
+        if (VKRT_renderPhaseIsSampling(vkrt->renderStatus.renderPhase)) {
             vkrt->runtime.frameOffscreen = VK_TRUE;
         }
         return VKRT_SUCCESS;
@@ -316,7 +320,7 @@ VKRT_Result VKRT_endFrame(VKRT* vkrt) {
         VkBool32 traceContributed = vkrt->core.descriptorSetReady[vkrt->runtime.currentFrame] &&
                                     !vkrt->core.accumulationNeedsReset &&
                                     vkrt->runtime.frameTraced &&
-                                    !(vkrt->renderStatus.renderModeActive && vkrt->renderStatus.renderModeFinished);
+                                    !VKRT_renderPhaseSamplingFinished(vkrt->renderStatus.renderPhase);
 
         if (traceContributed) {
             updateAutoSPP(vkrt);
@@ -329,13 +333,10 @@ VKRT_Result VKRT_endFrame(VKRT* vkrt) {
             vkrt->core.accumulationReadIndex = nextReadIndex;
         }
 
-        if (vkrt->renderStatus.renderModeActive &&
-            !vkrt->renderStatus.renderModeFinished &&
+        if (VKRT_renderPhaseIsSampling(vkrt->renderStatus.renderPhase) &&
             vkrt->renderStatus.renderTargetSamples > 0 &&
             vkrt->renderStatus.totalSamples >= vkrt->renderStatus.renderTargetSamples) {
-            VkBool32 usedRenderPresentProfile = vkrtUsesRenderPresentProfile(vkrt);
-            vkrt->renderStatus.renderModeFinished = 1;
-            vkrtRefreshPresentModeIfNeeded(vkrt, usedRenderPresentProfile);
+            VKRT_stopRenderSampling(vkrt);
         }
     }
 

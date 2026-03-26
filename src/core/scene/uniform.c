@@ -196,8 +196,8 @@ VKRT_Result createSceneUniform(VKRT* vkrt) {
     vkrt->sceneSettings.environmentColor[2] = 0.25f;
     vkrt->sceneSettings.environmentStrength = 1.0f;
     vkrt->sceneSettings.environmentTextureIndex = VKRT_INVALID_INDEX;
-    vkrt->renderStatus.renderModeActive = 0;
-    vkrt->renderStatus.renderModeFinished = 0;
+    vkrt->renderStatus.renderPhase = VKRT_RENDER_PHASE_INACTIVE;
+    vkrt->renderStatus.renderDenoiseEnabled = vkrt->renderControl.finalImageDenoiseEnabled ? 1u : 0u;
     vkrt->renderStatus.renderTargetSamples = 0;
     vkrt->renderControl.view.zoom = 1.0f;
     vkrt->renderControl.view.panX = 0.0f;
@@ -245,7 +245,9 @@ void resetSceneData(VKRT* vkrt) {
     resetAutoSPPForSceneChange(vkrt);
     resetAutoExposureForSceneChange(vkrt);
     vkrt->core.sceneData->frameNumber = 0;
-    vkrt->renderStatus.renderModeFinished = 0;
+    vkrt->renderStatus.renderPhase = VKRT_renderPhaseIsActive(vkrt->renderStatus.renderPhase)
+        ? VKRT_RENDER_PHASE_SAMPLING
+        : VKRT_RENDER_PHASE_INACTIVE;
     vkrt->renderStatus.accumulationFrame = 0;
     vkrt->renderStatus.totalSamples = 0;
     vkrt->renderStatus.averageFrametime = 0.0f;

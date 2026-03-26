@@ -76,13 +76,8 @@ jobs:
         shell: bash
 
       - name: Stage Release
-        shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path vkrt-windows-x64 | Out-Null
-          Copy-Item build\vkrt.exe vkrt-windows-x64
-          Copy-Item -Recurse assets vkrt-windows-x64
-          Copy-Item README.md vkrt-windows-x64
-          Compress-Archive -Path vkrt-windows-x64\* -DestinationPath vkrt-windows-x64.zip -Force
+          python scripts/stage_release.py --platform windows --bundle-dir vkrt-windows-x64 --archive zip --archive-path vkrt-windows-x64.zip
 
       - name: Upload Release Asset
         if: github.ref_type == 'tag'

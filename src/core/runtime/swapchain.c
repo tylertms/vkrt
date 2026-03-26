@@ -133,7 +133,7 @@ static uint32_t collectPresentModeCandidates(
 }
 
 VkBool32 vkrtUsesRenderPresentProfile(const VKRT* vkrt) {
-    return vkrt && vkrt->renderStatus.renderModeActive && !vkrt->renderStatus.renderModeFinished;
+    return vkrt && VKRT_renderPhaseIsSampling(vkrt->renderStatus.renderPhase);
 }
 
 void vkrtRefreshPresentModeIfNeeded(VKRT* vkrt, VkBool32 previousUsesRenderPresentProfile) {
@@ -386,7 +386,9 @@ static VKRT_Result createSwapChainWithOld(VKRT* vkrt, VkSwapchainKHR oldSwapchai
     }
 
     applySwapChainState(vkrt, &nextState);
-    if (!vkrt->renderStatus.renderModeActive || vkrt->runtime.renderExtent.width == 0 || vkrt->runtime.renderExtent.height == 0) {
+    if (!VKRT_renderPhaseIsActive(vkrt->renderStatus.renderPhase) ||
+        vkrt->runtime.renderExtent.width == 0 ||
+        vkrt->runtime.renderExtent.height == 0) {
         vkrt->runtime.renderExtent = extent;
     }
 
@@ -447,7 +449,7 @@ VKRT_Result recreateSwapChain(VKRT* vkrt) {
     result = resetRenderFinishedSemaphores(vkrt, 0, vkrt->runtime.swapChainImageCount);
     if (result != VKRT_SUCCESS) goto restore_previous_state;
 
-    if (!vkrt->renderStatus.renderModeActive) {
+    if (!VKRT_renderPhaseIsActive(vkrt->renderStatus.renderPhase)) {
         result = createGPUImageState(vkrt, vkrt->runtime.swapChainExtent, &nextImages);
         if (result != VKRT_SUCCESS) goto restore_previous_state;
         applyGPUImageState(vkrt, &nextImages);
@@ -455,7 +457,7 @@ VKRT_Result recreateSwapChain(VKRT* vkrt) {
 
     result = updateAllDescriptorSets(vkrt);
     if (result != VKRT_SUCCESS) {
-        if (!vkrt->renderStatus.renderModeActive) {
+        if (!VKRT_renderPhaseIsActive(vkrt->renderStatus.renderPhase)) {
             applyGPUImageState(vkrt, &previousImages);
             updateAllDescriptorSets(vkrt);
         }
@@ -463,11 +465,11 @@ VKRT_Result recreateSwapChain(VKRT* vkrt) {
     }
 
     destroySwapChainState(vkrt, &previousSwapChain);
-    if (!vkrt->renderStatus.renderModeActive) {
+    if (!VKRT_renderPhaseIsActive(vkrt->renderStatus.renderPhase)) {
         destroyGPUImageState(vkrt, &previousImages);
     }
 
-    if (vkrt->renderStatus.renderModeActive) {
+    if (VKRT_renderPhaseIsActive(vkrt->renderStatus.renderPhase)) {
         VKRT_setRenderViewport(
             vkrt,
             preservedViewportX,
@@ -481,7 +483,7 @@ VKRT_Result recreateSwapChain(VKRT* vkrt) {
 
     vkrt->renderControl.timing.lastFrameTimestamp = 0;
     vkrt->renderControl.autoSPP.controlMs = 0.0f;
-    if (!vkrt->renderStatus.renderModeActive) {
+    if (!VKRT_renderPhaseIsActive(vkrt->renderStatus.renderPhase)) {
         resetSceneData(vkrt);
     }
 
@@ -497,7 +499,7 @@ restore_previous_state:
     }
 
     vkrt->runtime.renderExtent = previousRenderExtent;
-    if (!vkrt->renderStatus.renderModeActive) {
+    if (!VKRT_renderPhaseIsActive(vkrt->renderStatus.renderPhase)) {
         applyGPUImageState(vkrt, &previousImages);
         updateAllDescriptorSets(vkrt);
         destroyGPUImageState(vkrt, &nextImages);

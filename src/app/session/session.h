@@ -8,7 +8,10 @@
 typedef enum SessionRenderCommand {
     SESSION_RENDER_COMMAND_NONE = 0,
     SESSION_RENDER_COMMAND_START,
+    SESSION_RENDER_COMMAND_SET_DENOISE,
+    SESSION_RENDER_COMMAND_STOP_SAMPLING,
     SESSION_RENDER_COMMAND_STOP,
+    SESSION_RENDER_COMMAND_DENOISE,
     SESSION_RENDER_COMMAND_RESET_ACCUMULATION,
 } SessionRenderCommand;
 
@@ -19,6 +22,7 @@ typedef struct SessionRenderSettings {
     uint32_t width;
     uint32_t height;
     uint32_t targetSamples;
+    uint8_t denoiseEnabled;
 } SessionRenderSettings;
 
 typedef struct SessionRenderTimer {
@@ -63,6 +67,7 @@ typedef struct SessionEditorState {
     uint32_t requestedTextureMaterialIndex;
     uint32_t requestedTextureSlot;
     SessionRenderSettings renderConfig;
+    VKRT_RenderExportSettings renderExportSettings;
     SessionSceneObject* sceneObjects;
     uint32_t sceneObjectCount;
     uint32_t sceneObjectCapacity;
@@ -89,6 +94,7 @@ typedef struct SessionCommandQueue {
     char* environmentImportPath;
     uint8_t clearEnvironmentRequested;
     char* saveImagePath;
+    VKRT_RenderExportSettings saveImageSettings;
     SessionRenderCommand renderCommand;
     SessionRenderSettings pendingRenderJob;
 } SessionCommandQueue;
@@ -138,11 +144,14 @@ int sessionTakeEnvironmentClear(Session* session);
 int sessionTakeMeshRemoval(Session* session, uint32_t* outMeshIndex);
 
 void sessionQueueRenderSave(Session* session, const char* path);
-void sessionQueueRenderStart(Session* session, uint32_t width, uint32_t height, uint32_t targetSamples);
+void sessionQueueRenderStart(Session* session, const SessionRenderSettings* settings);
+void sessionQueueRenderSetDenoise(Session* session, uint8_t enabled);
+void sessionQueueRenderStopSampling(Session* session, uint8_t denoiseEnabled);
 void sessionQueueRenderStop(Session* session);
+void sessionQueueRenderDenoise(Session* session);
 void sessionQueueRenderResetAccumulation(Session* session);
 int sessionTakeRenderCommand(Session* session, SessionRenderCommand* outCommand, SessionRenderSettings* outSettings);
-int sessionTakeRenderSave(Session* session, char** outPath);
+int sessionTakeRenderSave(Session* session, char** outPath, VKRT_RenderExportSettings* outSettings);
 void sessionSetCurrentScenePath(Session* session, const char* path);
 const char* sessionGetCurrentScenePath(const Session* session);
 void sessionSetEnvironmentTexturePath(Session* session, const char* path);

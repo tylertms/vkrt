@@ -185,6 +185,10 @@ VKRT_Result recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex, VkBool32 presen
     }
     VkImage accumulationReadImage = vkrt->core.accumulationImages[vkrt->core.accumulationReadIndex];
     VkImage accumulationWriteImage = vkrt->core.accumulationImages[vkrt->core.accumulationWriteIndex];
+    VkImage albedoReadImage = vkrt->core.albedoImages[vkrt->core.accumulationReadIndex];
+    VkImage albedoWriteImage = vkrt->core.albedoImages[vkrt->core.accumulationWriteIndex];
+    VkImage normalReadImage = vkrt->core.normalImages[vkrt->core.accumulationReadIndex];
+    VkImage normalWriteImage = vkrt->core.normalImages[vkrt->core.accumulationWriteIndex];
     VkImage outputImage = vkrt->core.outputImage;
     VkImage selectionMaskImage = vkrt->core.selectionMaskImage;
     VkImage destImage = presentToSwapchain ? vkrt->runtime.swapChainImages[imageIndex] : VK_NULL_HANDLE;
@@ -216,10 +220,10 @@ VKRT_Result recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex, VkBool32 presen
     clearRange.baseArrayLayer = 0;
     clearRange.layerCount = 1;
 
-    VkBool32 renderModeActive = vkrt->renderStatus.renderModeActive != 0;
-    VkBool32 renderFinished = renderModeActive && vkrt->renderStatus.renderModeFinished;
+    VkBool32 renderModeActive = VKRT_renderPhaseIsActive(vkrt->renderStatus.renderPhase);
+    VkBool32 samplingFinished = VKRT_renderPhaseSamplingFinished(vkrt->renderStatus.renderPhase);
     VkBool32 descriptorReady = vkrt->core.descriptorSetReady[vkrt->runtime.currentFrame];
-    VkBool32 shouldTrace = descriptorReady && !renderFinished;
+    VkBool32 shouldTrace = descriptorReady && !samplingFinished;
     VkBool32 selectionOverlayEnabled = !renderModeActive &&
                                        vkrt->sceneSettings.selectionEnabled != 0u;
     VkBool32 shouldSelectionTrace = shouldTrace &&
@@ -244,12 +248,24 @@ VKRT_Result recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex, VkBool32 presen
             VkClearColorValue clearZero = {.float32 = {0.0f, 0.0f, 0.0f, 0.0f}};
             transitionImageLayout(commandBuffer, accumulationReadImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
             transitionImageLayout(commandBuffer, accumulationWriteImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+            transitionImageLayout(commandBuffer, albedoReadImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+            transitionImageLayout(commandBuffer, albedoWriteImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+            transitionImageLayout(commandBuffer, normalReadImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+            transitionImageLayout(commandBuffer, normalWriteImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
             transitionImageLayout(commandBuffer, outputImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
             vkCmdClearColorImage(commandBuffer, accumulationReadImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearZero, 1, &clearRange);
             vkCmdClearColorImage(commandBuffer, accumulationWriteImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearZero, 1, &clearRange);
+            vkCmdClearColorImage(commandBuffer, albedoReadImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearZero, 1, &clearRange);
+            vkCmdClearColorImage(commandBuffer, albedoWriteImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearZero, 1, &clearRange);
+            vkCmdClearColorImage(commandBuffer, normalReadImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearZero, 1, &clearRange);
+            vkCmdClearColorImage(commandBuffer, normalWriteImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearZero, 1, &clearRange);
             vkCmdClearColorImage(commandBuffer, outputImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearZero, 1, &clearRange);
             transitionImageLayout(commandBuffer, accumulationReadImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
             transitionImageLayout(commandBuffer, accumulationWriteImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+            transitionImageLayout(commandBuffer, albedoReadImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+            transitionImageLayout(commandBuffer, albedoWriteImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+            transitionImageLayout(commandBuffer, normalReadImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+            transitionImageLayout(commandBuffer, normalWriteImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
             transitionImageLayout(commandBuffer, outputImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
             vkrt->core.accumulationNeedsReset = VK_FALSE;
         }
@@ -369,7 +385,7 @@ VKRT_Result recordCommandBuffer(VKRT* vkrt, uint32_t imageIndex, VkBool32 presen
             blit.srcOffsets[1] = (VkOffset3D){(int32_t)renderExtent.width, (int32_t)renderExtent.height, 1};
             blit.dstSubresource = (VkImageSubresourceLayers){VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
 
-            if (vkrt->renderStatus.renderModeActive) {
+            if (renderModeActive) {
                 uint32_t x = vkrt->runtime.displayViewportRect[0];
                 uint32_t y = vkrt->runtime.displayViewportRect[1];
                 uint32_t width = vkrt->runtime.displayViewportRect[2];

@@ -161,6 +161,14 @@ typedef struct VKRT_SceneSettingsSnapshot {
     VKRT_SceneTimelineSettings sceneTimeline;
 } VKRT_SceneSettingsSnapshot;
 
+typedef enum VKRT_RenderPhase {
+    VKRT_RENDER_PHASE_INACTIVE = 0,
+    VKRT_RENDER_PHASE_SAMPLING,
+    VKRT_RENDER_PHASE_DENOISING,
+    VKRT_RENDER_PHASE_COMPLETE_RAW,
+    VKRT_RENDER_PHASE_COMPLETE_DENOISED,
+} VKRT_RenderPhase;
+
 typedef struct VKRT_RenderStatusSnapshot {
     uint32_t framesPerSecond;
     float averageFrametime;
@@ -169,12 +177,69 @@ typedef struct VKRT_RenderStatusSnapshot {
     float renderTimeMs;
     uint32_t accumulationFrame;
     uint64_t totalSamples;
-    uint8_t renderModeActive;
-    uint8_t renderModeFinished;
+    VKRT_RenderPhase renderPhase;
+    uint8_t renderDenoiseEnabled;
     uint32_t renderTargetSamples;
     float displayRenderTimeMs;
     float displayFrameTimeMs;
 } VKRT_RenderStatusSnapshot;
+
+static inline uint8_t VKRT_renderPhaseIsActive(VKRT_RenderPhase phase) {
+    return phase != VKRT_RENDER_PHASE_INACTIVE;
+}
+
+static inline uint8_t VKRT_renderPhaseIsSampling(VKRT_RenderPhase phase) {
+    return phase == VKRT_RENDER_PHASE_SAMPLING;
+}
+
+static inline uint8_t VKRT_renderPhaseIsDenoising(VKRT_RenderPhase phase) {
+    return phase == VKRT_RENDER_PHASE_DENOISING;
+}
+
+static inline uint8_t VKRT_renderPhaseIsBusy(VKRT_RenderPhase phase) {
+    return VKRT_renderPhaseIsDenoising(phase);
+}
+
+static inline uint8_t VKRT_renderPhaseIsComplete(VKRT_RenderPhase phase) {
+    return phase == VKRT_RENDER_PHASE_COMPLETE_RAW ||
+        phase == VKRT_RENDER_PHASE_COMPLETE_DENOISED;
+}
+
+static inline uint8_t VKRT_renderPhaseSamplingFinished(VKRT_RenderPhase phase) {
+    return VKRT_renderPhaseIsBusy(phase) || VKRT_renderPhaseIsComplete(phase);
+}
+
+static inline uint8_t VKRT_renderPhaseIsDenoised(VKRT_RenderPhase phase) {
+    return phase == VKRT_RENDER_PHASE_COMPLETE_DENOISED;
+}
+
+static inline uint8_t VKRT_renderStatusIsActive(const VKRT_RenderStatusSnapshot* status) {
+    return status && VKRT_renderPhaseIsActive(status->renderPhase);
+}
+
+static inline uint8_t VKRT_renderStatusIsSampling(const VKRT_RenderStatusSnapshot* status) {
+    return status && VKRT_renderPhaseIsSampling(status->renderPhase);
+}
+
+static inline uint8_t VKRT_renderStatusIsDenoising(const VKRT_RenderStatusSnapshot* status) {
+    return status && VKRT_renderPhaseIsDenoising(status->renderPhase);
+}
+
+static inline uint8_t VKRT_renderStatusIsBusy(const VKRT_RenderStatusSnapshot* status) {
+    return status && VKRT_renderPhaseIsBusy(status->renderPhase);
+}
+
+static inline uint8_t VKRT_renderStatusIsComplete(const VKRT_RenderStatusSnapshot* status) {
+    return status && VKRT_renderPhaseIsComplete(status->renderPhase);
+}
+
+static inline uint8_t VKRT_renderStatusSamplingFinished(const VKRT_RenderStatusSnapshot* status) {
+    return status && VKRT_renderPhaseSamplingFinished(status->renderPhase);
+}
+
+static inline uint8_t VKRT_renderStatusIsDenoised(const VKRT_RenderStatusSnapshot* status) {
+    return status && VKRT_renderPhaseIsDenoised(status->renderPhase);
+}
 
 typedef struct VKRT_RuntimeSnapshot {
     uint32_t displayWidth;
@@ -187,6 +252,10 @@ typedef struct VKRT_RuntimeSnapshot {
     uint32_t presentMode;
     float displayRefreshHz;
 } VKRT_RuntimeSnapshot;
+
+typedef struct VKRT_RenderExportSettings {
+    uint8_t denoiseEnabled;
+} VKRT_RenderExportSettings;
 
 typedef struct VKRT_SystemInfo {
     char deviceName[VKRT_DEVICE_NAME_LEN];

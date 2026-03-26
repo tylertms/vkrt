@@ -14,6 +14,7 @@ typedef struct VKRT_LoadedImage {
     uint32_t colorSpace;
 } VKRT_LoadedImage;
 
+int vkrtTryComputeImageByteCount(uint32_t width, uint32_t height, uint32_t channels, size_t* outByteCount);
 int vkrtLoadImageFromFile(const char* path, uint32_t preferredColorSpace, VKRT_LoadedImage* outImage);
 int vkrtLoadImageFromMemory(
     const void* data,

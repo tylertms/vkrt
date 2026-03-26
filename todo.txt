@@ -1,9 +1,7 @@
 - add license and proper readme
 - real animation/keyframe system for more than lighting
 - in display two units, the second unit can only be the second largest one below the first, so 7m 0s not 7m 503ms
-- light speckles still, not as bad, check pbr book
 - hero wavelength or some other method of adding wavelength-dependent refraction
-- add denoiser, NRD maybe? doesn't need to be realtime
 - maybe look into improving movement controls
 - move/rotate/scale with keybinds in viewport and potential post-rt widget draw
 - raster mode or single-ray RT mode just for scene viewing and movement

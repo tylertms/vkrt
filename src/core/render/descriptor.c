@@ -36,6 +36,10 @@ static VkBool32 descriptorResourcesReadyForFrame(VKRT* vkrt, uint32_t frameIndex
            vkrt->core.selectionMaskImageView != VK_NULL_HANDLE &&
            vkrt->core.accumulationImageViews[vkrt->core.accumulationReadIndex] != VK_NULL_HANDLE &&
            vkrt->core.accumulationImageViews[vkrt->core.accumulationWriteIndex] != VK_NULL_HANDLE &&
+           vkrt->core.albedoImageViews[vkrt->core.accumulationReadIndex] != VK_NULL_HANDLE &&
+           vkrt->core.albedoImageViews[vkrt->core.accumulationWriteIndex] != VK_NULL_HANDLE &&
+           vkrt->core.normalImageViews[vkrt->core.accumulationReadIndex] != VK_NULL_HANDLE &&
+           vkrt->core.normalImageViews[vkrt->core.accumulationWriteIndex] != VK_NULL_HANDLE &&
            vkrt->core.vertexData.buffer != VK_NULL_HANDLE &&
            vkrt->core.indexData.buffer != VK_NULL_HANDLE &&
            vkrt->core.selection.buffer != VK_NULL_HANDLE &&
@@ -158,6 +162,54 @@ static VKRT_Result updateDescriptorSetForFrame(VKRT* vkrt, uint32_t frameIndex) 
     selectionMaskImageWrite.descriptorCount = 1;
     selectionMaskImageWrite.pImageInfo = &selectionMaskImageInfo;
 
+    VkDescriptorImageInfo albedoReadImageInfo = {0};
+    albedoReadImageInfo.imageView = vkrt->core.albedoImageViews[vkrt->core.accumulationReadIndex];
+    albedoReadImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+    VkWriteDescriptorSet albedoReadImageWrite = {0};
+    albedoReadImageWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    albedoReadImageWrite.dstSet = descriptorSet;
+    albedoReadImageWrite.dstBinding = 6;
+    albedoReadImageWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    albedoReadImageWrite.descriptorCount = 1;
+    albedoReadImageWrite.pImageInfo = &albedoReadImageInfo;
+
+    VkDescriptorImageInfo albedoWriteImageInfo = {0};
+    albedoWriteImageInfo.imageView = vkrt->core.albedoImageViews[vkrt->core.accumulationWriteIndex];
+    albedoWriteImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+    VkWriteDescriptorSet albedoWriteImageWrite = {0};
+    albedoWriteImageWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    albedoWriteImageWrite.dstSet = descriptorSet;
+    albedoWriteImageWrite.dstBinding = 7;
+    albedoWriteImageWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    albedoWriteImageWrite.descriptorCount = 1;
+    albedoWriteImageWrite.pImageInfo = &albedoWriteImageInfo;
+
+    VkDescriptorImageInfo normalReadImageInfo = {0};
+    normalReadImageInfo.imageView = vkrt->core.normalImageViews[vkrt->core.accumulationReadIndex];
+    normalReadImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+    VkWriteDescriptorSet normalReadImageWrite = {0};
+    normalReadImageWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    normalReadImageWrite.dstSet = descriptorSet;
+    normalReadImageWrite.dstBinding = 8;
+    normalReadImageWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    normalReadImageWrite.descriptorCount = 1;
+    normalReadImageWrite.pImageInfo = &normalReadImageInfo;
+
+    VkDescriptorImageInfo normalWriteImageInfo = {0};
+    normalWriteImageInfo.imageView = vkrt->core.normalImageViews[vkrt->core.accumulationWriteIndex];
+    normalWriteImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+    VkWriteDescriptorSet normalWriteImageWrite = {0};
+    normalWriteImageWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    normalWriteImageWrite.dstSet = descriptorSet;
+    normalWriteImageWrite.dstBinding = 9;
+    normalWriteImageWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    normalWriteImageWrite.descriptorCount = 1;
+    normalWriteImageWrite.pImageInfo = &normalWriteImageInfo;
+
     VkDescriptorBufferInfo verticesInfo = {
         .buffer = vkrt->core.vertexData.buffer,
         .offset = 0,
@@ -167,7 +219,7 @@ static VKRT_Result updateDescriptorSetForFrame(VKRT* vkrt, uint32_t frameIndex) 
     VkWriteDescriptorSet verticesWrite = {0};
     verticesWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     verticesWrite.dstSet = descriptorSet;
-    verticesWrite.dstBinding = 6;
+    verticesWrite.dstBinding = 10;
     verticesWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     verticesWrite.descriptorCount = 1;
     verticesWrite.pBufferInfo = &verticesInfo;
@@ -181,7 +233,7 @@ static VKRT_Result updateDescriptorSetForFrame(VKRT* vkrt, uint32_t frameIndex) 
     VkWriteDescriptorSet indicesWrite = {0};
     indicesWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     indicesWrite.dstSet = descriptorSet;
-    indicesWrite.dstBinding = 7;
+    indicesWrite.dstBinding = 11;
     indicesWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     indicesWrite.descriptorCount = 1;
     indicesWrite.pBufferInfo = &indicesInfo;
@@ -195,7 +247,7 @@ static VKRT_Result updateDescriptorSetForFrame(VKRT* vkrt, uint32_t frameIndex) 
     VkWriteDescriptorSet sceneDataWrite = {0};
     sceneDataWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     sceneDataWrite.dstSet = descriptorSet;
-    sceneDataWrite.dstBinding = 8;
+    sceneDataWrite.dstBinding = 12;
     sceneDataWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     sceneDataWrite.descriptorCount = 1;
     sceneDataWrite.pBufferInfo = &sceneDataInfo;
@@ -209,7 +261,7 @@ static VKRT_Result updateDescriptorSetForFrame(VKRT* vkrt, uint32_t frameIndex) 
     VkWriteDescriptorSet selectionWrite = {0};
     selectionWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     selectionWrite.dstSet = descriptorSet;
-    selectionWrite.dstBinding = 9;
+    selectionWrite.dstBinding = 13;
     selectionWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     selectionWrite.descriptorCount = 1;
     selectionWrite.pBufferInfo = &selectionInfo;
@@ -223,7 +275,7 @@ static VKRT_Result updateDescriptorSetForFrame(VKRT* vkrt, uint32_t frameIndex) 
     VkWriteDescriptorSet meshInfoWrite = {0};
     meshInfoWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     meshInfoWrite.dstSet = descriptorSet;
-    meshInfoWrite.dstBinding = 10;
+    meshInfoWrite.dstBinding = 14;
     meshInfoWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     meshInfoWrite.descriptorCount = 1;
     meshInfoWrite.pBufferInfo = &meshInfo;
@@ -237,7 +289,7 @@ static VKRT_Result updateDescriptorSetForFrame(VKRT* vkrt, uint32_t frameIndex) 
     VkWriteDescriptorSet materialWrite = {0};
     materialWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     materialWrite.dstSet = descriptorSet;
-    materialWrite.dstBinding = 11;
+    materialWrite.dstBinding = 15;
     materialWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     materialWrite.descriptorCount = 1;
     materialWrite.pBufferInfo = &materialInfo;
@@ -251,7 +303,7 @@ static VKRT_Result updateDescriptorSetForFrame(VKRT* vkrt, uint32_t frameIndex) 
     VkWriteDescriptorSet emissiveMeshWrite = {0};
     emissiveMeshWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     emissiveMeshWrite.dstSet = descriptorSet;
-    emissiveMeshWrite.dstBinding = 12;
+    emissiveMeshWrite.dstBinding = 16;
     emissiveMeshWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     emissiveMeshWrite.descriptorCount = 1;
     emissiveMeshWrite.pBufferInfo = &emissiveMeshInfo;
@@ -265,7 +317,7 @@ static VKRT_Result updateDescriptorSetForFrame(VKRT* vkrt, uint32_t frameIndex) 
     VkWriteDescriptorSet emissiveTriangleWrite = {0};
     emissiveTriangleWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     emissiveTriangleWrite.dstSet = descriptorSet;
-    emissiveTriangleWrite.dstBinding = 13;
+    emissiveTriangleWrite.dstBinding = 17;
     emissiveTriangleWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     emissiveTriangleWrite.descriptorCount = 1;
     emissiveTriangleWrite.pBufferInfo = &emissiveTriangleInfo;
@@ -279,7 +331,7 @@ static VKRT_Result updateDescriptorSetForFrame(VKRT* vkrt, uint32_t frameIndex) 
     VkWriteDescriptorSet meshAliasQWrite = {0};
     meshAliasQWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     meshAliasQWrite.dstSet = descriptorSet;
-    meshAliasQWrite.dstBinding = 14;
+    meshAliasQWrite.dstBinding = 18;
     meshAliasQWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     meshAliasQWrite.descriptorCount = 1;
     meshAliasQWrite.pBufferInfo = &meshAliasQInfo;
@@ -293,7 +345,7 @@ static VKRT_Result updateDescriptorSetForFrame(VKRT* vkrt, uint32_t frameIndex) 
     VkWriteDescriptorSet meshAliasIdxWrite = {0};
     meshAliasIdxWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     meshAliasIdxWrite.dstSet = descriptorSet;
-    meshAliasIdxWrite.dstBinding = 15;
+    meshAliasIdxWrite.dstBinding = 19;
     meshAliasIdxWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     meshAliasIdxWrite.descriptorCount = 1;
     meshAliasIdxWrite.pBufferInfo = &meshAliasIdxInfo;
@@ -307,7 +359,7 @@ static VKRT_Result updateDescriptorSetForFrame(VKRT* vkrt, uint32_t frameIndex) 
     VkWriteDescriptorSet triAliasQWrite = {0};
     triAliasQWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     triAliasQWrite.dstSet = descriptorSet;
-    triAliasQWrite.dstBinding = 16;
+    triAliasQWrite.dstBinding = 20;
     triAliasQWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     triAliasQWrite.descriptorCount = 1;
     triAliasQWrite.pBufferInfo = &triAliasQInfo;
@@ -321,7 +373,7 @@ static VKRT_Result updateDescriptorSetForFrame(VKRT* vkrt, uint32_t frameIndex) 
     VkWriteDescriptorSet triAliasIdxWrite = {0};
     triAliasIdxWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     triAliasIdxWrite.dstSet = descriptorSet;
-    triAliasIdxWrite.dstBinding = 17;
+    triAliasIdxWrite.dstBinding = 21;
     triAliasIdxWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     triAliasIdxWrite.descriptorCount = 1;
     triAliasIdxWrite.pBufferInfo = &triAliasIdxInfo;
@@ -334,7 +386,7 @@ static VKRT_Result updateDescriptorSetForFrame(VKRT* vkrt, uint32_t frameIndex) 
     VkWriteDescriptorSet samplerWrite = {0};
     samplerWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     samplerWrite.dstSet = descriptorSet;
-    samplerWrite.dstBinding = 18;
+    samplerWrite.dstBinding = 22;
     samplerWrite.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
     samplerWrite.descriptorCount = VKRT_TEXTURE_SAMPLER_VARIANT_COUNT;
     samplerWrite.pImageInfo = samplerInfos;
@@ -351,7 +403,7 @@ static VKRT_Result updateDescriptorSetForFrame(VKRT* vkrt, uint32_t frameIndex) 
     VkWriteDescriptorSet textureWrite = {0};
     textureWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     textureWrite.dstSet = descriptorSet;
-    textureWrite.dstBinding = 19;
+    textureWrite.dstBinding = 23;
     textureWrite.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
     textureWrite.descriptorCount = VKRT_MAX_BINDLESS_TEXTURES;
     textureWrite.pImageInfo = textureBindings;
@@ -363,6 +415,10 @@ static VKRT_Result updateDescriptorSetForFrame(VKRT* vkrt, uint32_t frameIndex) 
         accumulationWrite,
         outputImageWrite,
         selectionMaskImageWrite,
+        albedoReadImageWrite,
+        albedoWriteImageWrite,
+        normalReadImageWrite,
+        normalWriteImageWrite,
         verticesWrite,
         indicesWrite,
         sceneDataWrite,
@@ -402,20 +458,24 @@ VKRT_Result createDescriptorSetLayout(VKRT* vkrt) {
         {.binding = 3,  .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,              .descriptorCount = 1, .stageFlags = rgen},
         {.binding = 4,  .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,              .descriptorCount = 1, .stageFlags = rgen | comp},
         {.binding = 5,  .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,              .descriptorCount = 1, .stageFlags = rgen | comp},
-        {.binding = 6,  .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rhit},
-        {.binding = 7,  .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rhit},
-        {.binding = 8,  .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,             .descriptorCount = 1, .stageFlags = rtAll | comp},
-        {.binding = 9,  .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rgen},
-        {.binding = 10, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rgen | rhit},
-        {.binding = 11, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rgen | rhit},
-        {.binding = 12, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rgen},
+        {.binding = 6,  .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,              .descriptorCount = 1, .stageFlags = rgen},
+        {.binding = 7,  .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,              .descriptorCount = 1, .stageFlags = rgen},
+        {.binding = 8,  .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,              .descriptorCount = 1, .stageFlags = rgen},
+        {.binding = 9,  .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,              .descriptorCount = 1, .stageFlags = rgen},
+        {.binding = 10, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rhit},
+        {.binding = 11, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rhit},
+        {.binding = 12, .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,             .descriptorCount = 1, .stageFlags = rtAll | comp},
         {.binding = 13, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rgen},
-        {.binding = 14, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rgen},
-        {.binding = 15, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rgen},
+        {.binding = 14, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rgen | rhit},
+        {.binding = 15, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rgen | rhit},
         {.binding = 16, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rgen},
         {.binding = 17, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rgen},
-        {.binding = 18, .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,                    .descriptorCount = VKRT_TEXTURE_SAMPLER_VARIANT_COUNT, .stageFlags = rtAll},
-        {.binding = 19, .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,              .descriptorCount = VKRT_MAX_BINDLESS_TEXTURES, .stageFlags = rtAll},
+        {.binding = 18, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rgen},
+        {.binding = 19, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rgen},
+        {.binding = 20, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rgen},
+        {.binding = 21, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rgen},
+        {.binding = 22, .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,                    .descriptorCount = VKRT_TEXTURE_SAMPLER_VARIANT_COUNT, .stageFlags = rtAll},
+        {.binding = 23, .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,              .descriptorCount = VKRT_MAX_BINDLESS_TEXTURES, .stageFlags = rtAll},
     };
 
     VkDescriptorSetLayoutCreateInfo createInfo = {0};
@@ -435,7 +495,7 @@ VKRT_Result createDescriptorPool(VKRT* vkrt) {
 
     static const VkDescriptorPoolSize rendererPoolSizes[] = {
         {VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 2u * VKRT_MAX_FRAMES_IN_FLIGHT},
-        {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 4u * VKRT_MAX_FRAMES_IN_FLIGHT},
+        {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 8u * VKRT_MAX_FRAMES_IN_FLIGHT},
         {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 11u * VKRT_MAX_FRAMES_IN_FLIGHT},
         {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VKRT_MAX_FRAMES_IN_FLIGHT},
         {VK_DESCRIPTOR_TYPE_SAMPLER, VKRT_TEXTURE_SAMPLER_VARIANT_COUNT * VKRT_MAX_FRAMES_IN_FLIGHT},
