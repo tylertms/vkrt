@@ -19,6 +19,7 @@ cc = meson.get_compiler('c')
 cpp = meson.get_compiler('cpp')
 cmake = import('cmake')
 fs = import('fs')
+python = find_program('python3')
 
 buildtype = get_option('buildtype')
 profiling_enabled = get_option('profiling')
@@ -503,3 +504,11 @@ summary({
   'File dialogs': file_dialogs_backend,
   'Profiling': profiling_enabled,
 }, section: 'vkrt')
+
+run_target('clang-tidy',
+  command: [python, files('scripts/run_clang_tidy.py')],
+)
+
+run_target('clang-tidy-fix',
+  command: [python, files('scripts/run_clang_tidy.py'), '--fix'],
+)

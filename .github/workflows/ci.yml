@@ -129,14 +129,13 @@ jobs:
       - name: Package Windows Artifact
         if: runner.os == 'Windows'
         run: |
-          python scripts/stage_release.py --platform windows --bundle-dir dist/${{ matrix.archive_name }}
+          python scripts/stage_release.py windows dist
 
       - name: Package Linux Artifact
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          mkdir -p dist
-          BUNDLE_DIR="dist/${{ matrix.archive_name }}" TARBALL_PATH="dist/${{ matrix.archive_name }}.tar.gz" python scripts/build_appimage.py
+          python scripts/build_appimage.py dist
 
       - name: Test Linux Package
         if: runner.os == 'Linux'

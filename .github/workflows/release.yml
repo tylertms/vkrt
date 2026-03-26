@@ -77,7 +77,7 @@ jobs:
 
       - name: Stage Release
         run: |
-          python scripts/stage_release.py --platform windows --bundle-dir vkrt-windows-x64 --archive zip --archive-path vkrt-windows-x64.zip
+          python scripts/stage_release.py windows . --zip
 
       - name: Upload Release Asset
         if: github.ref_type == 'tag'
@@ -149,7 +149,7 @@ jobs:
           APPIMAGETOOL_VERSION: ${{ env.APPIMAGETOOL_VERSION }}
           APPIMAGETOOL_SHA256: ${{ env.APPIMAGETOOL_SHA256 }}
         run: |
-          python scripts/build_appimage.py --appimage
+          python scripts/build_appimage.py . --appimage
 
       - name: Test Packaged Linux Bundle
         run: ./vkrt-linux-x64/vkrt --help && ./vkrt-linux-x64/vkrt --version
