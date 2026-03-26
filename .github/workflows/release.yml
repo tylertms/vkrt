@@ -79,6 +79,10 @@ jobs:
         run: |
           python scripts/stage_release.py windows . --zip
 
+      - name: Test Packaged Windows Bundle
+        run: ./vkrt-windows-x64/bin/vkrt.exe --help && ./vkrt-windows-x64/bin/vkrt.exe --version
+        shell: bash
+
       - name: Upload Release Asset
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2.6.1
@@ -152,7 +156,22 @@ jobs:
           python scripts/build_appimage.py . --appimage
 
       - name: Test Packaged Linux Bundle
-        run: ./vkrt-linux-x64/vkrt --help && ./vkrt-linux-x64/vkrt --version
+        run: ./vkrt-linux-x64/bin/vkrt --help && ./vkrt-linux-x64/bin/vkrt --version
+
+      - name: Test Linux Tarball
+        shell: bash
+        run: |
+          mkdir -p packaged-linux
+          tar -xzf vkrt-linux-x64.tar.gz -C packaged-linux
+          ./packaged-linux/bin/vkrt --help
+          ./packaged-linux/bin/vkrt --version
+
+      - name: Test AppImage
+        shell: bash
+        run: |
+          chmod +x vkrt-linux-x86_64.AppImage
+          ./vkrt-linux-x86_64.AppImage --appimage-extract-and-run --help
+          ./vkrt-linux-x86_64.AppImage --appimage-extract-and-run --version
 
       - name: Upload Release Assets
         if: github.ref_type == 'tag'

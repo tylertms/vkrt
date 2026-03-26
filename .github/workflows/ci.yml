@@ -131,6 +131,11 @@ jobs:
         run: |
           python scripts/stage_release.py windows dist
 
+      - name: Test Windows Package
+        if: runner.os == 'Windows'
+        shell: bash
+        run: ./dist/${{ matrix.archive_name }}/bin/vkrt.exe --help && ./dist/${{ matrix.archive_name }}/bin/vkrt.exe --version
+
       - name: Package Linux Artifact
         if: runner.os == 'Linux'
         shell: bash
@@ -140,7 +145,7 @@ jobs:
       - name: Test Linux Package
         if: runner.os == 'Linux'
         shell: bash
-        run: ./dist/${{ matrix.archive_name }}/vkrt --help && ./dist/${{ matrix.archive_name }}/vkrt --version
+        run: ./dist/${{ matrix.archive_name }}/bin/vkrt --help && ./dist/${{ matrix.archive_name }}/bin/vkrt --version
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v6

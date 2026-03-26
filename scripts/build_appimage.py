@@ -30,9 +30,24 @@ def remove_path(path):
         shutil.rmtree(path)
 
 
-def collect_ldd_paths(binary_path):
+def chmod_executable(path):
+    path.chmod(0o755)
+
+
+def collect_ldd_paths(binary_path, library_search_dir):
+    env = dict(os.environ)
+    env["LD_LIBRARY_PATH"] = ":".join(
+        part
+        for part in [str(library_search_dir), env.get("LD_LIBRARY_PATH", "")]
+        if part
+    )
+
     result = subprocess.run(
-        ["ldd", str(binary_path)], check=True, capture_output=True, text=True
+        ["ldd", str(binary_path)],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=env,
     )
 
     missing = []
@@ -138,15 +153,40 @@ def main():
         if path.exists() or path.is_symlink():
             remove_path(path)
 
-    app_bin_dir = APP_DIR / "usr" / "bin"
+    bundle_bin_dir = bundle_dir / "bin"
+    bundle_lib_dir = bundle_dir / "lib"
+    bundle_libexec_dir = bundle_dir / "libexec"
     app_lib_dir = APP_DIR / "usr" / "lib"
-    app_bin_dir.mkdir(parents=True, exist_ok=True)
-    app_lib_dir.mkdir(parents=True, exist_ok=True)
+    app_libexec_dir = APP_DIR / "usr" / "libexec"
 
-    shutil.copy2(binary_path, app_bin_dir / "vkrt")
-    (app_bin_dir / "vkrt").chmod(0o755)
-    shutil.copytree(ROOT / "assets", app_bin_dir / "assets", symlinks=True)
-    shutil.copy2(ROOT / "README.md", app_bin_dir / "README.md")
+    for path in [
+        bundle_bin_dir,
+        bundle_lib_dir,
+        bundle_libexec_dir,
+        app_lib_dir,
+        app_libexec_dir,
+    ]:
+        path.mkdir(parents=True, exist_ok=True)
+
+    for target_path in [bundle_libexec_dir / "vkrt", app_libexec_dir / "vkrt"]:
+        shutil.copy2(binary_path, target_path)
+        chmod_executable(target_path)
+
+    launcher = (
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        'HERE="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"\n'
+        'ROOT="$(cd -- "${HERE}/.." && pwd)"\n'
+        'export LD_LIBRARY_PATH="${ROOT}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"\n'
+        'cd "${ROOT}"\n'
+        'exec "${ROOT}/libexec/vkrt" "$@"\n'
+    )
+    (bundle_bin_dir / "vkrt").write_text(launcher, encoding="utf-8")
+    chmod_executable(bundle_bin_dir / "vkrt")
+
+    for target_root in [bundle_dir, APP_DIR / "usr"]:
+        shutil.copytree(ROOT / "assets", target_root / "assets", symlinks=True)
+        shutil.copy2(ROOT / "README.md", target_root / "README.md")
     shutil.copy2(ROOT / "assets" / "images" / "icon.png", APP_DIR / "vkrt.png")
 
     (APP_DIR / "vkrt.desktop").write_text(
@@ -164,31 +204,28 @@ def main():
         "set -euo pipefail\n"
         'HERE="$(dirname "$(readlink -f "$0")")"\n'
         'export LD_LIBRARY_PATH="${HERE}/usr/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"\n'
-        'exec "${HERE}/usr/bin/vkrt" "$@"\n',
+        'cd "${HERE}/usr"\n'
+        'exec "${HERE}/usr/libexec/vkrt" "$@"\n',
         encoding="utf-8",
     )
-    (APP_DIR / "AppRun").chmod(0o755)
+    chmod_executable(APP_DIR / "AppRun")
 
-    for library_path in collect_ldd_paths(app_bin_dir / "vkrt"):
+    for library_path in collect_ldd_paths(binary_path, BUILD_DIR):
         if not should_bundle_library(library_path.name):
             continue
-        target_path = app_lib_dir / library_path.name
-        if target_path.exists():
-            continue
         resolved_path = library_path.resolve()
-        shutil.copy2(resolved_path, target_path)
-        target_path.chmod(resolved_path.stat().st_mode & 0o777)
+        for target_path in [
+            bundle_lib_dir / library_path.name,
+            app_lib_dir / library_path.name,
+        ]:
+            if target_path.exists():
+                continue
+            shutil.copy2(resolved_path, target_path)
+            target_path.chmod(resolved_path.stat().st_mode & 0o777)
 
     bundle_dir.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(APP_DIR / "AppRun", bundle_dir / "vkrt")
-    (bundle_dir / "vkrt").chmod(0o755)
-    shutil.copy2(ROOT / "README.md", bundle_dir / "README.md")
-    shutil.copytree(APP_DIR / "usr", bundle_dir / "usr", symlinks=True)
-
     with tarfile.open(tarball_path, "w:gz") as archive:
         for path in sorted(bundle_dir.iterdir()):
-            if path.name == "vkrt":
-                continue
             archive.add(path, arcname=path.name)
 
     if args.appimage:
