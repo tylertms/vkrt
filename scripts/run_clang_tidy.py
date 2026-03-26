@@ -46,8 +46,19 @@ def collect_files(raw_paths):
     return unique_files
 
 
+def build_file_patterns(files):
+    if not files:
+        return [r"src/.*\.(c|cc|cpp|cxx)$"]
+
+    return [str(path) for path in files]
+
+
 def main():
     args = parse_args()
+    run_clang_tidy = os.environ.get("RUN_CLANG_TIDY") or shutil.which("run-clang-tidy")
+    if run_clang_tidy is None:
+        print("run-clang-tidy not found on PATH", file=sys.stderr)
+        return 2
     clang_tidy = os.environ.get("CLANG_TIDY") or shutil.which("clang-tidy")
     if clang_tidy is None:
         print("clang-tidy not found on PATH", file=sys.stderr)
@@ -59,12 +70,16 @@ def main():
         return 2
 
     files = collect_files(args.paths)
-
-    if not files:
-        print("No matching source files found.", file=sys.stderr)
-        return 1
-
-    command = [clang_tidy, "-p", str(BUILD_DIR)]
+    file_patterns = build_file_patterns(files)
+    command = [
+        run_clang_tidy,
+        "-clang-tidy-binary",
+        clang_tidy,
+        "-p",
+        str(BUILD_DIR),
+        "-j",
+        str(max(1, (os.cpu_count() or 1) - 1)),
+    ]
     if sys.platform == "darwin":
         sdk_path = subprocess.run(
             ["xcrun", "--show-sdk-path"],
@@ -73,10 +88,10 @@ def main():
             text=True,
         ).stdout.strip()
         if sdk_path:
-            command.extend(["--extra-arg=-isysroot", f"--extra-arg={sdk_path}"])
+            command.extend([f"-extra-arg=-isysroot", f"-extra-arg={sdk_path}"])
     if args.fix:
-        command.append("--fix")
-    command.extend(str(path) for path in files)
+        command.extend(["-fix", "-format"])
+    command.extend(file_patterns)
     return subprocess.run(command, cwd=ROOT).returncode
 
 

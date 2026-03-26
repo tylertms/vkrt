@@ -31,6 +31,16 @@ clang_tidy = find_program(
   ],
   required: true,
 )
+run_clang_tidy = find_program(
+  'run-clang-tidy',
+  dirs: [
+    '/opt/homebrew/opt/llvm/bin',
+    '/usr/local/opt/llvm/bin',
+    '/opt/homebrew/bin',
+    '/usr/local/bin',
+  ],
+  required: true,
+)
 
 buildtype = get_option('buildtype')
 profiling_enabled = get_option('profiling')
@@ -543,10 +553,16 @@ summary({
 
 run_target('clang-tidy',
   command: [python, files('scripts/run_clang_tidy.py')],
-  env: {'CLANG_TIDY': clang_tidy.full_path()},
+  env: {
+    'CLANG_TIDY': clang_tidy.full_path(),
+    'RUN_CLANG_TIDY': run_clang_tidy.full_path(),
+  },
 )
 
 run_target('clang-tidy-fix',
   command: [python, files('scripts/run_clang_tidy.py'), '--fix'],
-  env: {'CLANG_TIDY': clang_tidy.full_path()},
+  env: {
+    'CLANG_TIDY': clang_tidy.full_path(),
+    'RUN_CLANG_TIDY': run_clang_tidy.full_path(),
+  },
 )
