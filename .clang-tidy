@@ -9,7 +9,8 @@ Checks: >-
   readability-*,
   -readability-magic-numbers,
   -readability-qualified-auto,
-  -readability-redundant-access-specifiers
+  -readability-redundant-access-specifiers,
+  -readability-uppercase-literal-suffix
 WarningsAsErrors: '*'
 HeaderFilterRegex: '^src/.*\.(h|hh|hpp|hxx)$'
 FormatStyle: file
@@ -80,8 +81,6 @@ CheckOptions:
     value: 'false'
   - key: readability-simplify-boolean-expr.SimplifyDeMorgan
     value: 'true'
-  - key: readability-uppercase-literal-suffix.NewSuffixes
-    value: ''
   - key: readability-identifier-naming.MacroDefinitionCase
     value: UPPER_CASE
   - key: readability-identifier-naming.EnumCase

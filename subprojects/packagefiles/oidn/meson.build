@@ -41,6 +41,31 @@ elif sys == 'linux' and cpu == 'x86_64'
     'lib/libtbbbind_2_5.so.3.17',
   )
   oidn_link_args = ['-Wl,-rpath,$ORIGIN']
+elif sys == 'darwin' and cpu == 'x86_64'
+  oidn_runtime_files = files(
+    'lib/libOpenImageDenoise.dylib',
+    'lib/libOpenImageDenoise.2.dylib',
+    'lib/libOpenImageDenoise.2.4.1.dylib',
+    'lib/libOpenImageDenoise_core.2.4.1.dylib',
+    'lib/libOpenImageDenoise_device_cpu.2.4.1.dylib',
+    'lib/libtbb.dylib',
+    'lib/libtbb.12.dylib',
+    'lib/libtbb.12.17.dylib',
+  )
+  oidn_link_args = ['-Wl,-rpath,@loader_path']
+elif sys == 'darwin' and cpu == 'aarch64'
+  oidn_runtime_files = files(
+    'lib/libOpenImageDenoise.dylib',
+    'lib/libOpenImageDenoise.2.dylib',
+    'lib/libOpenImageDenoise.2.4.1.dylib',
+    'lib/libOpenImageDenoise_core.2.4.1.dylib',
+    'lib/libOpenImageDenoise_device_cpu.2.4.1.dylib',
+    'lib/libOpenImageDenoise_device_metal.2.4.1.dylib',
+    'lib/libtbb.dylib',
+    'lib/libtbb.12.dylib',
+    'lib/libtbb.12.17.dylib',
+  )
+  oidn_link_args = ['-Wl,-rpath,@loader_path']
 else
   error('No bundled Open Image Denoise package is configured for ' + sys + ' ' + cpu)
 endif

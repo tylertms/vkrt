@@ -10,8 +10,9 @@ project('vkrt', ['c', 'cpp'],
 sys = host_machine.system()
 is_linux = sys == 'linux'
 is_windows = sys == 'windows'
+is_darwin = sys == 'darwin'
 
-if not is_linux and not is_windows
+if not is_linux and not is_windows and not is_darwin
   error('Unsupported host system: ' + sys)
 endif
 
@@ -20,6 +21,16 @@ cpp = meson.get_compiler('cpp')
 cmake = import('cmake')
 fs = import('fs')
 python = find_program('python3')
+clang_tidy = find_program(
+  'clang-tidy',
+  dirs: [
+    '/opt/homebrew/opt/llvm/bin',
+    '/usr/local/opt/llvm/bin',
+    '/opt/homebrew/bin',
+    '/usr/local/bin',
+  ],
+  required: true,
+)
 
 buildtype = get_option('buildtype')
 profiling_enabled = get_option('profiling')
@@ -154,9 +165,22 @@ core_internal_includes = include_directories(
 
 vulkan_dep = dependency('vulkan', required: true)
 windows_system_deps = []
+darwin_system_deps = []
 
 if is_windows
   windows_system_deps += cc.find_library('dwmapi', required: true)
+endif
+
+if is_darwin
+  darwin_system_deps += dependency(
+    'appleframeworks',
+    modules: [
+      'Cocoa',
+      'CoreFoundation',
+      'IOKit',
+      'QuartzCore',
+    ],
+  )
 endif
 
 linux_glfw_backend = 'auto'
@@ -227,7 +251,7 @@ elif linux_window_backend != 'auto'
 endif
 
 glfw_build_win32 = is_windows
-glfw_build_cocoa = false
+glfw_build_cocoa = is_darwin
 glfw_build_x11 = is_linux and (linux_glfw_backend == 'x11' or linux_glfw_backend == 'both')
 glfw_build_wayland = is_linux and (linux_glfw_backend == 'wayland' or linux_glfw_backend == 'both')
 
@@ -308,14 +332,24 @@ if is_windows and oidn_cpu == 'x86_64'
   oidn_subproject_name = 'oidn_windows_x86_64'
 elif is_linux and oidn_cpu == 'x86_64'
   oidn_subproject_name = 'oidn_linux_x86_64'
+elif is_darwin and oidn_cpu == 'aarch64'
+  oidn_subproject_name = 'oidn_macos_arm64'
+elif is_darwin and oidn_cpu == 'x86_64'
+  oidn_subproject_name = 'oidn_macos_x86_64'
 else
-  error('Bundled OIDN is not configured for ' + sys + ' ' + oidn_cpu)
+  oidn_enabled = false
 endif
 
-oidn_project = subproject(oidn_subproject_name, required: true)
-oidn_dep = oidn_project.get_variable('oidn_dep')
-oidn_runtime_files = oidn_project.get_variable('oidn_runtime_files')
-oidn_version = oidn_project.get_variable('oidn_version')
+oidn_dep = disabler()
+oidn_version = 'disabled'
+if oidn_enabled
+  oidn_project = subproject(oidn_subproject_name, required: true)
+  oidn_dep = oidn_project.get_variable('oidn_dep')
+  oidn_runtime_files = oidn_project.get_variable('oidn_runtime_files')
+  oidn_version = oidn_project.get_variable('oidn_version')
+else
+  message('OIDN disabled on ' + sys + ' ' + oidn_cpu)
+endif
 
 c_args += [c_define_prefix + 'VKRT_GLFW_VERSION="' + glfw_dep.version() + '"']
 c_args += [c_define_prefix + 'VKRT_SPNG_VERSION="' + spng_dep.version() + '"']
@@ -338,6 +372,7 @@ core_dependencies = [
   turbojpeg_dep,
   zlib_dep,
   windows_system_deps,
+  darwin_system_deps,
 ]
 
 core_dependencies += [oidn_dep]
@@ -348,6 +383,7 @@ app_dependencies = [
   threads_dep,
   rt_dep,
   windows_system_deps,
+  darwin_system_deps,
 ]
 
 imgui_dependencies = [
@@ -507,8 +543,10 @@ summary({
 
 run_target('clang-tidy',
   command: [python, files('scripts/run_clang_tidy.py')],
+  env: {'CLANG_TIDY': clang_tidy.full_path()},
 )
 
 run_target('clang-tidy-fix',
   command: [python, files('scripts/run_clang_tidy.py'), '--fix'],
+  env: {'CLANG_TIDY': clang_tidy.full_path()},
 )
