@@ -21,16 +21,38 @@ def find_clang_format() -> str:
 def main() -> int:
     repo_root = Path(__file__).resolve().parent.parent
     src_root = repo_root / "src"
-    extensions = {".c", ".h", ".cpp", ".hpp"}
-    files = sorted(path for path in src_root.rglob("*") if path.suffix in extensions)
+    source_extensions = {".c", ".h", ".cpp", ".hpp"}
+    shader_extensions = {".slang"}
+    source_files = sorted(
+        path for path in src_root.rglob("*") if path.suffix in source_extensions
+    )
+    shader_files = sorted(
+        path for path in src_root.rglob("*") if path.suffix in shader_extensions
+    )
 
-    if not files:
+    if not source_files and not shader_files:
         return 0
 
     clang_format = find_clang_format()
-    command = [clang_format, "-i", *[str(path) for path in files]]
-    completed = subprocess.run(command, cwd=repo_root)
-    return completed.returncode
+
+    if source_files:
+        command = [clang_format, "-i", *[str(path) for path in source_files]]
+        completed = subprocess.run(command, cwd=repo_root)
+        if completed.returncode != 0:
+            return completed.returncode
+
+    for path in shader_files:
+        command = [
+            clang_format,
+            "-i",
+            f"--assume-filename={path.with_suffix('.cpp')}",
+            str(path),
+        ]
+        completed = subprocess.run(command, cwd=repo_root)
+        if completed.returncode != 0:
+            return completed.returncode
+
+    return 0
 
 
 if __name__ == "__main__":
