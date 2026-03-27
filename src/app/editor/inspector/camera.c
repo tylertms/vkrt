@@ -124,9 +124,10 @@ static void drawCameraShadingSection(VKRT* vkrt, VKRT_SceneSettingsSnapshot* set
 
         bool autoExposureEnabled = settings->autoExposureEnabled != 0;
         if (ImGui_Checkbox("Auto Exposure", &autoExposureEnabled)) {
+            uint8_t autoExposureFlag = (uint8_t)autoExposureEnabled;
             logCameraInspectorFailure(
                 "Updating auto exposure failed",
-                VKRT_setAutoExposureEnabled(vkrt, (uint8_t)(autoExposureEnabled ? 1u : 0u))
+                VKRT_setAutoExposureEnabled(vkrt, autoExposureFlag)
             );
         }
         if (!autoExposureEnabled) {
@@ -276,7 +277,8 @@ static void drawCameraDebugSection(VKRT* vkrt, const VKRT_SceneSettingsSnapshot*
 
         bool neeEnabled = settings->misNeeEnabled != 0;
         if (ImGui_Checkbox("NEE (Direct Light)", &neeEnabled)) {
-            logCameraInspectorFailure("Updating NEE toggle failed", VKRT_setMISNEEEnabled(vkrt, neeEnabled ? 1u : 0u));
+            uint32_t neeEnabledFlag = (uint32_t)neeEnabled;
+            logCameraInspectorFailure("Updating NEE toggle failed", VKRT_setMISNEEEnabled(vkrt, neeEnabledFlag));
         }
         tooltipOnHover("Samples lights directly to reduce noise from emissive lighting.");
 
