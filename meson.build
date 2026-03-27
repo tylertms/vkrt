@@ -21,27 +21,34 @@ cpp = meson.get_compiler('cpp')
 cmake = import('cmake')
 fs = import('fs')
 python = find_program('python3')
-clang_tidy = find_program(
-  'clang-tidy',
-  dirs: [
-    'C:/Program Files/LLVM/bin',
+llvm_program_dirs = []
+if is_windows
+  llvm_program_dirs += ['C:/Program Files/LLVM/bin']
+elif is_darwin
+  llvm_program_dirs += [
     '/opt/homebrew/opt/llvm/bin',
     '/usr/local/opt/llvm/bin',
     '/opt/homebrew/bin',
     '/usr/local/bin',
-  ],
+  ]
+else
+  llvm_program_dirs += [
+    '/usr/local/opt/llvm/bin',
+    '/opt/homebrew/opt/llvm/bin',
+    '/usr/local/bin',
+    '/opt/homebrew/bin',
+  ]
+endif
+
+clang_tidy = find_program(
+  'clang-tidy',
+  dirs: llvm_program_dirs,
   required: true,
 )
 run_clang_tidy = find_program(
   'run-clang-tidy',
   'run-clang-tidy.py',
-  dirs: [
-    'C:/Program Files/LLVM/bin',
-    '/opt/homebrew/opt/llvm/bin',
-    '/usr/local/opt/llvm/bin',
-    '/opt/homebrew/bin',
-    '/usr/local/bin',
-  ],
+  dirs: llvm_program_dirs,
   required: true,
 )
 
