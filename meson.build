@@ -22,9 +22,7 @@ cmake = import('cmake')
 fs = import('fs')
 python = find_program('python3')
 llvm_program_dirs = []
-if is_windows
-  llvm_program_dirs += ['C:/Program Files/LLVM/bin']
-elif is_darwin
+if is_darwin
   llvm_program_dirs += [
     '/opt/homebrew/opt/llvm/bin',
     '/usr/local/opt/llvm/bin',
