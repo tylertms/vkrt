@@ -323,6 +323,7 @@ static float queryTopMenuBarHeight(void) {
 
 typedef enum EditorMenuAction {
     EDITOR_MENU_ACTION_OPEN_SCENE = 0,
+    EDITOR_MENU_ACTION_RESET_SCENE,
     EDITOR_MENU_ACTION_SAVE_SCENE,
     EDITOR_MENU_ACTION_SAVE_SCENE_AS,
     EDITOR_MENU_ACTION_IMPORT_MESH,
@@ -338,6 +339,11 @@ static void queueEditorMenuAction(Session* session, EditorMenuAction action, con
     switch (action) {
         case EDITOR_MENU_ACTION_OPEN_SCENE:
             sessionRequestSceneOpenDialog(session);
+            break;
+        case EDITOR_MENU_ACTION_RESET_SCENE:
+            if (currentScenePath && currentScenePath[0]) {
+                sessionQueueSceneOpen(session, currentScenePath);
+            }
             break;
         case EDITOR_MENU_ACTION_SAVE_SCENE:
             if (currentScenePath && currentScenePath[0]) {
@@ -422,6 +428,9 @@ static void drawFileMenu(
 
     if (ImGui_MenuItemEx("Open", "\tCtrl+O", false, true)) {
         queueEditorMenuAction(session, EDITOR_MENU_ACTION_OPEN_SCENE, currentScenePath);
+    }
+    if (ImGui_MenuItemEx("Reset Scene", NULL, false, haveCurrentScenePath)) {
+        queueEditorMenuAction(session, EDITOR_MENU_ACTION_RESET_SCENE, currentScenePath);
     }
     if (ImGui_MenuItemEx("Save", "\tCtrl+S", false, haveCurrentScenePath)) {
         queueEditorMenuAction(session, EDITOR_MENU_ACTION_SAVE_SCENE, currentScenePath);

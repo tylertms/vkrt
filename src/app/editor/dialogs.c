@@ -122,6 +122,29 @@ static int prepareDialogRequest(
     return 1;
 }
 
+static int buildDefaultRenderName(const char* currentScenePath, char outName[DIALOG_DEFAULT_NAME_CAPACITY]) {
+    if (!outName) return 0;
+
+    const char* fallbackName = "render";
+    const char* sceneName = (currentScenePath && currentScenePath[0]) ? pathBasename(currentScenePath) : fallbackName;
+    if (!sceneName || !sceneName[0]) {
+        sceneName = fallbackName;
+    }
+
+    size_t stemLength = strlen(sceneName);
+    const char* extension = strrchr(sceneName, '.');
+    if (extension && extension != sceneName) {
+        stemLength = (size_t)(extension - sceneName);
+    }
+    if (stemLength == 0u) {
+        sceneName = fallbackName;
+        stemLength = strlen(sceneName);
+    }
+
+    return snprintf(outName, DIALOG_DEFAULT_NAME_CAPACITY, "%.*s.png", (int)stemLength, sceneName) <
+           DIALOG_DEFAULT_NAME_CAPACITY;
+}
+
 static char* runDialogRequest(const DialogRequest* request) {
     if (!request) return NULL;
 
@@ -565,8 +588,13 @@ static int tryScheduleRenderSaveDialog(Session* session) {
     defaultPath[0] = '\0';
     resolveExistingParentPath("captures", NULL, defaultPath, sizeof(defaultPath));
 
+    char defaultName[DIALOG_DEFAULT_NAME_CAPACITY];
+    if (!buildDefaultRenderName(sessionGetCurrentScenePath(session), defaultName)) {
+        return 1;
+    }
+
     DialogRequest request = {0};
-    if (!prepareDialogRequest(state, DIALOG_KIND_SAVE_RENDER, defaultPath, "render.png", &request)) {
+    if (!prepareDialogRequest(state, DIALOG_KIND_SAVE_RENDER, defaultPath, defaultName, &request)) {
         return 1;
     }
 
