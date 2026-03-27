@@ -283,55 +283,76 @@ if cc_is_msvc or cpp_is_msvc
   endif
 endif
 
-glfw_options = cmake.subproject_options()
-glfw_options.set_override_option('warning_level', '0')
-glfw_options.add_cmake_defines({
-  'BUILD_SHARED_LIBS': 'OFF',
-  'GLFW_BUILD_DOCS': 'OFF',
-  'GLFW_BUILD_EXAMPLES': 'OFF',
-  'GLFW_BUILD_TESTS': 'OFF',
-  'GLFW_INSTALL': 'OFF',
-  'GLFW_BUILD_WIN32': glfw_build_win32 ? 'ON' : 'OFF',
-  'GLFW_BUILD_COCOA': glfw_build_cocoa ? 'ON' : 'OFF',
-  'GLFW_BUILD_X11': glfw_build_x11 ? 'ON' : 'OFF',
-  'GLFW_BUILD_WAYLAND': glfw_build_wayland ? 'ON' : 'OFF',
-  'GLFW_ENABLE_WARNINGS': 'OFF',
-  'CMAKE_SUPPRESS_DEVELOPER_WARNINGS': 'TRUE',
-})
-if glfw_msvc_runtime != ''
-  glfw_options.add_cmake_defines({
-    'CMAKE_MSVC_RUNTIME_LIBRARY': glfw_msvc_runtime,
-  })
-endif
-glfw_project = cmake.subproject('glfw', options: glfw_options)
-glfw_dep = glfw_project.dependency('glfw')
-
 threads_dep = dependency('threads')
 rt_dep = dependency('rt', required: false)
-zlib_project = subproject('zlib', default_options: ['default_library=static'])
-zlib_dep = zlib_project.get_variable('zlib_dep')
+glfw_dep = dependency('glfw3', required: false, method: 'pkg-config')
+if not glfw_dep.found()
+  glfw_options = cmake.subproject_options()
+  glfw_options.set_override_option('warning_level', '0')
+  glfw_options.add_cmake_defines({
+    'BUILD_SHARED_LIBS': 'OFF',
+    'GLFW_BUILD_DOCS': 'OFF',
+    'GLFW_BUILD_EXAMPLES': 'OFF',
+    'GLFW_BUILD_TESTS': 'OFF',
+    'GLFW_INSTALL': 'OFF',
+    'GLFW_BUILD_WIN32': glfw_build_win32 ? 'ON' : 'OFF',
+    'GLFW_BUILD_COCOA': glfw_build_cocoa ? 'ON' : 'OFF',
+    'GLFW_BUILD_X11': glfw_build_x11 ? 'ON' : 'OFF',
+    'GLFW_BUILD_WAYLAND': glfw_build_wayland ? 'ON' : 'OFF',
+    'GLFW_ENABLE_WARNINGS': 'OFF',
+    'CMAKE_SUPPRESS_DEVELOPER_WARNINGS': 'TRUE',
+  })
+  if glfw_msvc_runtime != ''
+    glfw_options.add_cmake_defines({
+      'CMAKE_MSVC_RUNTIME_LIBRARY': glfw_msvc_runtime,
+    })
+  endif
+  glfw_project = cmake.subproject('glfw', options: glfw_options)
+  glfw_dep = glfw_project.dependency('glfw')
+endif
 
-spng_project = subproject(
-  'spng',
-  default_options: [
-    'default_library=static',
-    'static_zlib=true',
-    'build_examples=false',
-    'warning_level=0',
-  ]
+zlib_dep = dependency('zlib', required: false)
+zlib_compile_dep = disabler()
+if not zlib_dep.found()
+  zlib_project = subproject('zlib', default_options: ['default_library=static'])
+  zlib_dep = zlib_project.get_variable('zlib_dep')
+endif
+zlib_compile_dep = zlib_dep.partial_dependency(
+  compile_args: true,
+  includes: true,
 )
-spng_dep = spng_project.get_variable('spng_dep')
 
-turbojpeg_project = subproject(
-  'libjpeg-turbo',
-  default_options: {
-    'default_library': 'static',
-    'tests': 'disabled',
-    'warning_level': '0',
-    'c_args': is_linux ? ['-D_DEFAULT_SOURCE', '-include', 'strings.h'] : [],
-  }
-)
-turbojpeg_dep = turbojpeg_project.get_variable('turbojpeg_dep')
+spng_from_system = false
+spng_dep = dependency('spng', required: false, method: 'pkg-config')
+if not spng_dep.found()
+  spng_dep = dependency('libspng', required: false, method: 'pkg-config')
+endif
+spng_from_system = spng_dep.found()
+if not spng_dep.found()
+  spng_project = subproject(
+    'spng',
+    default_options: [
+      'default_library=static',
+      'static_zlib=false',
+      'build_examples=false',
+      'warning_level=0',
+    ]
+  )
+  spng_dep = spng_project.get_variable('spng_dep')
+endif
+
+turbojpeg_dep = dependency('libturbojpeg', required: false, method: 'pkg-config')
+if not turbojpeg_dep.found()
+  turbojpeg_project = subproject(
+    'libjpeg-turbo',
+    default_options: [
+      'default_library=static',
+      'tests=disabled',
+      'warning_level=0',
+    ] + (is_linux ? ['c_args=-D_DEFAULT_SOURCE -include strings.h'] : [])
+  )
+  turbojpeg_dep = turbojpeg_project.get_variable('turbojpeg_dep')
+endif
 
 oidn_runtime_files = []
 oidn_enabled = true
@@ -380,7 +401,7 @@ core_dependencies = [
   rt_dep,
   spng_dep,
   turbojpeg_dep,
-  zlib_dep,
+  spng_from_system ? zlib_dep : zlib_compile_dep,
   windows_system_deps,
   darwin_system_deps,
 ]
@@ -536,6 +557,8 @@ endforeach
 glfw_backend_summary = 'unknown'
 if glfw_build_win32
   glfw_backend_summary = 'win32'
+elif glfw_build_cocoa
+  glfw_backend_summary = 'cocoa'
 elif glfw_build_x11 and glfw_build_wayland
   glfw_backend_summary = 'x11 + wayland'
 elif glfw_build_x11
