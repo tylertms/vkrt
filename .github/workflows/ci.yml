@@ -112,7 +112,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang-tidy clang-tools libdbus-1-dev pkg-config libwayland-dev libxkbcommon-dev wayland-protocols libx11-dev libxrandr-dev libxinerama-dev libxi-dev libxcursor-dev libxext-dev
+          sudo apt-get install -y clang-tidy clang-tools libdbus-1-dev libturbojpeg0-dev pkg-config libwayland-dev libxkbcommon-dev wayland-protocols libx11-dev libxrandr-dev libxinerama-dev libxi-dev libxcursor-dev libxext-dev
 
       - name: Install Meson and Ninja
         run: python -m pip install meson ninja
