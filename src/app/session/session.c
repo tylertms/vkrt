@@ -263,8 +263,8 @@ static void pruneEmptyLeafGroups(Session* session) {
 }
 
 typedef struct SceneObjectSyncNode {
-    uint32_t objectIndex;
     mat4 parentWorldTransform;
+    uint32_t objectIndex;
 } SceneObjectSyncNode;
 
 static int pushSceneObjectSyncNode(
@@ -285,8 +285,8 @@ static int pushSceneObjectSyncNode(
     }
 
     SceneObjectSyncNode* node = &(*stack)[*stackCount];
-    node->objectIndex = objectIndex;
     memcpy(node->parentWorldTransform, parentWorldTransform, sizeof(node->parentWorldTransform));
+    node->objectIndex = objectIndex;
     (*stackCount)++;
     return 1;
 }

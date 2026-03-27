@@ -45,12 +45,6 @@ static const float kPropertiesDockFraction = 0.28f;
 static const float kWorkspaceHostBorderOverlapPx = 1.0f;
 static const float kMinimumViewportExtentPx = 1.0f;
 static const uint32_t kViewportRectSnapTolerancePx = 1u;
-static const ImGuiDockNodeFlags kPanelDockFlags =
-    (ImGuiDockNodeFlags)(ImGuiDockNodeFlags_NoTabBar | ImGuiDockNodeFlags_NoWindowMenuButton |
-                         ImGuiDockNodeFlags_NoCloseButton);
-static const ImGuiDockNodeFlags kViewportDockFlags =
-    (ImGuiDockNodeFlags)(ImGuiDockNodeFlags_NoTabBar | ImGuiDockNodeFlags_NoUndocking |
-                         ImGuiDockNodeFlags_NoWindowMenuButton | ImGuiDockNodeFlags_NoCloseButton);
 
 typedef struct EditorUIState {
     float uiScale;
@@ -69,6 +63,21 @@ static EditorUIState* getEditorUIState(Session* session) {
 
 static ImGuiDockNodeFlags composeDockNodeFlags(ImGuiDockNodeFlags baseFlags, ImGuiDockNodeFlags extraFlags) {
     return (ImGuiDockNodeFlags)((int)baseFlags | (int)extraFlags);
+}
+
+static ImGuiDockNodeFlags queryPanelDockFlags(void) {
+    int flags = ImGuiDockNodeFlags_NoTabBar;
+    flags |= ImGuiDockNodeFlags_NoWindowMenuButton;
+    flags |= ImGuiDockNodeFlags_NoCloseButton;
+    return (ImGuiDockNodeFlags)flags;
+}
+
+static ImGuiDockNodeFlags queryViewportDockFlags(void) {
+    int flags = ImGuiDockNodeFlags_NoTabBar;
+    flags |= ImGuiDockNodeFlags_NoUndocking;
+    flags |= ImGuiDockNodeFlags_NoWindowMenuButton;
+    flags |= ImGuiDockNodeFlags_NoCloseButton;
+    return (ImGuiDockNodeFlags)flags;
 }
 
 static void initializeDockNodeFlags(ImGuiDockNode* dockNode, ImGuiDockNodeFlags extraFlags) {
@@ -586,9 +595,9 @@ static void initializeDockLayout(EditorUIState* state) {
     ImGuiDockNode* sceneDockNode = ImGui_DockBuilderGetNode(sceneDockID);
     ImGuiDockNode* propertiesDockNode = ImGui_DockBuilderGetNode(propertiesDockID);
     ImGuiDockNode* viewportDockNode = ImGui_DockBuilderGetNode(viewportDockID);
-    initializeDockNodeFlags(sceneDockNode, kPanelDockFlags);
-    initializeDockNodeFlags(propertiesDockNode, kPanelDockFlags);
-    initializeDockNodeFlags(viewportDockNode, kViewportDockFlags);
+    initializeDockNodeFlags(sceneDockNode, queryPanelDockFlags());
+    initializeDockNodeFlags(propertiesDockNode, queryPanelDockFlags());
+    initializeDockNodeFlags(viewportDockNode, queryViewportDockFlags());
 
     ImGui_DockBuilderFinish(dockspaceID);
     state->dockLayoutInitialized = true;
@@ -627,11 +636,8 @@ static bool drawViewportWindow(VKRT* vkrt, const VKRT_RenderStatusSnapshot* stat
     if (!vkrt || !status || !runtime) return false;
 
     ImGuiWindowClass viewportWindowClass = {0};
-    viewportWindowClass.DockNodeFlagsOverrideSet = composeDockNodeFlags(
-        ImGuiDockNodeFlags_None,
-        (ImGuiDockNodeFlags)(ImGuiDockNodeFlags_NoTabBar | ImGuiDockNodeFlags_NoUndocking |
-                             ImGuiDockNodeFlags_NoWindowMenuButton | ImGuiDockNodeFlags_NoCloseButton)
-    );
+    viewportWindowClass.DockNodeFlagsOverrideSet =
+        composeDockNodeFlags(ImGuiDockNodeFlags_None, queryViewportDockFlags());
     ImGui_SetNextWindowClass(&viewportWindowClass);
 
     ImGui_PushStyleVarImVec2(ImGuiStyleVar_WindowPadding, (ImVec2){0.0f, 0.0f});

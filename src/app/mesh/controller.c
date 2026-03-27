@@ -190,9 +190,9 @@ static int createImportedNodeObjects(Session* session, const MeshImportData* imp
         const NodeImportEntry* node = &importData->nodes[nodeIndex];
         uint32_t parentObjectIndex =
             node->parentIndex != VKRT_INVALID_INDEX ? nodeObjectIndices[node->parentIndex] : VKRT_INVALID_INDEX;
-        vec3 position = {node->position[0], node->position[1], node->position[2]};
-        vec3 rotation = {node->rotation[0], node->rotation[1], node->rotation[2]};
-        vec3 scale = {node->scale[0], node->scale[1], node->scale[2]};
+        const vec3 position = {node->position[0], node->position[1], node->position[2]};
+        const vec3 rotation = {node->rotation[0], node->rotation[1], node->rotation[2]};
+        const vec3 scale = {node->scale[0], node->scale[1], node->scale[2]};
         const char* nodeName = (node->name && node->name[0]) ? node->name : "Object";
         if (!sessionAddSceneObject(
                 session,
@@ -249,8 +249,8 @@ static int attachImportedMeshesToSceneObjects(
 ) {
     if (!vkrt || !session || !importData) return 0;
 
-    vec3 zero = {0.0f, 0.0f, 0.0f};
-    vec3 one = {1.0f, 1.0f, 1.0f};
+    const vec3 zero = {0.0f, 0.0f, 0.0f};
+    const vec3 one = {1.0f, 1.0f, 1.0f};
     for (uint32_t entryIndex = 0u; entryIndex < importData->count; entryIndex++) {
         const MeshImportEntry* entry = &importData->entries[entryIndex];
         uint32_t meshIndex = meshIndexBase + entryIndex;

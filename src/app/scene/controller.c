@@ -1476,8 +1476,8 @@ static int applyLoadedSceneObjects(SceneLoadContext* context) {
             {0.0f, 0.0f, 0.0f, 1.0f},
         };
         uint8_t useMatrix = 0u;
-        vec3 zero = {0.0f, 0.0f, 0.0f};
-        vec3 one = {1.0f, 1.0f, 1.0f};
+        const vec3 zero = {0.0f, 0.0f, 0.0f};
+        const vec3 one = {1.0f, 1.0f, 1.0f};
         uint32_t loadedMeshIndex = VKRT_INVALID_INDEX;
         if (!name || !cJSON_IsString(name) ||
             !jsonToIndexOrInvalid(cJSON_GetObjectItemCaseSensitive(sceneObject, "parentIndex"), &parentIndex) ||
@@ -1496,15 +1496,19 @@ static int applyLoadedSceneObjects(SceneLoadContext* context) {
 
         if (!resolveLoadedSceneObjectMeshIndex(context, savedMeshRef, &loadedMeshIndex)) return 0;
 
+        const vec3 createPosition = {localPosition[0], localPosition[1], localPosition[2]};
+        const vec3 createRotation = {localRotation[0], localRotation[1], localRotation[2]};
+        const vec3 createScale = {localScale[0], localScale[1], localScale[2]};
+
         if (!sessionAddSceneObject(
                 context->session,
                 &(SessionSceneObjectCreateInfo){
                     .name = name->valuestring,
                     .parentIndex = parentIndex,
                     .meshIndex = loadedMeshIndex,
-                    .localPosition = useMatrix ? &zero : &localPosition,
-                    .localRotation = useMatrix ? &zero : &localRotation,
-                    .localScale = useMatrix ? &one : &localScale,
+                    .localPosition = useMatrix ? &zero : &createPosition,
+                    .localRotation = useMatrix ? &zero : &createRotation,
+                    .localScale = useMatrix ? &one : &createScale,
                 },
                 NULL
             ) ||
