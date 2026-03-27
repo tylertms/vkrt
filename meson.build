@@ -362,7 +362,6 @@ if not turbojpeg_dep.found()
 endif
 
 oidn_runtime_files = []
-oidn_enabled = true
 oidn_subproject_name = ''
 oidn_cpu = host_machine.cpu_family()
 
@@ -375,26 +374,18 @@ elif is_darwin and oidn_cpu == 'aarch64'
 elif is_darwin and oidn_cpu == 'x86_64'
   oidn_subproject_name = 'oidn_macos_x86_64'
 else
-  oidn_enabled = false
+  error('OIDN is required but no packaged build is available for ' + sys + ' ' + oidn_cpu)
 endif
 
-oidn_dep = disabler()
-oidn_version = 'disabled'
-if oidn_enabled
-  oidn_project = subproject(oidn_subproject_name, required: true)
-  oidn_dep = oidn_project.get_variable('oidn_dep')
-  oidn_runtime_files = oidn_project.get_variable('oidn_runtime_files')
-  oidn_version = oidn_project.get_variable('oidn_version')
-else
-  message('OIDN disabled on ' + sys + ' ' + oidn_cpu)
-endif
+oidn_project = subproject(oidn_subproject_name, required: true)
+oidn_dep = oidn_project.get_variable('oidn_dep')
+oidn_runtime_files = oidn_project.get_variable('oidn_runtime_files')
+oidn_version = oidn_project.get_variable('oidn_version')
 
 c_args += [c_define_prefix + 'VKRT_GLFW_VERSION="' + glfw_dep.version() + '"']
 c_args += [c_define_prefix + 'VKRT_SPNG_VERSION="' + spng_dep.version() + '"']
 c_args += [c_define_prefix + 'VKRT_TURBOJPEG_VERSION="' + turbojpeg_dep.version() + '"']
 c_args += [c_define_prefix + 'VKRT_OIDN_VERSION="' + oidn_version + '"']
-c_args += [c_define_prefix + 'VKRT_OIDN_ENABLED=' + (oidn_enabled ? '1' : '0')]
-cpp_args += [cpp_define_prefix + 'VKRT_OIDN_ENABLED=' + (oidn_enabled ? '1' : '0')]
 
 core_cpp_args = cpp_args
 if is_windows and cpp_is_msvc
