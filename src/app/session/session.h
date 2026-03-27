@@ -8,6 +8,7 @@
 typedef enum SessionRenderCommand {
     SESSION_RENDER_COMMAND_NONE = 0,
     SESSION_RENDER_COMMAND_START,
+    SESSION_RENDER_COMMAND_CONTINUE,
     SESSION_RENDER_COMMAND_SET_DENOISE,
     SESSION_RENDER_COMMAND_STOP_SAMPLING,
     SESSION_RENDER_COMMAND_STOP,
@@ -27,7 +28,9 @@ typedef struct SessionRenderSettings {
 
 typedef struct SessionRenderTimer {
     uint8_t wasActive;
+    uint8_t wasComplete;
     uint64_t startTimeUs;
+    float accumulatedSeconds;
     float completedSeconds;
 } SessionRenderTimer;
 
@@ -154,6 +157,7 @@ int sessionTakeMeshRemoval(Session* session, uint32_t* outMeshIndex);
 
 void sessionQueueRenderSave(Session* session, const char* path);
 void sessionQueueRenderStart(Session* session, const SessionRenderSettings* settings);
+void sessionQueueRenderContinue(Session* session, const SessionRenderSettings* settings);
 void sessionQueueRenderSetDenoise(Session* session, uint8_t enabled);
 void sessionQueueRenderStopSampling(Session* session, uint8_t denoiseEnabled);
 void sessionQueueRenderStop(Session* session);

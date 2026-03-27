@@ -22,7 +22,7 @@
 void VKRT_defaultRenderExportSettings(VKRT_RenderExportSettings* settings) {
     if (!settings) return;
 
-    settings->denoiseEnabled = VKRT_OIDN_ENABLED ? 1u : 0u;
+    settings->denoiseEnabled = 1u;
 }
 
 VKRT_Result VKRT_setRenderDenoiseEnabled(VKRT* vkrt, uint8_t enabled) {
@@ -50,7 +50,6 @@ static VKRT_Result beginViewportDenoiseTransfer(VKRT* vkrt) {
         return VKRT_ERROR_OPERATION_FAILED;
     }
     if (VKRT_renderPhaseIsBusy(vkrt->renderStatus.renderPhase)) return VKRT_SUCCESS;
-    if (!vkrtOIDNAvailable()) return VKRT_ERROR_OPERATION_FAILED;
     if (vkrt->sceneSettings.debugMode != VKRT_DEBUG_MODE_NONE) return VKRT_ERROR_OPERATION_FAILED;
 
     vkrt->renderStatus.renderPhase = VKRT_RENDER_PHASE_DENOISING;
@@ -63,8 +62,8 @@ static void finishRenderSampling(VKRT* vkrt) {
 
     VkBool32 usedRenderPresentProfile = vkrtUsesRenderPresentProfile(vkrt);
 
-    if (vkrt->renderStatus.renderDenoiseEnabled && vkrtOIDNAvailable() &&
-        vkrt->sceneSettings.debugMode == VKRT_DEBUG_MODE_NONE && beginViewportDenoiseTransfer(vkrt) == VKRT_SUCCESS) {
+    if (vkrt->renderStatus.renderDenoiseEnabled && vkrt->sceneSettings.debugMode == VKRT_DEBUG_MODE_NONE &&
+        beginViewportDenoiseTransfer(vkrt) == VKRT_SUCCESS) {
         vkrtRefreshPresentModeIfNeeded(vkrt, usedRenderPresentProfile);
         return;
     }
@@ -238,6 +237,19 @@ static VKRT_Result updateRenderExtent(VKRT* vkrt, VkExtent2D extent) {
     return VKRT_SUCCESS;
 }
 
+static void beginRenderSamplingSession(VKRT* vkrt, uint32_t targetSamples, VkBool32 resetViewTransform) {
+    if (!vkrt) return;
+
+    VkBool32 usedRenderPresentProfile = vkrtUsesRenderPresentProfile(vkrt);
+
+    vkrt->renderControl.renderSequence++;
+    vkrt->renderStatus.renderPhase = VKRT_RENDER_PHASE_SAMPLING;
+    vkrt->renderStatus.renderDenoiseEnabled = vkrt->renderControl.finalImageDenoiseEnabled ? 1u : 0u;
+    vkrt->renderStatus.renderTargetSamples = targetSamples;
+    resetRenderSessionState(vkrt, resetViewTransform);
+    vkrtRefreshPresentModeIfNeeded(vkrt, usedRenderPresentProfile);
+}
+
 VKRT_Result VKRT_startRender(VKRT* vkrt, uint32_t width, uint32_t height, uint32_t targetSamples) {
     if (!vkrt || width == 0 || height == 0) return VKRT_ERROR_INVALID_ARGUMENT;
     if (!vkrt->core.sceneData) return VKRT_ERROR_OPERATION_FAILED;
@@ -246,20 +258,25 @@ VKRT_Result VKRT_startRender(VKRT* vkrt, uint32_t width, uint32_t height, uint32
     if (height > 16384) height = 16384;
 
     VkBool32 wasRenderModeActive = VKRT_renderPhaseIsActive(vkrt->renderStatus.renderPhase);
-    VkBool32 usedRenderPresentProfile = vkrtUsesRenderPresentProfile(vkrt);
     VkBool32 extentChanged = vkrt->runtime.renderExtent.width != width || vkrt->runtime.renderExtent.height != height;
     VkExtent2D requestedExtent = {width, height};
 
     if (updateRenderExtent(vkrt, requestedExtent) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
 
-    vkrt->renderControl.renderSequence++;
-    vkrt->renderStatus.renderPhase = VKRT_RENDER_PHASE_SAMPLING;
-    vkrt->renderStatus.renderDenoiseEnabled = vkrt->renderControl.finalImageDenoiseEnabled ? 1u : 0u;
-    vkrt->renderStatus.renderTargetSamples = targetSamples;
-    resetRenderSessionState(vkrt, !wasRenderModeActive || extentChanged);
+    beginRenderSamplingSession(vkrt, targetSamples, !wasRenderModeActive || extentChanged);
     applySceneViewport(vkrt, 0, 0, width, height);
     resetSceneData(vkrt);
-    vkrtRefreshPresentModeIfNeeded(vkrt, usedRenderPresentProfile);
+    return VKRT_SUCCESS;
+}
+
+VKRT_Result VKRT_continueRender(VKRT* vkrt, uint32_t targetSamples) {
+    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+    if (!vkrt->core.sceneData) return VKRT_ERROR_OPERATION_FAILED;
+    if (!VKRT_renderPhaseIsComplete(vkrt->renderStatus.renderPhase)) {
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+
+    beginRenderSamplingSession(vkrt, targetSamples, VK_FALSE);
     return VKRT_SUCCESS;
 }
 

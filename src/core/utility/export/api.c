@@ -45,10 +45,6 @@ int denoiseCurrentRenderToViewport(VKRT* vkrt) {
         LOG_ERROR("Viewport denoise requires a completed render");
         return -1;
     }
-    if (!vkrtOIDNAvailable()) {
-        LOG_ERROR("Viewport denoise requested but OIDN support is unavailable in this build");
-        return -1;
-    }
     if (vkrt->sceneSettings.debugMode != VKRT_DEBUG_MODE_NONE) {
         LOG_INFO("Viewport denoise is unavailable while a debug view is active");
         return -1;

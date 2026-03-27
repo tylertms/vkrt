@@ -27,6 +27,15 @@ static void startRenderCommand(VKRT* vkrt, const SessionRenderSettings* settings
     }
 }
 
+static void continueRenderCommand(VKRT* vkrt, const SessionRenderSettings* settings) {
+    if (!applyRenderDenoiseSetting(vkrt, settings)) return;
+
+    VKRT_Result result = VKRT_continueRender(vkrt, settings->targetSamples);
+    if (result != VKRT_SUCCESS) {
+        LOG_ERROR("Continuing render command failed (%d)", (int)result);
+    }
+}
+
 static void stopRenderSamplingCommand(VKRT* vkrt, const SessionRenderSettings* settings) {
     if (!applyRenderDenoiseSetting(vkrt, settings)) return;
 
@@ -76,6 +85,11 @@ static void applyRenderCommand(VKRT* vkrt, SessionRenderCommand command, const S
 
     if (command == SESSION_RENDER_COMMAND_START) {
         startRenderCommand(vkrt, settings);
+        return;
+    }
+
+    if (command == SESSION_RENDER_COMMAND_CONTINUE) {
+        continueRenderCommand(vkrt, settings);
         return;
     }
 

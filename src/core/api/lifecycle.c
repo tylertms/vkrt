@@ -320,9 +320,9 @@ static void initializeRuntimeDefaults(VKRT* vkrt, const VKRT_CreateInfo* createI
     vkrt->core.emissiveMeshCount = 0;
     vkrt->core.emissiveTriangleCount = 0;
     vkrt->renderStatus.renderPhase = VKRT_RENDER_PHASE_INACTIVE;
-    vkrt->renderStatus.renderDenoiseEnabled = VKRT_OIDN_ENABLED ? 1u : 0u;
+    vkrt->renderStatus.renderDenoiseEnabled = 1u;
     vkrt->renderStatus.renderTargetSamples = 0;
-    vkrt->renderControl.finalImageDenoiseEnabled = VKRT_OIDN_ENABLED ? 1u : 0u;
+    vkrt->renderControl.finalImageDenoiseEnabled = 1u;
 }
 
 static void configureDisplayMetricsAndExtent(

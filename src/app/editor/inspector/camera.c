@@ -262,7 +262,12 @@ static void drawCameraDebugSection(VKRT* vkrt, const VKRT_SceneSettingsSnapshot*
              "Metallic Map",
              "Roughness Map",
              "Normal Map",
-             "Emissive Map"};
+             "Emissive Map",
+             "Denoiser Albedo",
+             "Denoiser Normal",
+             "Denoiser Feature Validity",
+             "Denoiser Feature Depth",
+             "Denoiser Follow Specular"};
         int debugModeValue = (int)settings->debugMode;
         if (debugModeValue < 0 || debugModeValue >= (int)VKRT_DEBUG_MODE_COUNT) debugModeValue = 0;
         if (ImGui_ComboCharEx(

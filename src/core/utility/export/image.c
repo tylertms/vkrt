@@ -422,6 +422,7 @@ static int prepareRGBA32FBuffer(
     uint32_t height,
     int clampNonNegative,
     int normalizeVectors,
+    int preserveSourceWeight,
     float** outPixels
 ) {
     if (outPixels) *outPixels = NULL;
@@ -458,6 +459,16 @@ static int prepareRGBA32FBuffer(
         }
 
         float* pixel = &converted[baseIndex];
+        float sourceWeight = pixel[3];
+        if (preserveSourceWeight) {
+            pixel[3] = fmaxf(sourceWeight, 0.0f);
+            if (pixel[3] <= 0.0f) {
+                pixel[0] = 0.0f;
+                pixel[1] = 0.0f;
+                pixel[2] = 0.0f;
+                continue;
+            }
+        }
         if (clampNonNegative) {
             pixel[0] = fmaxf(pixel[0], 0.0f);
             pixel[1] = fmaxf(pixel[1], 0.0f);
@@ -476,11 +487,43 @@ static int prepareRGBA32FBuffer(
                 pixel[2] = 0.0f;
             }
         }
-        pixel[3] = 1.0f;
+        if (!preserveSourceWeight) {
+            pixel[3] = 1.0f;
+        }
     }
 
     *outPixels = converted;
     return 1;
+}
+
+static int cloneRGBA32FBuffer(const float* source, uint32_t width, uint32_t height, float** outPixels) {
+    if (outPixels) *outPixels = NULL;
+    if (!source || !outPixels) return 0;
+
+    size_t rgba32fByteCount = 0u;
+    if (!tryComputeRGBAByteCount(width, height, sizeof(float), &rgba32fByteCount)) {
+        return 0;
+    }
+
+    float* clone = (float*)malloc(rgba32fByteCount);
+    if (!clone) return 0;
+
+    memcpy(clone, source, rgba32fByteCount);
+    *outPixels = clone;
+    return 1;
+}
+
+static int hasPreparedFeatureCoverage(const float* pixels, uint32_t width, uint32_t height) {
+    size_t pixelCount = 0u;
+    if (!pixels || !tryComputePixelCount(width, height, &pixelCount)) return 0;
+
+    for (size_t pixelIndex = 0u; pixelIndex < pixelCount; pixelIndex++) {
+        if (pixels[(pixelIndex * 4u) + 3u] > 0.0f) {
+            return 1;
+        }
+    }
+
+    return 0;
 }
 
 static int convertLinearToDisplayRGBA16(
@@ -544,8 +587,56 @@ static int prepareDenoiseFeatureBuffers(
         return 0;
     }
 
-    return prepareRGBA32FBuffer(request->albedoBuffer, request->width, request->height, 1, 0, outAlbedo) &&
-           prepareRGBA32FBuffer(request->normalBuffer, request->width, request->height, 0, 1, outNormal);
+    if (!prepareRGBA32FBuffer(request->albedoBuffer, request->width, request->height, 1, 0, 1, outAlbedo)) {
+        return 0;
+    }
+    if (!prepareRGBA32FBuffer(request->normalBuffer, request->width, request->height, 0, 1, 1, outNormal)) {
+        free(*outAlbedo);
+        *outAlbedo = NULL;
+        return 0;
+    }
+
+    if (!hasPreparedFeatureCoverage(*outAlbedo, request->width, request->height) &&
+        !hasPreparedFeatureCoverage(*outNormal, request->width, request->height)) {
+        free(*outNormal);
+        free(*outAlbedo);
+        *outNormal = NULL;
+        *outAlbedo = NULL;
+        return 0;
+    }
+
+    return 1;
+}
+
+static int prefilterDenoiseFeatureBuffer(
+    const char* outputLabel,
+    const char* featureLabel,
+    VKRT_OIDNAuxImage auxImage,
+    const float* source,
+    uint32_t width,
+    uint32_t height,
+    float** outFiltered
+) {
+    if (outFiltered) *outFiltered = NULL;
+    if (!source || !outFiltered) return 0;
+
+    if (!cloneRGBA32FBuffer(source, width, height, outFiltered)) {
+        LOG_ERROR("Failed to allocate prefiltered %s buffer for '%s'", featureLabel, outputLabel);
+        return 0;
+    }
+
+    const char* errorMessage = NULL;
+    if (vkrtOIDNPrefilterAux(auxImage, source, width, height, *outFiltered, &errorMessage)) {
+        return 1;
+    }
+
+    LOG_INFO("OIDN %s prefilter failed for '%s'; using raw %s buffer", featureLabel, outputLabel, featureLabel);
+    if (errorMessage && errorMessage[0]) {
+        LOG_INFO("OIDN error detail: %s", errorMessage);
+    }
+    free(*outFiltered);
+    *outFiltered = NULL;
+    return 0;
 }
 
 static int denoiseLinearRenderOutput(
@@ -555,9 +646,13 @@ static int denoiseLinearRenderOutput(
 ) {
     float* albedo = NULL;
     float* normal = NULL;
+    float* prefilteredAlbedo = NULL;
+    float* prefilteredNormal = NULL;
     float* denoised = NULL;
     size_t rgba32fByteCount = 0u;
     int featureBuffersReady = prepareDenoiseFeatureBuffers(request, &albedo, &normal);
+    int albedoPrefiltered = 0;
+    int normalPrefiltered = 0;
     int succeeded = 0;
 
     if (!tryComputeRGBAByteCount(request->width, request->height, sizeof(float), &rgba32fByteCount)) {
@@ -570,6 +665,37 @@ static int denoiseLinearRenderOutput(
         goto cleanup;
     }
 
+    if (featureBuffersReady) {
+        if (prefilterDenoiseFeatureBuffer(
+                outputLabel,
+                "albedo",
+                VKRT_OIDN_AUX_IMAGE_ALBEDO,
+                albedo,
+                request->width,
+                request->height,
+                &prefilteredAlbedo
+            )) {
+            free(albedo);
+            albedo = prefilteredAlbedo;
+            prefilteredAlbedo = NULL;
+            albedoPrefiltered = 1;
+        }
+        if (prefilterDenoiseFeatureBuffer(
+                outputLabel,
+                "normal",
+                VKRT_OIDN_AUX_IMAGE_NORMAL,
+                normal,
+                request->width,
+                request->height,
+                &prefilteredNormal
+            )) {
+            free(normal);
+            normal = prefilteredNormal;
+            prefilteredNormal = NULL;
+            normalPrefiltered = 1;
+        }
+    }
+
     const char* errorMessage = NULL;
     VKRT_OIDNFilterInput input = {
         .color = *inOutLinearOutput,
@@ -577,7 +703,7 @@ static int denoiseLinearRenderOutput(
         .normal = featureBuffersReady ? normal : NULL,
         .width = request->width,
         .height = request->height,
-        .cleanAux = 0u,
+        .cleanAux = (uint8_t)(albedoPrefiltered && normalPrefiltered),
     };
 
     if (vkrtOIDNDenoise(&input, denoised, &errorMessage)) {
@@ -601,6 +727,8 @@ static int denoiseLinearRenderOutput(
     }
 
 cleanup:
+    free(prefilteredNormal);
+    free(prefilteredAlbedo);
     free(denoised);
     free(normal);
     free(albedo);
@@ -619,7 +747,7 @@ static int prepareLinearRenderOutput(const LinearRenderOutputRequest* request, f
     float* linearOutput = NULL;
     int result = 0;
 
-    if (!prepareRGBA32FBuffer(request->beautyBuffer, request->width, request->height, 0, 0, &beauty)) {
+    if (!prepareRGBA32FBuffer(request->beautyBuffer, request->width, request->height, 0, 0, 0, &beauty)) {
         LOG_ERROR("Failed to prepare beauty buffer for '%s'", outputLabel);
         goto cleanup;
     }
@@ -628,15 +756,6 @@ static int prepareLinearRenderOutput(const LinearRenderOutputRequest* request, f
 
     int shouldDenoise =
         request->settings->denoiseEnabled != 0u && request->sceneSettings->debugMode == VKRT_DEBUG_MODE_NONE;
-
-    if (shouldDenoise && !vkrtOIDNAvailable()) {
-        if (!request->allowRawFallback) {
-            LOG_ERROR("OIDN denoising is unavailable for '%s'", outputLabel);
-            goto cleanup;
-        }
-        LOG_INFO("OIDN denoising requested but support is unavailable; using raw render for '%s'", outputLabel);
-        shouldDenoise = 0;
-    }
 
     if (shouldDenoise && !denoiseLinearRenderOutput(request, outputLabel, &linearOutput)) {
         goto cleanup;

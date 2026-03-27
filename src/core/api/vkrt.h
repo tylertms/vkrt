@@ -56,6 +56,7 @@ VKRT_Result VKRT_saveRenderImageEx(VKRT* vkrt, const char* path, const VKRT_Rend
 VKRT_Result VKRT_saveRenderImage(VKRT* vkrt, const char* path);
 VKRT_Result VKRT_saveRenderPNG(VKRT* vkrt, const char* path);
 VKRT_Result VKRT_startRender(VKRT* vkrt, uint32_t width, uint32_t height, uint32_t targetSamples);
+VKRT_Result VKRT_continueRender(VKRT* vkrt, uint32_t targetSamples);
 VKRT_Result VKRT_stopRenderSampling(VKRT* vkrt);
 VKRT_Result VKRT_stopRender(VKRT* vkrt);
 VKRT_Result VKRT_getSceneSettings(const VKRT* vkrt, VKRT_SceneSettingsSnapshot* outSettings);

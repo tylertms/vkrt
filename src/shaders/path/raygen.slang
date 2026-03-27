@@ -39,11 +39,19 @@ void main() {
     bool bsdfOnlyDebug = debugMode == VKRT_DEBUG_MODE_BSDF_ONLY;
     bool neeOnlyDebug = debugMode == VKRT_DEBUG_MODE_NEE_ONLY;
     bool bounceCountDebug = debugMode == VKRT_DEBUG_MODE_BOUNCE_COUNT;
+    bool denoiserAlbedoDebug = debugMode == VKRT_DEBUG_MODE_DENOISER_ALBEDO;
+    bool denoiserNormalDebug = debugMode == VKRT_DEBUG_MODE_DENOISER_NORMAL;
+    bool denoiserFeatureValidityDebug = debugMode == VKRT_DEBUG_MODE_DENOISER_FEATURE_VALIDITY;
+    bool denoiserFeatureDepthDebug = debugMode == VKRT_DEBUG_MODE_DENOISER_FEATURE_DEPTH;
+    bool denoiserFollowSpecularDebug = debugMode == VKRT_DEBUG_MODE_DENOISER_FOLLOW_SPECULAR;
     bool neeEnabled = scene.misNeeEnabled != 0u && scene.emissiveMeshCount > 0u;
 
     float3 frameRadiance = float3(0.0);
     float3 frameAlbedo = float3(0.0);
     float3 frameNormal = float3(0.0);
+    float frameFeatureWeight = 0.0;
+    float frameFeatureDepth = 0.0;
+    float frameFollowSpecular = 0.0;
     bool debugEarlyOut = false;
 
     if (debugMode == VKRT_DEBUG_MODE_SELECTION_MASK) {
@@ -62,6 +70,9 @@ void main() {
         float3 radiance = float3(0.0);
         float3 sampleAlbedo = float3(0.0);
         float3 sampleNormal = float3(0.0);
+        float sampleFeatureWeight = 0.0;
+        float sampleFeatureDepth = 0.0;
+        float sampleFollowSpecular = 0.0;
         bool sampleFeaturesResolved = false;
         float3 throughput = float3(1.0);
         MediumState medium;
@@ -132,9 +143,15 @@ void main() {
             }
 
             applySurfaceTextures(material, payload.color, payload.texcoord0, payload.texcoord1);
-            if (!sampleFeaturesResolved && !materialDenoiserShouldFollowSpecularHit(material, payload.frontFace)) {
+            bool shouldFollowSpecularHit = materialDenoiserShouldFollowSpecularHit(material, payload.frontFace);
+            if (depth == 0u) {
+                sampleFollowSpecular = shouldFollowSpecularHit ? 1.0 : 0.0;
+            }
+            if (!sampleFeaturesResolved && !shouldFollowSpecularHit) {
                 sampleAlbedo = materialDenoiserAlbedo(material);
                 sampleNormal = shadingNormal;
+                sampleFeatureWeight = 1.0;
+                sampleFeatureDepth = float(depth + 1u);
                 sampleFeaturesResolved = true;
             }
 
@@ -226,13 +243,47 @@ void main() {
             frameRadiance += radiance;
             frameAlbedo += sampleAlbedo;
             frameNormal += sampleNormal;
+            frameFeatureWeight += sampleFeatureWeight;
+            frameFeatureDepth += sampleFeatureDepth;
+            frameFollowSpecular += sampleFollowSpecular;
         }
     }
 
     if (!debugEarlyOut) {
         frameRadiance /= float(spp);
-        frameAlbedo /= float(spp);
-        frameNormal /= float(spp);
+        if (frameFeatureWeight > 0.0) {
+            frameAlbedo /= frameFeatureWeight;
+            frameNormal /= frameFeatureWeight;
+        } else {
+            frameAlbedo = float3(0.0);
+            frameNormal = float3(0.0);
+        }
+    }
+
+    if (!debugEarlyOut) {
+        if (denoiserAlbedoDebug) {
+            frameRadiance = frameAlbedo;
+            debugEarlyOut = true;
+        } else if (denoiserNormalDebug) {
+            frameRadiance = frameFeatureWeight > 0.0 ? frameNormal * 0.5 + 0.5 : float3(0.0);
+            debugEarlyOut = true;
+        } else if (denoiserFeatureValidityDebug) {
+            float coverage = saturate(frameFeatureWeight / float(spp));
+            frameRadiance = coverage.xxx;
+            debugEarlyOut = true;
+        } else if (denoiserFeatureDepthDebug) {
+            float normalizedDepth = 0.0;
+            if (frameFeatureWeight > 0.0) {
+                float averageFeatureDepth = frameFeatureDepth / frameFeatureWeight;
+                normalizedDepth = saturate((averageFeatureDepth - 1.0) / max(float(scene.rrMaxDepth - 1u), 1.0));
+            }
+            frameRadiance = normalizedDepth.xxx;
+            debugEarlyOut = true;
+        } else if (denoiserFollowSpecularDebug) {
+            float followRatio = saturate(frameFollowSpecular / float(spp));
+            frameRadiance = lerp(float3(0.05), float3(1.0, 0.6, 0.0), followRatio);
+            debugEarlyOut = true;
+        }
     }
 
     if (captureSelection) {
@@ -248,14 +299,22 @@ void main() {
         float previousWeight = float(previousSamples);
         float newWeight = float(spp);
         float totalWeight = previousWeight + newWeight;
+        float previousAlbedoWeight = previousAlbedo.w;
+        float previousNormalWeight = previousNormal.w;
+        float totalAlbedoWeight = previousAlbedoWeight + frameFeatureWeight;
+        float totalNormalWeight = previousNormalWeight + frameFeatureWeight;
         float3 accumulated = (previous.xyz * previousWeight + frameRadiance * newWeight) / max(totalWeight, 1.0);
-        float3 accumulatedAlbedo = (previousAlbedo.xyz * previousWeight + frameAlbedo * newWeight) / max(totalWeight, 1.0);
-        float3 accumulatedNormal = (previousNormal.xyz * previousWeight + frameNormal * newWeight) / max(totalWeight, 1.0);
+        float3 accumulatedAlbedo = totalAlbedoWeight > 0.0
+            ? (previousAlbedo.xyz * previousAlbedoWeight + frameAlbedo * frameFeatureWeight) / totalAlbedoWeight
+            : float3(0.0);
+        float3 accumulatedNormal = totalNormalWeight > 0.0
+            ? (previousNormal.xyz * previousNormalWeight + frameNormal * frameFeatureWeight) / totalNormalWeight
+            : float3(0.0);
         float3 mapped = mapSceneColorToDisplay(accumulated);
 
         accumulationWriteImage[pixel] = float4(accumulated, totalWeight);
-        albedoWriteImage[pixel] = float4(accumulatedAlbedo, totalWeight);
-        normalWriteImage[pixel] = float4(accumulatedNormal, totalWeight);
+        albedoWriteImage[pixel] = float4(accumulatedAlbedo, totalAlbedoWeight);
+        normalWriteImage[pixel] = float4(accumulatedNormal, totalNormalWeight);
         outputImage[pixel] = float4(mapped, 1.0);
     }
 }

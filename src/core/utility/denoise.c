@@ -1,17 +1,14 @@
 #include "denoise.h"
 
-#if VKRT_OIDN_ENABLED
 #include <OpenImageDenoise/oidn.h>
-#endif
-
 #include <stddef.h>
 #include <stdio.h>
+#include <string.h>
 
 static void setOIDNErrorMessage(const char** outErrorMessage, const char* message) {
     if (outErrorMessage) *outErrorMessage = message;
 }
 
-#if VKRT_OIDN_ENABLED
 static _Thread_local char oidnErrorStorage[256];
 
 typedef struct OIDNBufferSet {
@@ -20,6 +17,13 @@ typedef struct OIDNBufferSet {
     OIDNBuffer normal;
     OIDNBuffer output;
 } OIDNBufferSet;
+
+typedef struct OIDNFilterConfig {
+    const char* mainImageName;
+    uint8_t hdr;
+    uint8_t srgb;
+    uint8_t cleanAux;
+} OIDNFilterConfig;
 
 static int createOIDNBuffer(
     OIDNDevice device,
@@ -39,6 +43,26 @@ static int createOIDNBuffer(
     }
 
     oidnWriteBuffer(buffer, 0u, byteCount, input);
+    *outBuffer = buffer;
+    return 1;
+}
+
+static int createOIDNOutputBuffer(
+    OIDNDevice device,
+    const float* seedInput,
+    size_t byteCount,
+    OIDNBuffer* outBuffer,
+    const char** outErrorMessage
+) {
+    if (!device || !seedInput || !outBuffer) return 0;
+
+    OIDNBuffer buffer = oidnNewBuffer(device, byteCount);
+    if (!buffer) {
+        setOIDNErrorMessage(outErrorMessage, "failed to allocate OIDN output buffer");
+        return 0;
+    }
+
+    oidnWriteBuffer(buffer, 0u, byteCount, seedInput);
     *outBuffer = buffer;
     return 1;
 }
@@ -93,6 +117,7 @@ static int createOIDNInputBuffers(
     const VKRT_OIDNFilterInput* input,
     size_t imageByteCount,
     OIDNBufferSet* buffers,
+    const float* outputSeed,
     const char** outErrorMessage
 ) {
     if (!buffers) return 0;
@@ -101,9 +126,7 @@ static int createOIDNInputBuffers(
         return 0;
     }
 
-    buffers->output = oidnNewBuffer(device, imageByteCount);
-    if (!buffers->output) {
-        setOIDNErrorMessage(outErrorMessage, "failed to allocate OIDN output buffer");
+    if (!createOIDNOutputBuffer(device, outputSeed, imageByteCount, &buffers->output, outErrorMessage)) {
         return 0;
     }
 
@@ -121,18 +144,21 @@ static int createOIDNInputBuffers(
 
 static void configureOIDNFilterImages(
     OIDNFilter filter,
+    const OIDNFilterConfig* config,
     const VKRT_OIDNFilterInput* input,
     OIDNBuffer colorBuffer,
     OIDNBuffer albedoBuffer,
     OIDNBuffer normalBuffer,
     OIDNBuffer outputBuffer
 ) {
+    if (!config || !config->mainImageName || !config->mainImageName[0]) return;
+
     const size_t pixelStride = sizeof(float) * 4u;
     const size_t rowStride = pixelStride * (size_t)input->width;
 
     oidnSetFilterImage(
         filter,
-        "color",
+        config->mainImageName,
         colorBuffer,
         OIDN_FORMAT_FLOAT3,
         input->width,
@@ -141,7 +167,7 @@ static void configureOIDNFilterImages(
         pixelStride,
         rowStride
     );
-    if (input->albedo) {
+    if (input->albedo && strcmp(config->mainImageName, "albedo") != 0) {
         oidnSetFilterImage(
             filter,
             "albedo",
@@ -154,7 +180,7 @@ static void configureOIDNFilterImages(
             rowStride
         );
     }
-    if (input->normal) {
+    if (input->normal && strcmp(config->mainImageName, "normal") != 0) {
         oidnSetFilterImage(
             filter,
             "normal",
@@ -178,9 +204,9 @@ static void configureOIDNFilterImages(
         pixelStride,
         rowStride
     );
-    oidnSetFilterBool(filter, "hdr", true);
-    oidnSetFilterBool(filter, "srgb", false);
-    oidnSetFilterBool(filter, "cleanAux", input->cleanAux != 0);
+    oidnSetFilterBool(filter, "hdr", config->hdr != 0);
+    oidnSetFilterBool(filter, "srgb", config->srgb != 0);
+    oidnSetFilterBool(filter, "cleanAux", config->cleanAux != 0);
     oidnSetFilterInt(filter, "quality", OIDN_QUALITY_HIGH);
 }
 
@@ -214,27 +240,18 @@ static int executeOIDNFilter(
     }
     return 0;
 }
-#endif
 
-int vkrtOIDNAvailable(void) {
-#if VKRT_OIDN_ENABLED
-    return 1;
-#else
-    return 0;
-#endif
-}
-
-int vkrtOIDNDenoise(const VKRT_OIDNFilterInput* input, float* output, const char** outErrorMessage) {
-    setOIDNErrorMessage(outErrorMessage, NULL);
-    if (!input || !output || !input->color || input->width == 0u || input->height == 0u) {
+static int runOIDNFilter(
+    const VKRT_OIDNFilterInput* input,
+    const OIDNFilterConfig* config,
+    float* output,
+    const char** outErrorMessage
+) {
+    if (!input || !config || !output || !input->color || input->width == 0u || input->height == 0u) {
         setOIDNErrorMessage(outErrorMessage, "invalid OIDN input");
         return 0;
     }
 
-#if !VKRT_OIDN_ENABLED
-    setOIDNErrorMessage(outErrorMessage, "OIDN support was not compiled into this build");
-    return 0;
-#else
     OIDNBufferSet buffers = {0};
     OIDNFilter filter = NULL;
     OIDNDevice device = NULL;
@@ -245,11 +262,11 @@ int vkrtOIDNDenoise(const VKRT_OIDNFilterInput* input, float* output, const char
     }
 
     const size_t imageByteCount = (sizeof(float) * 4u * (size_t)input->width) * (size_t)input->height;
-    if (!createOIDNInputBuffers(device, input, imageByteCount, &buffers, outErrorMessage)) {
+    if (!createOIDNInputBuffers(device, input, imageByteCount, &buffers, input->color, outErrorMessage)) {
         goto cleanup;
     }
 
-    configureOIDNFilterImages(filter, input, buffers.color, buffers.albedo, buffers.normal, buffers.output);
+    configureOIDNFilterImages(filter, config, input, buffers.color, buffers.albedo, buffers.normal, buffers.output);
     if (!executeOIDNFilter(device, filter, buffers.output, imageByteCount, output, outErrorMessage)) {
         goto cleanup;
     }
@@ -259,5 +276,64 @@ int vkrtOIDNDenoise(const VKRT_OIDNFilterInput* input, float* output, const char
 cleanup:
     releaseOIDNResources(&device, &filter, &buffers.color, &buffers.albedo, &buffers.normal, &buffers.output);
     return succeeded;
-#endif
+}
+
+int vkrtOIDNDenoise(const VKRT_OIDNFilterInput* input, float* output, const char** outErrorMessage) {
+    setOIDNErrorMessage(outErrorMessage, NULL);
+    if (!input || !output || !input->color || input->width == 0u || input->height == 0u) {
+        setOIDNErrorMessage(outErrorMessage, "invalid OIDN input");
+        return 0;
+    }
+
+    const OIDNFilterConfig config = {
+        .mainImageName = "color",
+        .hdr = 1u,
+        .srgb = 0u,
+        .cleanAux = input->cleanAux,
+    };
+    return runOIDNFilter(input, &config, output, outErrorMessage);
+}
+
+int vkrtOIDNPrefilterAux(
+    VKRT_OIDNAuxImage auxImage,
+    const float* input,
+    uint32_t width,
+    uint32_t height,
+    float* output,
+    const char** outErrorMessage
+) {
+    setOIDNErrorMessage(outErrorMessage, NULL);
+    if (!input || !output || width == 0u || height == 0u) {
+        setOIDNErrorMessage(outErrorMessage, "invalid OIDN auxiliary input");
+        return 0;
+    }
+
+    const char* mainImageName = NULL;
+    switch (auxImage) {
+        case VKRT_OIDN_AUX_IMAGE_ALBEDO:
+            mainImageName = "albedo";
+            break;
+        case VKRT_OIDN_AUX_IMAGE_NORMAL:
+            mainImageName = "normal";
+            break;
+        default:
+            setOIDNErrorMessage(outErrorMessage, "invalid OIDN auxiliary image kind");
+            return 0;
+    }
+
+    const VKRT_OIDNFilterInput filterInput = {
+        .color = input,
+        .albedo = NULL,
+        .normal = NULL,
+        .width = width,
+        .height = height,
+        .cleanAux = 0u,
+    };
+    const OIDNFilterConfig config = {
+        .mainImageName = mainImageName,
+        .hdr = 0u,
+        .srgb = 0u,
+        .cleanAux = 0u,
+    };
+    return runOIDNFilter(&filterInput, &config, output, outErrorMessage);
 }

@@ -55,27 +55,46 @@ static void updateRenderTimer(const VKRT_RenderStatusSnapshot* status, SessionRe
     uint8_t renderModeFinished = VKRT_renderStatusIsComplete(status);
     if (renderModeActive && !timer->wasActive) {
         timer->startTimeUs = nowUs;
+        timer->accumulatedSeconds = 0.0f;
         timer->completedSeconds = 0.0f;
     }
 
-    if (renderModeActive && renderModeFinished && timer->completedSeconds <= 0.0f && timer->startTimeUs > 0 &&
-        nowUs >= timer->startTimeUs) {
-        timer->completedSeconds = (float)(nowUs - timer->startTimeUs) / kMicrosecondsPerSecond;
+    if (renderModeActive && timer->wasActive && timer->wasComplete && !renderModeFinished) {
+        timer->startTimeUs = nowUs;
+        timer->completedSeconds = 0.0f;
+    }
+
+    if (renderModeActive && renderModeFinished && !timer->wasComplete) {
+        if (timer->startTimeUs > 0 && nowUs >= timer->startTimeUs) {
+            timer->accumulatedSeconds += (float)(nowUs - timer->startTimeUs) / kMicrosecondsPerSecond;
+        }
+        timer->startTimeUs = 0u;
+        timer->completedSeconds = timer->accumulatedSeconds;
     }
 
     if (!renderModeActive && timer->wasActive) {
-        if (timer->completedSeconds <= 0.0f && timer->startTimeUs > 0 && nowUs >= timer->startTimeUs) {
-            timer->completedSeconds = (float)(nowUs - timer->startTimeUs) / kMicrosecondsPerSecond;
+        if (!timer->wasComplete && timer->startTimeUs > 0 && nowUs >= timer->startTimeUs) {
+            timer->accumulatedSeconds += (float)(nowUs - timer->startTimeUs) / kMicrosecondsPerSecond;
         }
-        timer->startTimeUs = 0;
+        timer->startTimeUs = 0u;
+        timer->completedSeconds = timer->accumulatedSeconds;
     }
 
     timer->wasActive = renderModeActive;
+    timer->wasComplete = renderModeFinished;
 }
 
 static float queryActiveRenderSeconds(const SessionRenderTimer* timer, uint64_t nowUs) {
-    if (!timer || timer->startTimeUs == 0 || nowUs < timer->startTimeUs) return 0.0f;
-    return (float)(nowUs - timer->startTimeUs) / kMicrosecondsPerSecond;
+    float elapsedSeconds = 0.0f;
+
+    if (!timer) return 0.0f;
+
+    elapsedSeconds = timer->accumulatedSeconds;
+    if (timer->startTimeUs == 0 || nowUs < timer->startTimeUs) {
+        return elapsedSeconds;
+    }
+
+    return elapsedSeconds + (float)(nowUs - timer->startTimeUs) / kMicrosecondsPerSecond;
 }
 
 void inspectorPrepareRenderState(VKRT* vkrt, Session* session) {
@@ -122,14 +141,6 @@ static void drawFinalImageControls(Session* session, const VKRT_RenderStatusSnap
     if (status && !VKRT_renderStatusIsSampling(status)) return;
 
     bool denoiseEnabled = session->editor.renderExportSettings.denoiseEnabled != 0u;
-
-#if !VKRT_OIDN_ENABLED
-    ImGui_BeginDisabled(true);
-    ImGui_Checkbox("Denoise (OIDN)", &denoiseEnabled);
-    ImGui_EndDisabled();
-    tooltipOnHover("Requires OIDN support in this build.");
-    return;
-#endif
 
     if (ImGui_Checkbox("Denoise (OIDN)", &denoiseEnabled)) {
         session->editor.renderExportSettings.denoiseEnabled = (int)denoiseEnabled ? 1u : 0u;
@@ -217,6 +228,51 @@ static float queryRenderEtaSeconds(const VKRT_RenderStatusSnapshot* status, floa
     return (float)(status->renderTargetSamples - status->totalSamples) / samplesPerSecond;
 }
 
+static uint32_t queryContinueRenderTargetSamples(const VKRT_RenderStatusSnapshot* status, uint32_t configuredSamples) {
+    uint64_t continuedTarget = 0u;
+
+    if (!status) return configuredSamples;
+    if (status->renderTargetSamples == 0u) return 0u;
+    if (status->totalSamples < (uint64_t)status->renderTargetSamples) {
+        return status->renderTargetSamples;
+    }
+    if (configuredSamples == 0u) return 0u;
+
+    continuedTarget = status->totalSamples + (uint64_t)configuredSamples;
+    return continuedTarget > UINT32_MAX ? 0u : (uint32_t)continuedTarget;
+}
+
+static int renderContinueExtendsPastCurrentTarget(const VKRT_RenderStatusSnapshot* status) {
+    return status && status->renderTargetSamples > 0u && status->totalSamples >= (uint64_t)status->renderTargetSamples;
+}
+
+static const char* queryContinueRenderButtonLabel(const VKRT_RenderStatusSnapshot* status) {
+    return renderContinueExtendsPastCurrentTarget(status) ? ICON_FA_FORWARD " Continue Render"
+                                                          : ICON_FA_PLAY " Resume Render";
+}
+
+static void drawContinueRenderControls(Session* session, const VKRT_RenderStatusSnapshot* status) {
+    if (!session || !status || !VKRT_renderStatusIsComplete(status)) return;
+
+    if (renderContinueExtendsPastCurrentTarget(status)) {
+        int additionalSamples = (int)session->editor.renderConfig.targetSamples;
+        if (ImGui_DragIntEx("Additional Samples", &additionalSamples, 1.0f, 0, INT_MAX, "%d", ImGuiSliderFlags_AlwaysClamp)
+        ) {
+            if (additionalSamples < 0) additionalSamples = 0;
+            session->editor.renderConfig.targetSamples = (uint32_t)additionalSamples;
+        }
+        tooltipOnHover("Used when extending a completed render. 0 continues until stopped.");
+        return;
+    }
+
+    if (status->renderTargetSamples == 0u) {
+        ImGui_TextDisabled("Resume will continue until stopped.");
+        return;
+    }
+
+    ImGui_TextDisabled("Resume will continue toward %u samples.", status->renderTargetSamples);
+}
+
 static void drawRenderProgressStatusText(
     const VKRT_RenderStatusSnapshot* status,
     float elapsedActiveSeconds,
@@ -283,7 +339,9 @@ static void drawRenderActionsSection(Session* session, const VKRT_RenderStatusSn
         return;
     }
 
-#if VKRT_OIDN_ENABLED
+    drawContinueRenderControls(session, status);
+    ImGui_Spacing();
+
     if (status->renderPhase == VKRT_RENDER_PHASE_COMPLETE_RAW) {
         if (inspectorPaddedButton("Denoise")) {
             session->editor.renderExportSettings.denoiseEnabled = 1u;
@@ -291,8 +349,15 @@ static void drawRenderActionsSection(Session* session, const VKRT_RenderStatusSn
         }
         ImGui_SameLine();
     }
-#endif
 
+    if (inspectorPaddedButton(queryContinueRenderButtonLabel(status))) {
+        SessionRenderSettings settings = {
+            .targetSamples = queryContinueRenderTargetSamples(status, session->editor.renderConfig.targetSamples),
+            .denoiseEnabled = session->editor.renderExportSettings.denoiseEnabled,
+        };
+        sessionQueueRenderContinue(session, &settings);
+    }
+    ImGui_SameLine();
     if (inspectorPaddedButton(ICON_FA_FLOPPY_DISK " Save Image")) {
         sessionRequestRenderSaveDialog(session);
     }

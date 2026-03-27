@@ -976,6 +976,17 @@ void sessionQueueRenderStart(Session* session, const SessionRenderSettings* sett
     session->commands.pendingRenderJob.denoiseEnabled = nextSettings.denoiseEnabled ? 1u : 0u;
 }
 
+void sessionQueueRenderContinue(Session* session, const SessionRenderSettings* settings) {
+    if (!session) return;
+
+    SessionRenderSettings nextSettings = {0};
+    if (settings) nextSettings = *settings;
+
+    session->commands.renderCommand = SESSION_RENDER_COMMAND_CONTINUE;
+    session->commands.pendingRenderJob = nextSettings;
+    session->commands.pendingRenderJob.denoiseEnabled = nextSettings.denoiseEnabled ? 1u : 0u;
+}
+
 void sessionQueueRenderSetDenoise(Session* session, uint8_t enabled) {
     if (!session) return;
     session->commands.renderCommand = SESSION_RENDER_COMMAND_SET_DENOISE;
