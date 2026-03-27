@@ -72,14 +72,18 @@ def main():
     files = collect_files(args.paths)
     file_patterns = build_file_patterns(files)
     command = [
-        run_clang_tidy,
         "-clang-tidy-binary",
         clang_tidy,
         "-p",
         str(BUILD_DIR),
         "-j",
         str(max(1, (os.cpu_count() or 1) - 1)),
+        "-quiet",
     ]
+    if run_clang_tidy.lower().endswith(".py"):
+        command = [sys.executable, run_clang_tidy] + command
+    else:
+        command = [run_clang_tidy] + command
     if sys.platform == "darwin":
         sdk_path = subprocess.run(
             ["xcrun", "--show-sdk-path"],
@@ -88,7 +92,7 @@ def main():
             text=True,
         ).stdout.strip()
         if sdk_path:
-            command.extend([f"-extra-arg=-isysroot", f"-extra-arg={sdk_path}"])
+            command.extend(["-extra-arg=-isysroot", f"-extra-arg={sdk_path}"])
     if args.fix:
         command.extend(["-fix", "-format"])
     command.extend(file_patterns)

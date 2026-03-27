@@ -24,6 +24,7 @@ python = find_program('python3')
 clang_tidy = find_program(
   'clang-tidy',
   dirs: [
+    'C:/Program Files/LLVM/bin',
     '/opt/homebrew/opt/llvm/bin',
     '/usr/local/opt/llvm/bin',
     '/opt/homebrew/bin',
@@ -33,7 +34,9 @@ clang_tidy = find_program(
 )
 run_clang_tidy = find_program(
   'run-clang-tidy',
+  'run-clang-tidy.py',
   dirs: [
+    'C:/Program Files/LLVM/bin',
     '/opt/homebrew/opt/llvm/bin',
     '/usr/local/opt/llvm/bin',
     '/opt/homebrew/bin',

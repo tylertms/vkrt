@@ -123,6 +123,13 @@ def download_appimagetool(path):
             "APPIMAGETOOL_VERSION and APPIMAGETOOL_SHA256 are required for --appimage"
         )
 
+    if path.is_file():
+        actual_sha256 = sha256_file(path)
+        if actual_sha256.lower() == expected_sha256.lower():
+            path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+            return
+        path.unlink()
+
     urllib.request.urlretrieve(
         f"https://github.com/AppImage/appimagetool/releases/download/{version}/appimagetool-x86_64.AppImage",
         path,
@@ -149,7 +156,7 @@ def main():
     if not binary_path.is_file():
         raise RuntimeError(f"missing executable: {binary_path}")
 
-    for path in [APP_DIR, bundle_dir, tarball_path, appimage_path, appimagetool_path]:
+    for path in [APP_DIR, bundle_dir, tarball_path, appimage_path]:
         if path.exists() or path.is_symlink():
             remove_path(path)
 

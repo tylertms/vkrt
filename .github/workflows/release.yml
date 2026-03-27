@@ -28,6 +28,8 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.13"
+          cache: pip
+          cache-dependency-path: .github/workflows/release.yml
 
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1.13.0
@@ -38,6 +40,12 @@ jobs:
         with:
           path: VULKAN_SDK
           key: ${{ runner.os }}-vulkan-${{ env.VULKAN_SDK_VERSION }}
+
+      - name: Cache Meson Wrap Downloads
+        uses: actions/cache@v5
+        with:
+          path: subprojects/packagecache
+          key: ${{ runner.os }}-meson-wraps-${{ hashFiles('subprojects/*.wrap', 'subprojects/packagefiles/**') }}
 
       - name: Install Vulkan SDK
         if: steps.vulkan-cache-windows.outputs.cache-hit != 'true'
@@ -107,6 +115,8 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.13"
+          cache: pip
+          cache-dependency-path: .github/workflows/release.yml
 
       - name: Cache Vulkan SDK
         id: vulkan-cache-linux
@@ -114,6 +124,18 @@ jobs:
         with:
           path: VULKAN_SDK
           key: ${{ runner.os }}-vulkan-${{ env.VULKAN_SDK_VERSION }}
+
+      - name: Cache Meson Wrap Downloads
+        uses: actions/cache@v5
+        with:
+          path: subprojects/packagecache
+          key: ${{ runner.os }}-meson-wraps-${{ hashFiles('subprojects/*.wrap', 'subprojects/packagefiles/**') }}
+
+      - name: Cache AppImageTool
+        uses: actions/cache@v5
+        with:
+          path: appimagetool
+          key: ${{ runner.os }}-appimagetool-${{ env.APPIMAGETOOL_VERSION }}-${{ env.APPIMAGETOOL_SHA256 }}
 
       - name: Install Vulkan SDK
         if: steps.vulkan-cache-linux.outputs.cache-hit != 'true'
