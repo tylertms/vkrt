@@ -1,0 +1,11 @@
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -96,7 +96,7 @@
+ 
+         endforeach()
+     else()
+-        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
++        set(CMAKE_MSVC_RUNTIME_LIBRARY MultiThreaded)
+     endif()
+ endif()
+ 
