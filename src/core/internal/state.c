@@ -47,7 +47,7 @@ VKRT_Result vkrtEnsureDefaultMaterial(VKRT* vkrt) {
     if (!materials) return VKRT_ERROR_OUT_OF_MEMORY;
 
     materials[0].material = VKRT_materialDefault();
-    snprintf(materials[0].name, sizeof(materials[0].name), "%s", kDefaultMaterialName);
+    (void)snprintf(materials[0].name, sizeof(materials[0].name), "%s", kDefaultMaterialName);
     vkrt->core.materials = materials;
     vkrt->core.materialCount = 1u;
     return VKRT_SUCCESS;

@@ -53,10 +53,11 @@ static void drawStatusSummary(const VKRT_RenderStatusSnapshot* status, const VKR
     char fpsText[K_OVERVIEW_COUNT_TEXT_CAPACITY];
     char sppText[K_OVERVIEW_COUNT_TEXT_CAPACITY];
 
-    snprintf(renderTimeText, sizeof(renderTimeText), "%.1f ms", status->displayRenderTimeMs);
-    snprintf(accumulationText, sizeof(accumulationText), "%llu samples", (unsigned long long)status->totalSamples);
-    snprintf(fpsText, sizeof(fpsText), "%u", status->framesPerSecond);
-    snprintf(sppText, sizeof(sppText), "%u", settings->samplesPerPixel);
+    (void)snprintf(renderTimeText, sizeof(renderTimeText), "%.1f ms", status->displayRenderTimeMs);
+    (void)
+        snprintf(accumulationText, sizeof(accumulationText), "%llu samples", (unsigned long long)status->totalSamples);
+    (void)snprintf(fpsText, sizeof(fpsText), "%u", status->framesPerSecond);
+    (void)snprintf(sppText, sizeof(sppText), "%u", settings->samplesPerPixel);
 
     if (beginCompactTable("##monitor_status")) {
         inspectorKeyValueRow("Mode", mode);
@@ -74,7 +75,7 @@ static void drawSystemSummary(const VKRT_RuntimeSnapshot* runtime, const VKRT_Sy
     char driverText[K_OVERVIEW_DRIVER_TEXT_CAPACITY];
     char viewportText[K_OVERVIEW_TIME_TEXT_CAPACITY];
     formatDriverVersionText(system->vendorID, system->driverVersion, driverText, sizeof(driverText));
-    snprintf(
+    (void)snprintf(
         viewportText,
         sizeof(viewportText),
         "%ux%u",

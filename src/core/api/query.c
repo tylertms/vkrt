@@ -41,7 +41,7 @@ VKRT_Result VKRT_getSystemInfo(const VKRT* vkrt, VKRT_SystemInfo* outSystemInfo)
     if (!vkrt || !outSystemInfo) return VKRT_ERROR_INVALID_ARGUMENT;
 
     memset(outSystemInfo, 0, sizeof(*outSystemInfo));
-    snprintf(outSystemInfo->deviceName, sizeof(outSystemInfo->deviceName), "%s", vkrt->core.deviceName);
+    (void)snprintf(outSystemInfo->deviceName, sizeof(outSystemInfo->deviceName), "%s", vkrt->core.deviceName);
     outSystemInfo->vendorID = vkrt->core.vendorID;
     outSystemInfo->driverVersion = vkrt->core.driverVersion;
     return VKRT_SUCCESS;
@@ -78,7 +78,7 @@ VKRT_Result VKRT_getMeshSnapshot(const VKRT* vkrt, uint32_t meshIndex, VKRT_Mesh
     outMesh->geometrySource = mesh->geometrySource;
     outMesh->hasMaterialAssignment = mesh->hasMaterialAssignment;
     outMesh->ownsGeometry = mesh->ownsGeometry;
-    snprintf(outMesh->name, sizeof(outMesh->name), "%s", mesh->name);
+    (void)snprintf(outMesh->name, sizeof(outMesh->name), "%s", mesh->name);
     return VKRT_SUCCESS;
 }
 
@@ -97,7 +97,7 @@ VKRT_Result VKRT_getMaterialSnapshot(const VKRT* vkrt, uint32_t materialIndex, V
 
     outMaterial->material = material->material;
     outMaterial->useCount = vkrtCountMaterialUsers(vkrt, materialIndex);
-    snprintf(outMaterial->name, sizeof(outMaterial->name), "%s", material->name);
+    (void)snprintf(outMaterial->name, sizeof(outMaterial->name), "%s", material->name);
     return VKRT_SUCCESS;
 }
 
@@ -118,6 +118,6 @@ VKRT_Result VKRT_getTextureSnapshot(const VKRT* vkrt, uint32_t textureIndex, VKR
     outTexture->format = texture->format;
     outTexture->colorSpace = texture->colorSpace;
     outTexture->useCount = vkrtCountTextureUsers(vkrt, textureIndex);
-    snprintf(outTexture->name, sizeof(outTexture->name), "%s", texture->name);
+    (void)snprintf(outTexture->name, sizeof(outTexture->name), "%s", texture->name);
     return VKRT_SUCCESS;
 }

@@ -41,7 +41,7 @@ static void formatPrefixedText(char* out, size_t outSize, const char* prefix, co
     size_t prefixLength = strlen(prefix);
     size_t available = outSize > prefixLength + 2u ? outSize - prefixLength - 2u : 0u;
     int textLimit = available > (size_t)INT_MAX ? INT_MAX : (int)available;
-    snprintf(out, outSize, "%s %.*s", prefix, textLimit, text);
+    (void)snprintf(out, outSize, "%s %.*s", prefix, textLimit, text);
 }
 
 static bool drawCompactNameInput(const char* inputId, char* buffer, size_t bufferSize) {
@@ -63,12 +63,12 @@ static void formatMeshSourceText(char* out, size_t outSize, const char* sourceNa
     size_t suffixSize = (size_t)suffixLength;
     size_t available = outSize > suffixSize + 1u ? outSize - suffixSize - 1u : 0u;
     int nameLimit = available > (size_t)INT_MAX ? INT_MAX : (int)available;
-    snprintf(out, outSize, "%.*s%s", nameLimit, sourceName, suffix);
+    (void)snprintf(out, outSize, "%.*s%s", nameLimit, sourceName, suffix);
 }
 
 static void formatMeshGeometryText(const VKRT_MeshSnapshot* mesh, char* out, size_t outSize) {
     if (!mesh || !out || outSize == 0) return;
-    snprintf(out, outSize, mesh->ownsGeometry ? "Unique" : "Instanced");
+    (void)snprintf(out, outSize, mesh->ownsGeometry ? "Unique" : "Instanced");
 }
 
 static bool drawSceneBrowserEntry(uint32_t objectIndex, const char* label, int isGroup, bool isSelected, int depth) {
@@ -77,7 +77,7 @@ static bool drawSceneBrowserEntry(uint32_t objectIndex, const char* label, int i
     char entryId[K_SCENE_BROWSER_ID_CAPACITY];
     char nameText[K_SCENE_BROWSER_NAME_TEXT_CAPACITY];
     const float rowHeight = ImGui_GetTextLineHeight() + kSceneBrowserRowTopPadding + kSceneBrowserRowBottomPadding;
-    snprintf(entryId, sizeof(entryId), "##scene_%u", objectIndex);
+    (void)snprintf(entryId, sizeof(entryId), "##scene_%u", objectIndex);
     formatPrefixedText(nameText, sizeof(nameText), isGroup ? ICON_FA_FOLDER : ICON_FA_CUBE, label);
 
     const ImVec4 transparent = {0.0f, 0.0f, 0.0f, 0.0f};
@@ -137,7 +137,7 @@ static void drawSceneObjectInfoHeader(Session* session, uint32_t objectIndex, co
     if (!session || !object) return;
 
     char name[VKRT_NAME_LEN];
-    snprintf(name, sizeof(name), "%s", object->name[0] ? object->name : "(unnamed)");
+    (void)snprintf(name, sizeof(name), "%s", object->name[0] ? object->name : "(unnamed)");
 
     ImGui_SeparatorText(ICON_FA_CIRCLE_INFO " Object");
     inspectorIndentSection();
@@ -153,7 +153,7 @@ static void drawSceneObjectInfoHeader(Session* session, uint32_t objectIndex, co
 
         inspectorKeyValueRow("Type", object->meshIndex != VKRT_INVALID_INDEX ? "Mesh" : "Group");
         char childCount[32];
-        snprintf(childCount, sizeof(childCount), "%u", sessionCountSceneObjectChildren(session, objectIndex));
+        (void)snprintf(childCount, sizeof(childCount), "%u", sessionCountSceneObjectChildren(session, objectIndex));
         inspectorKeyValueRow("Children", childCount);
         inspectorEndKeyValueTable();
     }
@@ -174,7 +174,7 @@ static void drawMeshInfoHeader(VKRT* vkrt, const VKRT_MeshSnapshot* mesh) {
     VKRT_MaterialSnapshot material = {0};
     uint8_t hasEditableMaterial = mesh->hasMaterialAssignment && mesh->materialIndex != 0u &&
                                   VKRT_getMaterialSnapshot(vkrt, mesh->materialIndex, &material) == VKRT_SUCCESS;
-    snprintf(countText, sizeof(countText), "%u verts / %u tris", mesh->info.vertexCount, triangleCount);
+    (void)snprintf(countText, sizeof(countText), "%u verts / %u tris", mesh->info.vertexCount, triangleCount);
     formatByteSize(vertexBytes + indexBytes, sizeText, sizeof(sizeText));
     formatMeshGeometryText(mesh, geometryText, sizeof(geometryText));
     if (!mesh->ownsGeometry) {
@@ -196,7 +196,7 @@ static void drawMeshInfoHeader(VKRT* vkrt, const VKRT_MeshSnapshot* mesh) {
         ImGui_TableSetColumnIndex(1);
         if (hasEditableMaterial) {
             char materialName[VKRT_NAME_LEN];
-            snprintf(materialName, sizeof(materialName), "%s", material.name);
+            (void)snprintf(materialName, sizeof(materialName), "%s", material.name);
             if (drawCompactNameInput("##material_name", materialName, sizeof(materialName))) {
                 VKRT_Result result = VKRT_setMaterialName(vkrt, mesh->materialIndex, materialName);
                 if (result != VKRT_SUCCESS) {
@@ -267,20 +267,20 @@ static void formatMaterialLabel(
         size_t maxNameLength = available - 1u;
         nameLimit = maxNameLength > (size_t)INT_MAX ? INT_MAX : (int)maxNameLength;
     }
-    snprintf(out + prefixLength, available, "%.*s", nameLimit, materialName);
+    (void)snprintf(out + prefixLength, available, "%.*s", nameLimit, materialName);
 }
 
 static void formatMaterialAssignmentPreviewLabel(VKRT* vkrt, const VKRT_MeshSnapshot* mesh, char* out, size_t outSize) {
     if (!vkrt || !mesh || !out || outSize == 0) return;
 
     if (!mesh->hasMaterialAssignment || mesh->materialIndex == 0u) {
-        snprintf(out, outSize, "None");
+        (void)snprintf(out, outSize, "None");
         return;
     }
 
     VKRT_MaterialSnapshot material = {0};
     if (VKRT_getMaterialSnapshot(vkrt, mesh->materialIndex, &material) != VKRT_SUCCESS) {
-        snprintf(out, outSize, "Material #%u", mesh->materialIndex - 1u);
+        (void)snprintf(out, outSize, "Material #%u", mesh->materialIndex - 1u);
         return;
     }
 
@@ -371,7 +371,7 @@ static void buildMaterialAssignmentLabels(
 ) {
     if (!vkrt || !labels) return;
 
-    snprintf(storage[0], sizeof(storage[0]), "None");
+    (void)snprintf(storage[0], sizeof(storage[0]), "None");
     labels[0] = storage[0];
 
     for (uint32_t visibleMaterialIndex = 0; visibleMaterialIndex < visibleMaterialCount; visibleMaterialIndex++) {
@@ -385,7 +385,7 @@ static void buildMaterialAssignmentLabels(
                 visibleMaterialIndex
             );
         } else {
-            snprintf(
+            (void)snprintf(
                 storage[visibleMaterialIndex + 1u],
                 sizeof(storage[visibleMaterialIndex + 1u]),
                 "Material %u",
@@ -428,7 +428,7 @@ static void drawCreateMaterialButton(
     if (ImGui_ButtonEx(ICON_FA_PLUS, (ImVec2){buttonWidth, frameHeight})) {
         char materialName[VKRT_NAME_LEN];
         const char* baseName = mesh->name[0] ? mesh->name : "Material";
-        snprintf(materialName, sizeof(materialName), "%s", baseName);
+        (void)snprintf(materialName, sizeof(materialName), "%s", baseName);
 
         uint32_t materialIndex = VKRT_INVALID_INDEX;
         VKRT_Result result = VKRT_addMaterial(vkrt, &mesh->material, materialName, &materialIndex);
@@ -533,7 +533,7 @@ static void formatTextureAssignmentLabel(VKRT* vkrt, uint32_t textureIndex, char
     if (!out || outSize == 0) return;
 
     if (textureIndex == VKRT_INVALID_INDEX) {
-        snprintf(out, outSize, "N/A");
+        (void)snprintf(out, outSize, "N/A");
         return;
     }
 
@@ -544,11 +544,11 @@ static void formatTextureAssignmentLabel(VKRT* vkrt, uint32_t textureIndex, char
             size_t maxNameLength = outSize - 1u;
             nameLimit = maxNameLength > (size_t)INT_MAX ? INT_MAX : (int)maxNameLength;
         }
-        snprintf(out, outSize, "%.*s", nameLimit, texture.name[0] ? texture.name : "Texture");
+        (void)snprintf(out, outSize, "%.*s", nameLimit, texture.name[0] ? texture.name : "Texture");
         return;
     }
 
-    snprintf(out, outSize, "Texture #%u", textureIndex);
+    (void)snprintf(out, outSize, "Texture #%u", textureIndex);
 }
 
 static void drawMaterialTextureSlotEditor(
@@ -643,7 +643,7 @@ static void drawMaterialTexturesEditor(
 
             ImGui_TableSetColumnIndex(1);
             char textureSlotId[32];
-            snprintf(textureSlotId, sizeof(textureSlotId), "texture_slot_%u", textureSlot);
+            (void)snprintf(textureSlotId, sizeof(textureSlotId), "texture_slot_%u", textureSlot);
             ImGui_PushID(textureSlotId);
             drawMaterialTextureSlotEditor(vkrt, session, materialIndex, textureSlot, textureIndex);
             ImGui_PopID();

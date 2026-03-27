@@ -70,12 +70,12 @@ static const char* requireOptionValue(
         const char* inlineValue = arg + optionLength + 1;
         if (inlineValue[0]) return inlineValue;
 
-        snprintf(error, errorSize, "Missing value for %s", optionName);
+        (void)snprintf(error, errorSize, "Missing value for %s", optionName);
         return NULL;
     }
 
     if (*inOutIndex + 1 >= argc) {
-        snprintf(error, errorSize, "Missing value for %s", optionName);
+        (void)snprintf(error, errorSize, "Missing value for %s", optionName);
         return NULL;
     }
 
@@ -96,7 +96,7 @@ static int parseUnsignedValue(
     char* end = NULL;
     unsigned long parsed = strtoul(text, &end, 10);
     if (errno != 0 || end == text || (end && end[0] != '\0') || parsed == 0 || parsed > UINT32_MAX) {
-        snprintf(error, errorSize, "Invalid value for %s: %s", optionName, text);
+        (void)snprintf(error, errorSize, "Invalid value for %s: %s", optionName, text);
         return 0;
     }
 
@@ -111,7 +111,7 @@ static int parseDeviceIndexValue(const char* text, int32_t* outValue, char* erro
     char* end = NULL;
     long parsed = strtol(text, &end, 10);
     if (errno != 0 || end == text || (end && end[0] != '\0') || parsed < 0 || parsed > INT32_MAX) {
-        snprintf(error, errorSize, "Invalid value for --device-index: %s", text);
+        (void)snprintf(error, errorSize, "Invalid value for --device-index: %s", text);
         return 0;
     }
 
@@ -134,9 +134,9 @@ void CLIDefaultLaunchOptions(CLILaunchOptions* options) {
 static int setCLIError(char* error, size_t errorSize, const char* message, const char* value) {
     if (!error || errorSize == 0u || !message) return 0;
     if (value) {
-        snprintf(error, errorSize, message, value);
+        (void)snprintf(error, errorSize, message, value);
     } else {
-        snprintf(error, errorSize, "%s", message);
+        (void)snprintf(error, errorSize, "%s", message);
     }
     return 0;
 }

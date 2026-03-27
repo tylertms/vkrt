@@ -28,17 +28,17 @@ static void formatEnvironmentTextureLabel(VKRT* vkrt, uint32_t textureIndex, cha
     if (!out || outSize == 0u) return;
 
     if (!vkrt || textureIndex == VKRT_INVALID_INDEX) {
-        snprintf(out, outSize, "None");
+        (void)snprintf(out, outSize, "None");
         return;
     }
 
     VKRT_TextureSnapshot texture = {0};
     if (VKRT_getTextureSnapshot(vkrt, textureIndex, &texture) == VKRT_SUCCESS) {
-        snprintf(out, outSize, "%s", texture.name[0] ? texture.name : "Texture");
+        (void)snprintf(out, outSize, "%s", texture.name[0] ? texture.name : "Texture");
         return;
     }
 
-    snprintf(out, outSize, "Texture #%u", textureIndex);
+    (void)snprintf(out, outSize, "Texture #%u", textureIndex);
 }
 
 static void logCameraInspectorFailure(const char* message, VKRT_Result result) {

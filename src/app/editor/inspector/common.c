@@ -90,7 +90,7 @@ void formatDriverVersionText(uint32_t vendorID, uint32_t driverVersion, char* ou
     if (vendorID == 0x10DEu) {  // NVIDIA
         uint32_t major = (driverVersion >> 22u) & 0x3ffu;
         uint32_t minor = (driverVersion >> 14u) & 0xffu;
-        snprintf(out, outSize, "%u.%02u", major, minor);
+        (void)snprintf(out, outSize, "%u.%02u", major, minor);
         return;
     }
 
@@ -98,12 +98,12 @@ void formatDriverVersionText(uint32_t vendorID, uint32_t driverVersion, char* ou
         uint32_t major = driverVersion >> 14u;
         uint32_t minor = driverVersion & 0x3fffu;
         if (major > 0 && minor > 0) {
-            snprintf(out, outSize, "%u.%u", major, minor);
+            (void)snprintf(out, outSize, "%u.%u", major, minor);
             return;
         }
     }
 
-    snprintf(
+    (void)snprintf(
         out,
         outSize,
         "%u.%u.%u",  // AMD / UNKNOWN
@@ -125,7 +125,7 @@ void formatByteSize(uint64_t bytes, char* out, size_t outSize) {
         scaledBytes /= 1024.0;
     }
 
-    snprintf(out, outSize, "%.*f %s", index > 0, scaledBytes, symbols[index]);
+    (void)snprintf(out, outSize, "%.*f %s", index > 0, scaledBytes, symbols[index]);
 }
 
 static void drawPaddedTooltip(const char* text) {
@@ -151,7 +151,7 @@ uint32_t clampRenderDimension(int value) {
 }
 
 static void formatUnsignedLongLong(char* out, size_t outSize, unsigned long long value, const char* unit) {
-    snprintf(out, outSize, "%llu%s", value, unit);
+    (void)snprintf(out, outSize, "%llu%s", value, unit);
 }
 
 static void formatTimeUnitValue(
@@ -179,13 +179,13 @@ static void formatTimeUnitValue(
 void formatTime(float seconds, char* out, size_t outSize) {
     if (!out || outSize == 0) return;
     if (seconds <= 0.0f) {
-        snprintf(out, outSize, "0ms");
+        (void)snprintf(out, outSize, "0ms");
         return;
     }
 
     uint64_t totalMs = (uint64_t)((seconds * 1000.0f) + 0.5f);
     if (totalMs == 0) {
-        snprintf(out, outSize, "0ms");
+        (void)snprintf(out, outSize, "0ms");
         return;
     }
 
@@ -197,7 +197,7 @@ void formatTime(float seconds, char* out, size_t outSize) {
     formatTimeUnitValue(totalMs, 0, &firstUnit, &firstValue, &remainder);
 
     if (firstUnit < 0) {
-        snprintf(out, outSize, "0ms");
+        (void)snprintf(out, outSize, "0ms");
         return;
     }
 
@@ -207,7 +207,7 @@ void formatTime(float seconds, char* out, size_t outSize) {
     formatTimeUnitValue(remainder, firstUnit + 1, &secondUnit, &secondValue, &ignoredRemainder);
 
     if (secondUnit >= 0) {
-        snprintf(
+        (void)snprintf(
             out,
             outSize,
             "%llu%s %llu%s",

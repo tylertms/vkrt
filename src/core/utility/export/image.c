@@ -79,10 +79,14 @@ static const char* queryPathExtension(const char* path) {
     return extension;
 }
 
+static int lowerASCII(int value) {
+    return tolower((unsigned char)value);
+}
+
 static int equalsIgnoreCaseASCII(const char* lhs, const char* rhs) {
     if (!lhs || !rhs) return 0;
     while (*lhs && *rhs) {
-        if (tolower((unsigned char)*lhs) != tolower((unsigned char)*rhs)) return 0;
+        if (lowerASCII(*lhs) != lowerASCII(*rhs)) return 0;
         lhs++;
         rhs++;
     }
@@ -119,8 +123,7 @@ static char* duplicatePathWithAppendedExtension(const char* path, const char* ex
     char* combined = (char*)malloc(pathLength + extensionLength + 1u);
     if (!combined) return NULL;
 
-    memcpy(combined, path, pathLength);
-    memcpy(combined + pathLength, extension, extensionLength + 1u);
+    (void)snprintf(combined, pathLength + extensionLength + 1u, "%s%s", path, extension);
     return combined;
 }
 

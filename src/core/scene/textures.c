@@ -265,7 +265,7 @@ static int uploadSceneTexture(VKRT* vkrt, const TextureUploadDesc* upload, Scene
     outTexture->height = upload->height;
     outTexture->format = upload->format;
     outTexture->colorSpace = upload->colorSpace;
-    snprintf(outTexture->name, sizeof(outTexture->name), "%s", upload->name[0] ? upload->name : "Texture");
+    (void)snprintf(outTexture->name, sizeof(outTexture->name), "%s", upload->name[0] ? upload->name : "Texture");
     return 1;
 }
 

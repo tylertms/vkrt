@@ -141,7 +141,7 @@ static FILE* fopenExeRelative(const char* relpath, const char* mode) {
     }
 
     size_t dirlen = strlen(buf);
-    snprintf(buf + dirlen, sizeof buf - dirlen, "/%s", relpath);
+    (void)snprintf(buf + dirlen, sizeof buf - dirlen, "/%s", relpath);
 
 #ifdef _WIN32
     FILE* file = NULL;

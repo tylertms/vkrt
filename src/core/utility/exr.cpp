@@ -12,6 +12,12 @@
 #define TINYEXR_USE_MINIZ 0
 #define TINYEXR_IMPLEMENTATION
 #ifdef _MSC_VER
+#ifdef max
+#undef max
+#endif
+#ifdef min
+#undef min
+#endif
 #pragma warning(push)
 #pragma warning(disable : 4245 4702)
 #endif

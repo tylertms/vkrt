@@ -290,9 +290,9 @@ static int selectionMaskUsesMaterial(const VKRT* vkrt, uint32_t materialIndex) {
 static void formatMaterialName(char outName[VKRT_NAME_LEN], const char* name, uint32_t materialIndex) {
     if (!outName) return;
     if (name && name[0]) {
-        snprintf(outName, VKRT_NAME_LEN, "%s", name);
+        (void)snprintf(outName, VKRT_NAME_LEN, "%s", name);
     } else {
-        snprintf(outName, VKRT_NAME_LEN, "Material %u", materialIndex);
+        (void)snprintf(outName, VKRT_NAME_LEN, "Material %u", materialIndex);
     }
 }
 
@@ -504,7 +504,7 @@ VKRT_Result VKRT_setMeshName(VKRT* vkrt, uint32_t meshIndex, const char* name) {
     const char* sanitizedName = name[0] ? name : "(unknown)";
     if (strncmp(mesh->name, sanitizedName, sizeof(mesh->name)) == 0) return VKRT_SUCCESS;
 
-    snprintf(mesh->name, sizeof(mesh->name), "%s", sanitizedName);
+    (void)snprintf(mesh->name, sizeof(mesh->name), "%s", sanitizedName);
     return VKRT_SUCCESS;
 }
 

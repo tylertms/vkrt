@@ -2,7 +2,6 @@
 
 #include "debug.h"
 
-#include <pthread.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -15,14 +14,14 @@
 #ifdef _WIN32
 #include <process.h>
 
-static int g_vkrtInfoLoggingEnabled = 1;
+static int gVkrtInfoLoggingEnabled = 1;
 
 int vkrtInfoLoggingEnabled(void) {
-    return g_vkrtInfoLoggingEnabled;
+    return gVkrtInfoLoggingEnabled;
 }
 
 void vkrtSetInfoLoggingEnabled(int enabled) {
-    g_vkrtInfoLoggingEnabled = enabled ? 1 : 0;
+    gVkrtInfoLoggingEnabled = enabled ? 1 : 0;
 }
 
 uint64_t getMicroseconds(void) {
@@ -141,6 +140,8 @@ int vkrtThreadJoin(VKRT_Thread thread, int* result) {
 }
 
 #else
+
+#include <pthread.h>
 
 static int gVkrtInfoLoggingEnabled = 1;
 

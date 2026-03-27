@@ -30,7 +30,7 @@ typedef enum DialogKind {
 } DialogKind;
 
 enum {
-    kDialogDefaultNameCapacity = 256
+    DIALOG_DEFAULT_NAME_CAPACITY = 256
 };
 
 typedef struct DialogRequest {
@@ -38,7 +38,7 @@ typedef struct DialogRequest {
     uint32_t materialIndex;
     uint32_t textureSlot;
     char defaultPath[VKRT_PATH_MAX];
-    char defaultName[kDialogDefaultNameCapacity];
+    char defaultName[DIALOG_DEFAULT_NAME_CAPACITY];
     nfdwindowhandle_t parentWindow;
 } DialogRequest;
 

@@ -141,10 +141,10 @@ static void queryBenchmarkDeviceName(VKRT* vkrt, char* outName, size_t outNameSi
 
     outName[0] = '\0';
     if (VKRT_getSystemInfo(vkrt, &systemInfo) == VKRT_SUCCESS && systemInfo.deviceName[0]) {
-        snprintf(outName, outNameSize, "%s", systemInfo.deviceName);
+        (void)snprintf(outName, outNameSize, "%s", systemInfo.deviceName);
         return;
     }
-    snprintf(outName, outNameSize, "%s", "(unknown device)");
+    (void)snprintf(outName, outNameSize, "%s", "(unknown device)");
 }
 
 static void printBenchmarkHeader(VKRT* vkrt, const CLIBenchmarkOptions* options) {

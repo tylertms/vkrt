@@ -192,11 +192,12 @@ static void formatRenderProgressOverlay(
     }
 
     if (VKRT_renderStatusIsDenoising(status)) {
-        snprintf(out, outSize, "Denoising...");
+        (void)snprintf(out, outSize, "Denoising...");
     } else if (status->renderTargetSamples > 0u) {
-        snprintf(out, outSize, "%llu / %u samples", (unsigned long long)shownSamples, status->renderTargetSamples);
+        (void)
+            snprintf(out, outSize, "%llu / %u samples", (unsigned long long)shownSamples, status->renderTargetSamples);
     } else {
-        snprintf(out, outSize, "%llu samples", (unsigned long long)status->totalSamples);
+        (void)snprintf(out, outSize, "%llu samples", (unsigned long long)status->totalSamples);
     }
 
     if (outShownSamples) *outShownSamples = shownSamples;

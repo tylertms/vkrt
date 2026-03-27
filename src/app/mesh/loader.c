@@ -792,7 +792,7 @@ static int allocateMaterialDecodeScratch(
     }
 
     *outReferences = (ImportedTextureReference*)calloc(*outMaxTextureRefs, sizeof(**outReferences));
-    *outCachedImages = (const cgltf_image**)calloc(*outMaxTextureRefs, sizeof(**outCachedImages));
+    *outCachedImages = (const cgltf_image**)calloc(*outMaxTextureRefs, sizeof(const cgltf_image*));
     *outCachedColorSpaces = (uint32_t*)calloc(*outMaxTextureRefs, sizeof(**outCachedColorSpaces));
     *outCachedTextureIndices = (uint32_t*)calloc(*outMaxTextureRefs, sizeof(**outCachedTextureIndices));
     if (*outReferences && *outCachedImages && *outCachedColorSpaces && *outCachedTextureIndices) {
@@ -823,11 +823,11 @@ static void makeGeneratedMaterialName(
     if (!outName || outNameSize == 0u) return;
 
     if (sourceMaterial && sourceMaterial->name && sourceMaterial->name[0]) {
-        snprintf(outName, outNameSize, "%s", sourceMaterial->name);
+        (void)snprintf(outName, outNameSize, "%s", sourceMaterial->name);
         return;
     }
 
-    snprintf(outName, outNameSize, "Material %zu", materialIndex);
+    (void)snprintf(outName, outNameSize, "Material %zu", materialIndex);
 }
 
 static int appendImportedMaterial(
@@ -1096,9 +1096,9 @@ static void buildEntryName(
     }
 
     if (mesh && mesh->primitives_count > 1) {
-        snprintf(outName, outNameSize, "%s_%zu", baseName, primitiveIndex);
+        (void)snprintf(outName, outNameSize, "%s_%zu", baseName, primitiveIndex);
     } else {
-        snprintf(outName, outNameSize, "%s", baseName);
+        (void)snprintf(outName, outNameSize, "%s", baseName);
     }
 }
 
@@ -2075,7 +2075,7 @@ static int collectRootNodeEntries(const cgltf_data* data, MeshImportData* import
         return collectNodeEntries(data, sceneRootNodes, data->scene->nodes_count, importData);
     }
 
-    const cgltf_node** rootNodes = (const cgltf_node**)calloc(data->nodes_count, sizeof(*rootNodes));
+    const cgltf_node** rootNodes = (const cgltf_node**)calloc(data->nodes_count, sizeof(const cgltf_node*));
     if (!rootNodes) {
         return -1;
     }

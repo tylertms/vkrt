@@ -33,7 +33,7 @@ static int createOIDNBuffer(
 
     OIDNBuffer buffer = oidnNewBuffer(device, byteCount);
     if (!buffer) {
-        snprintf(oidnErrorStorage, sizeof(oidnErrorStorage), "failed to allocate OIDN %s buffer", label);
+        (void)snprintf(oidnErrorStorage, sizeof(oidnErrorStorage), "failed to allocate OIDN %s buffer", label);
         setOIDNErrorMessage(outErrorMessage, oidnErrorStorage);
         return 0;
     }
@@ -207,7 +207,7 @@ static int executeOIDNFilter(
     }
 
     if (errorMessage && errorMessage[0]) {
-        snprintf(oidnErrorStorage, sizeof(oidnErrorStorage), "%s", errorMessage);
+        (void)snprintf(oidnErrorStorage, sizeof(oidnErrorStorage), "%s", errorMessage);
         setOIDNErrorMessage(outErrorMessage, oidnErrorStorage);
     } else {
         setOIDNErrorMessage(outErrorMessage, "OIDN filtering failed");

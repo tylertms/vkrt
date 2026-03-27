@@ -718,7 +718,7 @@ int sessionAddSceneObject(Session* session, const SessionSceneObjectCreateInfo* 
     }
     if (createInfo->localScale) memcpy(object->localScale, *createInfo->localScale, sizeof(object->localScale));
     buildLocalTransformMatrix(object->localPosition, object->localRotation, object->localScale, object->localTransform);
-    snprintf(
+    (void)snprintf(
         object->name,
         sizeof(object->name),
         "%s",
@@ -752,7 +752,7 @@ void sessionSelectSceneObjectForMesh(Session* session, uint32_t meshIndex) {
 
 int sessionSetSceneObjectName(Session* session, uint32_t objectIndex, const char* name) {
     if (!session || objectIndex >= session->editor.sceneObjectCount || !name) return 0;
-    snprintf(session->editor.sceneObjects[objectIndex].name, VKRT_NAME_LEN, "%s", name);
+    (void)snprintf(session->editor.sceneObjects[objectIndex].name, VKRT_NAME_LEN, "%s", name);
     return 1;
 }
 

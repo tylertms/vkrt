@@ -444,7 +444,7 @@ static void storeSelectedPhysicalDeviceInfo(VKRT* vkrt, const VkPhysicalDevice* 
     vkGetPhysicalDeviceProperties(vkrt->core.physicalDevice, &deviceProperties);
 
     LOG_INFO("Selected device [%u]: %s", (uint32_t)bestDevice, deviceProperties.deviceName);
-    snprintf(vkrt->core.deviceName, sizeof(vkrt->core.deviceName), "%s", deviceProperties.deviceName);
+    (void)snprintf(vkrt->core.deviceName, sizeof(vkrt->core.deviceName), "%s", deviceProperties.deviceName);
     vkrt->core.vendorID = deviceProperties.vendorID;
     vkrt->core.driverVersion = deviceProperties.driverVersion;
 }
@@ -522,23 +522,32 @@ static int32_t scoreDeviceSuitability(VKRT* vkrt, DeviceExtensionSupport* outExt
     return -1;
 }
 
+static int charsEqualCaseInsensitive(char lhs, char rhs) {
+    return tolower((unsigned char)lhs) == tolower((unsigned char)rhs);
+}
+
+static int startsWithCaseInsensitive(const char* text, const char* prefix) {
+    if (!text || !prefix) return 0;
+
+    while (*prefix) {
+        if (!*text || !charsEqualCaseInsensitive(*text, *prefix)) {
+            return 0;
+        }
+        text++;
+        prefix++;
+    }
+    return 1;
+}
+
 static int stringContainsCaseInsensitive(const char* text, const char* pattern) {
     if (!text || !pattern) return 0;
     if (!pattern[0]) return 1;
 
-    size_t patternLength = strlen(pattern);
     for (const char* cursor = text; cursor[0]; cursor++) {
-        size_t matched = 0;
-        while (matched < patternLength) {
-            char hay = cursor[matched];
-            char needle = pattern[matched];
-            if (!hay) return 0;
-            if (tolower((unsigned char)hay) != tolower((unsigned char)needle)) break;
-            matched++;
+        if (startsWithCaseInsensitive(cursor, pattern)) {
+            return 1;
         }
-        if (matched == patternLength) return 1;
     }
-
     return 0;
 }
 
@@ -591,13 +600,13 @@ static void formatDevicePreferenceText(const VKRT_CreateInfo* createInfo, char* 
     out[0] = '\0';
 
     if (!createInfo) {
-        snprintf(out, outSize, "default selection");
+        (void)snprintf(out, outSize, "default selection");
         return;
     }
 
     if (createInfo->preferredDeviceIndex >= 0 && createInfo->preferredDeviceName &&
         createInfo->preferredDeviceName[0]) {
-        snprintf(
+        (void)snprintf(
             out,
             outSize,
             "index %d, name contains \"%s\"",
@@ -608,16 +617,16 @@ static void formatDevicePreferenceText(const VKRT_CreateInfo* createInfo, char* 
     }
 
     if (createInfo->preferredDeviceIndex >= 0) {
-        snprintf(out, outSize, "index %d", createInfo->preferredDeviceIndex);
+        (void)snprintf(out, outSize, "index %d", createInfo->preferredDeviceIndex);
         return;
     }
 
     if (createInfo->preferredDeviceName && createInfo->preferredDeviceName[0]) {
-        snprintf(out, outSize, "name contains \"%s\"", createInfo->preferredDeviceName);
+        (void)snprintf(out, outSize, "name contains \"%s\"", createInfo->preferredDeviceName);
         return;
     }
 
-    snprintf(out, outSize, "default selection");
+    (void)snprintf(out, outSize, "default selection");
 }
 
 VKRT_Result pickPhysicalDevice(VKRT* vkrt, const VKRT_CreateInfo* createInfo) {
