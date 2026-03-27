@@ -25,10 +25,7 @@ static void resetTimelineDefaults(VKRT_SceneSettingsSnapshot* settings) {
 }
 
 static void resetAutoSPPForSceneChange(VKRT* vkrt) {
-    if (!vkrt->sceneSettings.autoSPPEnabled) return;
-
-    vkrt->sceneSettings.samplesPerPixel = 1u;
-    vkrt->renderControl.autoSPP.controlMs = 0.0f;
+    resetAutoSPPState(vkrt, VK_TRUE);
 }
 
 static void resetAutoExposureForSceneChange(VKRT* vkrt) {

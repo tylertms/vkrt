@@ -87,7 +87,7 @@ VKRT_Result VKRT_setPathDepth(VKRT* vkrt, uint32_t rrMinDepth, uint32_t rrMaxDep
 VKRT_Result VKRT_setAutoSPPEnabled(VKRT* vkrt, uint8_t enabled) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
     vkrt->sceneSettings.autoSPPEnabled = enabled ? 1 : 0;
-    vkrt->renderControl.autoSPP.controlMs = 0.0f;
+    resetAutoSPPState(vkrt, VK_FALSE);
     return VKRT_SUCCESS;
 }
 
@@ -96,7 +96,7 @@ VKRT_Result VKRT_setAutoSPPTargetFPS(VKRT* vkrt, uint32_t targetFPS) {
     targetFPS = sanitizeAutoSPPTargetFPS(vkrt, targetFPS);
     vkrt->sceneSettings.autoSPPTargetFPS = targetFPS;
     vkrt->renderControl.autoSPP.targetFrameMs = 1000.0f / (float)targetFPS;
-    vkrt->renderControl.autoSPP.controlMs = 0.0f;
+    resetAutoSPPState(vkrt, VK_FALSE);
     return VKRT_SUCCESS;
 }
 

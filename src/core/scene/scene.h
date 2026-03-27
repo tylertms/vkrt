@@ -13,6 +13,7 @@ void syncCurrentFrameSceneData(VKRT* vkrt);
 void syncCameraMatrices(VKRT* vkrt);
 void updateCamera(VKRT* vkrt);
 void updateAutoSPP(VKRT* vkrt);
+void resetAutoSPPState(VKRT* vkrt, VkBool32 resetSamplesPerPixel);
 VKRT_Result createAutoExposureReadbacks(VKRT* vkrt);
 void destroyAutoExposureReadbacks(VKRT* vkrt);
 void resolveAutoExposureReadback(VKRT* vkrt, uint32_t frameIndex);

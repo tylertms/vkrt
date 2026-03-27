@@ -190,6 +190,7 @@ void formatTime(float seconds, char* out, size_t outSize) {
     }
 
     static const char* unitLabels[] = {"d", "h", "m", "s", "ms"};
+    static const uint64_t unitMs[] = {86400000ull, 3600000ull, 60000ull, 1000ull, 1ull};
 
     int firstUnit = -1;
     uint64_t firstValue = 0;
@@ -201,12 +202,9 @@ void formatTime(float seconds, char* out, size_t outSize) {
         return;
     }
 
-    int secondUnit = -1;
-    uint64_t secondValue = 0;
-    uint64_t ignoredRemainder = 0u;
-    formatTimeUnitValue(remainder, firstUnit + 1, &secondUnit, &secondValue, &ignoredRemainder);
-
-    if (secondUnit >= 0) {
+    int secondUnit = firstUnit + 1;
+    if (secondUnit < 5) {
+        uint64_t secondValue = remainder / unitMs[secondUnit];
         (void)snprintf(
             out,
             outSize,

@@ -216,7 +216,7 @@ static void resetRenderSessionState(VKRT* vkrt, VkBool32 resetViewTransform) {
     }
 
     vkrt->renderControl.timing.lastFrameTimestamp = 0;
-    vkrt->renderControl.autoSPP.controlMs = 0.0f;
+    resetAutoSPPState(vkrt, VK_FALSE);
     vkrt->renderControl.viewportDenoisePending = 0u;
 }
 
@@ -277,6 +277,8 @@ VKRT_Result VKRT_continueRender(VKRT* vkrt, uint32_t targetSamples) {
     }
 
     beginRenderSamplingSession(vkrt, targetSamples, VK_FALSE);
+    resetAutoSPPState(vkrt, VK_TRUE);
+    syncSceneStateData(vkrt);
     return VKRT_SUCCESS;
 }
 

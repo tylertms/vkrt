@@ -451,7 +451,7 @@ static void finalizeRecreatedSwapChain(
     }
 
     vkrt->renderControl.timing.lastFrameTimestamp = 0u;
-    vkrt->renderControl.autoSPP.controlMs = 0.0f;
+    resetAutoSPPState(vkrt, VK_FALSE);
     if (!renderPhaseActive) resetSceneData(vkrt);
     vkrt->runtime.framebufferResized = VK_FALSE;
 }

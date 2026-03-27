@@ -34,6 +34,7 @@ static const ImVec2 kCompactNameInputPadding = {8.0f, 4.0f};
 static const float kSceneBrowserRowTopPadding = 2.0f;
 static const float kSceneBrowserRowBottomPadding = 5.0f;
 static const float kSceneBrowserRowLeftPadding = 8.0f;
+static const char* kTransformDragFloatFormat = "%.3f";
 
 static void formatPrefixedText(char* out, size_t outSize, const char* prefix, const char* text) {
     if (!out || outSize == 0 || !prefix || !text) return;
@@ -231,10 +232,33 @@ static void drawSceneObjectTransformEditor(
     float scale[3] = {object->localScale[0], object->localScale[1], object->localScale[2]};
 
     bool transformChanged = false;
-    transformChanged |= ImGui_DragFloat3Ex("Translate", position, 0.001f, 0.0f, 0.0f, "%.3f", ImGuiSliderFlags_None);
-    transformChanged |= ImGui_DragFloat3Ex("Rotate", rotation, 0.05f, 0.0f, 0.0f, "%.2f", ImGuiSliderFlags_None);
-    transformChanged |=
-        ImGui_DragFloat3Ex("Scale", scale, 0.001f, 0.001f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    transformChanged |= ImGui_DragFloat3Ex(
+        "Translate",
+        position,
+        0.001f,
+        0.0f,
+        0.0f,
+        kTransformDragFloatFormat,
+        ImGuiSliderFlags_None
+    );
+    transformChanged |= ImGui_DragFloat3Ex(
+        "Rotate",
+        rotation,
+        0.05f,
+        0.0f,
+        0.0f,
+        kTransformDragFloatFormat,
+        ImGuiSliderFlags_None
+    );
+    transformChanged |= ImGui_DragFloat3Ex(
+        "Scale",
+        scale,
+        0.001f,
+        0.001f,
+        1000.0f,
+        kTransformDragFloatFormat,
+        ImGuiSliderFlags_AlwaysClamp
+    );
 
     if (transformChanged) {
         for (int axis = 0; axis < 3; axis++) {

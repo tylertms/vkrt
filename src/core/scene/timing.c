@@ -58,6 +58,21 @@ static float queryAutoSPPControlMs(const VKRT* vkrt) {
     return vkrt->renderStatus.displayFrameTimeMs;
 }
 
+void resetAutoSPPState(VKRT* vkrt, VkBool32 resetSamplesPerPixel) {
+    if (!vkrt) return;
+
+    if (resetSamplesPerPixel && vkrt->sceneSettings.autoSPPEnabled) {
+        vkrt->sceneSettings.samplesPerPixel = 1u;
+    }
+
+    vkrt->renderControl.autoSPP.controlMs = 0.0f;
+    vkrt->renderStatus.displayTimeMs = 0.0f;
+    vkrt->renderStatus.renderTimeMs = 0.0f;
+    vkrt->renderStatus.displayRenderTimeMs = 0.0f;
+    vkrt->renderStatus.displayFrameTimeMs = 0.0f;
+    vkrt->renderStatus.framesPerSecond = 0u;
+}
+
 void recordFrameTime(VKRT* vkrt, uint32_t frameIndex) {
     if (!vkrt) return;
 

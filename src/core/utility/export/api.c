@@ -157,7 +157,7 @@ void syncCompletedViewportDenoise(VKRT* vkrt) {
     if (succeeded && displayPixels && vkrtWaitForAllInFlightFrames(vkrt) == VKRT_SUCCESS &&
         uploadImagePixels(vkrt, vkrt->core.outputImage, width, height, displayPixels, displayByteCount) == 0) {
         vkrt->renderStatus.renderPhase = VKRT_RENDER_PHASE_COMPLETE_DENOISED;
-        LOG_INFO("Applied denoised render result to the viewport");
+        LOG_INFO("Finished denoising render");
     } else if (succeeded) {
         LOG_ERROR("Failed to upload denoised viewport image");
         vkrt->renderStatus.renderPhase = VKRT_RENDER_PHASE_COMPLETE_RAW;
