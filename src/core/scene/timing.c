@@ -1,33 +1,45 @@
-#include "scene.h"
-
+#include "config.h"
 #include "debug.h"
+#include "scene.h"
+#include "vkrt_types.h"
+#include "vulkan/vulkan_core.h"
 
 #include <math.h>
+#include <stddef.h>
+#include <stdint.h>
 
 static void updateFrameTimes(VKRT* vkrt) {
     if (!vkrt) return;
 
     const float displaySmoothing = 0.12f;
-    if (vkrt->renderStatus.displayFrameTimeMs <= 0.0f) vkrt->renderStatus.displayFrameTimeMs = vkrt->renderStatus.displayTimeMs;
-    else vkrt->renderStatus.displayFrameTimeMs =
-        vkrt->renderStatus.displayFrameTimeMs * (1.0f - displaySmoothing) + vkrt->renderStatus.displayTimeMs * displaySmoothing;
+    if (vkrt->renderStatus.displayFrameTimeMs <= 0.0f) {
+        vkrt->renderStatus.displayFrameTimeMs = vkrt->renderStatus.displayTimeMs;
+    } else {
+        vkrt->renderStatus.displayFrameTimeMs =
+            (vkrt->renderStatus.displayFrameTimeMs * (1.0f - displaySmoothing))
+            + (vkrt->renderStatus.displayTimeMs * displaySmoothing);
+    }
 
-    if (vkrt->renderStatus.displayRenderTimeMs <= 0.0f) vkrt->renderStatus.displayRenderTimeMs = vkrt->renderStatus.renderTimeMs;
-    else vkrt->renderStatus.displayRenderTimeMs =
-        vkrt->renderStatus.displayRenderTimeMs * (1.0f - displaySmoothing) + vkrt->renderStatus.renderTimeMs * displaySmoothing;
+    if (vkrt->renderStatus.displayRenderTimeMs <= 0.0f) {
+        vkrt->renderStatus.displayRenderTimeMs = vkrt->renderStatus.renderTimeMs;
+    } else {
+        vkrt->renderStatus.displayRenderTimeMs =
+            (vkrt->renderStatus.displayRenderTimeMs * (1.0f - displaySmoothing))
+            + (vkrt->renderStatus.renderTimeMs * displaySmoothing);
+    }
 
-    size_t n = (size_t)(vkrt->renderStatus.accumulationFrame + 1);
-    size_t cap = VKRT_ARRAY_COUNT(vkrt->renderStatus.frametimes);
-    if (n > cap) n = cap;
+    size_t sampleCount = (size_t)vkrt->renderStatus.accumulationFrame + 1u;
+    size_t frametimeCapacity = sizeof(vkrt->renderStatus.frametimes) / sizeof(vkrt->renderStatus.frametimes[0]);
+    if (sampleCount > frametimeCapacity) sampleCount = frametimeCapacity;
 
-    float weight = 1.0f / (float)n;
+    float weight = 1.0f / (float)sampleCount;
 
-    vkrt->renderStatus.averageFrametime =
-        vkrt->renderStatus.averageFrametime * (1.0f - weight) + vkrt->renderStatus.displayFrameTimeMs * weight;
+    vkrt->renderStatus.averageFrametime = (vkrt->renderStatus.averageFrametime * (1.0f - weight))
+                                        + (vkrt->renderStatus.displayFrameTimeMs * weight);
     vkrt->renderStatus.framesPerSecond = (uint32_t)(1000.0f / vkrt->renderStatus.displayFrameTimeMs);
     vkrt->renderStatus.frametimes[vkrt->renderControl.timing.frametimeStartIndex] = vkrt->renderStatus.displayFrameTimeMs;
     vkrt->renderControl.timing.frametimeStartIndex =
-        (vkrt->renderControl.timing.frametimeStartIndex + 1) % VKRT_ARRAY_COUNT(vkrt->renderStatus.frametimes);
+        (vkrt->renderControl.timing.frametimeStartIndex + 1) % frametimeCapacity;
 }
 
 static float queryAutoSPPTargetMs(const VKRT* vkrt) {
@@ -51,13 +63,15 @@ void recordFrameTime(VKRT* vkrt, uint32_t frameIndex) {
     if (!vkrt) return;
 
     uint64_t currentTime = getMicroseconds();
+    uint64_t lastFrameTimestamp = vkrt->renderControl.timing.lastFrameTimestamp;
 
-    if (vkrt->renderControl.timing.lastFrameTimestamp == 0) {
+    if (lastFrameTimestamp == 0u) {
         vkrt->renderControl.timing.lastFrameTimestamp = currentTime;
         return;
     }
 
-    vkrt->renderStatus.displayTimeMs = (currentTime - vkrt->renderControl.timing.lastFrameTimestamp) / 1000.0f;
+    double elapsedMicroseconds = (double)(currentTime - lastFrameTimestamp);
+    vkrt->renderStatus.displayTimeMs = (float)(elapsedMicroseconds / 1000.0);
     vkrt->renderControl.timing.lastFrameTimestamp = currentTime;
 
     if (frameIndex >= VKRT_MAX_FRAMES_IN_FLIGHT || !vkrt->runtime.frameTimingPending[frameIndex]) {
@@ -65,14 +79,14 @@ void recordFrameTime(VKRT* vkrt, uint32_t frameIndex) {
         return;
     }
 
-    uint64_t ts[2] = {0};
+    uint64_t timestamps[2] = {0u, 0u};
     VkResult queryResult = vkGetQueryPoolResults(
         vkrt->core.device,
         vkrt->runtime.timestampPool,
         frameIndex * 2,
         2,
-        sizeof(ts),
-        ts,
+        sizeof(timestamps),
+        timestamps,
         sizeof(uint64_t),
         VK_QUERY_RESULT_64_BIT
     );
@@ -83,7 +97,9 @@ void recordFrameTime(VKRT* vkrt, uint32_t frameIndex) {
     }
 
     vkrt->runtime.frameTimingPending[frameIndex] = VK_FALSE;
-    vkrt->renderStatus.renderTimeMs = (float)((ts[1] - ts[0]) * vkrt->runtime.timestampPeriod / 1e6);
+    double timestampDelta = (double)(timestamps[1] - timestamps[0]);
+    double renderTimeMs = (timestampDelta * (double)vkrt->runtime.timestampPeriod) / 1000000.0;
+    vkrt->renderStatus.renderTimeMs = (float)renderTimeMs;
     updateFrameTimes(vkrt);
 }
 
@@ -114,7 +130,8 @@ void updateAutoSPP(VKRT* vkrt) {
         vkrt->renderControl.autoSPP.controlMs = measuredMsPerSPP;
     } else {
         vkrt->renderControl.autoSPP.controlMs =
-            vkrt->renderControl.autoSPP.controlMs * (1.0f - measurementSmoothing) + measuredMsPerSPP * measurementSmoothing;
+            (vkrt->renderControl.autoSPP.controlMs * (1.0f - measurementSmoothing))
+            + (measuredMsPerSPP * measurementSmoothing);
     }
 
     float desired = (targetMs * budgetScale) / vkrt->renderControl.autoSPP.controlMs;
@@ -125,14 +142,13 @@ void updateAutoSPP(VKRT* vkrt) {
     float deadband = fmaxf(sppf * (delta > 0.0f ? upwardDeadbandScale : downwardDeadbandScale), 1.0f);
     if (fabsf(delta) <= deadband) return;
 
-    float limitedDesired = desired;
-    uint32_t next = spp;
+    uint32_t next = 0u;
     if (delta > 0.0f) {
-        limitedDesired = fminf(desired, ceilf(sppf * maxUpwardScale));
+        float limitedDesired = fminf(desired, ceilf(sppf * maxUpwardScale));
         next = (uint32_t)floorf(limitedDesired);
         if (next <= spp && spp < 2048u) next = spp + 1u;
     } else {
-        limitedDesired = fmaxf(desired, floorf(sppf * maxDownwardScale));
+        float limitedDesired = fmaxf(desired, floorf(sppf * maxDownwardScale));
         next = (uint32_t)ceilf(limitedDesired);
         if (next >= spp && spp > 1u) next = spp - 1u;
     }

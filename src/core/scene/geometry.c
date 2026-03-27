@@ -1,13 +1,20 @@
 #include "geometry.h"
 
-#include "rebuild.h"
-#include "state.h"
-#include "buffer.h"
-#include "descriptor.h"
-#include "debug.h"
-#include "scene.h"
 #include "accel/accel.h"
+#include "buffer.h"
+#include "constants.h"
+#include "debug.h"
+#include "descriptor.h"
+#include "rebuild.h"
+#include "scene.h"
+#include "state.h"
+#include "types.h"
+#include "vkrt_engine_types.h"
+#include "vkrt_internal.h"
+#include "vkrt_types.h"
+#include "vulkan/vulkan_core.h"
 
+#include <mat4.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -150,7 +157,7 @@ static uint64_t hashGeometryBytes(uint64_t hash, const void* bytes, size_t byteC
         hash *= kGeometryFingerprintPrime;
     }
 
-    size_t remaining = byteCount - wordCount * sizeof(uint64_t);
+    size_t remaining = byteCount - (wordCount * sizeof(uint64_t));
     cursor += wordCount * sizeof(uint64_t);
     for (size_t i = 0; i < remaining; i++) {
         hash ^= (uint64_t)cursor[i];
@@ -217,10 +224,10 @@ static void initializeMeshDefaults(Mesh* mesh, size_t vertexCount, size_t indexC
     mesh->info.materialIndex = 0u;
     mesh->info.renderBackfaces = vkrtResolveMeshRenderBackfaces(mesh);
     mesh->info.opacity = 1.0f;
-    vec3 scale = {1.0f, 1.0f, 1.0f};
-    glm_vec3_copy(scale, mesh->info.scale);
-    memset(&mesh->info.rotation, 0, sizeof(vec3));
-    memset(&mesh->info.position, 0, sizeof(vec3));
+    float scale[3] = {1.0f, 1.0f, 1.0f};
+    memcpy(mesh->info.scale, scale, sizeof(scale));
+    memset(&mesh->info.rotation, 0, sizeof(mesh->info.rotation));
+    memset(&mesh->info.position, 0, sizeof(mesh->info.position));
 }
 
 static void releaseNewMeshRange(VKRT* vkrt, uint32_t startIndex, uint32_t endIndex) {
@@ -274,6 +281,229 @@ static void restoreMeshState(
     vkrt->core.meshCount = meshCount;
     vkrt->sceneSettings.selectedMeshIndex = selectedMeshIndex;
     vkrt->sceneSettings.selectionEnabled = selectionEnabled;
+}
+
+static void destroyOwnerAccelerationStructures(
+    VKRT* vkrt,
+    GeometryOwnerState* ownerStates,
+    uint32_t ownerCount
+) {
+    if (!vkrt || !ownerStates) return;
+
+    for (uint32_t i = 0; i < ownerCount; i++) {
+        vkrtDestroyAccelerationStructureResources(vkrt, &ownerStates[i].accelerationStructure);
+    }
+}
+
+static VKRT_Result collectGeometryRequirements(
+    const VKRT* vkrt,
+    uint32_t* outVertexCapacity,
+    uint32_t* outIndexCapacity,
+    uint32_t* outOwnerCount
+) {
+    if (!vkrt || !outVertexCapacity || !outIndexCapacity || !outOwnerCount) {
+        return VKRT_ERROR_INVALID_ARGUMENT;
+    }
+
+    uint64_t requiredVertexCapacity = 0;
+    uint64_t requiredIndexCapacity = 0;
+    uint32_t ownerCount = 0;
+    for (uint32_t i = 0; i < vkrt->core.meshCount; i++) {
+        const Mesh* mesh = &vkrt->core.meshes[i];
+        if (!mesh->ownsGeometry) continue;
+        requiredVertexCapacity += mesh->info.vertexCount;
+        requiredIndexCapacity += mesh->info.indexCount;
+        ownerCount++;
+    }
+
+    if (requiredVertexCapacity > VKRT_INVALID_INDEX || requiredIndexCapacity > VKRT_INVALID_INDEX) {
+        LOG_ERROR("Geometry layout rebuild exceeds 32-bit buffer limits");
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+
+    *outVertexCapacity = (uint32_t)requiredVertexCapacity;
+    *outIndexCapacity = (uint32_t)requiredIndexCapacity;
+    *outOwnerCount = ownerCount;
+    return VKRT_SUCCESS;
+}
+
+static Mesh* allocateMeshBackupCopy(const VKRT* vkrt) {
+    if (!vkrt || vkrt->core.meshCount == 0) return NULL;
+
+    Mesh* backup = (Mesh*)malloc((size_t)vkrt->core.meshCount * sizeof(Mesh));
+    if (!backup) return NULL;
+
+    memcpy(backup, vkrt->core.meshes, (size_t)vkrt->core.meshCount * sizeof(Mesh));
+    return backup;
+}
+
+static VKRT_Result buildRebuiltGeometryOwners(
+    VKRT* vkrt,
+    GeometryBufferState* newState,
+    GeometryOwnerState* ownerStates,
+    uint32_t ownerCount
+) {
+    if (!vkrt || !newState || (ownerCount > 0 && !ownerStates)) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    uint32_t ownerWriteIndex = 0;
+    for (uint32_t i = 0; i < vkrt->core.meshCount; i++) {
+        Mesh* mesh = &vkrt->core.meshes[i];
+        if (!mesh->ownsGeometry) continue;
+        if (ownerWriteIndex >= ownerCount) return VKRT_ERROR_OPERATION_FAILED;
+
+        GeometryOwnerState* ownerState = &ownerStates[ownerWriteIndex];
+        ownerState->vertexBase = newState->vertexData.count;
+        ownerState->indexBase = newState->indexData.count;
+
+        MeshInfo geometryInfo = mesh->info;
+        geometryInfo.vertexBase = ownerState->vertexBase;
+        geometryInfo.indexBase = ownerState->indexBase;
+        VKRT_Result result = createBottomLevelAccelerationStructureForGeometry(
+            vkrt,
+            &geometryInfo,
+            newState->vertexData.deviceAddress,
+            newState->indexData.deviceAddress,
+            &ownerState->accelerationStructure
+        );
+        if (result != VKRT_SUCCESS) {
+            destroyOwnerAccelerationStructures(vkrt, ownerStates, ownerWriteIndex);
+            return VKRT_ERROR_OPERATION_FAILED;
+        }
+
+        newState->vertexData.count += mesh->info.vertexCount;
+        newState->indexData.count += mesh->info.indexCount;
+        ownerWriteIndex++;
+    }
+
+    return VKRT_SUCCESS;
+}
+
+static void applyRebuiltOwnerGeometry(VKRT* vkrt, const GeometryOwnerState* ownerStates, uint32_t ownerCount) {
+    uint32_t ownerReadIndex = 0;
+    for (uint32_t i = 0; i < vkrt->core.meshCount; i++) {
+        Mesh* mesh = &vkrt->core.meshes[i];
+        if (!mesh->ownsGeometry) continue;
+        if (ownerReadIndex >= ownerCount) return;
+
+        const GeometryOwnerState* ownerState = &ownerStates[ownerReadIndex++];
+        mesh->info.vertexBase = ownerState->vertexBase;
+        mesh->info.indexBase = ownerState->indexBase;
+        mesh->geometrySource = i;
+        mesh->geometryUploadPending = 1;
+        mesh->blasBuildPending = 1;
+        mesh->bottomLevelAccelerationStructure = ownerState->accelerationStructure;
+    }
+}
+
+static void syncDuplicateGeometryOwners(VKRT* vkrt) {
+    for (uint32_t i = 0; i < vkrt->core.meshCount; i++) {
+        Mesh* mesh = &vkrt->core.meshes[i];
+        if (mesh->ownsGeometry) continue;
+        mesh->geometrySource = vkrt->core.meshes[mesh->geometrySource].geometrySource;
+        syncDuplicateMeshFromSource(mesh, &vkrt->core.meshes[mesh->geometrySource]);
+    }
+}
+
+static void restorePreviousGeometryState(
+    VKRT* vkrt,
+    const GeometryBufferState* previousState,
+    const Mesh* meshBackup
+) {
+    vkrt->core.vertexData = previousState->vertexData;
+    vkrt->core.indexData = previousState->indexData;
+    vkrt->core.geometryLayout = previousState->layout;
+    if (meshBackup) {
+        memcpy(vkrt->core.meshes, meshBackup, (size_t)vkrt->core.meshCount * sizeof(Mesh));
+    }
+    updateAllDescriptorSets(vkrt);
+}
+
+static int allocateMeshHostGeometry(const VKRT_MeshUpload* upload, Mesh* mesh) {
+    if (!upload || !mesh || upload->vertexCount == 0 || upload->indexCount == 0) return 0;
+
+    size_t vertexBytes = upload->vertexCount * sizeof(Vertex);
+    size_t indexBytes = upload->indexCount * sizeof(uint32_t);
+    mesh->vertices = (Vertex*)malloc(vertexBytes);
+    mesh->indices = (uint32_t*)malloc(indexBytes);
+    if (!mesh->vertices || !mesh->indices) {
+        free(mesh->vertices);
+        free(mesh->indices);
+        mesh->vertices = NULL;
+        mesh->indices = NULL;
+        return 0;
+    }
+
+    memcpy(mesh->vertices, upload->vertices, vertexBytes);
+    memcpy(mesh->indices, upload->indices, indexBytes);
+    return 1;
+}
+
+static int32_t findGeometryPromotionCandidate(const VKRT* vkrt, uint32_t meshIndex) {
+    const Mesh* removed = &vkrt->core.meshes[meshIndex];
+    if (!removed->ownsGeometry) return -1;
+
+    for (uint32_t i = 0; i < vkrt->core.meshCount; i++) {
+        if (i == meshIndex) continue;
+
+        const Mesh* candidate = &vkrt->core.meshes[i];
+        if (candidate->ownsGeometry || candidate->geometrySource != meshIndex) continue;
+        return (int32_t)i;
+    }
+
+    return -1;
+}
+
+static void promoteRemovedGeometryOwner(VKRT* vkrt, int32_t promotedIndex, const Mesh* removed) {
+    if (!vkrt || !removed || promotedIndex < 0) return;
+
+    Mesh* promoted = &vkrt->core.meshes[promotedIndex];
+    promoted->ownsGeometry = 1;
+    promoted->vertices = removed->vertices;
+    promoted->indices = removed->indices;
+    promoted->bottomLevelAccelerationStructure = removed->bottomLevelAccelerationStructure;
+    promoted->geometryUploadPending = removed->geometryUploadPending;
+    promoted->blasBuildPending = removed->blasBuildPending;
+}
+
+static void removeMeshSlot(VKRT* vkrt, uint32_t meshIndex) {
+    uint32_t lastIndex = vkrt->core.meshCount - 1u;
+    if (meshIndex != lastIndex) {
+        memmove(
+            &vkrt->core.meshes[meshIndex],
+            &vkrt->core.meshes[meshIndex + 1u],
+            (size_t)(lastIndex - meshIndex) * sizeof(Mesh)
+        );
+    }
+    vkrt->core.meshCount = lastIndex;
+}
+
+static void remapGeometrySourcesAfterRemoval(VKRT* vkrt, uint32_t meshIndex, int32_t promotedIndex) {
+    for (uint32_t i = 0; i < vkrt->core.meshCount; i++) {
+        Mesh* mesh = &vkrt->core.meshes[i];
+        if (mesh->ownsGeometry) {
+            mesh->geometrySource = i;
+            continue;
+        }
+
+        if (mesh->geometrySource == meshIndex && promotedIndex >= 0) {
+            mesh->geometrySource = (uint32_t)promotedIndex;
+        }
+        if (mesh->geometrySource > meshIndex) {
+            mesh->geometrySource--;
+        }
+
+        syncDuplicateMeshFromSource(mesh, &vkrt->core.meshes[mesh->geometrySource]);
+    }
+}
+
+static void updateSelectionAfterMeshRemoval(VKRT* vkrt, uint32_t meshIndex) {
+    if (vkrt->sceneSettings.selectedMeshIndex == meshIndex) {
+        vkrt->sceneSettings.selectedMeshIndex = VKRT_INVALID_INDEX;
+    } else if (vkrt->sceneSettings.selectedMeshIndex != VKRT_INVALID_INDEX &&
+               vkrt->sceneSettings.selectedMeshIndex > meshIndex) {
+        vkrt->sceneSettings.selectedMeshIndex--;
+    }
+    vkrt->sceneSettings.selectionEnabled = vkrt->sceneSettings.selectedMeshIndex != VKRT_INVALID_INDEX;
 }
 
 static VKRT_Result createGeometryBuffers(
@@ -351,80 +581,44 @@ static VKRT_Result rebuildGeometryLayout(VKRT* vkrt) {
         return VKRT_ERROR_OPERATION_FAILED;
     }
 
-    uint64_t requiredVertexCapacity = 0;
-    uint64_t requiredIndexCapacity = 0;
+    uint32_t requiredVertexCapacity = 0;
+    uint32_t requiredIndexCapacity = 0;
     uint32_t ownerCount = 0;
-    for (uint32_t i = 0; i < vkrt->core.meshCount; i++) {
-        Mesh* mesh = &vkrt->core.meshes[i];
-        if (!mesh->ownsGeometry) continue;
-        requiredVertexCapacity += mesh->info.vertexCount;
-        requiredIndexCapacity += mesh->info.indexCount;
-        ownerCount++;
-    }
-
-    if (requiredVertexCapacity > VKRT_INVALID_INDEX || requiredIndexCapacity > VKRT_INVALID_INDEX) {
-        LOG_ERROR("Geometry layout rebuild exceeds 32-bit buffer limits");
-        return VKRT_ERROR_OPERATION_FAILED;
-    }
-
-    GeometryBufferState newState = {0};
-    VKRT_Result result = createGeometryBuffers(
+    VKRT_Result result = collectGeometryRequirements(
         vkrt,
-        (uint32_t)requiredVertexCapacity,
-        (uint32_t)requiredIndexCapacity,
-        &newState);
+        &requiredVertexCapacity,
+        &requiredIndexCapacity,
+        &ownerCount
+    );
     if (result != VKRT_SUCCESS) return result;
 
-    GeometryOwnerState* ownerStates = ownerCount > 0
-        ? (GeometryOwnerState*)calloc(ownerCount, sizeof(GeometryOwnerState))
-        : NULL;
-    if (ownerCount > 0 && !ownerStates) {
+    GeometryBufferState newState = {0};
+    result = createGeometryBuffers(
+        vkrt,
+        requiredVertexCapacity,
+        requiredIndexCapacity,
+        &newState
+    );
+    if (result != VKRT_SUCCESS) return result;
+
+    GeometryOwnerState* ownerStates = (GeometryOwnerState*)calloc(ownerCount > 0 ? ownerCount : 1u, sizeof(GeometryOwnerState));
+    if (!ownerStates) {
         destroyGeometryBufferState(vkrt, &newState);
         return VKRT_ERROR_OPERATION_FAILED;
     }
 
-    Mesh* meshBackup = vkrt->core.meshCount > 0
-        ? (Mesh*)malloc((size_t)vkrt->core.meshCount * sizeof(Mesh))
-        : NULL;
+    Mesh* meshBackup = allocateMeshBackupCopy(vkrt);
     if (vkrt->core.meshCount > 0 && !meshBackup) {
         free(ownerStates);
         destroyGeometryBufferState(vkrt, &newState);
         return VKRT_ERROR_OPERATION_FAILED;
     }
-    if (meshBackup) {
-        memcpy(meshBackup, vkrt->core.meshes, (size_t)vkrt->core.meshCount * sizeof(Mesh));
-    }
-
-    uint32_t ownerWriteIndex = 0;
-    for (uint32_t i = 0; i < vkrt->core.meshCount; i++) {
-        Mesh* mesh = &vkrt->core.meshes[i];
-        if (!mesh->ownsGeometry) continue;
-
-        GeometryOwnerState* ownerState = &ownerStates[ownerWriteIndex++];
-        ownerState->vertexBase = newState.vertexData.count;
-        ownerState->indexBase = newState.indexData.count;
-
-        MeshInfo geometryInfo = mesh->info;
-        geometryInfo.vertexBase = ownerState->vertexBase;
-        geometryInfo.indexBase = ownerState->indexBase;
-        result = createBottomLevelAccelerationStructureForGeometry(
-            vkrt,
-            &geometryInfo,
-            newState.vertexData.deviceAddress,
-            newState.indexData.deviceAddress,
-            &ownerState->accelerationStructure);
-        if (result != VKRT_SUCCESS) {
-            for (uint32_t ownerIndex = 0; ownerIndex < ownerWriteIndex; ownerIndex++) {
-                vkrtDestroyAccelerationStructureResources(vkrt, &ownerStates[ownerIndex].accelerationStructure);
-            }
-            free(meshBackup);
-            free(ownerStates);
-            destroyGeometryBufferState(vkrt, &newState);
-            return VKRT_ERROR_OPERATION_FAILED;
-        }
-
-        newState.vertexData.count += mesh->info.vertexCount;
-        newState.indexData.count += mesh->info.indexCount;
+    result = buildRebuiltGeometryOwners(vkrt, &newState, ownerStates, ownerCount);
+    if (result != VKRT_SUCCESS) {
+        free(meshBackup);
+        free(ownerStates);
+        destroyGeometryBufferState(vkrt, &newState);
+        return result;
     }
 
     GeometryBufferState previousState = {
@@ -437,39 +631,13 @@ static VKRT_Result rebuildGeometryLayout(VKRT* vkrt) {
     vkrt->core.indexData = newState.indexData;
     vkrt->core.geometryLayout = newState.layout;
 
-    ownerWriteIndex = 0;
-    for (uint32_t i = 0; i < vkrt->core.meshCount; i++) {
-        Mesh* mesh = &vkrt->core.meshes[i];
-        if (!mesh->ownsGeometry) continue;
-
-        GeometryOwnerState* ownerState = &ownerStates[ownerWriteIndex++];
-        mesh->info.vertexBase = ownerState->vertexBase;
-        mesh->info.indexBase = ownerState->indexBase;
-        mesh->geometrySource = i;
-        mesh->geometryUploadPending = 1;
-        mesh->blasBuildPending = 1;
-        mesh->bottomLevelAccelerationStructure = ownerState->accelerationStructure;
-    }
-
-    for (uint32_t i = 0; i < vkrt->core.meshCount; i++) {
-        Mesh* mesh = &vkrt->core.meshes[i];
-        if (mesh->ownsGeometry) continue;
-        mesh->geometrySource = vkrt->core.meshes[mesh->geometrySource].geometrySource;
-        syncDuplicateMeshFromSource(mesh, &vkrt->core.meshes[mesh->geometrySource]);
-    }
+    applyRebuiltOwnerGeometry(vkrt, ownerStates, ownerCount);
+    syncDuplicateGeometryOwners(vkrt);
 
     result = updateAllDescriptorSets(vkrt);
     if (result != VKRT_SUCCESS) {
-        vkrt->core.vertexData = previousState.vertexData;
-        vkrt->core.indexData = previousState.indexData;
-        vkrt->core.geometryLayout = previousState.layout;
-        if (meshBackup) {
-            memcpy(vkrt->core.meshes, meshBackup, (size_t)vkrt->core.meshCount * sizeof(Mesh));
-        }
-        updateAllDescriptorSets(vkrt);
-        for (uint32_t ownerIndex = 0; ownerIndex < ownerCount; ownerIndex++) {
-            vkrtDestroyAccelerationStructureResources(vkrt, &ownerStates[ownerIndex].accelerationStructure);
-        }
+        restorePreviousGeometryState(vkrt, &previousState, meshBackup);
+        destroyOwnerAccelerationStructures(vkrt, ownerStates, ownerCount);
         free(meshBackup);
         free(ownerStates);
         destroyGeometryBufferState(vkrt, &newState);
@@ -554,7 +722,6 @@ VKRT_Result vkrtSceneUploadMeshData(
 ) {
     if (!vkrt || !vertices || !indices || vertexCount == 0 || indexCount == 0) return VKRT_ERROR_INVALID_ARGUMENT;
 
-    uint64_t startTime = getMicroseconds();
     VKRT_MeshUpload upload = {
         .vertices = vertices,
         .vertexCount = vertexCount,
@@ -566,15 +733,6 @@ VKRT_Result vkrtSceneUploadMeshData(
         return result;
     }
 
-    const Mesh* mesh = &vkrt->core.meshes[vkrt->core.meshCount - 1u];
-    LOG_TRACE(
-        "Mesh upload complete. Total Meshes: %u, Vertices: %zu, Indices: %zu, Reused Geometry: %s, in %.3f ms",
-        vkrt->core.meshCount,
-        vertexCount,
-        indexCount,
-        mesh->ownsGeometry ? "No" : "Yes",
-        (double)(getMicroseconds() - startTime) / 1e3
-    );
     return VKRT_SUCCESS;
 }
 
@@ -633,19 +791,12 @@ VKRT_Result vkrtSceneUploadMeshDataBatch(VKRT* vkrt, const VKRT_MeshUpload* uplo
         );
 
         if (duplicateIndex == VKRT_INVALID_INDEX) {
-            mesh->vertices = (Vertex*)malloc(upload->vertexCount * sizeof(Vertex));
-            mesh->indices = (uint32_t*)malloc(upload->indexCount * sizeof(uint32_t));
-            if (!mesh->vertices || !mesh->indices) {
-                free(mesh->vertices);
-                free(mesh->indices);
+            if (!allocateMeshHostGeometry(upload, mesh)) {
                 releaseNewMeshRange(vkrt, previousCount, meshIndex);
                 shrinkMeshList(vkrt, previousCount);
                 LOG_ERROR("Failed to allocate mesh host data");
                 return VKRT_ERROR_OPERATION_FAILED;
             }
-
-            memcpy(mesh->vertices, upload->vertices, upload->vertexCount * sizeof(Vertex));
-            memcpy(mesh->indices, upload->indices, upload->indexCount * sizeof(uint32_t));
             mesh->geometryFingerprint = fingerprint;
             mesh->geometrySource = meshIndex;
             mesh->ownsGeometry = 1;
@@ -671,8 +822,6 @@ VKRT_Result vkrtSceneUploadMeshDataBatch(VKRT* vkrt, const VKRT_MeshUpload* uplo
 VKRT_Result vkrtSceneRemoveMesh(VKRT* vkrt, uint32_t meshIndex) {
     if (!vkrt || meshIndex >= vkrt->core.meshCount) return VKRT_ERROR_INVALID_ARGUMENT;
 
-    uint64_t startTime = getMicroseconds();
-    uint32_t meshCount = vkrt->core.meshCount;
     Mesh* meshBackup = NULL;
     uint32_t meshCountBackup = 0;
     uint32_t selectedMeshIndexBackup = VKRT_INVALID_INDEX;
@@ -682,62 +831,12 @@ VKRT_Result vkrtSceneRemoveMesh(VKRT* vkrt, uint32_t meshIndex) {
         return VKRT_ERROR_OPERATION_FAILED;
     }
 
-    uint32_t lastIndex = meshCount - 1u;
     Mesh removed = vkrt->core.meshes[meshIndex];
-    int32_t promotedIndex = -1;
-
-    if (removed.ownsGeometry) {
-        for (uint32_t i = 0; i < meshCount; i++) {
-            if (i == meshIndex) continue;
-            Mesh* candidate = &vkrt->core.meshes[i];
-            if (candidate->ownsGeometry || candidate->geometrySource != meshIndex) continue;
-            promotedIndex = (int32_t)i;
-            break;
-        }
-    }
-
-    if (promotedIndex >= 0) {
-        Mesh* promoted = &vkrt->core.meshes[promotedIndex];
-        promoted->ownsGeometry = 1;
-        promoted->vertices = removed.vertices;
-        promoted->indices = removed.indices;
-        promoted->bottomLevelAccelerationStructure = removed.bottomLevelAccelerationStructure;
-        promoted->geometryUploadPending = removed.geometryUploadPending;
-        promoted->blasBuildPending = removed.blasBuildPending;
-    }
-
-    if (meshIndex != lastIndex) {
-        memmove(
-            &vkrt->core.meshes[meshIndex],
-            &vkrt->core.meshes[meshIndex + 1u],
-            (size_t)(lastIndex - meshIndex) * sizeof(Mesh));
-    }
-
-    vkrt->core.meshCount = lastIndex;
-
-    for (uint32_t i = 0; i < lastIndex; i++) {
-        Mesh* mesh = &vkrt->core.meshes[i];
-        if (mesh->ownsGeometry) {
-            mesh->geometrySource = i;
-            continue;
-        }
-
-        if (mesh->geometrySource == meshIndex && promotedIndex >= 0) {
-            mesh->geometrySource = (uint32_t)promotedIndex;
-        }
-        if (mesh->geometrySource > meshIndex) {
-            mesh->geometrySource--;
-        }
-
-        syncDuplicateMeshFromSource(mesh, &vkrt->core.meshes[mesh->geometrySource]);
-    }
-
-    if (vkrt->sceneSettings.selectedMeshIndex == meshIndex) {
-        vkrt->sceneSettings.selectedMeshIndex = VKRT_INVALID_INDEX;
-    } else if (vkrt->sceneSettings.selectedMeshIndex != VKRT_INVALID_INDEX && vkrt->sceneSettings.selectedMeshIndex > meshIndex) {
-        vkrt->sceneSettings.selectedMeshIndex--;
-    }
-    vkrt->sceneSettings.selectionEnabled = vkrt->sceneSettings.selectedMeshIndex != VKRT_INVALID_INDEX;
+    int32_t promotedIndex = findGeometryPromotionCandidate(vkrt, meshIndex);
+    promoteRemovedGeometryOwner(vkrt, promotedIndex, &removed);
+    removeMeshSlot(vkrt, meshIndex);
+    remapGeometrySourcesAfterRemoval(vkrt, meshIndex, promotedIndex);
+    updateSelectionAfterMeshRemoval(vkrt, meshIndex);
 
     if (rebuildGeometryLayout(vkrt) != VKRT_SUCCESS) {
         restoreMeshState(vkrt, meshBackup, meshCountBackup, selectedMeshIndexBackup, selectionEnabledBackup);
@@ -752,15 +851,8 @@ VKRT_Result vkrtSceneRemoveMesh(VKRT* vkrt, uint32_t meshIndex) {
         free(removed.indices);
     }
 
-    shrinkMeshList(vkrt, lastIndex);
+    shrinkMeshList(vkrt, vkrt->core.meshCount);
     free(meshBackup);
     markSceneMutation(vkrt);
-
-    LOG_TRACE(
-        "Mesh removal complete. Removed Index: %u, Remaining Meshes: %u, in %.3f ms",
-        meshIndex,
-        vkrt->core.meshCount,
-        (double)(getMicroseconds() - startTime) / 1e3
-    );
     return VKRT_SUCCESS;
 }

@@ -1,41 +1,96 @@
 #include "io.h"
+
 #include "debug.h"
+#include "platform.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 
-#if defined(_WIN32)
+#ifdef _WIN32
 #include <windows.h>
 #include <direct.h>
+#elif defined(__APPLE__)
+#include <mach-o/dyld.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #else
+#include <sys/stat.h>
 #include <unistd.h>
 #endif
 
 enum {
-    kExeRelativePathCapacity = 4096,
+    K_EXE_RELATIVE_PATH_CAPACITY = 4096,
 };
 
-static int get_exe_dir(char* out, size_t sz) {
-#if defined(_WIN32)
-    DWORD len = GetModuleFileNameA(NULL, out, (DWORD)sz);
-    if (len == 0 || len == sz)
+static char* pathFindLastSeparator(char* path);
+static int copyPathString(char* out, size_t outSize, const char* value);
+static int joinPath(char* out, size_t outSize, const char* base, const char* value);
+
+static int getExeDir(char* out, size_t outSize) {
+#ifdef _WIN32
+    DWORD len = GetModuleFileNameA(NULL, out, (DWORD)outSize);
+    if (len == 0 || len == outSize)
         return -1;
 
     while (len && out[len] != '\\')
         --len;
     out[len] = '\0';
     return 0;
-#else
-    ssize_t len = readlink("/proc/self/exe", out, sz - 1);
-    if (len <= 0)
+#elif defined(__APPLE__)
+    uint32_t pathSize = (uint32_t)outSize;
+    if (_NSGetExecutablePath(out, &pathSize) != 0) {
         return -1;
-    out[len] = '\0';
-    while (len && out[len] != '/')
+    }
+
+    out[outSize - 1u] = '\0';
+    size_t len = strlen(out);
+    while (len && out[len] != '/') {
         --len;
+    }
+    out[len] = '\0';
+    return 0;
+#else
+    long pathLength = (long)readlink("/proc/self/exe", out, outSize - 1);
+    size_t len = 0u;
+    if (pathLength <= 0) {
+        return -1;
+    }
+    len = (size_t)pathLength;
+    out[len] = '\0';
+    while (len && out[len] != '/') {
+        --len;
+    }
     out[len] = '\0';
     return 0;
 #endif
+}
+
+static int resolveExistingPreferredParentPath(const char* preferredPath, char* outPath, size_t outPathSize) {
+    char candidate[VKRT_PATH_MAX];
+
+    if (!preferredPath || !preferredPath[0]) return -1;
+    if (copyPathString(candidate, sizeof(candidate), preferredPath) != 0) return -1;
+
+    while (candidate[0]) {
+        char* separator = NULL;
+
+        pathTrimTrailingSeparators(candidate);
+        if (resolveExistingPath(candidate, outPath, outPathSize) == 0) {
+            return 0;
+        }
+
+        separator = pathFindLastSeparator(candidate);
+        if (!separator) break;
+        if (separator == candidate) {
+            candidate[1] = '\0';
+        } else {
+            *separator = '\0';
+        }
+    }
+
+    return -1;
 }
 
 char* stringDuplicate(const char* value) {
@@ -79,9 +134,9 @@ const char* pathBasename(const char* path) {
     return slash > backslash ? slash + 1 : backslash + 1;
 }
 
-static FILE* fopen_exe_relative(const char* relpath, const char* mode) {
-    char buf[kExeRelativePathCapacity];
-    if (get_exe_dir(buf, sizeof buf) < 0) {
+static FILE* fopenExeRelative(const char* relpath, const char* mode) {
+    char buf[K_EXE_RELATIVE_PATH_CAPACITY];
+    if (getExeDir(buf, sizeof buf) < 0) {
         LOG_ERROR("Failed to determine executable path");
         return NULL;
     }
@@ -89,7 +144,7 @@ static FILE* fopen_exe_relative(const char* relpath, const char* mode) {
     size_t dirlen = strlen(buf);
     snprintf(buf + dirlen, sizeof buf - dirlen, "/%s", relpath);
 
-#if defined(_WIN32)
+#ifdef _WIN32
     FILE* file = NULL;
     return fopen_s(&file, buf, mode) == 0 ? file : NULL;
 #else
@@ -99,11 +154,12 @@ static FILE* fopen_exe_relative(const char* relpath, const char* mode) {
 
 static int pathExists(const char* path) {
     if (!path || !path[0]) return 0;
-#if defined(_WIN32)
+#ifdef _WIN32
     DWORD attributes = GetFileAttributesA(path);
     return attributes != INVALID_FILE_ATTRIBUTES;
 #else
-    return access(path, F_OK) == 0;
+    struct stat status = {0};
+    return stat(path, &status) == 0;
 #endif
 }
 
@@ -116,15 +172,16 @@ static int copyPathString(char* out, size_t outSize, const char* value) {
 static int canonicalizePath(const char* path, char* outPath, size_t outPathSize) {
     if (!path || !path[0] || !outPath || outPathSize == 0) return -1;
 
-#if defined(_WIN32)
+#ifdef _WIN32
     return _fullpath(outPath, path, outPathSize) ? 0 : -1;
 #else
-    if (outPathSize < VKRT_PATH_MAX) {
-        char resolved[VKRT_PATH_MAX];
-        if (!realpath(path, resolved)) return -1;
-        return copyPathString(outPath, outPathSize, resolved);
+    if (path[0] == '/') {
+        return copyPathString(outPath, outPathSize, path);
     }
-    return realpath(path, outPath) ? 0 : -1;
+
+    char currentDirectory[VKRT_PATH_MAX];
+    if (!getcwd(currentDirectory, sizeof(currentDirectory))) return -1;
+    return joinPath(outPath, outPathSize, currentDirectory, path);
 #endif
 }
 
@@ -153,7 +210,7 @@ int resolveExistingPath(const char* path, char* outPath, size_t outPathSize) {
     }
 
     char executableDir[VKRT_PATH_MAX];
-    if (get_exe_dir(executableDir, sizeof(executableDir)) != 0) {
+    if (getExeDir(executableDir, sizeof(executableDir)) != 0) {
         return -1;
     }
 
@@ -164,7 +221,7 @@ int resolveExistingPath(const char* path, char* outPath, size_t outPathSize) {
     }
 
     char* lastSeparator = strrchr(executableDir, '/');
-#if defined(_WIN32)
+#ifdef _WIN32
     char* lastBackslash = strrchr(executableDir, '\\');
     if (!lastSeparator || (lastBackslash && lastBackslash > lastSeparator)) {
         lastSeparator = lastBackslash;
@@ -186,24 +243,8 @@ int resolveExistingPath(const char* path, char* outPath, size_t outPathSize) {
 int resolveExistingParentPath(const char* preferredPath, const char* fallbackPath, char* outPath, size_t outPathSize) {
     if (!outPath || outPathSize == 0) return -1;
 
-    if (preferredPath && preferredPath[0]) {
-        char candidate[VKRT_PATH_MAX];
-        if (copyPathString(candidate, sizeof(candidate), preferredPath) == 0) {
-            while (candidate[0]) {
-                pathTrimTrailingSeparators(candidate);
-                if (resolveExistingPath(candidate, outPath, outPathSize) == 0) {
-                    return 0;
-                }
-
-                char* separator = pathFindLastSeparator(candidate);
-                if (!separator) break;
-                if (separator == candidate) {
-                    candidate[1] = '\0';
-                } else {
-                    *separator = '\0';
-                }
-            }
-        }
+    if (resolveExistingPreferredParentPath(preferredPath, outPath, outPathSize) == 0) {
+        return 0;
     }
 
     if (fallbackPath && fallbackPath[0] &&
@@ -220,31 +261,31 @@ const char* readFile(const char* filename, size_t* fileSize) {
         return NULL;
     }
 
-    FILE* file = fopen_exe_relative(filename, "rb");
+    FILE* file = fopenExeRelative(filename, "rb");
     if (!file) {
         LOG_ERROR("Failed to open file: %s", filename);
         return NULL;
     }
-    fseek(file, 0, SEEK_END);
+    (void)fseek(file, 0, SEEK_END);
     long fileLength = ftell(file);
     if (fileLength < 0) {
         LOG_ERROR("Failed to determine file size: %s", filename);
-        fclose(file);
+        (void)fclose(file);
         return NULL;
     }
     *fileSize = (size_t)fileLength;
-    fseek(file, 0, SEEK_SET);
+    (void)fseek(file, 0, SEEK_SET);
 
     size_t allocSize = *fileSize > 0 ? *fileSize : 1;
     char* buffer = (char*)malloc(allocSize);
     if (!buffer) {
         LOG_ERROR("Failed to allocate file buffer for %s", filename);
-        fclose(file);
+        (void)fclose(file);
         return NULL;
     }
 
     size_t bytesRead = fread(buffer, 1, *fileSize, file);
-    fclose(file);
+    (void)fclose(file);
     if (bytesRead != *fileSize) {
         free(buffer);
         LOG_ERROR("Failed to read complete file: %s", filename);

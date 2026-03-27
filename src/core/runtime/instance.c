@@ -1,7 +1,11 @@
 #include "instance.h"
-#include "validation.h"
-#include "debug.h"
 
+#include "debug.h"
+#include "validation.h"
+#include "vkrt_types.h"
+#include "vulkan/vulkan_core.h"
+
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -64,7 +68,7 @@ VKRT_Result createInstance(VKRT* vkrt, VkBool32 requirePresentation) {
         instanceCreateInfo.ppEnabledLayerNames = validationLayers;
 
         populateDebugMessengerCreateInfo(&debugCreateInfo);
-        instanceCreateInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*)&debugCreateInfo;
+        instanceCreateInfo.pNext = (&debugCreateInfo);
     } else {
         instanceCreateInfo.enabledLayerCount = 0;
         instanceCreateInfo.pNext = 0;
@@ -72,11 +76,11 @@ VKRT_Result createInstance(VKRT* vkrt, VkBool32 requirePresentation) {
 
     if (vkCreateInstance(&instanceCreateInfo, 0, &vkrt->core.instance) != VK_SUCCESS) {
         LOG_ERROR("Failed to create instance");
-        free(extensions);
+        free((void*)extensions);
         return VKRT_ERROR_INITIALIZATION_FAILED;
     }
 
-    free(extensions);
+    free((void*)extensions);
     vkrt->core.apiVersion = requestedApiVersion;
     return VKRT_SUCCESS;
 }

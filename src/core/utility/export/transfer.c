@@ -1,10 +1,12 @@
-#include "internal.h"
-
 #include "buffer.h"
 #include "command/pool.h"
 #include "command/record.h"
 #include "debug.h"
+#include "internal.h"
+#include "vkrt_types.h"
+#include "vulkan/vulkan_core.h"
 
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 

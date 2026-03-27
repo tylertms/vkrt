@@ -1,27 +1,28 @@
-#include "common.h"
-#include "vkrt.h"
-
 #include "IconsFontAwesome6.h"
+#include "common.h"
+#include "sections.h"
+#include "vkrt.h"
+#include "vkrt_types.h"
 
-#include <inttypes.h>
+#include <dcimgui.h>
 #include <stdio.h>
 
 enum {
-    kOverviewTimeTextCapacity = 32,
-    kOverviewCountTextCapacity = 32,
-    kOverviewDriverTextCapacity = 64,
+    K_OVERVIEW_TIME_TEXT_CAPACITY = 32,
+    K_OVERVIEW_COUNT_TEXT_CAPACITY = 32,
+    K_OVERVIEW_DRIVER_TEXT_CAPACITY = 64,
 };
 
 static const ImVec2 kOverviewTableCellPadding = {4.0f, 2.0f};
 static const float kOverviewFramePaddingY = 2.0f;
 
-static bool beginCompactTable(const char* id) {
-    if (!id) return false;
+static bool beginCompactTable(const char* tableId) {
+    if (!tableId) return false;
 
     ImVec2 framePadding = ImGui_GetStyle()->FramePadding;
     framePadding.y = kOverviewFramePaddingY;
     ImGui_PushStyleVarImVec2(ImGuiStyleVar_FramePadding, framePadding);
-    if (!inspectorBeginKeyValueTableWithCellPadding(id, kOverviewTableCellPadding)) {
+    if (!inspectorBeginKeyValueTableWithCellPadding(tableId, kOverviewTableCellPadding)) {
         ImGui_PopStyleVar();
         return false;
     }
@@ -47,13 +48,13 @@ static void drawStatusSummary(const VKRT_RenderStatusSnapshot* status, const VKR
         }
     }
 
-    char renderTimeText[kOverviewTimeTextCapacity];
-    char accumulationText[kOverviewTimeTextCapacity];
-    char fpsText[kOverviewCountTextCapacity];
-    char sppText[kOverviewCountTextCapacity];
+    char renderTimeText[K_OVERVIEW_TIME_TEXT_CAPACITY];
+    char accumulationText[K_OVERVIEW_TIME_TEXT_CAPACITY];
+    char fpsText[K_OVERVIEW_COUNT_TEXT_CAPACITY];
+    char sppText[K_OVERVIEW_COUNT_TEXT_CAPACITY];
 
     snprintf(renderTimeText, sizeof(renderTimeText), "%.1f ms", status->displayRenderTimeMs);
-    snprintf(accumulationText, sizeof(accumulationText), "%" PRIu64 " samples", status->totalSamples);
+    snprintf(accumulationText, sizeof(accumulationText), "%llu samples", (unsigned long long)status->totalSamples);
     snprintf(fpsText, sizeof(fpsText), "%u", status->framesPerSecond);
     snprintf(sppText, sizeof(sppText), "%u", settings->samplesPerPixel);
 
@@ -70,8 +71,8 @@ static void drawStatusSummary(const VKRT_RenderStatusSnapshot* status, const VKR
 static void drawSystemSummary(const VKRT_RuntimeSnapshot* runtime, const VKRT_SystemInfo* system) {
     if (!runtime || !system) return;
 
-    char driverText[kOverviewDriverTextCapacity];
-    char viewportText[kOverviewTimeTextCapacity];
+    char driverText[K_OVERVIEW_DRIVER_TEXT_CAPACITY];
+    char viewportText[K_OVERVIEW_TIME_TEXT_CAPACITY];
     formatDriverVersionText(system->vendorID, system->driverVersion, driverText, sizeof(driverText));
     snprintf(viewportText, sizeof(viewportText), "%ux%u", runtime->displayViewportRect[2], runtime->displayViewportRect[3]);
 

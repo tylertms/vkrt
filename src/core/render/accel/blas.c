@@ -1,9 +1,14 @@
 #include "accel.h"
-
 #include "buffer.h"
-#include "rebuild.h"
 #include "device.h"
+#include "rebuild.h"
+#include "types.h"
+#include "vkrt_engine_types.h"
+#include "vkrt_internal.h"
+#include "vkrt_types.h"
+#include "vulkan/vulkan_core.h"
 
+#include <stdint.h>
 #include <stdlib.h>
 
 static void buildBLASGeometryInfo(

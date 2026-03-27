@@ -3,10 +3,13 @@
 #include "buffer.h"
 #include "command/pool.h"
 #include "command/record.h"
+#include "debug.h"
 #include "device.h"
 #include "scene.h"
-#include "debug.h"
+#include "vkrt_types.h"
+#include "vulkan/vulkan_core.h"
 
+#include <stdint.h>
 #include <string.h>
 
 static VKRT_Result createImageWithMemory(
@@ -25,18 +28,19 @@ static VKRT_Result createImageWithMemory(
     *outView = VK_NULL_HANDLE;
     *outMemory = VK_NULL_HANDLE;
 
-    VkImageCreateInfo imageCreateInfo = {0};
-    imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
-    imageCreateInfo.extent = (VkExtent3D){extent.width, extent.height, 1u};
-    imageCreateInfo.mipLevels = 1;
-    imageCreateInfo.arrayLayers = 1;
-    imageCreateInfo.format = format;
-    imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-    imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    imageCreateInfo.usage = usage;
-    imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-    imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    VkImageCreateInfo imageCreateInfo = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType = VK_IMAGE_TYPE_2D,
+        .extent = (VkExtent3D){extent.width, extent.height, 1u},
+        .mipLevels = 1,
+        .arrayLayers = 1,
+        .format = format,
+        .tiling = VK_IMAGE_TILING_OPTIMAL,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .usage = usage,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+    };
 
     if (vkCreateImage(vkrt->core.device, &imageCreateInfo, NULL, outImage) != VK_SUCCESS) {
         return VKRT_ERROR_OPERATION_FAILED;
@@ -115,25 +119,54 @@ VKRT_Result vkrtCreateDeviceImage(
     return createImageWithMemory(vkrt, extent, format, usage, outImage, outView, outMemory);
 }
 
+static VKRT_Result createTextureUploadStagingBuffer(
+    VKRT* vkrt,
+    const TextureImageUpload* upload,
+    VkBuffer* outBuffer,
+    VkDeviceMemory* outMemory
+) {
+    VKRT_Result result = createBuffer(
+        vkrt,
+        upload->byteSize,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        outBuffer,
+        outMemory
+    );
+    if (result != VKRT_SUCCESS) {
+        return result;
+    }
+
+    void* mapped = NULL;
+    if (vkMapMemory(vkrt->core.device, *outMemory, 0, upload->byteSize, 0, &mapped) != VK_SUCCESS || !mapped) {
+        vkDestroyBuffer(vkrt->core.device, *outBuffer, NULL);
+        vkFreeMemory(vkrt->core.device, *outMemory, NULL);
+        *outBuffer = VK_NULL_HANDLE;
+        *outMemory = VK_NULL_HANDLE;
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+
+    memcpy(mapped, upload->pixels, (size_t)upload->byteSize);
+    vkUnmapMemory(vkrt->core.device, *outMemory);
+    return VKRT_SUCCESS;
+}
+
 VKRT_Result vkrtCreateSampledTextureImageFromData(
     VKRT* vkrt,
-    const void* pixels,
-    uint32_t width,
-    uint32_t height,
-    VkFormat format,
-    VkDeviceSize byteSize,
+    const TextureImageUpload* upload,
     VkImage* outImage,
     VkImageView* outView,
     VkDeviceMemory* outMemory
 ) {
-    if (!vkrt || !pixels || width == 0u || height == 0u || !outImage || !outView || !outMemory || byteSize == 0u) {
+    if (!vkrt || !upload || !upload->pixels || upload->width == 0u || upload->height == 0u ||
+        !outImage || !outView || !outMemory || upload->byteSize == 0u) {
         return VKRT_ERROR_INVALID_ARGUMENT;
     }
 
     VKRT_Result result = createImageWithMemory(
         vkrt,
-        (VkExtent2D){width, height},
-        format,
+        (VkExtent2D){upload->width, upload->height},
+        upload->format,
         VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
         outImage,
         outView,
@@ -145,28 +178,11 @@ VKRT_Result vkrtCreateSampledTextureImageFromData(
 
     VkBuffer stagingBuffer = VK_NULL_HANDLE;
     VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
-    result = createBuffer(
-        vkrt,
-        byteSize,
-        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        &stagingBuffer,
-        &stagingMemory
-    );
+    result = createTextureUploadStagingBuffer(vkrt, upload, &stagingBuffer, &stagingMemory);
     if (result != VKRT_SUCCESS) {
         vkrtDestroyImageResources(vkrt, outImage, outView, outMemory);
         return result;
     }
-
-    void* mapped = NULL;
-    if (vkMapMemory(vkrt->core.device, stagingMemory, 0, byteSize, 0, &mapped) != VK_SUCCESS || !mapped) {
-        vkDestroyBuffer(vkrt->core.device, stagingBuffer, NULL);
-        vkFreeMemory(vkrt->core.device, stagingMemory, NULL);
-        vkrtDestroyImageResources(vkrt, outImage, outView, outMemory);
-        return VKRT_ERROR_OPERATION_FAILED;
-    }
-    memcpy(mapped, pixels, (size_t)byteSize);
-    vkUnmapMemory(vkrt->core.device, stagingMemory);
 
     VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
     result = beginSingleTimeCommands(vkrt, &commandBuffer);
@@ -184,7 +200,7 @@ VKRT_Result vkrtCreateSampledTextureImageFromData(
     copyRegion.imageSubresource.mipLevel = 0;
     copyRegion.imageSubresource.baseArrayLayer = 0;
     copyRegion.imageSubresource.layerCount = 1;
-    copyRegion.imageExtent = (VkExtent3D){width, height, 1u};
+    copyRegion.imageExtent = (VkExtent3D){upload->width, upload->height, 1u};
 
     vkCmdCopyBufferToImage(
         commandBuffer,

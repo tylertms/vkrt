@@ -41,6 +41,15 @@ typedef struct SessionSceneObject {
     char name[VKRT_NAME_LEN];
 } SessionSceneObject;
 
+typedef struct SessionSceneObjectCreateInfo {
+    const char* name;
+    uint32_t parentIndex;
+    uint32_t meshIndex;
+    const vec3* localPosition;
+    const vec3* localRotation;
+    const vec3* localScale;
+} SessionSceneObjectCreateInfo;
+
 typedef struct SessionMeshRecord {
     uint32_t importBatchIndex;
     uint32_t importLocalIndex;
@@ -162,16 +171,7 @@ uint32_t sessionGetSceneObjectCount(const Session* session);
 const SessionSceneObject* sessionGetSceneObject(const Session* session, uint32_t objectIndex);
 uint32_t sessionGetSelectedSceneObject(const Session* session);
 void sessionSetSelectedSceneObject(Session* session, uint32_t objectIndex);
-int sessionAddSceneObject(
-    Session* session,
-    const char* name,
-    uint32_t parentIndex,
-    uint32_t meshIndex,
-    vec3 localPosition,
-    vec3 localRotation,
-    vec3 localScale,
-    uint32_t* outObjectIndex
-);
+int sessionAddSceneObject(Session* session, const SessionSceneObjectCreateInfo* createInfo, uint32_t* outObjectIndex);
 void sessionTruncateSceneObjects(Session* session, uint32_t objectCount);
 uint32_t sessionFindSceneObjectForMesh(const Session* session, uint32_t meshIndex);
 void sessionSelectSceneObjectForMesh(Session* session, uint32_t meshIndex);

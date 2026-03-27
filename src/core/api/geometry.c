@@ -1,5 +1,12 @@
 #include "geometry.h"
+
+#include "constants.h"
 #include "state.h"
+#include "types.h"
+#include "vkrt_types.h"
+
+#include <stddef.h>
+#include <stdint.h>
 
 static int meshUploadValid(const VKRT_MeshUpload* upload) {
     return upload &&

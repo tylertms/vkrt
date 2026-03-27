@@ -3,12 +3,18 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#define VKRT_LOG_LINE(stream, level, ...)    \
-    do {                                      \
-        fprintf((stream), level ": ");        \
-        fprintf((stream), __VA_ARGS__);       \
-        fputc('\n', (stream));                \
-    } while (0)
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#if defined(__GNUC__) || defined(__clang__)
+void vkrtLogLine(FILE* stream, const char* level, const char* format, ...)
+    __attribute__((format(printf, 3, 4)));
+#else
+void vkrtLogLine(FILE* stream, const char* level, const char* format, ...);
+#endif
+
+#define VKRT_LOG_LINE(stream, level, ...) vkrtLogLine((stream), (level), __VA_ARGS__)
 
 #ifndef VKRT_TRACE_ENABLED
 #define VKRT_TRACE_ENABLED 0
@@ -27,3 +33,7 @@ void vkrtSetInfoLoggingEnabled(int enabled);
 #define LOG_ERROR(...) VKRT_LOG_LINE(stderr, "[ERROR]", __VA_ARGS__)
 
 uint64_t getMicroseconds(void);
+
+#ifdef __cplusplus
+}
+#endif

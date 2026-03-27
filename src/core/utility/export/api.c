@@ -1,10 +1,16 @@
-#include "export.h"
-
+#include "constants.h"
 #include "debug.h"
 #include "denoise.h"
+#include "export.h"
 #include "internal.h"
+#include "platform.h"
 #include "state.h"
+#include "vkrt.h"
+#include "vkrt_engine_types.h"
+#include "vkrt_types.h"
+#include "vulkan/vulkan_core.h"
 
+#include <stdint.h>
 #include <stdlib.h>
 
 static void readbackCurrentRenderFeatureBuffers(VKRT* vkrt, RenderImageExportJob* job, const char* label) {

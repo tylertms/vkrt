@@ -20,6 +20,14 @@ typedef struct GPUImageState {
     VkDeviceMemory selectionMaskImageMemory;
 } GPUImageState;
 
+typedef struct TextureImageUpload {
+    const void* pixels;
+    uint32_t width;
+    uint32_t height;
+    VkFormat format;
+    VkDeviceSize byteSize;
+} TextureImageUpload;
+
 void vkrtDestroyImageResources(VKRT* vkrt, VkImage* image, VkImageView* view, VkDeviceMemory* memory);
 VKRT_Result vkrtCreateDeviceImage(
     VKRT* vkrt,
@@ -32,11 +40,7 @@ VKRT_Result vkrtCreateDeviceImage(
 );
 VKRT_Result vkrtCreateSampledTextureImageFromData(
     VKRT* vkrt,
-    const void* pixelData,
-    uint32_t width,
-    uint32_t height,
-    VkFormat format,
-    VkDeviceSize byteSize,
+    const TextureImageUpload* upload,
     VkImage* outImage,
     VkImageView* outView,
     VkDeviceMemory* outMemory

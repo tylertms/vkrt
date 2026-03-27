@@ -1,6 +1,14 @@
 #include "scene.h"
+#include "vkrt_engine_types.h"
+#include "vulkan/vulkan_core.h"
 
+#include "../../../external/cglm/include/types.h"
+#include <affine-pre.h>
+#include <affine.h>
+#include <mat4.h>
 #include <math.h>
+#include <util.h>
+#include <vec3.h>
 
 static const float kTransformEpsilon = 1e-6f;
 static const vec3 kImportedMeshBasisRotationDegrees = {90.0f, 0.0f, 0.0f};
@@ -56,9 +64,13 @@ static void extractRotationAndScale(mat4 worldTransform, mat4 outRotationMatrix,
 static void extractEulerZYXRadians(mat4 rotationMatrix, vec3 outRotationRadians) {
     if (!outRotationRadians) return;
 
-    float sy = -rotationMatrix[0][2];
-    sy = sy < -1.0f ? -1.0f : (sy > 1.0f ? 1.0f : sy);
-    outRotationRadians[1] = asinf(sy);
+    float sineY = -rotationMatrix[0][2];
+    if (sineY < -1.0f) {
+        sineY = -1.0f;
+    } else if (sineY > 1.0f) {
+        sineY = 1.0f;
+    }
+    outRotationRadians[1] = asinf(sineY);
 
     if (fabsf(cosf(outRotationRadians[1])) > kTransformEpsilon) {
         outRotationRadians[0] = atan2f(rotationMatrix[1][2], rotationMatrix[2][2]);
@@ -103,7 +115,11 @@ void decomposeImportedMeshNodeTransform(mat4 worldTransform, vec3 outPosition, v
     decomposeImportedMeshTransform(engineTransform, outPosition, outRotation, outScale);
 }
 
-static void assignSignedScaleCandidate(mat4 normalizedRotationMatrix, vec3 absoluteScale, int flippedAxis, mat4 outRotationMatrix, vec3 outScale) {
+static void assignSignedScaleCandidate(mat4 normalizedRotationMatrix,
+                                       const vec3 absoluteScale,
+                                       int flippedAxis,
+                                       mat4 outRotationMatrix,
+                                       vec3 outScale) {
     if (!normalizedRotationMatrix || !absoluteScale || !outRotationMatrix || !outScale) return;
 
     glm_mat4_copy(normalizedRotationMatrix, outRotationMatrix);
@@ -192,9 +208,9 @@ VkTransformMatrixKHR getMeshWorldTransform(const Mesh* mesh) {
     VkTransformMatrixKHR transform = {0};
     if (!mesh) return transform;
 
-    for (int r = 0; r < 3; ++r) {
-        for (int c = 0; c < 4; ++c) {
-            transform.matrix[r][c] = mesh->worldTransform[c][r];
+    for (int rowIndex = 0; rowIndex < 3; ++rowIndex) {
+        for (int columnIndex = 0; columnIndex < 4; ++columnIndex) {
+            transform.matrix[rowIndex][columnIndex] = mesh->worldTransform[columnIndex][rowIndex];
         }
     }
 

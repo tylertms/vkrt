@@ -1,9 +1,17 @@
+#include "debug.h"
 #include "platform.h"
 
+#include <pthread.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <stdlib.h>
+#ifdef __APPLE__
+#include <mach/mach_time.h>
+#else
+#include <time.h>
+#endif
 
-#if defined(_WIN32)
+#ifdef _WIN32
 #include <process.h>
 
 static int g_vkrtInfoLoggingEnabled = 1;
@@ -135,16 +143,14 @@ int vkrtThreadJoin(VKRT_Thread thread, int* result) {
 
 #else
 
-#include <time.h>
-
-static int g_vkrtInfoLoggingEnabled = 1;
+static int gVkrtInfoLoggingEnabled = 1;
 
 int vkrtInfoLoggingEnabled(void) {
-    return g_vkrtInfoLoggingEnabled;
+    return gVkrtInfoLoggingEnabled;
 }
 
 void vkrtSetInfoLoggingEnabled(int enabled) {
-    g_vkrtInfoLoggingEnabled = enabled ? 1 : 0;
+    gVkrtInfoLoggingEnabled = enabled ? 1 : 0;
 }
 
 typedef struct ThreadStartContext {
@@ -153,17 +159,34 @@ typedef struct ThreadStartContext {
 } ThreadStartContext;
 
 uint64_t getMicroseconds(void) {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t)ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
+#ifdef __APPLE__
+    static mach_timebase_info_data_t timebase = {0};
+    if (timebase.denom == 0u) {
+        (void)mach_timebase_info(&timebase);
+    }
+
+    uint64_t ticks = mach_absolute_time();
+    uint64_t nanoseconds = ticks;
+    if (timebase.denom != 0u) {
+        nanoseconds = (ticks * timebase.numer) / timebase.denom;
+    }
+    return nanoseconds / 1000u;
+#else
+    struct timespec timeSpec;
+    clock_gettime(CLOCK_MONOTONIC, &timeSpec);
+    return ((uint64_t)timeSpec.tv_sec * 1000000) + (timeSpec.tv_nsec / 1000);
+#endif
 }
 
 static void* vkrtThreadTrampoline(void* rawContext) {
     ThreadStartContext* context = (ThreadStartContext*)rawContext;
     VKRT_ThreadFunc function = context->function;
     void* argument = context->argument;
+    int* result = (int*)malloc(sizeof(*result));
     free(context);
-    return (void*)(intptr_t)function(argument);
+    if (!result) return NULL;
+    *result = function(argument);
+    return result;
 }
 
 int vkrtMutexInit(VKRT_Mutex* mutex, int type) {
@@ -223,8 +246,14 @@ int vkrtThreadCreate(VKRT_Thread* thread, VKRT_ThreadFunc function, void* argume
 
 int vkrtThreadJoin(VKRT_Thread thread, int* result) {
     void* threadResult = NULL;
+    int* threadResultPtr = NULL;
+
     if (pthread_join(thread, &threadResult) != 0) return VKRT_THREAD_ERROR;
-    if (result) *result = (int)(intptr_t)threadResult;
+    threadResultPtr = (int*)threadResult;
+    if (result) {
+        *result = threadResultPtr ? *threadResultPtr : 0;
+    }
+    free(threadResultPtr);
     return VKRT_THREAD_SUCCESS;
 }
 

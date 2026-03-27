@@ -1,9 +1,13 @@
 #include "panel.h"
 
+#include "IconsFontAwesome6.h"
 #include "common.h"
 #include "sections.h"
+#include "session.h"
+#include "vkrt_types.h"
 
-#include "IconsFontAwesome6.h"
+#include <dcimgui.h>
+#include <stdint.h>
 #ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable : 5287)
@@ -66,9 +70,11 @@ static bool beginInspectorDockWindow(const char* title) {
 static bool drawInspectorTabButton(const char* label, bool selected, ImVec2 size) {
     if (!label) return false;
 
-    const ImVec4* baseColor = ImGui_GetStyleColorVec4(selected ? ImGuiCol_TabActive : ImGuiCol_Tab);
+    const ImVec4* baseColor =
+        ImGui_GetStyleColorVec4((int)selected ? ImGuiCol_TabActive : ImGuiCol_Tab);
     const ImVec4* hoveredColor = ImGui_GetStyleColorVec4(ImGuiCol_TabHovered);
-    const ImVec4* activeColor = ImGui_GetStyleColorVec4(selected ? ImGuiCol_TabActive : ImGuiCol_TabHovered);
+    const ImVec4* activeColor =
+        ImGui_GetStyleColorVec4((int)selected ? ImGuiCol_TabActive : ImGuiCol_TabHovered);
 
     ImGui_PushStyleColorImVec4(ImGuiCol_Button, *baseColor);
     ImGui_PushStyleColorImVec4(ImGuiCol_ButtonHovered, *hoveredColor);
@@ -100,7 +106,7 @@ static void drawPropertiesPanelSelector(Session* session) {
     float spacing = style->ItemSpacing.x;
     float availableWidth = ImGui_GetContentRegionAvail().x;
     uint32_t tabCount = queryInspectorPropertiesTabCount();
-    float buttonWidth = (availableWidth - spacing * (float)(tabCount - 1u)) / (float)tabCount;
+    float buttonWidth = (availableWidth - (spacing * (float)(tabCount - 1u))) / (float)tabCount;
     if (buttonWidth < 1.0f) buttonWidth = 1.0f;
 
     for (uint32_t i = 0; i < tabCount; i++) {

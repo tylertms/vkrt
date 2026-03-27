@@ -1,8 +1,14 @@
 #include "buffer.h"
-#include "command/pool.h"
-#include "device.h"
-#include "debug.h"
 
+#include "command/pool.h"
+#include "debug.h"
+#include "device.h"
+#include "vkrt_engine_types.h"
+#include "vkrt_internal.h"
+#include "vkrt_types.h"
+#include "vulkan/vulkan_core.h"
+
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

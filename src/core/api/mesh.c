@@ -1,13 +1,22 @@
-#include "state.h"
-#include "scene.h"
-#include "textures.h"
-#include "vkrt_internal.h"
+#include "constants.h"
 #include "numeric.h"
+#include "scene.h"
+#include "state.h"
+#include "textures.h"
+#include "types.h"
+#include "vkrt_engine_types.h"
+#include "vkrt_internal.h"
+#include "vkrt_types.h"
 
+#include "../../../external/cglm/include/types.h"
+#include <mat3.h>
+#include <mat4.h>
 #include <math.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <vec3.h>
 
 static float* accessMaterialTextureRotation(Material* material, uint32_t textureSlot) {
     if (!material) return NULL;
@@ -33,60 +42,73 @@ static void assignMaterialTextureTexcoordSet(uint32_t* packedSets, uint32_t text
     *packedSets = (*packedSets & ~mask) | ((texcoordSet & 0xffu) << shift);
 }
 
-static void sanitizeMaterialTextureSlot(
-    const VKRT* vkrt,
-    uint32_t textureSlot,
-    uint32_t* textureIndex,
-    uint32_t* textureWrap,
-    uint32_t* textureTexcoordSets,
-    float4 textureTransform,
-    float* textureRotation,
-    uint32_t expectedColorSpace
-) {
-    if (!textureIndex || !textureWrap || !textureTexcoordSets || !textureTransform || !textureRotation) return;
+typedef struct MaterialTextureSlotState {
+    uint32_t* textureIndex;
+    uint32_t* textureWrap;
+    uint32_t* textureTexcoordSets;
+    float* textureTransform;
+    float* textureRotation;
+    uint32_t expectedColorSpace;
+} MaterialTextureSlotState;
 
-    if (*textureIndex == VKRT_INVALID_INDEX) {
-        *textureWrap = 0u;
-        assignMaterialTextureTexcoordSet(textureTexcoordSets, textureSlot, 0u);
-        setIdentityMaterialTextureTransform(textureTransform);
-        *textureRotation = 0.0f;
+static void resetMaterialTextureSlot(uint32_t textureSlot, MaterialTextureSlotState state) {
+    if (!state.textureIndex || !state.textureWrap || !state.textureTexcoordSets || !state.textureTransform ||
+        !state.textureRotation) {
         return;
     }
 
-    const SceneTexture* texture = vkrtGetSceneTexture(vkrt, *textureIndex);
+    *state.textureWrap = 0u;
+    assignMaterialTextureTexcoordSet(state.textureTexcoordSets, textureSlot, 0u);
+    setIdentityMaterialTextureTransform(state.textureTransform);
+    *state.textureRotation = 0.0f;
+}
+
+static void sanitizeMaterialTextureSlot(const VKRT* vkrt, uint32_t textureSlot, MaterialTextureSlotState state) {
+    if (!state.textureIndex || !state.textureWrap || !state.textureTexcoordSets || !state.textureTransform ||
+        !state.textureRotation) {
+        return;
+    }
+
+    if (*state.textureIndex == VKRT_INVALID_INDEX) {
+        resetMaterialTextureSlot(textureSlot, state);
+        return;
+    }
+
+    const SceneTexture* texture = vkrtGetSceneTexture(vkrt, *state.textureIndex);
     int valid = 0;
     if (texture) {
-        valid = expectedColorSpace == VKRT_TEXTURE_COLOR_SPACE_SRGB
+        valid = state.expectedColorSpace == VKRT_TEXTURE_COLOR_SPACE_SRGB
             ? (texture->colorSpace == VKRT_TEXTURE_COLOR_SPACE_SRGB ||
                 texture->colorSpace == VKRT_TEXTURE_COLOR_SPACE_LINEAR)
             : texture->colorSpace == VKRT_TEXTURE_COLOR_SPACE_LINEAR;
     }
     if (!valid) {
-        *textureIndex = VKRT_INVALID_INDEX;
-        *textureWrap = 0u;
-        assignMaterialTextureTexcoordSet(textureTexcoordSets, textureSlot, 0u);
-        setIdentityMaterialTextureTransform(textureTransform);
-        *textureRotation = 0.0f;
+        *state.textureIndex = VKRT_INVALID_INDEX;
+        resetMaterialTextureSlot(textureSlot, state);
         return;
     }
 
-    if (*textureWrap == 0u) {
-        *textureWrap = VKRT_TEXTURE_WRAP_DEFAULT;
+    if (*state.textureWrap == 0u) {
+        *state.textureWrap = VKRT_TEXTURE_WRAP_DEFAULT;
     }
-    if (!isfinite(*textureRotation)) {
-        *textureRotation = 0.0f;
+    if (!isfinite(*state.textureRotation)) {
+        *state.textureRotation = 0.0f;
     }
-    if (queryMaterialTextureTexcoordSet(*textureTexcoordSets, textureSlot) > 1u) {
-        assignMaterialTextureTexcoordSet(textureTexcoordSets, textureSlot, 0u);
+    if (queryMaterialTextureTexcoordSet(*state.textureTexcoordSets, textureSlot) > 1u) {
+        assignMaterialTextureTexcoordSet(state.textureTexcoordSets, textureSlot, 0u);
     }
 }
 
 static Material sanitizeMaterial(const VKRT* vkrt, Material material) {
-    for (int c = 0; c < 3; c++) {
-        material.baseColor[c] = vkrtFiniteClampf(material.baseColor[c], 0.0f, 0.0f, 1.0f);
-        material.emissionColor[c] = vkrtFiniteClampf(material.emissionColor[c], 0.0f, 0.0f, INFINITY);
-        material.sheenTintWeight[c] = vkrtFiniteClampf(material.sheenTintWeight[c], 0.0f, 0.0f, 1.0f);
-        material.attenuationColor[c] = vkrtFiniteClampf(material.attenuationColor[c], 1.0f, 0.0f, 1.0f);
+    for (int componentIndex = 0; componentIndex < 3; componentIndex++) {
+        material.baseColor[componentIndex] =
+            vkrtFiniteClampf(material.baseColor[componentIndex], 0.0f, 0.0f, 1.0f);
+        material.emissionColor[componentIndex] =
+            vkrtFiniteClampf(material.emissionColor[componentIndex], 0.0f, 0.0f, INFINITY);
+        material.sheenTintWeight[componentIndex] =
+            vkrtFiniteClampf(material.sheenTintWeight[componentIndex], 0.0f, 0.0f, 1.0f);
+        material.attenuationColor[componentIndex] =
+            vkrtFiniteClampf(material.attenuationColor[componentIndex], 1.0f, 0.0f, 1.0f);
     }
 
     material.metallic = vkrtFiniteClampf(material.metallic, 0.0f, 0.0f, 1.0f);
@@ -112,49 +134,57 @@ static Material sanitizeMaterial(const VKRT* vkrt, Material material) {
         material.alphaMode != VKRT_MATERIAL_ALPHA_MODE_BLEND) {
         material.alphaMode = VKRT_MATERIAL_ALPHA_MODE_OPAQUE;
     }
-    for (int c = 0; c < 3; c++) {
-        material.eta[c] = vkrtFiniteClampf(material.eta[c], 0.0f, 0.0f, INFINITY);
-        material.k[c] = vkrtFiniteClampf(material.k[c], 0.0f, 0.0f, INFINITY);
+    for (int componentIndex = 0; componentIndex < 3; componentIndex++) {
+        material.eta[componentIndex] = vkrtFiniteClampf(material.eta[componentIndex], 0.0f, 0.0f, INFINITY);
+        material.k[componentIndex] = vkrtFiniteClampf(material.k[componentIndex], 0.0f, 0.0f, INFINITY);
     }
     sanitizeMaterialTextureSlot(
         vkrt,
         VKRT_MATERIAL_TEXTURE_SLOT_BASE_COLOR,
-        &material.baseColorTextureIndex,
-        &material.baseColorTextureWrap,
-        &material.textureTexcoordSets,
-        material.baseColorTextureTransform,
-        accessMaterialTextureRotation(&material, VKRT_MATERIAL_TEXTURE_SLOT_BASE_COLOR),
-        VKRT_TEXTURE_COLOR_SPACE_SRGB
+        (MaterialTextureSlotState){
+            .textureIndex = &material.baseColorTextureIndex,
+            .textureWrap = &material.baseColorTextureWrap,
+            .textureTexcoordSets = &material.textureTexcoordSets,
+            .textureTransform = material.baseColorTextureTransform,
+            .textureRotation = accessMaterialTextureRotation(&material, VKRT_MATERIAL_TEXTURE_SLOT_BASE_COLOR),
+            .expectedColorSpace = VKRT_TEXTURE_COLOR_SPACE_SRGB,
+        }
     );
     sanitizeMaterialTextureSlot(
         vkrt,
         VKRT_MATERIAL_TEXTURE_SLOT_METALLIC_ROUGHNESS,
-        &material.metallicRoughnessTextureIndex,
-        &material.metallicRoughnessTextureWrap,
-        &material.textureTexcoordSets,
-        material.metallicRoughnessTextureTransform,
-        accessMaterialTextureRotation(&material, VKRT_MATERIAL_TEXTURE_SLOT_METALLIC_ROUGHNESS),
-        VKRT_TEXTURE_COLOR_SPACE_LINEAR
+        (MaterialTextureSlotState){
+            .textureIndex = &material.metallicRoughnessTextureIndex,
+            .textureWrap = &material.metallicRoughnessTextureWrap,
+            .textureTexcoordSets = &material.textureTexcoordSets,
+            .textureTransform = material.metallicRoughnessTextureTransform,
+            .textureRotation = accessMaterialTextureRotation(&material, VKRT_MATERIAL_TEXTURE_SLOT_METALLIC_ROUGHNESS),
+            .expectedColorSpace = VKRT_TEXTURE_COLOR_SPACE_LINEAR,
+        }
     );
     sanitizeMaterialTextureSlot(
         vkrt,
         VKRT_MATERIAL_TEXTURE_SLOT_NORMAL,
-        &material.normalTextureIndex,
-        &material.normalTextureWrap,
-        &material.textureTexcoordSets,
-        material.normalTextureTransform,
-        accessMaterialTextureRotation(&material, VKRT_MATERIAL_TEXTURE_SLOT_NORMAL),
-        VKRT_TEXTURE_COLOR_SPACE_LINEAR
+        (MaterialTextureSlotState){
+            .textureIndex = &material.normalTextureIndex,
+            .textureWrap = &material.normalTextureWrap,
+            .textureTexcoordSets = &material.textureTexcoordSets,
+            .textureTransform = material.normalTextureTransform,
+            .textureRotation = accessMaterialTextureRotation(&material, VKRT_MATERIAL_TEXTURE_SLOT_NORMAL),
+            .expectedColorSpace = VKRT_TEXTURE_COLOR_SPACE_LINEAR,
+        }
     );
     sanitizeMaterialTextureSlot(
         vkrt,
         VKRT_MATERIAL_TEXTURE_SLOT_EMISSIVE,
-        &material.emissiveTextureIndex,
-        &material.emissiveTextureWrap,
-        &material.textureTexcoordSets,
-        material.emissiveTextureTransform,
-        accessMaterialTextureRotation(&material, VKRT_MATERIAL_TEXTURE_SLOT_EMISSIVE),
-        VKRT_TEXTURE_COLOR_SPACE_SRGB
+        (MaterialTextureSlotState){
+            .textureIndex = &material.emissiveTextureIndex,
+            .textureWrap = &material.emissiveTextureWrap,
+            .textureTexcoordSets = &material.textureTexcoordSets,
+            .textureTransform = material.emissiveTextureTransform,
+            .textureRotation = accessMaterialTextureRotation(&material, VKRT_MATERIAL_TEXTURE_SLOT_EMISSIVE),
+            .expectedColorSpace = VKRT_TEXTURE_COLOR_SPACE_SRGB,
+        }
     );
 
     return material;
@@ -244,9 +274,16 @@ static int meshTransformMatrixValid(mat4 transform) {
 
 static int updateMeshTransformMatrix(mat4 destination, mat4 source) {
     if (!destination || !source) return 0;
-    if (memcmp(destination, source, sizeof(mat4)) == 0) return 0;
-    memcpy(destination, source, sizeof(mat4));
-    return 1;
+
+    for (int column = 0; column < 4; column++) {
+        for (int row = 0; row < 4; row++) {
+            if (destination[column][row] != source[column][row]) {
+                memcpy(destination, source, sizeof(mat4));
+                return 1;
+            }
+        }
+    }
+    return 0;
 }
 
 static int meshOpacityValid(float opacity) {
@@ -337,7 +374,7 @@ static uint32_t collectMaterialTextureIndices(const Material* material, uint32_t
         material->emissiveTextureIndex,
     };
 
-    for (uint32_t i = 0; i < VKRT_ARRAY_COUNT(candidates); i++) {
+    for (uint32_t i = 0; i < 4u; i++) {
         uint32_t textureIndex = candidates[i];
         if (textureIndex == VKRT_INVALID_INDEX) continue;
 
@@ -386,7 +423,7 @@ VKRT_Result vkrtReleaseTextureIfUnused(VKRT* vkrt, uint32_t textureIndex) {
     if (!vkrt || textureIndex == VKRT_INVALID_INDEX) return VKRT_SUCCESS;
 
     uint32_t textureIndices[] = {textureIndex};
-    return releaseTextureIndicesIfUnused(vkrt, textureIndices, VKRT_ARRAY_COUNT(textureIndices));
+    return releaseTextureIndicesIfUnused(vkrt, textureIndices, 1u);
 }
 
 static VKRT_Result releaseTexturesReferencedByMaterialIfUnused(VKRT* vkrt, const Material* material) {
@@ -506,12 +543,21 @@ VKRT_Result VKRT_setMeshTransform(VKRT* vkrt, uint32_t meshIndex, vec3 position,
     vec3 resolvedPosition = {0.0f, 0.0f, 0.0f};
     vec3 resolvedRotation = {0.0f, 0.0f, 0.0f};
     vec3 resolvedScale = {1.0f, 1.0f, 1.0f};
-    if (position) glm_vec3_copy(position, resolvedPosition);
-    else glm_vec3_copy(mesh->info.position, resolvedPosition);
-    if (rotation) glm_vec3_copy(rotation, resolvedRotation);
-    else glm_vec3_copy(mesh->info.rotation, resolvedRotation);
-    if (scale) glm_vec3_copy(scale, resolvedScale);
-    else glm_vec3_copy(mesh->info.scale, resolvedScale);
+    if (position) {
+        glm_vec3_copy(position, resolvedPosition);
+    } else {
+        glm_vec3_copy(mesh->info.position, resolvedPosition);
+    }
+    if (rotation) {
+        glm_vec3_copy(rotation, resolvedRotation);
+    } else {
+        glm_vec3_copy(mesh->info.rotation, resolvedRotation);
+    }
+    if (scale) {
+        glm_vec3_copy(scale, resolvedScale);
+    } else {
+        glm_vec3_copy(mesh->info.scale, resolvedScale);
+    }
 
     mat4 worldTransform = GLM_MAT4_IDENTITY_INIT;
     buildMeshTransformMatrix(resolvedPosition, resolvedRotation, resolvedScale, worldTransform);

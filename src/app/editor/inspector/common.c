@@ -1,8 +1,10 @@
 #include "common.h"
 
-#include <inttypes.h>
+#include "vulkan/vulkan_core.h"
+
+#include <dcimgui.h>
+#include <stdint.h>
 #include <stdio.h>
-#include <vulkan/vulkan.h>
 
 const float kInspectorControlSpacing = 4.0f;
 const float kInspectorSectionIndent = 12.0f;
@@ -29,12 +31,12 @@ void inspectorEndCollapsingHeaderSection(void) {
     ImGui_Dummy((ImVec2){0.0f, kCollapsingHeaderBottomSpacing});
 }
 
-bool inspectorBeginKeyValueTableWithCellPadding(const char* id, ImVec2 cellPadding) {
-    if (!id) return false;
+bool inspectorBeginKeyValueTableWithCellPadding(const char* tableId, ImVec2 cellPadding) {
+    if (!tableId) return false;
 
     ImGui_PushStyleVarImVec2(ImGuiStyleVar_CellPadding, cellPadding);
     ImGuiTableFlags flags = ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings;
-    if (!ImGui_BeginTableEx(id, 2, flags, (ImVec2){-1.0f, 0.0f}, 0.0f)) {
+    if (!ImGui_BeginTableEx(tableId, 2, flags, (ImVec2){-1.0f, 0.0f}, 0.0f)) {
         ImGui_PopStyleVar();
         return false;
     }
@@ -51,8 +53,8 @@ bool inspectorBeginKeyValueTableWithCellPadding(const char* id, ImVec2 cellPaddi
     return true;
 }
 
-bool inspectorBeginKeyValueTable(const char* id) {
-    return inspectorBeginKeyValueTableWithCellPadding(id, kInspectorTableCellPadding);
+bool inspectorBeginKeyValueTable(const char* tableId) {
+    return inspectorBeginKeyValueTableWithCellPadding(tableId, kInspectorTableCellPadding);
 }
 
 void inspectorKeyValueRow(const char* label, const char* value) {
@@ -112,15 +114,15 @@ void formatByteSize(uint64_t bytes, char* out, size_t outSize) {
     if (!out || outSize == 0) return;
 
     static const char* symbols[] = {"B", "KB", "MB", "GB"};
-    double _bytes = (double)bytes;
+    double scaledBytes = (double)bytes;
     int index;
 
     for (index = 0; index < 3; index++) {
-        if (_bytes < 1024.0) break;
-        _bytes /= 1024.0;
+        if (scaledBytes < 1024.0) break;
+        scaledBytes /= 1024.0;
     }
 
-    snprintf(out, outSize, "%.*f %s", index > 0, _bytes, symbols[index]);
+    snprintf(out, outSize, "%.*f %s", index > 0, scaledBytes, symbols[index]);
 }
 
 static void drawPaddedTooltip(const char* text) {
@@ -145,6 +147,32 @@ uint32_t clampRenderDimension(int value) {
     return (uint32_t)value;
 }
 
+static void formatUnsignedLongLong(char* out, size_t outSize, unsigned long long value, const char* unit) {
+    snprintf(out, outSize, "%llu%s", value, unit);
+}
+
+static void formatTimeUnitValue(
+    uint64_t totalMs,
+    int startUnit,
+    int* outUnitIndex,
+    uint64_t* outUnitValue,
+    uint64_t* outRemainder
+) {
+    static const uint64_t unitMs[] = {86400000ull, 3600000ull, 60000ull, 1000ull, 1ull};
+
+    *outUnitIndex = -1;
+    *outUnitValue = 0u;
+    *outRemainder = totalMs;
+    for (int unitIndex = startUnit; unitIndex < 5; unitIndex++) {
+        uint64_t value = (*outRemainder) / unitMs[unitIndex];
+        if (value == 0u) continue;
+        *outUnitIndex = unitIndex;
+        *outUnitValue = value;
+        *outRemainder %= unitMs[unitIndex];
+        return;
+    }
+}
+
 void formatTime(float seconds, char* out, size_t outSize) {
     if (!out || outSize == 0) return;
     if (seconds <= 0.0f) {
@@ -152,26 +180,18 @@ void formatTime(float seconds, char* out, size_t outSize) {
         return;
     }
 
-    uint64_t totalMs = (uint64_t)(seconds * 1000.0f + 0.5f);
+    uint64_t totalMs = (uint64_t)((seconds * 1000.0f) + 0.5f);
     if (totalMs == 0) {
         snprintf(out, outSize, "0ms");
         return;
     }
 
-    static const uint64_t unitMs[] = {86400000ull, 3600000ull, 60000ull, 1000ull, 1ull};
     static const char* unitLabels[] = {"d", "h", "m", "s", "ms"};
 
     int firstUnit = -1;
     uint64_t firstValue = 0;
     uint64_t remainder = totalMs;
-    for (int i = 0; i < 5; i++) {
-        uint64_t value = remainder / unitMs[i];
-        if (value == 0) continue;
-        firstUnit = i;
-        firstValue = value;
-        remainder %= unitMs[i];
-        break;
-    }
+    formatTimeUnitValue(totalMs, 0, &firstUnit, &firstValue, &remainder);
 
     if (firstUnit < 0) {
         snprintf(out, outSize, "0ms");
@@ -180,27 +200,18 @@ void formatTime(float seconds, char* out, size_t outSize) {
 
     int secondUnit = -1;
     uint64_t secondValue = 0;
-    for (int i = firstUnit + 1; i < 5; i++) {
-        uint64_t value = remainder / unitMs[i];
-        if (value == 0) continue;
-        secondUnit = i;
-        secondValue = value;
-        break;
-    }
+    uint64_t ignoredRemainder = 0u;
+    formatTimeUnitValue(remainder, firstUnit + 1, &secondUnit, &secondValue, &ignoredRemainder);
 
     if (secondUnit >= 0) {
         snprintf(out, outSize,
-            "%" PRIu64 "%s %" PRIu64 "%s",
-            firstValue,
+            "%llu%s %llu%s",
+            (unsigned long long)firstValue,
             unitLabels[firstUnit],
-            secondValue,
+            (unsigned long long)secondValue,
             unitLabels[secondUnit]
         );
     } else {
-        snprintf(out, outSize,
-            "%" PRIu64 "%s",
-            firstValue,
-            unitLabels[firstUnit]
-        );
+        formatUnsignedLongLong(out, outSize, (unsigned long long)firstValue, unitLabels[firstUnit]);
     }
 }

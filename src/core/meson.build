@@ -38,6 +38,7 @@ vkrt_sources = files(
   'api/texture.c',
   'utility/exr.cpp',
   'utility/denoise.c',
+  'utility/debug.c',
   'utility/export/api.c',
   'utility/export/image.c',
   'utility/export/transfer.c',

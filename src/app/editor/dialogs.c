@@ -5,6 +5,7 @@
 #define GLFW_EXPOSE_NATIVE_WAYLAND
 #endif
 
+#include "editor.h"
 #include "editor_internal.h"
 #include "session.h"
 

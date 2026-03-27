@@ -1,20 +1,31 @@
 #include "loader.h"
 
+#include "constants.h"
 #include "debug.h"
 #include "image.h"
 #include "io.h"
 #include "platform.h"
-#define CGLTF_IMPLEMENTATION
+#include "vkrt.h"
+#include "vkrt_types.h"
+
+#include <stdint.h>
+#include <mat4.h>
+#include <types.h>
+#include <vec3.h>
 #include "cgltf.h"
 
-#include <math.h>
 #include <limits.h>
+#include <math.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-enum { kGeneratedMeshNameCapacity = 256 };
-static const size_t kMeshImportMaxPrimitiveBytes = 1024u * 1024u * 1024u;
+enum {
+    K_GENERATED_MESH_NAME_CAPACITY = 256
+};
+
+static const size_t kMeshImportMaxPrimitiveBytes = (size_t)1024u * 1024u * 1024u;
 static const uint32_t kMeshImportTextureDecodeThreadCount = 6u;
 static const float kAlphaBlendMaskCutoff = 1.0f / 255.0f;
 
@@ -46,16 +57,39 @@ typedef struct TextureDecodeThreadContext {
     int failed;
 } TextureDecodeThreadContext;
 
+typedef struct MaterialTextureCache {
+    const cgltf_image** images;
+    uint32_t* colorSpaces;
+    uint32_t* textureIndices;
+    uint32_t count;
+} MaterialTextureCache;
+
+typedef struct PrimitiveBuildInputs {
+    const cgltf_accessor* positionAccessor;
+    const cgltf_accessor* normalAccessor;
+    const cgltf_accessor* tangentAccessor;
+    const cgltf_accessor* colorAccessor;
+    const cgltf_accessor* texcoordAccessor0;
+    const cgltf_accessor* texcoordAccessor1;
+    uint32_t tangentTexcoordSet;
+    int useImportedTangents;
+} PrimitiveBuildInputs;
+
 static int textureViewUsesUnsupportedTransform(const cgltf_texture_view* textureView);
 static Material buildMaterial(
     const cgltf_material* sourceMaterial,
     const char* resolvedPath,
     MeshImportData* importData,
-    const cgltf_image** cachedImages,
-    uint32_t* cachedColorSpaces,
-    uint32_t* cachedTextureIndices,
-    uint32_t* inoutCachedTextureCount
+    MaterialTextureCache* textureCache
 );
+static void alignPrimitiveWindingToNormals(Vertex* vertices, size_t vertexCount, uint32_t* indices, size_t indexCount);
+
+static float max3(float firstValue, float secondValue, float thirdValue) {
+    float value = firstValue;
+    if (secondValue > value) value = secondValue;
+    if (thirdValue > value) value = thirdValue;
+    return value;
+}
 
 static void releaseImportEntry(MeshImportEntry* entry) {
     if (!entry) return;
@@ -349,10 +383,10 @@ static int copyParentDirectory(const char* path, char outDirectory[VKRT_PATH_MAX
     return 1;
 }
 
-static uint32_t packTextureWrapModes(cgltf_wrap_mode wrapS, cgltf_wrap_mode wrapT) {
-    uint32_t s = wrapS != 0 ? (uint32_t)wrapS : VKRT_TEXTURE_WRAP_REPEAT;
-    uint32_t t = wrapT != 0 ? (uint32_t)wrapT : VKRT_TEXTURE_WRAP_REPEAT;
-    return s | (t << 16u);
+static uint32_t packTextureWrapModes(cgltf_wrap_mode wrapModeS, cgltf_wrap_mode wrapModeT) {
+    uint32_t wrapS = wrapModeS != 0 ? (uint32_t)wrapModeS : VKRT_TEXTURE_WRAP_REPEAT;
+    uint32_t wrapT = wrapModeT != 0 ? (uint32_t)wrapModeT : VKRT_TEXTURE_WRAP_REPEAT;
+    return wrapS | (wrapT << 16u);
 }
 
 static uint32_t materialTextureTexcoordSetShift(uint32_t textureSlot) {
@@ -522,6 +556,53 @@ static void releaseTextureImportEntries(TextureImportEntry* textures, uint32_t t
     }
 }
 
+static void freeTextureDecodeBuffers(
+    TextureDecodeThreadContext* contexts,
+    VKRT_Thread* threads,
+    TextureImportEntry* decodedTextures
+) {
+    free((void*)contexts);
+    free((void*)threads);
+    free((void*)decodedTextures);
+}
+
+static void storeDecodedTextureReferences(
+    const ImportedTextureReference* references,
+    uint32_t referenceCount,
+    const TextureImportEntry* decodedTextures,
+    MeshImportData* importData,
+    const cgltf_image** outCachedImages,
+    uint32_t* outCachedColorSpaces,
+    uint32_t* outCachedTextureIndices
+) {
+    if (!references || !decodedTextures || !importData || !outCachedImages || !outCachedColorSpaces || !outCachedTextureIndices) {
+        return;
+    }
+
+    uint32_t firstTextureIndex = importData->textureCount - referenceCount;
+    for (uint32_t referenceIndex = 0u; referenceIndex < referenceCount; referenceIndex++) {
+        outCachedImages[referenceIndex] = references[referenceIndex].image;
+        outCachedColorSpaces[referenceIndex] = references[referenceIndex].colorSpace;
+        outCachedTextureIndices[referenceIndex] = firstTextureIndex + referenceIndex;
+    }
+}
+
+static int appendDecodedTextureEntries(
+    MeshImportData* importData,
+    TextureImportEntry* decodedTextures,
+    uint32_t referenceCount
+) {
+    if (!importData || !decodedTextures) return 0;
+
+    for (uint32_t referenceIndex = 0u; referenceIndex < referenceCount; referenceIndex++) {
+        if (appendImportTexture(importData, &decodedTextures[referenceIndex]) != 0) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
 static int decodeImportedTextureReferences(
     MeshImportData* importData,
     const char* resolvedPath,
@@ -545,9 +626,7 @@ static int decodeImportedTextureReferences(
     TextureDecodeThreadContext* contexts = (TextureDecodeThreadContext*)calloc(threadCount, sizeof(*contexts));
     VKRT_Thread* threads = (VKRT_Thread*)calloc(threadCount, sizeof(*threads));
     if (!contexts || !threads) {
-        free(contexts);
-        free(threads);
-        free(decodedTextures);
+        freeTextureDecodeBuffers(contexts, threads, decodedTextures);
         return 0;
     }
 
@@ -584,27 +663,65 @@ static int decodeImportedTextureReferences(
         }
     }
 
+    if (!failed && !appendDecodedTextureEntries(importData, decodedTextures, referenceCount)) {
+        failed = 1;
+    }
     if (!failed) {
-        for (uint32_t i = 0; i < referenceCount; i++) {
-            if (appendImportTexture(importData, &decodedTextures[i]) != 0) {
-                failed = 1;
-                break;
-            }
-
-            outCachedImages[i] = references[i].image;
-            outCachedColorSpaces[i] = references[i].colorSpace;
-            outCachedTextureIndices[i] = i;
-        }
+        storeDecodedTextureReferences(
+            references,
+            referenceCount,
+            decodedTextures,
+            importData,
+            outCachedImages,
+            outCachedColorSpaces,
+            outCachedTextureIndices
+        );
     }
 
     if (failed) {
         releaseTextureImportEntries(decodedTextures, referenceCount);
     }
 
-    free(contexts);
-    free(threads);
-    free(decodedTextures);
+    freeTextureDecodeBuffers(contexts, threads, decodedTextures);
     return failed ? 0 : 1;
+}
+
+static int findCachedImportedTextureIndex(
+    const cgltf_image* image,
+    uint32_t colorSpace,
+    const MaterialTextureCache* textureCache,
+    uint32_t* outTextureIndex
+) {
+    if (outTextureIndex) *outTextureIndex = VKRT_INVALID_INDEX;
+    if (!image || !textureCache || !textureCache->images || !textureCache->colorSpaces || !textureCache->textureIndices) {
+        return 0;
+    }
+
+    for (uint32_t cachedIndex = 0u; cachedIndex < textureCache->count; cachedIndex++) {
+        if (textureCache->images[cachedIndex] == image && textureCache->colorSpaces[cachedIndex] == colorSpace) {
+            if (outTextureIndex) *outTextureIndex = textureCache->textureIndices[cachedIndex];
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static int cacheImportedTextureIndex(
+    const cgltf_image* image,
+    uint32_t colorSpace,
+    uint32_t textureIndex,
+    MaterialTextureCache* textureCache
+) {
+    if (!image || !textureCache || !textureCache->images || !textureCache->colorSpaces || !textureCache->textureIndices) {
+        return 0;
+    }
+
+    textureCache->images[textureCache->count] = image;
+    textureCache->textureIndices[textureCache->count] = textureIndex;
+    textureCache->colorSpaces[textureCache->count] = colorSpace;
+    textureCache->count++;
+    return 1;
 }
 
 static int registerImportedTexture(
@@ -612,15 +729,12 @@ static int registerImportedTexture(
     const char* resolvedPath,
     const cgltf_texture_view* textureView,
     uint32_t colorSpace,
-    const cgltf_image** cachedImages,
-    uint32_t* cachedColorSpaces,
-    uint32_t* cachedTextureIndices,
-    uint32_t* inoutCachedTextureCount,
+    MaterialTextureCache* textureCache,
     uint32_t* outTextureIndex
 ) {
     if (outTextureIndex) *outTextureIndex = VKRT_INVALID_INDEX;
     if (!importData || !textureView || !textureView->texture || !textureView->texture->image ||
-        !cachedImages || !cachedColorSpaces || !cachedTextureIndices || !inoutCachedTextureCount) {
+        !textureCache) {
         return 0;
     }
     if (textureViewUsesUnsupportedTransform(textureView)) {
@@ -628,11 +742,13 @@ static int registerImportedTexture(
     }
 
     const cgltf_image* image = textureView->texture->image;
-    for (uint32_t i = 0; i < *inoutCachedTextureCount; i++) {
-        if (cachedImages[i] == image && cachedColorSpaces[i] == colorSpace) {
-            if (outTextureIndex) *outTextureIndex = cachedTextureIndices[i];
-            return 1;
-        }
+    if (findCachedImportedTextureIndex(
+            image,
+            colorSpace,
+            textureCache,
+            outTextureIndex
+        )) {
+        return 1;
     }
 
     TextureImportEntry texture = {0};
@@ -645,13 +761,123 @@ static int registerImportedTexture(
     }
 
     uint32_t textureIndex = importData->textureCount - 1u;
-    cachedImages[*inoutCachedTextureCount] = image;
-    cachedTextureIndices[*inoutCachedTextureCount] = textureIndex;
-    cachedColorSpaces[*inoutCachedTextureCount] = colorSpace;
-    (*inoutCachedTextureCount)++;
+    cacheImportedTextureIndex(
+        image,
+        colorSpace,
+        textureIndex,
+        textureCache
+    );
 
     if (outTextureIndex) *outTextureIndex = textureIndex;
     return 1;
+}
+
+static void freeMaterialDecodeScratch(
+    MaterialImportEntry* materials,
+    ImportedTextureReference* references,
+    const cgltf_image** cachedImages,
+    uint32_t* cachedColorSpaces,
+    uint32_t* cachedTextureIndices
+) {
+    free(materials);
+    free((void*)references);
+    free((void*)cachedImages);
+    free((void*)cachedColorSpaces);
+    free((void*)cachedTextureIndices);
+}
+
+static int allocateMaterialDecodeScratch(
+    cgltf_size materialCount,
+    MaterialImportEntry** outMaterials,
+    ImportedTextureReference** outReferences,
+    const cgltf_image*** outCachedImages,
+    uint32_t** outCachedColorSpaces,
+    uint32_t** outCachedTextureIndices,
+    uint32_t* outMaxTextureRefs
+) {
+    if (!outMaterials || !outReferences || !outCachedImages ||
+        !outCachedColorSpaces || !outCachedTextureIndices || !outMaxTextureRefs) {
+        return 0;
+    }
+
+    *outMaterials = (MaterialImportEntry*)calloc((size_t)materialCount, sizeof(MaterialImportEntry));
+    if (!*outMaterials) return 0;
+
+    *outMaxTextureRefs = (uint32_t)materialCount * VKRT_MATERIAL_TEXTURE_SLOT_COUNT;
+    if (*outMaxTextureRefs == 0u) {
+        *outReferences = NULL;
+        *outCachedImages = NULL;
+        *outCachedColorSpaces = NULL;
+        *outCachedTextureIndices = NULL;
+        return 1;
+    }
+
+    *outReferences = (ImportedTextureReference*)calloc(*outMaxTextureRefs, sizeof(**outReferences));
+    *outCachedImages = (const cgltf_image**)calloc(*outMaxTextureRefs, sizeof(**outCachedImages));
+    *outCachedColorSpaces = (uint32_t*)calloc(*outMaxTextureRefs, sizeof(**outCachedColorSpaces));
+    *outCachedTextureIndices = (uint32_t*)calloc(*outMaxTextureRefs, sizeof(**outCachedTextureIndices));
+    if (*outReferences && *outCachedImages && *outCachedColorSpaces && *outCachedTextureIndices) {
+        return 1;
+    }
+
+    freeMaterialDecodeScratch(
+        *outMaterials,
+        *outReferences,
+        *outCachedImages,
+        *outCachedColorSpaces,
+        *outCachedTextureIndices
+    );
+    *outMaterials = NULL;
+    *outReferences = NULL;
+    *outCachedImages = NULL;
+    *outCachedColorSpaces = NULL;
+    *outCachedTextureIndices = NULL;
+    return 0;
+}
+
+static void makeGeneratedMaterialName(
+    char* outName,
+    size_t outNameSize,
+    const cgltf_material* sourceMaterial,
+    cgltf_size materialIndex
+) {
+    if (!outName || outNameSize == 0u) return;
+
+    if (sourceMaterial && sourceMaterial->name && sourceMaterial->name[0]) {
+        snprintf(outName, outNameSize, "%s", sourceMaterial->name);
+        return;
+    }
+
+    snprintf(outName, outNameSize, "Material %zu", materialIndex);
+}
+
+static int appendImportedMaterial(
+    MaterialImportEntry* materials,
+    cgltf_size materialIndex,
+    const cgltf_material* sourceMaterial,
+    const char* resolvedPath,
+    MeshImportData* importData,
+    MaterialTextureCache* textureCache
+) {
+    char generatedName[VKRT_NAME_LEN];
+    makeGeneratedMaterialName(generatedName, sizeof(generatedName), sourceMaterial, materialIndex);
+
+    materials[materialIndex].material = buildMaterial(
+        sourceMaterial,
+        resolvedPath,
+        importData,
+        textureCache
+    );
+    materials[materialIndex].name = stringDuplicate(generatedName);
+    return materials[materialIndex].name ? 0 : -1;
+}
+
+static void releaseImportedMaterials(MaterialImportEntry* materials, cgltf_size materialCount) {
+    if (!materials) return;
+
+    for (cgltf_size materialIndex = 0; materialIndex < materialCount; materialIndex++) {
+        releaseImportMaterial(&materials[materialIndex]);
+    }
 }
 
 static int populateImportMaterials(const cgltf_data* data, MeshImportData* importData, const char* resolvedPath) {
@@ -662,94 +888,212 @@ static int populateImportMaterials(const cgltf_data* data, MeshImportData* impor
         return -1;
     }
 
-    MaterialImportEntry* materials = (MaterialImportEntry*)calloc(
-        (size_t)data->materials_count,
-        sizeof(MaterialImportEntry)
-    );
-    if (!materials) return -1;
-
-    uint32_t maxTextureRefs = (uint32_t)data->materials_count * VKRT_MATERIAL_TEXTURE_SLOT_COUNT;
-    ImportedTextureReference* references = maxTextureRefs > 0
-        ? (ImportedTextureReference*)calloc(maxTextureRefs, sizeof(*references))
-        : NULL;
-    const cgltf_image** cachedImages = maxTextureRefs > 0
-        ? (const cgltf_image**)calloc(maxTextureRefs, sizeof(*cachedImages))
-        : NULL;
-    uint32_t* cachedColorSpaces = maxTextureRefs > 0
-        ? (uint32_t*)calloc(maxTextureRefs, sizeof(*cachedColorSpaces))
-        : NULL;
-    uint32_t* cachedTextureIndices = maxTextureRefs > 0
-        ? (uint32_t*)calloc(maxTextureRefs, sizeof(*cachedTextureIndices))
-        : NULL;
-    uint32_t cachedTextureCount = 0u;
-    if (maxTextureRefs > 0 && (!references || !cachedImages || !cachedColorSpaces || !cachedTextureIndices)) {
-        free(materials);
-        free(references);
-        free(cachedImages);
-        free(cachedColorSpaces);
-        free(cachedTextureIndices);
+    MaterialImportEntry* materials = NULL;
+    ImportedTextureReference* references = NULL;
+    const cgltf_image** cachedImages = NULL;
+    uint32_t* cachedColorSpaces = NULL;
+    uint32_t* cachedTextureIndices = NULL;
+    uint32_t maxTextureRefs = 0u;
+    if (!allocateMaterialDecodeScratch(
+            data->materials_count,
+            &materials,
+            &references,
+            &cachedImages,
+            &cachedColorSpaces,
+            &cachedTextureIndices,
+            &maxTextureRefs
+        )) {
         return -1;
     }
 
+    MaterialTextureCache textureCache = {
+        .images = cachedImages,
+        .colorSpaces = cachedColorSpaces,
+        .textureIndices = cachedTextureIndices,
+        .count = 0u,
+    };
+
     if (maxTextureRefs > 0) {
-        if (!collectImportedTextureReferences(data, references, &cachedTextureCount) ||
+        if (!collectImportedTextureReferences(data, references, &textureCache.count) ||
             !decodeImportedTextureReferences(
                 importData,
                 resolvedPath,
                 references,
-                cachedTextureCount,
+                textureCache.count,
                 cachedImages,
                 cachedColorSpaces,
                 cachedTextureIndices
             )) {
-            free(materials);
-            free(references);
-            free(cachedImages);
-            free(cachedColorSpaces);
-            free(cachedTextureIndices);
+            freeMaterialDecodeScratch(materials, references, cachedImages, cachedColorSpaces, cachedTextureIndices);
             return -1;
         }
     }
 
     for (cgltf_size materialIndex = 0; materialIndex < data->materials_count; materialIndex++) {
         const cgltf_material* sourceMaterial = &data->materials[materialIndex];
-        char generatedName[VKRT_NAME_LEN];
-        if (sourceMaterial->name && sourceMaterial->name[0]) {
-            snprintf(generatedName, sizeof(generatedName), "%s", sourceMaterial->name);
-        } else {
-            snprintf(generatedName, sizeof(generatedName), "Material %zu", materialIndex);
-        }
-
-        materials[materialIndex].material = buildMaterial(
-            sourceMaterial,
-            resolvedPath,
-            importData,
-            cachedImages,
-            cachedColorSpaces,
-            cachedTextureIndices,
-            &cachedTextureCount
-        );
-        materials[materialIndex].name = stringDuplicate(generatedName);
-        if (!materials[materialIndex].name) {
-            for (cgltf_size i = 0; i <= materialIndex; i++) {
-                releaseImportMaterial(&materials[i]);
-            }
-            free(materials);
-            free(references);
-            free(cachedImages);
-            free(cachedColorSpaces);
-            free(cachedTextureIndices);
+        if (appendImportedMaterial(
+                materials,
+                materialIndex,
+                sourceMaterial,
+                resolvedPath,
+                importData,
+                &textureCache
+            ) != 0) {
+            releaseImportedMaterials(materials, materialIndex + 1u);
+            freeMaterialDecodeScratch(materials, references, cachedImages, cachedColorSpaces, cachedTextureIndices);
             return -1;
         }
     }
 
     importData->materials = materials;
     importData->materialCount = (uint32_t)data->materials_count;
-    free(references);
-    free(cachedImages);
-    free(cachedColorSpaces);
-    free(cachedTextureIndices);
+    freeMaterialDecodeScratch(NULL, references, cachedImages, cachedColorSpaces, cachedTextureIndices);
     return 0;
+}
+
+static void applyPBRMaterialProperties(
+    Material* material,
+    const cgltf_material* sourceMaterial,
+    const char* resolvedPath,
+    MeshImportData* importData,
+    MaterialTextureCache* textureCache
+) {
+    if (!material || !sourceMaterial || !sourceMaterial->has_pbr_metallic_roughness) return;
+
+    material->baseColor[0] = sourceMaterial->pbr_metallic_roughness.base_color_factor[0];
+    material->baseColor[1] = sourceMaterial->pbr_metallic_roughness.base_color_factor[1];
+    material->baseColor[2] = sourceMaterial->pbr_metallic_roughness.base_color_factor[2];
+    material->opacity = sourceMaterial->pbr_metallic_roughness.base_color_factor[3];
+    material->metallic = sourceMaterial->pbr_metallic_roughness.metallic_factor;
+    material->roughness = sourceMaterial->pbr_metallic_roughness.roughness_factor;
+
+    uint32_t baseColorTextureIndex = VKRT_INVALID_INDEX;
+    if (registerImportedTexture(
+            importData,
+            resolvedPath,
+            &sourceMaterial->pbr_metallic_roughness.base_color_texture,
+            VKRT_TEXTURE_COLOR_SPACE_SRGB,
+            textureCache,
+            &baseColorTextureIndex
+        )) {
+        material->baseColorTextureIndex = baseColorTextureIndex;
+        material->baseColorTextureWrap = packTextureWrapModes(
+            sourceMaterial->pbr_metallic_roughness.base_color_texture.texture->sampler
+                ? sourceMaterial->pbr_metallic_roughness.base_color_texture.texture->sampler->wrap_s
+                : cgltf_wrap_mode_repeat,
+            sourceMaterial->pbr_metallic_roughness.base_color_texture.texture->sampler
+                ? sourceMaterial->pbr_metallic_roughness.base_color_texture.texture->sampler->wrap_t
+                : cgltf_wrap_mode_repeat
+        );
+        setMaterialTextureTexcoordSet(
+            material,
+            VKRT_MATERIAL_TEXTURE_SLOT_BASE_COLOR,
+            queryTextureViewTexcoordSet(&sourceMaterial->pbr_metallic_roughness.base_color_texture)
+        );
+        copyTextureTransform(
+            material->baseColorTextureTransform,
+            &material->textureRotations[VKRT_MATERIAL_TEXTURE_SLOT_BASE_COLOR],
+            &sourceMaterial->pbr_metallic_roughness.base_color_texture
+        );
+    }
+
+    uint32_t metallicRoughnessTextureIndex = VKRT_INVALID_INDEX;
+    if (registerImportedTexture(
+            importData,
+            resolvedPath,
+            &sourceMaterial->pbr_metallic_roughness.metallic_roughness_texture,
+            VKRT_TEXTURE_COLOR_SPACE_LINEAR,
+            textureCache,
+            &metallicRoughnessTextureIndex
+        )) {
+        material->metallicRoughnessTextureIndex = metallicRoughnessTextureIndex;
+        material->metallicRoughnessTextureWrap = packTextureWrapModes(
+            sourceMaterial->pbr_metallic_roughness.metallic_roughness_texture.texture->sampler
+                ? sourceMaterial->pbr_metallic_roughness.metallic_roughness_texture.texture->sampler->wrap_s
+                : cgltf_wrap_mode_repeat,
+            sourceMaterial->pbr_metallic_roughness.metallic_roughness_texture.texture->sampler
+                ? sourceMaterial->pbr_metallic_roughness.metallic_roughness_texture.texture->sampler->wrap_t
+                : cgltf_wrap_mode_repeat
+        );
+        setMaterialTextureTexcoordSet(
+            material,
+            VKRT_MATERIAL_TEXTURE_SLOT_METALLIC_ROUGHNESS,
+            queryTextureViewTexcoordSet(&sourceMaterial->pbr_metallic_roughness.metallic_roughness_texture)
+        );
+        copyTextureTransform(
+            material->metallicRoughnessTextureTransform,
+            &material->textureRotations[VKRT_MATERIAL_TEXTURE_SLOT_METALLIC_ROUGHNESS],
+            &sourceMaterial->pbr_metallic_roughness.metallic_roughness_texture
+        );
+    }
+}
+
+static void applyBasicExtendedMaterialProperties(Material* material, const cgltf_material* sourceMaterial) {
+    if (!material || !sourceMaterial) return;
+    if (sourceMaterial->has_specular) material->specular = sourceMaterial->specular.specular_factor;
+    if (sourceMaterial->has_ior) material->ior = sourceMaterial->ior.ior;
+    if (sourceMaterial->has_transmission) material->transmission = sourceMaterial->transmission.transmission_factor;
+    if (sourceMaterial->has_volume) {
+        material->attenuationColor[0] = sourceMaterial->volume.attenuation_color[0];
+        material->attenuationColor[1] = sourceMaterial->volume.attenuation_color[1];
+        material->attenuationColor[2] = sourceMaterial->volume.attenuation_color[2];
+        material->absorptionCoefficient = sourceMaterial->volume.attenuation_distance > 0.0f &&
+            isfinite(sourceMaterial->volume.attenuation_distance)
+            ? 1.0f / sourceMaterial->volume.attenuation_distance
+            : 0.0f;
+    }
+    if (sourceMaterial->has_clearcoat) {
+        material->clearcoat = sourceMaterial->clearcoat.clearcoat_factor;
+        material->clearcoatGloss = 1.0f - sourceMaterial->clearcoat.clearcoat_roughness_factor;
+    }
+}
+
+static void applySheenMaterialProperties(Material* material, const cgltf_material* sourceMaterial) {
+    if (!material || !sourceMaterial || !sourceMaterial->has_sheen) return;
+
+    vec3 sheenColor = {
+        sourceMaterial->sheen.sheen_color_factor[0],
+        sourceMaterial->sheen.sheen_color_factor[1],
+        sourceMaterial->sheen.sheen_color_factor[2]
+    };
+    float sheenWeight = max3(sheenColor[0], sheenColor[1], sheenColor[2]);
+    if (sheenWeight > 0.0f) {
+        material->sheenTintWeight[0] = sheenColor[0] / sheenWeight;
+        material->sheenTintWeight[1] = sheenColor[1] / sheenWeight;
+        material->sheenTintWeight[2] = sheenColor[2] / sheenWeight;
+        material->sheenTintWeight[3] = sheenWeight;
+    } else {
+        material->sheenTintWeight[0] = 1.0f;
+        material->sheenTintWeight[1] = 1.0f;
+        material->sheenTintWeight[2] = 1.0f;
+        material->sheenTintWeight[3] = 0.0f;
+    }
+    material->sheenRoughness = sourceMaterial->sheen.sheen_roughness_factor;
+}
+
+static void applyEmissiveMaterialProperties(Material* material, const cgltf_material* sourceMaterial) {
+    if (!material || !sourceMaterial) return;
+
+    float emissiveScale = sourceMaterial->has_emissive_strength
+        ? sourceMaterial->emissive_strength.emissive_strength
+        : 1.0f;
+    vec3 emissive = {
+        sourceMaterial->emissive_factor[0] * emissiveScale,
+        sourceMaterial->emissive_factor[1] * emissiveScale,
+        sourceMaterial->emissive_factor[2] * emissiveScale,
+    };
+    float emissiveMax = max3(emissive[0], emissive[1], emissive[2]);
+    if (emissiveMax > 0.0f) {
+        material->emissionColor[0] = emissive[0] / emissiveMax;
+        material->emissionColor[1] = emissive[1] / emissiveMax;
+        material->emissionColor[2] = emissive[2] / emissiveMax;
+        material->emissionLuminance = emissiveMax;
+    } else {
+        material->emissionColor[0] = 1.0f;
+        material->emissionColor[1] = 1.0f;
+        material->emissionColor[2] = 1.0f;
+        material->emissionLuminance = 0.0f;
+    }
 }
 
 static const cgltf_accessor* findAttributeAccessor(
@@ -982,17 +1326,10 @@ static void logIgnoredImportFeatures(const char* resolvedPath, const cgltf_data*
     }
 }
 
-static float max3(float a, float b, float c) {
-    float value = a;
-    if (b > value) value = b;
-    if (c > value) value = c;
-    return value;
-}
-
-static void copyFloat3ToFloat4(float out[4], const float in[3], float w) {
-    out[0] = in[0];
-    out[1] = in[1];
-    out[2] = in[2];
+static void copyFloat3ToFloat4(float out[4], const float source[3], float w) {
+    out[0] = source[0];
+    out[1] = source[1];
+    out[2] = source[2];
     out[3] = w;
 }
 
@@ -1009,16 +1346,16 @@ static void loadVertexNormal3(const Vertex* vertices, uint32_t index, vec3 out) 
 }
 
 static int loadTriangleIndices(size_t vertexCount, const uint32_t* indices, size_t indexOffset, uint32_t out[3]) {
-    uint32_t i0 = indices[indexOffset + 0];
-    uint32_t i1 = indices[indexOffset + 1];
-    uint32_t i2 = indices[indexOffset + 2];
-    if (i0 >= vertexCount || i1 >= vertexCount || i2 >= vertexCount) {
+    uint32_t firstIndex = indices[indexOffset + 0u];
+    uint32_t secondIndex = indices[indexOffset + 1u];
+    uint32_t thirdIndex = indices[indexOffset + 2u];
+    if (firstIndex >= vertexCount || secondIndex >= vertexCount || thirdIndex >= vertexCount) {
         return 0;
     }
 
-    out[0] = i0;
-    out[1] = i1;
-    out[2] = i2;
+    out[0] = firstIndex;
+    out[1] = secondIndex;
+    out[2] = thirdIndex;
     return 1;
 }
 
@@ -1028,15 +1365,17 @@ static float triangleNormalAlignment(const Vertex* vertices, size_t vertexCount,
         return 0.0f;
     }
 
-    vec3 p0, p1, p2;
-    loadVertexPosition3(vertices, triangle[0], p0);
-    loadVertexPosition3(vertices, triangle[1], p1);
-    loadVertexPosition3(vertices, triangle[2], p2);
+    vec3 point0;
+    vec3 point1;
+    vec3 point2;
+    loadVertexPosition3(vertices, triangle[0], point0);
+    loadVertexPosition3(vertices, triangle[1], point1);
+    loadVertexPosition3(vertices, triangle[2], point2);
 
     vec3 edge1 = GLM_VEC3_ZERO_INIT;
     vec3 edge2 = GLM_VEC3_ZERO_INIT;
-    glm_vec3_sub(p1, p0, edge1);
-    glm_vec3_sub(p2, p0, edge2);
+    glm_vec3_sub(point1, point0, edge1);
+    glm_vec3_sub(point2, point0, edge2);
 
     vec3 faceNormal = GLM_VEC3_ZERO_INIT;
     glm_vec3_cross(edge1, edge2, faceNormal);
@@ -1056,18 +1395,18 @@ static float triangleNormalAlignment(const Vertex* vertices, size_t vertexCount,
 }
 
 static int orthonormalizeTangentFrame(const float normal[3], const float tangentIn[3], float handedness, float outTangent[4]) {
-    vec3 n = {normal[0], normal[1], normal[2]};
+    vec3 normalVector = {normal[0], normal[1], normal[2]};
     vec3 tangent = {tangentIn[0], tangentIn[1], tangentIn[2]};
-    if (glm_vec3_norm2(n) <= 1e-12f || glm_vec3_norm2(tangent) <= 1e-12f) {
+    if (glm_vec3_norm2(normalVector) <= 1e-12f || glm_vec3_norm2(tangent) <= 1e-12f) {
         return 0;
     }
 
-    glm_vec3_normalize(n);
-    float tangentDotNormal = glm_vec3_dot(tangent, n);
+    glm_vec3_normalize(normalVector);
+    float tangentDotNormal = glm_vec3_dot(tangent, normalVector);
     vec3 projectedNormal = {
-        n[0] * tangentDotNormal,
-        n[1] * tangentDotNormal,
-        n[2] * tangentDotNormal,
+        normalVector[0] * tangentDotNormal,
+        normalVector[1] * tangentDotNormal,
+        normalVector[2] * tangentDotNormal,
     };
     glm_vec3_sub(tangent, projectedNormal, tangent);
     if (glm_vec3_norm2(tangent) <= 1e-12f) {
@@ -1083,21 +1422,21 @@ static int orthonormalizeTangentFrame(const float normal[3], const float tangent
 }
 
 static void buildFallbackTangent(const float normal[3], float outTangent[4]) {
-    vec3 n = {normal[0], normal[1], normal[2]};
-    if (glm_vec3_norm2(n) <= 1e-12f) {
-        n[2] = 1.0f;
+    vec3 normalVector = {normal[0], normal[1], normal[2]};
+    if (glm_vec3_norm2(normalVector) <= 1e-12f) {
+        normalVector[2] = 1.0f;
     } else {
-        glm_vec3_normalize(n);
+        glm_vec3_normalize(normalVector);
     }
 
-    vec3 up = {0.0f, 0.0f, 1.0f};
-    if (fabsf(n[2]) > 0.999f) {
-        up[0] = 1.0f;
-        up[2] = 0.0f;
+    vec3 upAxis = {0.0f, 0.0f, 1.0f};
+    if (fabsf(normalVector[2]) > 0.999f) {
+        upAxis[0] = 1.0f;
+        upAxis[2] = 0.0f;
     }
 
     vec3 tangent = {0.0f, 0.0f, 0.0f};
-    glm_vec3_cross(up, n, tangent);
+    glm_vec3_cross(upAxis, normalVector, tangent);
     if (glm_vec3_norm2(tangent) <= 1e-12f) {
         tangent[0] = 1.0f;
         tangent[1] = 0.0f;
@@ -1128,163 +1467,27 @@ static void finalizeTangents(Vertex* vertices, size_t vertexCount) {
     }
 }
 
+static void applyFallbackTangents(Vertex* vertices, size_t vertexCount) {
+    if (!vertices) return;
+
+    for (size_t vertexIndex = 0; vertexIndex < vertexCount; vertexIndex++) {
+        buildFallbackTangent(vertices[vertexIndex].normal, vertices[vertexIndex].tangent);
+    }
+}
+
 static Material buildMaterial(
     const cgltf_material* sourceMaterial,
     const char* resolvedPath,
     MeshImportData* importData,
-    const cgltf_image** cachedImages,
-    uint32_t* cachedColorSpaces,
-    uint32_t* cachedTextureIndices,
-    uint32_t* inoutCachedTextureCount
+    MaterialTextureCache* textureCache
 ) {
     Material material = VKRT_materialDefault();
-    if (!sourceMaterial) {
-        return material;
-    }
+    if (!sourceMaterial) return material;
 
-    if (sourceMaterial->has_pbr_metallic_roughness) {
-        material.baseColor[0] = sourceMaterial->pbr_metallic_roughness.base_color_factor[0];
-        material.baseColor[1] = sourceMaterial->pbr_metallic_roughness.base_color_factor[1];
-        material.baseColor[2] = sourceMaterial->pbr_metallic_roughness.base_color_factor[2];
-        material.opacity = sourceMaterial->pbr_metallic_roughness.base_color_factor[3];
-        material.metallic = sourceMaterial->pbr_metallic_roughness.metallic_factor;
-        material.roughness = sourceMaterial->pbr_metallic_roughness.roughness_factor;
-
-        uint32_t baseColorTextureIndex = VKRT_INVALID_INDEX;
-        if (registerImportedTexture(
-            importData,
-            resolvedPath,
-            &sourceMaterial->pbr_metallic_roughness.base_color_texture,
-            VKRT_TEXTURE_COLOR_SPACE_SRGB,
-            cachedImages,
-            cachedColorSpaces,
-            cachedTextureIndices,
-            inoutCachedTextureCount,
-            &baseColorTextureIndex
-        )) {
-            material.baseColorTextureIndex = baseColorTextureIndex;
-            material.baseColorTextureWrap = packTextureWrapModes(
-                sourceMaterial->pbr_metallic_roughness.base_color_texture.texture->sampler
-                    ? sourceMaterial->pbr_metallic_roughness.base_color_texture.texture->sampler->wrap_s
-                    : cgltf_wrap_mode_repeat,
-                sourceMaterial->pbr_metallic_roughness.base_color_texture.texture->sampler
-                    ? sourceMaterial->pbr_metallic_roughness.base_color_texture.texture->sampler->wrap_t
-                    : cgltf_wrap_mode_repeat
-            );
-            setMaterialTextureTexcoordSet(
-                &material,
-                VKRT_MATERIAL_TEXTURE_SLOT_BASE_COLOR,
-                queryTextureViewTexcoordSet(&sourceMaterial->pbr_metallic_roughness.base_color_texture)
-            );
-            copyTextureTransform(
-                material.baseColorTextureTransform,
-                &material.textureRotations[VKRT_MATERIAL_TEXTURE_SLOT_BASE_COLOR],
-                &sourceMaterial->pbr_metallic_roughness.base_color_texture
-            );
-        }
-
-        uint32_t metallicRoughnessTextureIndex = VKRT_INVALID_INDEX;
-        if (registerImportedTexture(
-            importData,
-            resolvedPath,
-            &sourceMaterial->pbr_metallic_roughness.metallic_roughness_texture,
-            VKRT_TEXTURE_COLOR_SPACE_LINEAR,
-            cachedImages,
-            cachedColorSpaces,
-            cachedTextureIndices,
-            inoutCachedTextureCount,
-            &metallicRoughnessTextureIndex
-        )) {
-            material.metallicRoughnessTextureIndex = metallicRoughnessTextureIndex;
-            material.metallicRoughnessTextureWrap = packTextureWrapModes(
-                sourceMaterial->pbr_metallic_roughness.metallic_roughness_texture.texture->sampler
-                    ? sourceMaterial->pbr_metallic_roughness.metallic_roughness_texture.texture->sampler->wrap_s
-                    : cgltf_wrap_mode_repeat,
-                sourceMaterial->pbr_metallic_roughness.metallic_roughness_texture.texture->sampler
-                    ? sourceMaterial->pbr_metallic_roughness.metallic_roughness_texture.texture->sampler->wrap_t
-                    : cgltf_wrap_mode_repeat
-            );
-            setMaterialTextureTexcoordSet(
-                &material,
-                VKRT_MATERIAL_TEXTURE_SLOT_METALLIC_ROUGHNESS,
-                queryTextureViewTexcoordSet(&sourceMaterial->pbr_metallic_roughness.metallic_roughness_texture)
-            );
-            copyTextureTransform(
-                material.metallicRoughnessTextureTransform,
-                &material.textureRotations[VKRT_MATERIAL_TEXTURE_SLOT_METALLIC_ROUGHNESS],
-                &sourceMaterial->pbr_metallic_roughness.metallic_roughness_texture
-            );
-        }
-    }
-
-    if (sourceMaterial->has_specular) {
-        material.specular = sourceMaterial->specular.specular_factor;
-    }
-
-    if (sourceMaterial->has_ior) {
-        material.ior = sourceMaterial->ior.ior;
-    }
-
-    if (sourceMaterial->has_transmission) {
-        material.transmission = sourceMaterial->transmission.transmission_factor;
-    }
-
-    if (sourceMaterial->has_volume) {
-        material.attenuationColor[0] = sourceMaterial->volume.attenuation_color[0];
-        material.attenuationColor[1] = sourceMaterial->volume.attenuation_color[1];
-        material.attenuationColor[2] = sourceMaterial->volume.attenuation_color[2];
-        material.absorptionCoefficient = sourceMaterial->volume.attenuation_distance > 0.0f &&
-            isfinite(sourceMaterial->volume.attenuation_distance)
-            ? 1.0f / sourceMaterial->volume.attenuation_distance
-            : 0.0f;
-    }
-
-    if (sourceMaterial->has_clearcoat) {
-        material.clearcoat = sourceMaterial->clearcoat.clearcoat_factor;
-        material.clearcoatGloss = 1.0f - sourceMaterial->clearcoat.clearcoat_roughness_factor;
-    }
-
-    if (sourceMaterial->has_sheen) {
-        vec3 sheenColor = {
-            sourceMaterial->sheen.sheen_color_factor[0],
-            sourceMaterial->sheen.sheen_color_factor[1],
-            sourceMaterial->sheen.sheen_color_factor[2]
-        };
-        float sheenWeight = max3(sheenColor[0], sheenColor[1], sheenColor[2]);
-        if (sheenWeight > 0.0f) {
-            material.sheenTintWeight[0] = sheenColor[0] / sheenWeight;
-            material.sheenTintWeight[1] = sheenColor[1] / sheenWeight;
-            material.sheenTintWeight[2] = sheenColor[2] / sheenWeight;
-            material.sheenTintWeight[3] = sheenWeight;
-        } else {
-            material.sheenTintWeight[0] = 1.0f;
-            material.sheenTintWeight[1] = 1.0f;
-            material.sheenTintWeight[2] = 1.0f;
-            material.sheenTintWeight[3] = 0.0f;
-        }
-        material.sheenRoughness = sourceMaterial->sheen.sheen_roughness_factor;
-    }
-
-    float emissiveScale = sourceMaterial->has_emissive_strength
-        ? sourceMaterial->emissive_strength.emissive_strength
-        : 1.0f;
-    vec3 emissive = {
-        sourceMaterial->emissive_factor[0] * emissiveScale,
-        sourceMaterial->emissive_factor[1] * emissiveScale,
-        sourceMaterial->emissive_factor[2] * emissiveScale,
-    };
-    float emissiveMax = max3(emissive[0], emissive[1], emissive[2]);
-    if (emissiveMax > 0.0f) {
-        material.emissionColor[0] = emissive[0] / emissiveMax;
-        material.emissionColor[1] = emissive[1] / emissiveMax;
-        material.emissionColor[2] = emissive[2] / emissiveMax;
-        material.emissionLuminance = emissiveMax;
-    } else {
-        material.emissionColor[0] = 1.0f;
-        material.emissionColor[1] = 1.0f;
-        material.emissionColor[2] = 1.0f;
-        material.emissionLuminance = 0.0f;
-    }
+    applyPBRMaterialProperties(&material, sourceMaterial, resolvedPath, importData, textureCache);
+    applyBasicExtendedMaterialProperties(&material, sourceMaterial);
+    applySheenMaterialProperties(&material, sourceMaterial);
+    applyEmissiveMaterialProperties(&material, sourceMaterial);
 
     uint32_t normalTextureIndex = VKRT_INVALID_INDEX;
     if (registerImportedTexture(
@@ -1292,10 +1495,7 @@ static Material buildMaterial(
         resolvedPath,
         &sourceMaterial->normal_texture,
         VKRT_TEXTURE_COLOR_SPACE_LINEAR,
-        cachedImages,
-        cachedColorSpaces,
-        cachedTextureIndices,
-        inoutCachedTextureCount,
+        textureCache,
         &normalTextureIndex
     )) {
         material.normalTextureIndex = normalTextureIndex;
@@ -1328,10 +1528,7 @@ static Material buildMaterial(
         resolvedPath,
         &sourceMaterial->emissive_texture,
         VKRT_TEXTURE_COLOR_SPACE_SRGB,
-        cachedImages,
-        cachedColorSpaces,
-        cachedTextureIndices,
-        inoutCachedTextureCount,
+        textureCache,
         &emissiveTextureIndex
     )) {
         material.emissiveTextureIndex = emissiveTextureIndex;
@@ -1372,9 +1569,9 @@ static int buildNodeLocalTransformMatrix(const cgltf_node* node, mat4 outTransfo
     cgltf_float rawLocalTransform[16] = {0};
     cgltf_node_transform_local(node, rawLocalTransform);
     memcpy(outTransform, rawLocalTransform, sizeof(mat4));
-    mat4 basisAdjustedTransform = GLM_MAT4_IDENTITY_INIT;
-    buildImportedMeshNodeTransformMatrix(outTransform, basisAdjustedTransform);
-    glm_mat4_copy(basisAdjustedTransform, outTransform);
+    mat4 engineTransform = GLM_MAT4_IDENTITY_INIT;
+    buildImportedMeshNodeTransformMatrix(outTransform, engineTransform);
+    glm_mat4_copy(engineTransform, outTransform);
     return 1;
 }
 
@@ -1422,16 +1619,18 @@ static void generateNormals(Vertex* vertices, size_t vertexCount, const uint32_t
         uint32_t triangle[3];
         if (!loadTriangleIndices(vertexCount, indices, indexOffset, triangle)) continue;
 
-        vec3 p0, p1, p2;
-        loadVertexPosition3(vertices, triangle[0], p0);
-        loadVertexPosition3(vertices, triangle[1], p1);
-        loadVertexPosition3(vertices, triangle[2], p2);
+        vec3 point0;
+        vec3 point1;
+        vec3 point2;
+        loadVertexPosition3(vertices, triangle[0], point0);
+        loadVertexPosition3(vertices, triangle[1], point1);
+        loadVertexPosition3(vertices, triangle[2], point2);
 
         vec3 edge01 = GLM_VEC3_ZERO_INIT;
         vec3 edge02 = GLM_VEC3_ZERO_INIT;
         vec3 faceNormal = GLM_VEC3_ZERO_INIT;
-        glm_vec3_sub(p1, p0, edge01);
-        glm_vec3_sub(p2, p0, edge02);
+        glm_vec3_sub(point1, point0, edge01);
+        glm_vec3_sub(point2, point0, edge02);
         glm_vec3_cross(edge01, edge02, faceNormal);
         if (glm_vec3_norm2(faceNormal) <= 1e-12f) continue;
 
@@ -1450,6 +1649,92 @@ static void generateNormals(Vertex* vertices, size_t vertexCount, const uint32_t
         }
 
         copyFloat3ToFloat4(vertices[vertexIndex].normal, normal, 0.0f);
+    }
+}
+
+static void accumulateTriangleTangents(
+    const Vertex* vertices,
+    size_t vertexCount,
+    const uint32_t* indices,
+    size_t indexOffset,
+    const float* texcoords,
+    vec3* tangent1,
+    vec3* tangent2
+) {
+    uint32_t triangle[3];
+    if (!loadTriangleIndices(vertexCount, indices, indexOffset, triangle)) return;
+
+    uint32_t firstIndex = triangle[0];
+    uint32_t secondIndex = triangle[1];
+    uint32_t thirdIndex = triangle[2];
+    vec3 point0;
+    vec3 point1;
+    vec3 point2;
+    loadVertexPosition3(vertices, firstIndex, point0);
+    loadVertexPosition3(vertices, secondIndex, point1);
+    loadVertexPosition3(vertices, thirdIndex, point2);
+
+    vec2 uv0 = {texcoords[(firstIndex * 2u) + 0u], texcoords[(firstIndex * 2u) + 1u]};
+    vec2 uv1 = {texcoords[(secondIndex * 2u) + 0u], texcoords[(secondIndex * 2u) + 1u]};
+    vec2 uv2 = {texcoords[(thirdIndex * 2u) + 0u], texcoords[(thirdIndex * 2u) + 1u]};
+    vec3 edge1 = GLM_VEC3_ZERO_INIT;
+    vec3 edge2 = GLM_VEC3_ZERO_INIT;
+    glm_vec3_sub(point1, point0, edge1);
+    glm_vec3_sub(point2, point0, edge2);
+
+    float du1 = uv1[0] - uv0[0];
+    float dv1 = uv1[1] - uv0[1];
+    float du2 = uv2[0] - uv0[0];
+    float dv2 = uv2[1] - uv0[1];
+    float det = (du1 * dv2) - (dv1 * du2);
+    if (fabsf(det) <= 1e-12f) return;
+
+    float invDet = 1.0f / det;
+    vec3 sdir = {
+        ((dv2 * edge1[0]) - (dv1 * edge2[0])) * invDet,
+        ((dv2 * edge1[1]) - (dv1 * edge2[1])) * invDet,
+        ((dv2 * edge1[2]) - (dv1 * edge2[2])) * invDet,
+    };
+    vec3 tdir = {
+        ((du1 * edge2[0]) - (du2 * edge1[0])) * invDet,
+        ((du1 * edge2[1]) - (du2 * edge1[1])) * invDet,
+        ((du1 * edge2[2]) - (du2 * edge1[2])) * invDet,
+    };
+
+    glm_vec3_add(tangent1[firstIndex], sdir, tangent1[firstIndex]);
+    glm_vec3_add(tangent1[secondIndex], sdir, tangent1[secondIndex]);
+    glm_vec3_add(tangent1[thirdIndex], sdir, tangent1[thirdIndex]);
+    glm_vec3_add(tangent2[firstIndex], tdir, tangent2[firstIndex]);
+    glm_vec3_add(tangent2[secondIndex], tdir, tangent2[secondIndex]);
+    glm_vec3_add(tangent2[thirdIndex], tdir, tangent2[thirdIndex]);
+}
+
+static void finalizeGeneratedTangent(
+    Vertex* vertices,
+    vec3* tangent1,
+    vec3* tangent2,
+    size_t vertexIndex
+) {
+    vec3 tangent;
+    glm_vec3_copy(tangent1[vertexIndex], tangent);
+    vec3 normal;
+    loadVertexNormal3(vertices, (uint32_t)vertexIndex, normal);
+    if (glm_vec3_norm2(normal) <= 1e-12f || glm_vec3_norm2(tangent) <= 1e-12f) {
+        buildFallbackTangent(vertices[vertexIndex].normal, vertices[vertexIndex].tangent);
+        return;
+    }
+
+    glm_vec3_normalize(normal);
+    vec3 crossValue = GLM_VEC3_ZERO_INIT;
+    glm_vec3_cross(normal, tangent, crossValue);
+    float handedness = glm_vec3_dot(crossValue, tangent2[vertexIndex]) < 0.0f ? -1.0f : 1.0f;
+    if (!orthonormalizeTangentFrame(
+            vertices[vertexIndex].normal,
+            tangent,
+            handedness,
+            vertices[vertexIndex].tangent
+        )) {
+        buildFallbackTangent(vertices[vertexIndex].normal, vertices[vertexIndex].tangent);
     }
 }
 
@@ -1477,79 +1762,177 @@ static void generateTangents(
     }
 
     for (size_t indexOffset = 0; indexOffset + 2 < indexCount; indexOffset += 3) {
-        uint32_t triangle[3];
-        if (!loadTriangleIndices(vertexCount, indices, indexOffset, triangle)) continue;
-
-        vec3 p0, p1, p2;
-        loadVertexPosition3(vertices, triangle[0], p0);
-        loadVertexPosition3(vertices, triangle[1], p1);
-        loadVertexPosition3(vertices, triangle[2], p2);
-
-        uint32_t i0 = triangle[0];
-        uint32_t i1 = triangle[1];
-        uint32_t i2 = triangle[2];
-        vec2 uv0 = {texcoords[i0 * 2u + 0u], texcoords[i0 * 2u + 1u]};
-        vec2 uv1 = {texcoords[i1 * 2u + 0u], texcoords[i1 * 2u + 1u]};
-        vec2 uv2 = {texcoords[i2 * 2u + 0u], texcoords[i2 * 2u + 1u]};
-
-        vec3 edge1 = GLM_VEC3_ZERO_INIT;
-        vec3 edge2 = GLM_VEC3_ZERO_INIT;
-        glm_vec3_sub(p1, p0, edge1);
-        glm_vec3_sub(p2, p0, edge2);
-
-        float du1 = uv1[0] - uv0[0];
-        float dv1 = uv1[1] - uv0[1];
-        float du2 = uv2[0] - uv0[0];
-        float dv2 = uv2[1] - uv0[1];
-        float det = du1 * dv2 - dv1 * du2;
-        if (fabsf(det) <= 1e-12f) continue;
-
-        float invDet = 1.0f / det;
-        vec3 sdir = {
-            (dv2 * edge1[0] - dv1 * edge2[0]) * invDet,
-            (dv2 * edge1[1] - dv1 * edge2[1]) * invDet,
-            (dv2 * edge1[2] - dv1 * edge2[2]) * invDet,
-        };
-        vec3 tdir = {
-            (du1 * edge2[0] - du2 * edge1[0]) * invDet,
-            (du1 * edge2[1] - du2 * edge1[1]) * invDet,
-            (du1 * edge2[2] - du2 * edge1[2]) * invDet,
-        };
-
-        glm_vec3_add(tangent1[i0], sdir, tangent1[i0]);
-        glm_vec3_add(tangent1[i1], sdir, tangent1[i1]);
-        glm_vec3_add(tangent1[i2], sdir, tangent1[i2]);
-        glm_vec3_add(tangent2[i0], tdir, tangent2[i0]);
-        glm_vec3_add(tangent2[i1], tdir, tangent2[i1]);
-        glm_vec3_add(tangent2[i2], tdir, tangent2[i2]);
+        accumulateTriangleTangents(vertices, vertexCount, indices, indexOffset, texcoords, tangent1, tangent2);
     }
 
     for (size_t vertexIndex = 0; vertexIndex < vertexCount; vertexIndex++) {
-        vec3 tangent;
-        glm_vec3_copy(tangent1[vertexIndex], tangent);
-        vec3 normal;
-        loadVertexNormal3(vertices, (uint32_t)vertexIndex, normal);
-        if (glm_vec3_norm2(normal) <= 1e-12f || glm_vec3_norm2(tangent) <= 1e-12f) {
-            buildFallbackTangent(vertices[vertexIndex].normal, vertices[vertexIndex].tangent);
-            continue;
-        }
-
-        glm_vec3_normalize(normal);
-        vec3 crossValue = GLM_VEC3_ZERO_INIT;
-        glm_vec3_cross(normal, tangent, crossValue);
-        float handedness = glm_vec3_dot(crossValue, tangent2[vertexIndex]) < 0.0f ? -1.0f : 1.0f;
-        if (!orthonormalizeTangentFrame(
-            vertices[vertexIndex].normal,
-            tangent,
-            handedness,
-            vertices[vertexIndex].tangent
-        )) {
-            buildFallbackTangent(vertices[vertexIndex].normal, vertices[vertexIndex].tangent);
-        }
+        finalizeGeneratedTangent(vertices, tangent1, tangent2, vertexIndex);
     }
 
     free(tangent1);
     free(tangent2);
+}
+
+static void applyImportedNormal(
+    Vertex* vertex,
+    const cgltf_accessor* normalAccessor,
+    cgltf_size vertexIndex
+) {
+    float normal[3] = {0.0f, 0.0f, 1.0f};
+    if (!normalAccessor || !cgltf_accessor_read_float(normalAccessor, vertexIndex, normal, 3)) {
+        return;
+    }
+
+    float engineNormal[3] = {normal[0], -normal[2], normal[1]};
+    copyFloat3ToFloat4(vertex->normal, engineNormal, 0.0f);
+}
+
+static void applyImportedTangent(
+    Vertex* vertex,
+    const cgltf_accessor* tangentAccessor,
+    cgltf_size vertexIndex
+) {
+    float tangent[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+    if (!tangentAccessor || !cgltf_accessor_read_float(tangentAccessor, vertexIndex, tangent, 4)) {
+        return;
+    }
+
+    vertex->tangent[0] = tangent[0];
+    vertex->tangent[1] = -tangent[2];
+    vertex->tangent[2] = tangent[1];
+    vertex->tangent[3] = tangent[3];
+}
+
+static int readVertexColor(
+    const cgltf_accessor* colorAccessor,
+    cgltf_size vertexIndex,
+    float outColor[4]
+) {
+    outColor[0] = 1.0f;
+    outColor[1] = 1.0f;
+    outColor[2] = 1.0f;
+    outColor[3] = 1.0f;
+    if (!colorAccessor) return 1;
+
+    cgltf_size colorComponentCount = cgltf_num_components(colorAccessor->type);
+    if (colorComponentCount < 3u || colorComponentCount > 4u) return 0;
+    return cgltf_accessor_read_float(colorAccessor, vertexIndex, outColor, colorComponentCount);
+}
+
+static int readVertexTexcoord(
+    const cgltf_accessor* texcoordAccessor,
+    cgltf_size vertexIndex,
+    float outTexcoord[2]
+) {
+    outTexcoord[0] = 0.0f;
+    outTexcoord[1] = 0.0f;
+    return !texcoordAccessor || cgltf_accessor_read_float(texcoordAccessor, vertexIndex, outTexcoord, 2);
+}
+
+static int fillPrimitiveVertex(
+    MeshImportEntry* entry,
+    size_t vertexIndex,
+    const PrimitiveBuildInputs* inputs
+) {
+    float position[3] = {0.0f, 0.0f, 0.0f};
+    float color[4];
+    float texcoord0[2];
+    float texcoord1[2];
+
+    if (!cgltf_accessor_read_float(inputs->positionAccessor, (cgltf_size)vertexIndex, position, 3)) {
+        return 0;
+    }
+    if (!readVertexColor(inputs->colorAccessor, (cgltf_size)vertexIndex, color)) {
+        return 0;
+    }
+    if (!readVertexTexcoord(inputs->texcoordAccessor0, (cgltf_size)vertexIndex, texcoord0)) {
+        return 0;
+    }
+    if (!readVertexTexcoord(inputs->texcoordAccessor1, (cgltf_size)vertexIndex, texcoord1)) {
+        return 0;
+    }
+
+    Vertex* vertex = &entry->vertices[vertexIndex];
+    float enginePosition[3] = {position[0], -position[2], position[1]};
+    copyFloat3ToFloat4(vertex->position, enginePosition, 1.0f);
+    applyImportedNormal(vertex, inputs->normalAccessor, (cgltf_size)vertexIndex);
+    if (inputs->useImportedTangents) {
+        applyImportedTangent(vertex, inputs->tangentAccessor, (cgltf_size)vertexIndex);
+    }
+
+    vertex->color[0] = color[0];
+    vertex->color[1] = color[1];
+    vertex->color[2] = color[2];
+    vertex->color[3] = color[3];
+    vertex->texcoord0[0] = texcoord0[0];
+    vertex->texcoord0[1] = texcoord0[1];
+    vertex->texcoord1[0] = texcoord1[0];
+    vertex->texcoord1[1] = texcoord1[1];
+    return 1;
+}
+
+static int fillPrimitiveVertices(
+    MeshImportEntry* entry,
+    const PrimitiveBuildInputs* inputs,
+    float* texcoords,
+    uint32_t tangentTexcoordSet
+) {
+    for (size_t vertexIndex = 0; vertexIndex < entry->vertexCount; vertexIndex++) {
+        if (!fillPrimitiveVertex(entry, vertexIndex, inputs)) {
+            return 0;
+        }
+
+        if (!texcoords) continue;
+        const float* tangentTexcoords = tangentTexcoordSet == 1u
+            ? entry->vertices[vertexIndex].texcoord1
+            : entry->vertices[vertexIndex].texcoord0;
+        texcoords[(vertexIndex * 2u) + 0u] = tangentTexcoords[0];
+        texcoords[(vertexIndex * 2u) + 1u] = tangentTexcoords[1];
+    }
+
+    return 1;
+}
+
+static int fillPrimitiveIndices(
+    MeshImportEntry* entry,
+    const cgltf_primitive* primitive
+) {
+    if (primitive->indices) {
+        for (size_t indexOffset = 0; indexOffset < entry->indexCount; indexOffset++) {
+            cgltf_size indexValue = cgltf_accessor_read_index(primitive->indices, (cgltf_size)indexOffset);
+            if (indexValue >= entry->vertexCount) return 0;
+            entry->indices[indexOffset] = (uint32_t)indexValue;
+        }
+        return 1;
+    }
+
+    for (size_t indexOffset = 0; indexOffset < entry->indexCount; indexOffset++) {
+        entry->indices[indexOffset] = (uint32_t)indexOffset;
+    }
+    return 1;
+}
+
+static void finalizePrimitiveTangentData(
+    MeshImportEntry* entry,
+    const PrimitiveBuildInputs* inputs,
+    const float* texcoords
+) {
+    if (!inputs->normalAccessor) {
+        generateNormals(entry->vertices, entry->vertexCount, entry->indices, entry->indexCount);
+        return;
+    }
+
+    alignPrimitiveWindingToNormals(entry->vertices, entry->vertexCount, entry->indices, entry->indexCount);
+    if (inputs->useImportedTangents) {
+        finalizeTangents(entry->vertices, entry->vertexCount);
+        return;
+    }
+    if (texcoords) {
+        generateTangents(entry->vertices, entry->vertexCount, entry->indices, entry->indexCount, texcoords);
+        return;
+    }
+
+    applyFallbackTangents(entry->vertices, entry->vertexCount);
 }
 
 static void alignPrimitiveWindingToNormals(Vertex* vertices, size_t vertexCount, uint32_t* indices, size_t indexCount) {
@@ -1579,34 +1962,39 @@ static int buildPrimitiveEntry(
     const cgltf_primitive* primitive = &mesh->primitives[primitiveIndex];
     if (primitive->type != cgltf_primitive_type_triangles) return 0;
 
-    const cgltf_accessor* positionAccessor = findAttributeAccessor(primitive, cgltf_attribute_type_position, 0u);
-    const cgltf_accessor* normalAccessor = findAttributeAccessor(primitive, cgltf_attribute_type_normal, 0u);
-    const cgltf_accessor* tangentAccessor = findAttributeAccessor(primitive, cgltf_attribute_type_tangent, 0u);
-    const cgltf_accessor* texcoordAccessor0 = findAttributeAccessor(primitive, cgltf_attribute_type_texcoord, 0u);
-    const cgltf_accessor* texcoordAccessor1 = findAttributeAccessor(primitive, cgltf_attribute_type_texcoord, 1u);
-    const cgltf_accessor* colorAccessor0 = findAttributeAccessor(primitive, cgltf_attribute_type_color, 0u);
-    int useImportedTangents = normalAccessor && tangentAccessor;
-    if (!positionAccessor || positionAccessor->count == 0) return 0;
+    PrimitiveBuildInputs inputs = {
+        .positionAccessor = findAttributeAccessor(primitive, cgltf_attribute_type_position, 0u),
+        .normalAccessor = findAttributeAccessor(primitive, cgltf_attribute_type_normal, 0u),
+        .tangentAccessor = findAttributeAccessor(primitive, cgltf_attribute_type_tangent, 0u),
+        .texcoordAccessor0 = findAttributeAccessor(primitive, cgltf_attribute_type_texcoord, 0u),
+        .texcoordAccessor1 = findAttributeAccessor(primitive, cgltf_attribute_type_texcoord, 1u),
+        .colorAccessor = findAttributeAccessor(primitive, cgltf_attribute_type_color, 0u),
+        .tangentTexcoordSet = 0u,
+        .useImportedTangents = 0,
+    };
+    inputs.useImportedTangents = inputs.normalAccessor && inputs.tangentAccessor;
+    if (!inputs.positionAccessor || inputs.positionAccessor->count == 0) return 0;
 
     MeshImportEntry entry = {0};
-    entry.vertexCount = (size_t)positionAccessor->count;
+    entry.vertexCount = (size_t)inputs.positionAccessor->count;
     entry.indexCount = primitive->indices
         ? (size_t)primitive->indices->count
-        : (size_t)positionAccessor->count;
+        : (size_t)inputs.positionAccessor->count;
     entry.materialIndex = primitive->material ? (uint32_t)(primitive->material - data->materials) : VKRT_INVALID_INDEX;
     entry.renderBackfaces = primitive->material && primitive->material->double_sided ? 1u : 0u;
     const cgltf_material* sourceMaterial = primitive->material;
-    uint32_t tangentTexcoordSet = 0u;
     if (sourceMaterial) {
-        tangentTexcoordSet = queryTextureViewTexcoordSet(&sourceMaterial->normal_texture);
-        if (tangentTexcoordSet > 1u) tangentTexcoordSet = 0u;
+        inputs.tangentTexcoordSet = queryTextureViewTexcoordSet(&sourceMaterial->normal_texture);
+        if (inputs.tangentTexcoordSet > 1u) inputs.tangentTexcoordSet = 0u;
     }
-    const cgltf_accessor* tangentTexcoordAccessor = tangentTexcoordSet == 1u ? texcoordAccessor1 : texcoordAccessor0;
-    if (!validatePrimitiveAllocationFootprint(entry.vertexCount, entry.indexCount, !useImportedTangents && tangentTexcoordAccessor)) {
+    const cgltf_accessor* tangentTexcoordAccessor = inputs.tangentTexcoordSet == 1u
+        ? inputs.texcoordAccessor1
+        : inputs.texcoordAccessor0;
+    if (!validatePrimitiveAllocationFootprint(entry.vertexCount, entry.indexCount, !inputs.useImportedTangents && tangentTexcoordAccessor)) {
         return -1;
     }
 
-    char generatedName[kGeneratedMeshNameCapacity];
+    char generatedName[K_GENERATED_MESH_NAME_CAPACITY];
     buildEntryName(generatedName, sizeof(generatedName), node, mesh, primitiveIndex);
     entry.name = stringDuplicate(generatedName);
     entry.vertices = (Vertex*)calloc(entry.vertexCount, sizeof(Vertex));
@@ -1617,7 +2005,7 @@ static int buildPrimitiveEntry(
     }
 
     float* texcoords = NULL;
-    if (!useImportedTangents && tangentTexcoordAccessor) {
+    if (!inputs.useImportedTangents && tangentTexcoordAccessor) {
         texcoords = (float*)calloc(entry.vertexCount * 2u, sizeof(float));
         if (!texcoords) {
             releaseImportEntry(&entry);
@@ -1625,113 +2013,19 @@ static int buildPrimitiveEntry(
         }
     }
 
-    for (size_t vertexIndex = 0; vertexIndex < entry.vertexCount; vertexIndex++) {
-        float position[3] = {0.0f, 0.0f, 0.0f};
-        float normal[3] = {0.0f, 0.0f, 1.0f};
-        float tangent[4] = {0.0f, 0.0f, 0.0f, 1.0f};
-        float color[4] = {1.0f, 1.0f, 1.0f, 1.0f};
-        float texcoord0[2] = {0.0f, 0.0f};
-        float texcoord1[2] = {0.0f, 0.0f};
-
-        if (!cgltf_accessor_read_float(positionAccessor, (cgltf_size)vertexIndex, position, 3)) {
-            free(texcoords);
-            releaseImportEntry(&entry);
-            return -1;
-        }
-
-        float enginePosition[3] = {position[0], -position[2], position[1]};
-        copyFloat3ToFloat4(entry.vertices[vertexIndex].position, enginePosition, 1.0f);
-
-        if (normalAccessor && cgltf_accessor_read_float(normalAccessor, (cgltf_size)vertexIndex, normal, 3)) {
-            float engineNormal[3] = {normal[0], -normal[2], normal[1]};
-            copyFloat3ToFloat4(entry.vertices[vertexIndex].normal, engineNormal, 0.0f);
-        }
-
-        if (useImportedTangents && cgltf_accessor_read_float(tangentAccessor, (cgltf_size)vertexIndex, tangent, 4)) {
-            entry.vertices[vertexIndex].tangent[0] = tangent[0];
-            entry.vertices[vertexIndex].tangent[1] = -tangent[2];
-            entry.vertices[vertexIndex].tangent[2] = tangent[1];
-            entry.vertices[vertexIndex].tangent[3] = tangent[3];
-        }
-
-        if (colorAccessor0) {
-            cgltf_size colorComponentCount = cgltf_num_components(colorAccessor0->type);
-            if (colorComponentCount < 3u || colorComponentCount > 4u ||
-                !cgltf_accessor_read_float(colorAccessor0, (cgltf_size)vertexIndex, color, colorComponentCount)) {
-                free(texcoords);
-                releaseImportEntry(&entry);
-                return -1;
-            }
-        }
-
-        entry.vertices[vertexIndex].color[0] = color[0];
-        entry.vertices[vertexIndex].color[1] = color[1];
-        entry.vertices[vertexIndex].color[2] = color[2];
-        entry.vertices[vertexIndex].color[3] = color[3];
-
-        if (texcoordAccessor0) {
-            if (!cgltf_accessor_read_float(texcoordAccessor0, (cgltf_size)vertexIndex, texcoord0, 2)) {
-                free(texcoords);
-                releaseImportEntry(&entry);
-                return -1;
-            }
-        }
-
-        entry.vertices[vertexIndex].texcoord0[0] = texcoord0[0];
-        entry.vertices[vertexIndex].texcoord0[1] = texcoord0[1];
-
-        if (texcoordAccessor1) {
-            if (!cgltf_accessor_read_float(texcoordAccessor1, (cgltf_size)vertexIndex, texcoord1, 2)) {
-                free(texcoords);
-                releaseImportEntry(&entry);
-                return -1;
-            }
-        }
-
-
-        entry.vertices[vertexIndex].texcoord1[0] = texcoord1[0];
-        entry.vertices[vertexIndex].texcoord1[1] = texcoord1[1];
-
-        if (texcoords) {
-            const float* tangentTexcoords = tangentTexcoordSet == 1u ? texcoord1 : texcoord0;
-            texcoords[vertexIndex * 2u + 0u] = tangentTexcoords[0];
-            texcoords[vertexIndex * 2u + 1u] = tangentTexcoords[1];
-        }
+    if (!fillPrimitiveVertices(&entry, &inputs, texcoords, inputs.tangentTexcoordSet)) {
+        free(texcoords);
+        releaseImportEntry(&entry);
+        return -1;
     }
 
-    if (primitive->indices) {
-        for (size_t indexOffset = 0; indexOffset < entry.indexCount; indexOffset++) {
-            cgltf_size indexValue = cgltf_accessor_read_index(primitive->indices, (cgltf_size)indexOffset);
-            if (indexValue >= entry.vertexCount) {
-                free(texcoords);
-                releaseImportEntry(&entry);
-                return -1;
-            }
-            entry.indices[indexOffset] = (uint32_t)indexValue;
-        }
-    } else {
-        for (size_t indexOffset = 0; indexOffset < entry.indexCount; indexOffset++) {
-            entry.indices[indexOffset] = (uint32_t)indexOffset;
-        }
+    if (!fillPrimitiveIndices(&entry, primitive)) {
+        free(texcoords);
+        releaseImportEntry(&entry);
+        return -1;
     }
 
-    if (!normalAccessor) {
-        generateNormals(entry.vertices, entry.vertexCount, entry.indices, entry.indexCount);
-    }
-
-    if (normalAccessor) {
-        alignPrimitiveWindingToNormals(entry.vertices, entry.vertexCount, entry.indices, entry.indexCount);
-    }
-
-    if (useImportedTangents) {
-        finalizeTangents(entry.vertices, entry.vertexCount);
-    } else if (texcoords) {
-        generateTangents(entry.vertices, entry.vertexCount, entry.indices, entry.indexCount, texcoords);
-    } else {
-        for (size_t vertexIndex = 0; vertexIndex < entry.vertexCount; vertexIndex++) {
-            buildFallbackTangent(entry.vertices[vertexIndex].normal, entry.vertices[vertexIndex].tangent);
-        }
-    }
+    finalizePrimitiveTangentData(&entry, &inputs, texcoords);
 
     free(texcoords);
 
@@ -1744,45 +2038,135 @@ static int buildPrimitiveEntry(
     return 1;
 }
 
-static int collectNodeEntries(const cgltf_data* data, const cgltf_node* node, uint32_t parentNodeIndex, MeshImportData* importData) {
+static int appendNodePrimitiveEntries(
+    const cgltf_data* data,
+    const cgltf_node* node,
+    uint32_t nodeIndex,
+    MeshImportData* importData
+) {
     if (!data || !node || !importData) return -1;
+    if (!node->mesh) return 0;
 
-    uint32_t nodeIndex = VKRT_INVALID_INDEX;
-    if (appendNodeEntry(importData, node, parentNodeIndex, &nodeIndex) != 0) {
-        return -1;
-    }
-
-    if (node->mesh) {
-        for (cgltf_size primitiveIndex = 0; primitiveIndex < node->mesh->primitives_count; primitiveIndex++) {
-            MeshImportEntry entry = {0};
-            int buildResult = buildPrimitiveEntry(data, node, node->mesh, primitiveIndex, &entry);
-            if (buildResult < 0) {
-                releaseImportEntry(&entry);
-                return -1;
-            }
-            if (buildResult == 0) continue;
-            entry.nodeIndex = nodeIndex;
-            if (appendImportEntry(importData, &entry) != 0) {
-                releaseImportEntry(&entry);
-                return -1;
-            }
-            importData->nodes[nodeIndex].meshEntryCount++;
-        }
-    }
-
-    for (cgltf_size childIndex = 0; childIndex < node->children_count; childIndex++) {
-        if (collectNodeEntries(data, node->children[childIndex], nodeIndex, importData) != 0) {
+    for (cgltf_size primitiveIndex = 0; primitiveIndex < node->mesh->primitives_count; primitiveIndex++) {
+        MeshImportEntry entry = {0};
+        int buildResult = buildPrimitiveEntry(data, node, node->mesh, primitiveIndex, &entry);
+        if (buildResult < 0) {
+            releaseImportEntry(&entry);
             return -1;
         }
+        if (buildResult == 0) continue;
+
+        entry.nodeIndex = nodeIndex;
+        if (appendImportEntry(importData, &entry) != 0) {
+            releaseImportEntry(&entry);
+            return -1;
+        }
+        importData->nodes[nodeIndex].meshEntryCount++;
     }
 
     return 0;
 }
 
+static int collectNodeEntries(
+    const cgltf_data* data,
+    const cgltf_node* const* rootNodes,
+    cgltf_size rootNodeCount,
+    MeshImportData* importData
+) {
+    if (!data || !rootNodes || !importData) return -1;
+    if (rootNodeCount == 0u) return 0;
+
+    typedef struct NodeStackEntry {
+        const cgltf_node* node;
+        uint32_t parentNodeIndex;
+    } NodeStackEntry;
+
+    NodeStackEntry* stack = (NodeStackEntry*)calloc((size_t)data->nodes_count, sizeof(*stack));
+    if (!stack) return -1;
+
+    cgltf_size stackCount = 0u;
+    for (cgltf_size rootNodeIndex = rootNodeCount; rootNodeIndex > 0u; rootNodeIndex--) {
+        stack[stackCount++] = (NodeStackEntry){
+            .node = rootNodes[rootNodeIndex - 1u],
+            .parentNodeIndex = VKRT_INVALID_INDEX,
+        };
+    }
+
+    while (stackCount > 0u) {
+        NodeStackEntry stackEntry = stack[--stackCount];
+        uint32_t nodeIndex = VKRT_INVALID_INDEX;
+        if (appendNodeEntry(importData, stackEntry.node, stackEntry.parentNodeIndex, &nodeIndex) != 0 ||
+            appendNodePrimitiveEntries(data, stackEntry.node, nodeIndex, importData) != 0) {
+            free(stack);
+            return -1;
+        }
+
+        for (cgltf_size childIndex = stackEntry.node->children_count; childIndex > 0u; childIndex--) {
+            stack[stackCount++] = (NodeStackEntry){
+                .node = stackEntry.node->children[childIndex - 1u],
+                .parentNodeIndex = nodeIndex,
+            };
+        }
+    }
+
+    free(stack);
+    return 0;
+}
+
+static int parseGLTFFile(const char* resolvedPath, cgltf_options* options, cgltf_data** outData) {
+    if (cgltf_parse_file(options, resolvedPath, outData) != cgltf_result_success) {
+        LOG_ERROR("Failed to parse GLTF '%s'", resolvedPath);
+        return -1;
+    }
+    if (cgltf_load_buffers(options, *outData, resolvedPath) != cgltf_result_success) {
+        cgltf_free(*outData);
+        *outData = NULL;
+        LOG_ERROR("Failed to load buffers for '%s'", resolvedPath);
+        return -1;
+    }
+    return 0;
+}
+
+static int collectRootNodeEntries(
+    const cgltf_data* data,
+    MeshImportData* importData
+) {
+    if (data->scene && data->scene->nodes_count > 0) {
+        const cgltf_node* const* sceneRootNodes = (const cgltf_node* const*)data->scene->nodes;
+        return collectNodeEntries(data, sceneRootNodes, data->scene->nodes_count, importData);
+    }
+
+    const cgltf_node** rootNodes = (const cgltf_node**)calloc(data->nodes_count, sizeof(*rootNodes));
+    if (!rootNodes) {
+        return -1;
+    }
+
+    cgltf_size rootNodeCount = 0u;
+    for (cgltf_size nodeIndex = 0; nodeIndex < data->nodes_count; nodeIndex++) {
+        if (data->nodes[nodeIndex].parent) continue;
+        rootNodes[rootNodeCount++] = &data->nodes[nodeIndex];
+    }
+
+    int result = collectNodeEntries(data, rootNodes, rootNodeCount, importData);
+    free((void*)rootNodes);
+    return result;
+}
+
+static void logMeshImportProgress(const char* resolvedPath, const cgltf_data* data, const MeshImportData* importData) {
+    LOG_TRACE("glTF parsed. File: %s, Nodes: %zu, Meshes: %zu, Materials: %zu", resolvedPath, data->nodes_count, data->meshes_count, data->materials_count);
+    LOG_TRACE("glTF materials extracted. File: %s, Materials: %u, Textures: %u", resolvedPath, importData->materialCount, importData->textureCount);
+    LOG_TRACE("glTF geometry extracted. File: %s, Meshes: %u", resolvedPath, importData->count);
+    LOG_TRACE(
+        "glTF import decode complete. File: %s, Meshes: %u, Materials: %u, Textures: %u",
+        resolvedPath,
+        importData->count,
+        importData->materialCount,
+        importData->textureCount
+    );
+}
+
 int meshLoadFromFile(const char* filePath, MeshImportData* outImportData) {
     if (!filePath || !filePath[0] || !outImportData) return -1;
-
-    uint64_t totalStartTime = getMicroseconds();
 
     char resolvedPath[VKRT_PATH_MAX];
     if (resolveExistingPath(filePath, resolvedPath, sizeof(resolvedPath)) != 0) {
@@ -1795,30 +2179,11 @@ int meshLoadFromFile(const char* filePath, MeshImportData* outImportData) {
     cgltf_options options = {0};
     cgltf_data* data = NULL;
 
-    uint64_t parseStartTime = getMicroseconds();
-    if (cgltf_parse_file(&options, resolvedPath, &data) != cgltf_result_success) {
-        LOG_ERROR("Failed to parse GLTF '%s'", resolvedPath);
+    if (parseGLTFFile(resolvedPath, &options, &data) != 0) {
         return -1;
     }
-
-    if (cgltf_load_buffers(&options, data, resolvedPath) != cgltf_result_success) {
-        cgltf_free(data);
-        LOG_ERROR("Failed to load buffers for '%s'", resolvedPath);
-        return -1;
-    }
-
-    LOG_TRACE(
-        "glTF parsed. File: %s, Nodes: %zu, Meshes: %zu, Materials: %zu, in %.3f ms",
-        resolvedPath,
-        data->nodes_count,
-        data->meshes_count,
-        data->materials_count,
-        (double)(getMicroseconds() - parseStartTime) / 1e3
-    );
 
     logIgnoredImportFeatures(resolvedPath, data);
-
-    uint64_t materialStartTime = getMicroseconds();
     if (populateImportMaterials(data, outImportData, resolvedPath) != 0) {
         cgltf_free(data);
         meshReleaseImportData(outImportData);
@@ -1826,61 +2191,24 @@ int meshLoadFromFile(const char* filePath, MeshImportData* outImportData) {
         return -1;
     }
 
-    LOG_TRACE(
-        "glTF materials extracted. File: %s, Materials: %u, Textures: %u, in %.3f ms",
-        resolvedPath,
-        outImportData->materialCount,
-        outImportData->textureCount,
-        (double)(getMicroseconds() - materialStartTime) / 1e3
-    );
-
-    uint64_t geometryStartTime = getMicroseconds();
-    int result = 0;
-    if (data->scene && data->scene->nodes_count > 0) {
-        for (cgltf_size nodeIndex = 0; nodeIndex < data->scene->nodes_count; nodeIndex++) {
-            if (collectNodeEntries(data, data->scene->nodes[nodeIndex], VKRT_INVALID_INDEX, outImportData) != 0) {
-                result = -1;
-                break;
-            }
-        }
-    } else {
-        for (cgltf_size nodeIndex = 0; nodeIndex < data->nodes_count; nodeIndex++) {
-            if (data->nodes[nodeIndex].parent) continue;
-            if (collectNodeEntries(data, &data->nodes[nodeIndex], VKRT_INVALID_INDEX, outImportData) != 0) {
-                result = -1;
-                break;
-            }
-        }
-    }
-
-    cgltf_free(data);
+    int result = collectRootNodeEntries(data, outImportData);
 
     if (result != 0) {
+        cgltf_free(data);
         meshReleaseImportData(outImportData);
         LOG_ERROR("Failed to extract mesh entries from '%s'", resolvedPath);
         return -1;
     }
 
     if (outImportData->count == 0) {
+        cgltf_free(data);
         meshReleaseImportData(outImportData);
         LOG_ERROR("No triangle mesh primitives were found in '%s'", resolvedPath);
         return -1;
     }
 
-    LOG_TRACE(
-        "glTF geometry extracted. File: %s, Meshes: %u, in %.3f ms",
-        resolvedPath,
-        outImportData->count,
-        (double)(getMicroseconds() - geometryStartTime) / 1e3
-    );
-    LOG_TRACE(
-        "glTF import decode complete. File: %s, Meshes: %u, Materials: %u, Textures: %u, cumulative: %.3f ms",
-        resolvedPath,
-        outImportData->count,
-        outImportData->materialCount,
-        outImportData->textureCount,
-        (double)(getMicroseconds() - totalStartTime) / 1e3
-    );
+    logMeshImportProgress(resolvedPath, data, outImportData);
+    cgltf_free(data);
 
     return 0;
 }

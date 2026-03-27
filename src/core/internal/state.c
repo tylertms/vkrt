@@ -1,8 +1,14 @@
 #include "state.h"
 
+#include "config.h"
+#include "types.h"
+#include "vkrt_engine_types.h"
+#include "vkrt_types.h"
+#include "vulkan/vulkan_core.h"
+
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdint.h>
 
 static const char* kDefaultMaterialName = "Default Material";
 

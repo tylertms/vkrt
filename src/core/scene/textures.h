@@ -76,12 +76,7 @@ VKRT_Result vkrtSceneAddTextureFromFile(
 );
 VKRT_Result vkrtSceneAddTextureFromPixels(
     VKRT* vkrt,
-    const char* name,
-    const void* pixels,
-    uint32_t width,
-    uint32_t height,
-    uint32_t format,
-    uint32_t colorSpace,
+    const VKRT_TextureUpload* upload,
     uint32_t* outTextureIndex
 );
 VKRT_Result vkrtSceneAddTexturesBatch(

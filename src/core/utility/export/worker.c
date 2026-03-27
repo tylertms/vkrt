@@ -1,62 +1,96 @@
-#include "internal.h"
-
 #include "debug.h"
+#include "export.h"
+#include "internal.h"
+#include "platform.h"
+#include "vkrt_engine_types.h"
+#include "vkrt_types.h"
 
+#include <stdint.h>
 #include <stdlib.h>
 
 static const uint32_t kMaxPendingImageExportJobs = 2u;
+
+static RenderImageExportJob* waitForNextRenderImageExportJob(RenderImageExporter* exporter) {
+    if (!exporter) return NULL;
+
+    vkrtMutexLock(&exporter->workerLock);
+    while (!exporter->stop && exporter->head == NULL) {
+        vkrtCondWait(&exporter->workerCondition, &exporter->workerLock);
+    }
+
+    if (exporter->stop && exporter->head == NULL) {
+        vkrtMutexUnlock(&exporter->workerLock);
+        return NULL;
+    }
+
+    RenderImageExportJob* job = exporter->head;
+    exporter->head = job->next;
+    if (exporter->head == NULL) {
+        exporter->tail = NULL;
+    }
+    vkrtMutexUnlock(&exporter->workerLock);
+    return job;
+}
+
+static void publishCompletedViewportJob(
+    RenderImageExporter* exporter,
+    const RenderImageExportJob* job,
+    int result,
+    uint16_t* displayPixels,
+    size_t displayByteCount
+) {
+    if (!exporter || !job) return;
+
+    vkrtMutexLock(&exporter->stateLock);
+    free(exporter->completedViewportPixels);
+    exporter->completedViewportPixels = displayPixels;
+    exporter->completedViewportByteCount = displayByteCount;
+    exporter->completedViewportWidth = job->width;
+    exporter->completedViewportHeight = job->height;
+    exporter->completedViewportRenderSequence = job->renderSequence;
+    exporter->completedViewportSucceeded = result == 0;
+    exporter->completedViewportReady = 1;
+    vkrtMutexUnlock(&exporter->stateLock);
+}
+
+static void processRenderImageWorkerJob(RenderImageExporter* exporter, RenderImageExportJob* job) {
+    if (!exporter || !job) return;
+
+    if (job->type == RENDER_IMAGE_JOB_TYPE_SAVE) {
+        int result = processRenderImageExportJob(job);
+        if (result == 0) {
+            LOG_INFO("Saved render image: %s", job->path);
+        }
+        return;
+    }
+
+    uint16_t* displayPixels = NULL;
+    size_t displayByteCount = 0u;
+    int result = processViewportDenoiseJob(job, &displayPixels, &displayByteCount);
+    publishCompletedViewportJob(exporter, job, result, displayPixels, displayByteCount);
+}
+
+static void finishRenderImageWorkerJob(RenderImageExporter* exporter) {
+    if (!exporter) return;
+
+    vkrtMutexLock(&exporter->workerLock);
+    if (exporter->pendingJobCount > 0u) {
+        exporter->pendingJobCount--;
+    }
+    vkrtCondBroadcast(&exporter->workerCondition);
+    vkrtMutexUnlock(&exporter->workerLock);
+}
 
 static int renderImageWorkerMain(void* userData) {
     RenderImageExporter* exporter = (RenderImageExporter*)userData;
 
     for (;;) {
-        vkrtMutexLock(&exporter->workerLock);
-        while (!exporter->stop && exporter->head == NULL) {
-            vkrtCondWait(&exporter->workerCondition, &exporter->workerLock);
-        }
+        RenderImageExportJob* job = waitForNextRenderImageExportJob(exporter);
+        if (!job) break;
 
-        if (exporter->stop && exporter->head == NULL) {
-            vkrtMutexUnlock(&exporter->workerLock);
-            break;
-        }
-
-        RenderImageExportJob* job = exporter->head;
-        exporter->head = job->next;
-        if (exporter->head == NULL) {
-            exporter->tail = NULL;
-        }
-        vkrtMutexUnlock(&exporter->workerLock);
-
-        int result = -1;
-        if (job->type == RENDER_IMAGE_JOB_TYPE_SAVE) {
-            result = processRenderImageExportJob(job);
-            if (result == 0) {
-                LOG_INFO("Saved render image: %s", job->path);
-            }
-        } else {
-            uint16_t* displayPixels = NULL;
-            size_t displayByteCount = 0u;
-            result = processViewportDenoiseJob(job, &displayPixels, &displayByteCount);
-
-            vkrtMutexLock(&exporter->stateLock);
-            free(exporter->completedViewportPixels);
-            exporter->completedViewportPixels = displayPixels;
-            exporter->completedViewportByteCount = displayByteCount;
-            exporter->completedViewportWidth = job->width;
-            exporter->completedViewportHeight = job->height;
-            exporter->completedViewportRenderSequence = job->renderSequence;
-            exporter->completedViewportSucceeded = result == 0;
-            exporter->completedViewportReady = 1;
-            vkrtMutexUnlock(&exporter->stateLock);
-        }
+        processRenderImageWorkerJob(exporter, job);
         freeRenderImageExportJob(job);
-
-        vkrtMutexLock(&exporter->workerLock);
-        if (exporter->pendingJobCount > 0u) {
-            exporter->pendingJobCount--;
-        }
-        vkrtCondBroadcast(&exporter->workerCondition);
-        vkrtMutexUnlock(&exporter->workerLock);
+        finishRenderImageWorkerJob(exporter);
     }
 
     return 0;

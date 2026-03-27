@@ -1,13 +1,16 @@
+#include "config.h"
 #include "constants.h"
+#include "numeric.h"
 #include "scene.h"
 #include "state.h"
 #include "vkrt_internal.h"
-#include "numeric.h"
+#include "vkrt_types.h"
 
 #include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <types.h>
 
 static uint32_t sanitizeMeshSelection(const VKRT* vkrt, uint32_t meshIndex) {
     if (!vkrt || meshIndex == VKRT_INVALID_INDEX) return VKRT_INVALID_INDEX;
@@ -148,7 +151,9 @@ VKRT_Result VKRT_setEnvironmentLight(VKRT* vkrt, vec3 color, float strength) {
     }
     strength = vkrtFiniteClampf(strength, 0.0f, 0.0f, INFINITY);
 
-    if (memcmp(vkrt->sceneSettings.environmentColor, sanitizedColor, sizeof(sanitizedColor)) == 0 &&
+    if (vkrt->sceneSettings.environmentColor[0] == sanitizedColor[0] &&
+        vkrt->sceneSettings.environmentColor[1] == sanitizedColor[1] &&
+        vkrt->sceneSettings.environmentColor[2] == sanitizedColor[2] &&
         vkrt->sceneSettings.environmentStrength == strength) {
         return VKRT_SUCCESS;
     }
@@ -236,7 +241,19 @@ VKRT_Result VKRT_setSceneTimeline(VKRT* vkrt, const VKRT_SceneTimelineSettings* 
         }
     }
 
-    if (memcmp(&vkrt->sceneSettings.sceneTimeline, &sanitized, sizeof(sanitized)) == 0) return VKRT_SUCCESS;
+    const VKRT_SceneTimelineSettings* currentTimeline = &vkrt->sceneSettings.sceneTimeline;
+    int timelineMatches = currentTimeline->enabled == sanitized.enabled &&
+        currentTimeline->keyframeCount == sanitized.keyframeCount;
+    for (uint32_t keyIndex = 0; timelineMatches && keyIndex < sanitized.keyframeCount; keyIndex++) {
+        const VKRT_SceneTimelineKeyframe* currentKey = &currentTimeline->keyframes[keyIndex];
+        const VKRT_SceneTimelineKeyframe* sanitizedKey = &sanitized.keyframes[keyIndex];
+        timelineMatches = currentKey->time == sanitizedKey->time &&
+            currentKey->emissionScale == sanitizedKey->emissionScale &&
+            currentKey->emissionTint[0] == sanitizedKey->emissionTint[0] &&
+            currentKey->emissionTint[1] == sanitizedKey->emissionTint[1] &&
+            currentKey->emissionTint[2] == sanitizedKey->emissionTint[2];
+    }
+    if (timelineMatches) return VKRT_SUCCESS;
     vkrt->sceneSettings.sceneTimeline = sanitized;
     resetSceneData(vkrt);
     return VKRT_SUCCESS;

@@ -1,30 +1,33 @@
-#include "buffer.h"
+#include "GLFW/glfw3.h"
+#include "accel/accel.h"
 #include "command/pool.h"
+#include "config.h"
+#include "debug.h"
 #include "descriptor.h"
 #include "device.h"
-#include "procs.h"
+#include "export.h"
 #include "images.h"
 #include "instance.h"
 #include "pipeline.h"
-#include "scene.h"
-#include "accel/accel.h"
-#include "surface.h"
-#include "sync.h"
-#include "swapchain.h"
+#include "procs.h"
 #include "rebuild.h"
+#include "scene.h"
 #include "state.h"
+#include "surface.h"
+#include "swapchain.h"
+#include "sync.h"
 #include "textures.h"
 #include "validation.h"
-#include "export.h"
-#include "debug.h"
 #include "vkrt_internal.h"
+#include "vkrt_types.h"
+#include "vulkan/vulkan_core.h"
 
-#include <stdio.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#if defined (_WIN32)
+#ifdef _WIN32
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3native.h>
 #include <dwmapi.h>
@@ -42,23 +45,23 @@ static inline uint32_t defaultWindowExtentFromDisplay(uint32_t displayExtent) {
     return displayExtent > 1u ? (uint32_t)(((uint64_t)displayExtent * 4u) / 5u) : 1u;
 }
 
-static uint32_t g_glfwInitRefCount = 0u;
+static uint32_t gGlfwInitRefCount = 0u;
 
 static VKRT_Result acquireGLFW(void) {
-    if (g_glfwInitRefCount == 0u && !glfwInit()) {
+    if (gGlfwInitRefCount == 0u && !glfwInit()) {
         LOG_ERROR("Failed to initialize GLFW");
         return VKRT_ERROR_INITIALIZATION_FAILED;
     }
 
-    g_glfwInitRefCount++;
+    gGlfwInitRefCount++;
     return VKRT_SUCCESS;
 }
 
 static void releaseGLFW(void) {
-    if (g_glfwInitRefCount == 0u) return;
+    if (gGlfwInitRefCount == 0u) return;
 
-    g_glfwInitRefCount--;
-    if (g_glfwInitRefCount == 0u) {
+    gGlfwInitRefCount--;
+    if (gGlfwInitRefCount == 0u) {
         glfwTerminate();
     }
 }
@@ -227,10 +230,11 @@ static void cleanupCommandAndQueryResources(VKRT* vkrt) {
     if (!vkrt || vkrt->core.device == VK_NULL_HANDLE) return;
 
     if (vkrt->runtime.commandPool != VK_NULL_HANDLE) {
+        const uint32_t commandBufferCount = VKRT_MAX_FRAMES_IN_FLIGHT;
         vkFreeCommandBuffers(
             vkrt->core.device,
             vkrt->runtime.commandPool,
-            VKRT_ARRAY_COUNT(vkrt->runtime.commandBuffers),
+            commandBufferCount,
             vkrt->runtime.commandBuffers
         );
         vkDestroyCommandPool(vkrt->core.device, vkrt->runtime.commandPool, NULL);
@@ -283,6 +287,189 @@ void VKRT_destroy(VKRT* vkrt) {
     free(vkrt);
 }
 
+static void initializeRuntimeDefaults(VKRT* vkrt, const VKRT_CreateInfo* createInfo) {
+    if (!vkrt || !createInfo) return;
+
+    vkrt->runtime.swapChainFormatLogInitialized = VK_FALSE;
+    vkrt->runtime.lastLoggedSwapChainFormat = VK_FORMAT_UNDEFINED;
+    vkrt->runtime.lastLoggedSwapChainColorSpace = VK_COLOR_SPACE_MAX_ENUM_KHR;
+    vkrt->runtime.appInitialized = 0;
+    vkrt->runtime.headless = createInfo->headless ? VK_TRUE : VK_FALSE;
+    vkrt->runtime.disableSER = createInfo->disableSER ? 1u : 0u;
+
+    for (uint32_t i = 0; i < VKRT_MAX_FRAMES_IN_FLIGHT; i++) {
+        vkrt->core.descriptorSetReady[i] = VK_FALSE;
+    }
+
+    vkrt->core.sceneResourceRevision = 0;
+    vkrt->core.materialResourceRevision = 0;
+    vkrt->core.textureResourceRevision = 0;
+    vkrt->core.lightResourceRevision = 0;
+    vkrt->core.sceneRevision = 1;
+    vkrt->core.materialRevision = 1;
+    vkrt->core.textureRevision = 1;
+    vkrt->core.lightRevision = 1;
+    vkrt->core.emissiveMeshCount = 0;
+    vkrt->core.emissiveTriangleCount = 0;
+    vkrt->renderStatus.renderPhase = VKRT_RENDER_PHASE_INACTIVE;
+    vkrt->renderStatus.renderDenoiseEnabled = VKRT_OIDN_ENABLED ? 1u : 0u;
+    vkrt->renderStatus.renderTargetSamples = 0;
+    vkrt->renderControl.finalImageDenoiseEnabled = VKRT_OIDN_ENABLED ? 1u : 0u;
+}
+
+static void configureDisplayMetricsAndExtent(
+    VKRT* vkrt,
+    const VKRT_CreateInfo* createInfo,
+    uint32_t* outWidth,
+    uint32_t* outHeight
+) {
+    if (!vkrt || !createInfo || !outWidth || !outHeight) return;
+
+    uint32_t displayWidth = VKRT_DEFAULT_WIDTH;
+    uint32_t displayHeight = VKRT_DEFAULT_HEIGHT;
+    vkrtQueryDisplayMetrics(NULL, &displayWidth, &displayHeight, NULL);
+    vkrt->runtime.displayWidth = displayWidth;
+    vkrt->runtime.displayHeight = displayHeight;
+
+    uint32_t width = createInfo->startFullscreen ? displayWidth : createInfo->width;
+    uint32_t height = createInfo->startFullscreen ? displayHeight : createInfo->height;
+    if (width == 0) width = createInfo->startMaximized ? displayWidth : defaultWindowExtentFromDisplay(displayWidth);
+    if (height == 0) height = createInfo->startMaximized ? displayHeight : defaultWindowExtentFromDisplay(displayHeight);
+    if (width == 0) width = VKRT_DEFAULT_WIDTH;
+    if (height == 0) height = VKRT_DEFAULT_HEIGHT;
+
+    if (vkrt->runtime.headless) {
+        vkrt->runtime.swapChainExtent = (VkExtent2D){width, height};
+        vkrt->runtime.renderExtent = (VkExtent2D){width, height};
+        vkrt->runtime.displayViewportRect[0] = 0u;
+        vkrt->runtime.displayViewportRect[1] = 0u;
+        vkrt->runtime.displayViewportRect[2] = width;
+        vkrt->runtime.displayViewportRect[3] = height;
+    }
+
+    *outWidth = width;
+    *outHeight = height;
+}
+
+static VKRT_Result createRuntimeWindow(
+    VKRT* vkrt,
+    const VKRT_CreateInfo* createInfo,
+    const char* title,
+    uint32_t width,
+    uint32_t height
+) {
+    if (!vkrt || !createInfo || !title) return VKRT_ERROR_INVALID_ARGUMENT;
+    if (vkrt->runtime.headless) return VKRT_SUCCESS;
+
+    GLFWmonitor* fullscreenMonitor = createInfo->startFullscreen ? glfwGetPrimaryMonitor() : NULL;
+    int maximized = (!createInfo->startFullscreen && createInfo->startMaximized) ? GLFW_TRUE : GLFW_FALSE;
+
+    glfwWindowHint(GLFW_MAXIMIZED, maximized);
+    vkrt->runtime.window = glfwCreateWindow((int)width, (int)height, title, fullscreenMonitor, 0);
+    if (!vkrt->runtime.window) {
+        LOG_ERROR("Failed to create GLFW window");
+        return VKRT_ERROR_INITIALIZATION_FAILED;
+    }
+
+#ifdef _WIN32
+    BOOL value = TRUE;
+    HRESULT hr = DwmSetWindowAttribute(
+        glfwGetWin32Window(vkrt->runtime.window),
+        DWMWA_USE_IMMERSIVE_DARK_MODE,
+        &value,
+        sizeof(value)
+    );
+
+    if (!SUCCEEDED(hr)) {
+        LOG_INFO("Did not use immersive title bar");
+    }
+#endif
+
+    glfwSetWindowUserPointer(vkrt->runtime.window, vkrt);
+    glfwSetFramebufferSizeCallback(vkrt->runtime.window, VKRT_framebufferResizedCallback);
+    return VKRT_SUCCESS;
+}
+
+static VKRT_Result createInstanceAndDevice(VKRT* vkrt, const VKRT_CreateInfo* createInfo) {
+    if (!vkrt || !createInfo) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    if (createInstance(vkrt, !vkrt->runtime.headless) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    if (setupDebugMessenger(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    if (!vkrt->runtime.headless && createSurface(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    if (pickPhysicalDevice(vkrt, createInfo) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    if (createLogicalDevice(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    if (loadDeviceProcs(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    if (createQueryPool(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+
+    return VKRT_SUCCESS;
+}
+
+static VKRT_Result createRenderBackendResources(VKRT* vkrt) {
+    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    if (!vkrt->runtime.headless) {
+        glfwPollEvents();
+        if (createSwapChain(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+        if (createImageViews(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    }
+
+    if (createCommandPool(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    if (vkrtEnsureTextureBindings(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    if (createDescriptorSetLayout(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    if (createRayTracingPipeline(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    if (createSelectionRayTracingPipeline(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    if (createComputePipeline(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    if (createGPUImages(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    if (createSceneUniform(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    if (createDescriptorPool(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    if (createDescriptorSet(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    if (createShaderBindingTable(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    if (createSelectionShaderBindingTable(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    if (createCommandBuffers(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    if (createSyncObjects(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+
+    return VKRT_SUCCESS;
+}
+
+static void runInitializationSteps(VKRT* vkrt, const VKRT_CreateInfo* createInfo, uint64_t initStartTime) {
+    if (!vkrt || !createInfo) return;
+
+    uint64_t stepStartTime = initStartTime;
+    const char* title = createInfo->title ? createInfo->title : "VKRT";
+    uint32_t width = 0u;
+    uint32_t height = 0u;
+
+    initializeRuntimeDefaults(vkrt, createInfo);
+    configureDisplayMetricsAndExtent(vkrt, createInfo, &width, &height);
+
+    stepStartTime = getMicroseconds();
+    if (createRuntimeWindow(vkrt, createInfo, title, width, height) != VKRT_SUCCESS) goto init_failed;
+    if (!vkrt->runtime.headless) {
+        logStepTime("Window setup complete", stepStartTime);
+    }
+
+    stepStartTime = getMicroseconds();
+    if (createInstanceAndDevice(vkrt, createInfo) != VKRT_SUCCESS) goto init_failed;
+    logStepTime("Vulkan instance, surface, and device ready", stepStartTime);
+
+    stepStartTime = getMicroseconds();
+    if (createRenderBackendResources(vkrt) != VKRT_SUCCESS) goto init_failed;
+    logStepTime("Render backend resources ready", stepStartTime);
+
+    stepStartTime = getMicroseconds();
+    if (vkrt->appHooks.init) {
+        vkrt->appHooks.init(vkrt, vkrt->appHooks.userData);
+    }
+    vkrt->runtime.appInitialized = 1;
+    logStepTime("Application initialization complete", stepStartTime);
+
+    LOG_INFO("VKRT initialization complete in %.3f ms", (double)(getMicroseconds() - initStartTime) / 1e3);
+    return;
+
+init_failed:
+    VKRT_deinit(vkrt);
+}
+
 VKRT_Result VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInfo) {
     if (!vkrt || !createInfo) return VKRT_ERROR_INVALID_ARGUMENT;
     if (vkrt->runtime.window || vkrt->core.instance || vkrt->core.device) {
@@ -300,173 +487,11 @@ VKRT_Result VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInf
         glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
     }
     logStepTime("GLFW setup complete", stepStartTime);
-
-    vkrt->runtime.swapChainFormatLogInitialized = VK_FALSE;
-    vkrt->runtime.lastLoggedSwapChainFormat = VK_FORMAT_UNDEFINED;
-    vkrt->runtime.lastLoggedSwapChainColorSpace = VK_COLOR_SPACE_MAX_ENUM_KHR;
-    vkrt->runtime.appInitialized = 0;
-    vkrt->runtime.headless = createInfo->headless ? VK_TRUE : VK_FALSE;
-    vkrt->runtime.disableSER = createInfo->disableSER ? 1u : 0u;
-    for (uint32_t i = 0; i < VKRT_MAX_FRAMES_IN_FLIGHT; i++) {
-        vkrt->core.descriptorSetReady[i] = VK_FALSE;
+    runInitializationSteps(vkrt, createInfo, initStartTime);
+    if (!vkrt->core.device) {
+        return VKRT_ERROR_OPERATION_FAILED;
     }
-    vkrt->core.sceneResourceRevision = 0;
-    vkrt->core.materialResourceRevision = 0;
-    vkrt->core.textureResourceRevision = 0;
-    vkrt->core.lightResourceRevision = 0;
-    vkrt->core.sceneRevision = 1;
-    vkrt->core.materialRevision = 1;
-    vkrt->core.textureRevision = 1;
-    vkrt->core.lightRevision = 1;
-    vkrt->core.emissiveMeshCount = 0;
-    vkrt->core.emissiveTriangleCount = 0;
-    vkrt->renderStatus.renderPhase = VKRT_RENDER_PHASE_INACTIVE;
-    vkrt->renderStatus.renderDenoiseEnabled = VKRT_OIDN_ENABLED ? 1u : 0u;
-    vkrt->renderStatus.renderTargetSamples = 0;
-    vkrt->renderControl.finalImageDenoiseEnabled = VKRT_OIDN_ENABLED ? 1u : 0u;
-
-    const char* title = createInfo->title ? createInfo->title : "VKRT";
-    uint32_t displayWidth = VKRT_DEFAULT_WIDTH;
-    uint32_t displayHeight = VKRT_DEFAULT_HEIGHT;
-    vkrtQueryDisplayMetrics(NULL, &displayWidth, &displayHeight, NULL);
-    vkrt->runtime.displayWidth = displayWidth;
-    vkrt->runtime.displayHeight = displayHeight;
-
-    uint32_t width = createInfo->startFullscreen ? displayWidth : createInfo->width;
-    uint32_t height = createInfo->startFullscreen ? displayHeight : createInfo->height;
-    if (width == 0) width = createInfo->startMaximized ? displayWidth : defaultWindowExtentFromDisplay(displayWidth);
-    if (height == 0) height = createInfo->startMaximized ? displayHeight : defaultWindowExtentFromDisplay(displayHeight);
-    if (width == 0) width = VKRT_DEFAULT_WIDTH;
-    if (height == 0) height = VKRT_DEFAULT_HEIGHT;
-    if (vkrt->runtime.headless) {
-        vkrt->runtime.swapChainExtent = (VkExtent2D){width, height};
-        vkrt->runtime.renderExtent = (VkExtent2D){width, height};
-        vkrt->runtime.displayViewportRect[0] = 0u;
-        vkrt->runtime.displayViewportRect[1] = 0u;
-        vkrt->runtime.displayViewportRect[2] = width;
-        vkrt->runtime.displayViewportRect[3] = height;
-    }
-
-    if (!vkrt->runtime.headless) {
-        stepStartTime = getMicroseconds();
-        GLFWmonitor* fullscreenMonitor = createInfo->startFullscreen ? glfwGetPrimaryMonitor() : NULL;
-        glfwWindowHint(GLFW_MAXIMIZED, (!createInfo->startFullscreen && createInfo->startMaximized) ? GLFW_TRUE : GLFW_FALSE);
-        vkrt->runtime.window = glfwCreateWindow((int)width, (int)height, title, fullscreenMonitor, 0);
-        if (!vkrt->runtime.window) {
-            LOG_ERROR("Failed to create GLFW window");
-            goto init_failed;
-        }
-
-#if defined(_WIN32)
-        BOOL value = TRUE;
-        HRESULT hr = DwmSetWindowAttribute(
-            glfwGetWin32Window(vkrt->runtime.window),
-            DWMWA_USE_IMMERSIVE_DARK_MODE,
-            &value,
-            sizeof(value)
-        );
-
-        if (!SUCCEEDED(hr)) {
-            LOG_INFO("Did not use immersive title bar");
-        }
-#endif
-
-        glfwSetWindowUserPointer(vkrt->runtime.window, vkrt);
-        glfwSetFramebufferSizeCallback(vkrt->runtime.window, VKRT_framebufferResizedCallback);
-
-        logStepTime("Window setup complete", stepStartTime);
-    }
-
-    stepStartTime = getMicroseconds();
-    if (createInstance(vkrt, !vkrt->runtime.headless) != VKRT_SUCCESS) goto init_failed;
-    logStepTime("Vulkan instance created", stepStartTime);
-
-    stepStartTime = getMicroseconds();
-    if (setupDebugMessenger(vkrt) != VKRT_SUCCESS) goto init_failed;
-    logStepTime("Debug messenger setup complete", stepStartTime);
-
-    if (!vkrt->runtime.headless) {
-        stepStartTime = getMicroseconds();
-        if (createSurface(vkrt) != VKRT_SUCCESS) goto init_failed;
-        logStepTime("Surface created", stepStartTime);
-    }
-
-    stepStartTime = getMicroseconds();
-    if (pickPhysicalDevice(vkrt, createInfo) != VKRT_SUCCESS) goto init_failed;
-    logStepTime("Physical device selection complete", stepStartTime);
-
-    stepStartTime = getMicroseconds();
-    if (createLogicalDevice(vkrt) != VKRT_SUCCESS) goto init_failed;
-    logStepTime("Logical device created", stepStartTime);
-
-    stepStartTime = getMicroseconds();
-    if (loadDeviceProcs(vkrt) != VKRT_SUCCESS) goto init_failed;
-    logStepTime("Device procedures loaded", stepStartTime);
-
-    stepStartTime = getMicroseconds();
-    if (createQueryPool(vkrt) != VKRT_SUCCESS) goto init_failed;
-    logStepTime("Query pool created", stepStartTime);
-
-    if (!vkrt->runtime.headless) {
-        glfwPollEvents();
-
-        stepStartTime = getMicroseconds();
-        if (createSwapChain(vkrt) != VKRT_SUCCESS) goto init_failed;
-        if (createImageViews(vkrt) != VKRT_SUCCESS) goto init_failed;
-        logStepTime("Swapchain ready", stepStartTime);
-    }
-
-    stepStartTime = getMicroseconds();
-    if (createCommandPool(vkrt) != VKRT_SUCCESS) goto init_failed;
-    if (vkrtEnsureTextureBindings(vkrt) != VKRT_SUCCESS) goto init_failed;
-    if (createDescriptorSetLayout(vkrt) != VKRT_SUCCESS) goto init_failed;
-    logStepTime("Command pool and descriptor layout ready", stepStartTime);
-
-    stepStartTime = getMicroseconds();
-    if (createRayTracingPipeline(vkrt) != VKRT_SUCCESS) goto init_failed;
-    if (createSelectionRayTracingPipeline(vkrt) != VKRT_SUCCESS) goto init_failed;
-    if (createComputePipeline(vkrt) != VKRT_SUCCESS) goto init_failed;
-    logStepTime("Ray tracing pipelines and compute pipeline ready", stepStartTime);
-
-    stepStartTime = getMicroseconds();
-    if (createGPUImages(vkrt) != VKRT_SUCCESS) goto init_failed;
-    logStepTime("Storage image ready", stepStartTime);
-
-    stepStartTime = getMicroseconds();
-    if (createSceneUniform(vkrt) != VKRT_SUCCESS) goto init_failed;
-    logStepTime("Scene uniform ready", stepStartTime);
-
-    stepStartTime = getMicroseconds();
-    if (createDescriptorPool(vkrt) != VKRT_SUCCESS) goto init_failed;
-    logStepTime("Descriptor pool ready", stepStartTime);
-
-    stepStartTime = getMicroseconds();
-    if (createDescriptorSet(vkrt) != VKRT_SUCCESS) goto init_failed;
-    logStepTime("Descriptor set ready", stepStartTime);
-
-    stepStartTime = getMicroseconds();
-    if (createShaderBindingTable(vkrt) != VKRT_SUCCESS) goto init_failed;
-    if (createSelectionShaderBindingTable(vkrt) != VKRT_SUCCESS) goto init_failed;
-    logStepTime("Shader binding tables ready", stepStartTime);
-
-    stepStartTime = getMicroseconds();
-    if (createCommandBuffers(vkrt) != VKRT_SUCCESS) goto init_failed;
-    if (createSyncObjects(vkrt) != VKRT_SUCCESS) goto init_failed;
-    logStepTime("Command buffers and sync objects ready", stepStartTime);
-
-    stepStartTime = getMicroseconds();
-    if (vkrt->appHooks.init) {
-        vkrt->appHooks.init(vkrt, vkrt->appHooks.userData);
-    }
-    vkrt->runtime.appInitialized = 1;
-    logStepTime("Application initialization complete", stepStartTime);
-
-    LOG_INFO("VKRT initialization complete in %.3f ms", (double)(getMicroseconds() - initStartTime) / 1e3);
     return VKRT_SUCCESS;
-
-init_failed:
-    VKRT_deinit(vkrt);
-    return VKRT_ERROR_OPERATION_FAILED;
 }
 
 VKRT_Result VKRT_init(VKRT* vkrt) {

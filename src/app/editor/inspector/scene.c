@@ -1,28 +1,32 @@
+#include "IconsFontAwesome6.h"
 #include "common.h"
 #include "constants.h"
 #include "debug.h"
+#include "sections.h"
 #include "session.h"
+#include "types.h"
 #include "vkrt.h"
-
-#include "IconsFontAwesome6.h"
+#include "vkrt_types.h"
 
 #include <dcimgui.h>
 #include <float.h>
 #include <limits.h>
 #include <math.h>
+#include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 enum {
-    kSceneSuffixTextCapacity = 32,
-    kSceneStatTextCapacity = 48,
-    kSceneSizeTextCapacity = 32,
-    kSceneBrowserNameTextCapacity = 192,
-    kSceneBrowserIdCapacity = 32,
-    kSceneSourceTextCapacity = 192,
-    kSceneMaterialNameTextCapacity = 192,
-    kSceneTextureNameTextCapacity = 192,
-    kSceneMaterialComboMaxEntries = 128,
+    K_SCENE_SUFFIX_TEXT_CAPACITY = 32,
+    K_SCENE_STAT_TEXT_CAPACITY = 48,
+    K_SCENE_SIZE_TEXT_CAPACITY = 32,
+    K_SCENE_BROWSER_NAME_TEXT_CAPACITY = 192,
+    K_SCENE_BROWSER_ID_CAPACITY = 32,
+    K_SCENE_SOURCE_TEXT_CAPACITY = 192,
+    K_SCENE_MATERIAL_NAME_TEXT_CAPACITY = 192,
+    K_SCENE_TEXTURE_NAME_TEXT_CAPACITY = 192,
+    K_SCENE_MATERIAL_COMBO_MAX_ENTRIES = 128,
 };
 
 static const ImVec2 kTextureActionButtonPadding = {8.0f, 4.0f};
@@ -40,11 +44,11 @@ static void formatPrefixedText(char* out, size_t outSize, const char* prefix, co
     snprintf(out, outSize, "%s %.*s", prefix, textLimit, text);
 }
 
-static bool drawCompactNameInput(const char* id, char* buffer, size_t bufferSize) {
-    if (!id || !buffer || bufferSize == 0) return false;
+static bool drawCompactNameInput(const char* inputId, char* buffer, size_t bufferSize) {
+    if (!inputId || !buffer || bufferSize == 0) return false;
 
     ImGui_PushStyleVarImVec2(ImGuiStyleVar_FramePadding, kCompactNameInputPadding);
-    bool changed = ImGui_InputText(id, buffer, bufferSize, ImGuiInputTextFlags_None);
+    bool changed = ImGui_InputText(inputId, buffer, bufferSize, ImGuiInputTextFlags_None);
     ImGui_PopStyleVar();
     return changed;
 }
@@ -52,7 +56,7 @@ static bool drawCompactNameInput(const char* id, char* buffer, size_t bufferSize
 static void formatMeshSourceText(char* out, size_t outSize, const char* sourceName, uint32_t sourceIndex) {
     if (!out || outSize == 0 || !sourceName) return;
 
-    char suffix[kSceneSuffixTextCapacity];
+    char suffix[K_SCENE_SUFFIX_TEXT_CAPACITY];
     int suffixLength = snprintf(suffix, sizeof(suffix), " (#%u)", sourceIndex);
     if (suffixLength < 0) return;
 
@@ -70,30 +74,34 @@ static void formatMeshGeometryText(const VKRT_MeshSnapshot* mesh, char* out, siz
 static bool drawSceneBrowserEntry(uint32_t objectIndex, const char* label, int isGroup, bool isSelected, int depth) {
     if (!label) return false;
 
-    char id[kSceneBrowserIdCapacity];
-    char nameText[kSceneBrowserNameTextCapacity];
+    char entryId[K_SCENE_BROWSER_ID_CAPACITY];
+    char nameText[K_SCENE_BROWSER_NAME_TEXT_CAPACITY];
     const float rowHeight = ImGui_GetTextLineHeight() + kSceneBrowserRowTopPadding + kSceneBrowserRowBottomPadding;
-    snprintf(id, sizeof(id), "##scene_%u", objectIndex);
+    snprintf(entryId, sizeof(entryId), "##scene_%u", objectIndex);
     formatPrefixedText(nameText, sizeof(nameText), isGroup ? ICON_FA_FOLDER : ICON_FA_CUBE, label);
 
     const ImVec4 transparent = {0.0f, 0.0f, 0.0f, 0.0f};
     ImGui_PushStyleColorImVec4(ImGuiCol_Header, transparent);
     ImGui_PushStyleColorImVec4(ImGuiCol_HeaderHovered, transparent);
     ImGui_PushStyleColorImVec4(ImGuiCol_HeaderActive, transparent);
-    bool clicked = ImGui_SelectableEx(id, isSelected, ImGuiSelectableFlags_None, (ImVec2){0.0f, rowHeight});
+    bool clicked = ImGui_SelectableEx(entryId, isSelected, ImGuiSelectableFlags_None, (ImVec2){0.0f, rowHeight});
     ImGui_PopStyleColorEx(3);
 
     ImVec2 min = ImGui_GetItemRectMin();
     ImVec2 max = ImGui_GetItemRectMax();
     float textY = floorf(min.y + kSceneBrowserRowTopPadding);
-    float textX = min.x + kSceneBrowserRowLeftPadding + (float)depth * 16.0f;
+    float textX = min.x + kSceneBrowserRowLeftPadding + ((float)depth * 16.0f);
     bool hovered = ImGui_IsItemHovered(ImGuiHoveredFlags_None);
     bool held = ImGui_IsItemActive();
 
     ImU32 bgColor = 0;
-    if (held) bgColor = ImGui_GetColorU32(ImGuiCol_HeaderActive);
-    else if (hovered) bgColor = ImGui_GetColorU32(ImGuiCol_HeaderHovered);
-    else if (isSelected) bgColor = ImGui_GetColorU32(ImGuiCol_Header);
+    if (held) {
+        bgColor = ImGui_GetColorU32(ImGuiCol_HeaderActive);
+    } else if (hovered) {
+        bgColor = ImGui_GetColorU32(ImGuiCol_HeaderHovered);
+    } else if (isSelected) {
+        bgColor = ImGui_GetColorU32(ImGuiCol_Header);
+    }
 
     if (bgColor != 0) {
         ImDrawList_AddRectFilledEx(ImGui_GetWindowDrawList(), min, max, bgColor, 4.0f, 0);
@@ -159,10 +167,10 @@ static void drawMeshInfoHeader(VKRT* vkrt, const VKRT_MeshSnapshot* mesh) {
     uint64_t vertexBytes = (uint64_t)mesh->info.vertexCount * sizeof(Vertex);
     uint64_t indexBytes = (uint64_t)mesh->info.indexCount * sizeof(uint32_t);
 
-    char countText[kSceneStatTextCapacity];
-    char sizeText[kSceneSizeTextCapacity];
-    char geometryText[kSceneStatTextCapacity];
-    char sourceText[kSceneSourceTextCapacity];
+    char countText[K_SCENE_STAT_TEXT_CAPACITY];
+    char sizeText[K_SCENE_SIZE_TEXT_CAPACITY];
+    char geometryText[K_SCENE_STAT_TEXT_CAPACITY];
+    char sourceText[K_SCENE_SOURCE_TEXT_CAPACITY];
     VKRT_MaterialSnapshot material = {0};
     uint8_t hasEditableMaterial = mesh->hasMaterialAssignment &&
                                   mesh->materialIndex != 0u &&
@@ -249,9 +257,11 @@ static void formatMaterialLabel(
     if (prefixLength < 0 || (size_t)prefixLength >= outSize) return;
 
     size_t available = outSize - (size_t)prefixLength;
-    int nameLimit = available > 0u
-        ? (available - 1u > (size_t)INT_MAX ? INT_MAX : (int)(available - 1u))
-        : 0;
+    int nameLimit = 0;
+    if (available > 0u) {
+        size_t maxNameLength = available - 1u;
+        nameLimit = maxNameLength > (size_t)INT_MAX ? INT_MAX : (int)maxNameLength;
+    }
     snprintf(out + prefixLength, available, "%.*s", nameLimit, materialName);
 }
 
@@ -286,7 +296,7 @@ static float queryComboPopupMaxHeightFromItemCount(int itemCount) {
     float itemHeight = ImGui_GetTextLineHeightWithSpacing();
     float spacing = style ? style->ItemSpacing.y : 0.0f;
     float padding = style ? style->WindowPadding.y * 2.0f : 0.0f;
-    return itemHeight * (float)itemCount - spacing + padding;
+    return (itemHeight * (float)itemCount) - spacing + padding;
 }
 
 static bool drawMaterialAssignmentCombo(
@@ -298,7 +308,7 @@ static bool drawMaterialAssignmentCombo(
 ) {
     if (!vkrt || !mesh || !labels || !currentMaterialIndex) return false;
 
-    char previewText[kSceneMaterialNameTextCapacity];
+    char previewText[K_SCENE_MATERIAL_NAME_TEXT_CAPACITY];
     formatMaterialAssignmentPreviewLabel(vkrt, mesh, previewText, sizeof(previewText));
 
     ImGui_SetNextWindowSizeConstraints(
@@ -329,28 +339,38 @@ static bool drawMaterialAssignmentCombo(
     return valueChanged;
 }
 
-static void drawMeshMaterialBindingEditor(VKRT* vkrt, uint32_t meshIndex, const VKRT_MeshSnapshot* mesh) {
-    if (!vkrt || !mesh) return;
+static uint32_t queryVisibleMaterialCount(uint32_t internalMaterialCount) {
+    if (internalMaterialCount == 0u) return 0u;
 
-    uint32_t internalMaterialCount = 0;
-    if (VKRT_getMaterialCount(vkrt, &internalMaterialCount) != VKRT_SUCCESS || internalMaterialCount == 0) {
-        ImGui_TextDisabled("No materials available.");
-        return;
-    }
-
-    uint32_t visibleMaterialCount = internalMaterialCount > 0u ? internalMaterialCount - 1u : 0u;
-    uint32_t maxListedMaterials = kSceneMaterialComboMaxEntries > 0u
-        ? (uint32_t)kSceneMaterialComboMaxEntries - 1u
-        : 0u;
+    uint32_t visibleMaterialCount = internalMaterialCount - 1u;
+    uint32_t maxListedMaterials = (uint32_t)K_SCENE_MATERIAL_COMBO_MAX_ENTRIES - 1u;
     if (visibleMaterialCount > maxListedMaterials) {
         visibleMaterialCount = maxListedMaterials;
     }
+    return visibleMaterialCount;
+}
 
-    int currentMaterialIndex = (mesh->hasMaterialAssignment && mesh->materialIndex > 0u)
-        ? (int)mesh->materialIndex
-        : 0;
-    char storage[kSceneMaterialComboMaxEntries][kSceneMaterialNameTextCapacity];
-    const char* labels[kSceneMaterialComboMaxEntries];
+static int queryCurrentAssignedMaterialIndex(const VKRT_MeshSnapshot* mesh, uint32_t visibleMaterialCount) {
+    if (!mesh) return 0;
+
+    int currentMaterialIndex = 0;
+    if (mesh->hasMaterialAssignment && mesh->materialIndex > 0u) {
+        currentMaterialIndex = (int)mesh->materialIndex;
+    }
+    if (currentMaterialIndex > (int)visibleMaterialCount) {
+        currentMaterialIndex = 0;
+    }
+    return currentMaterialIndex;
+}
+
+static void buildMaterialAssignmentLabels(
+    VKRT* vkrt,
+    uint32_t visibleMaterialCount,
+    char storage[K_SCENE_MATERIAL_COMBO_MAX_ENTRIES][K_SCENE_MATERIAL_NAME_TEXT_CAPACITY],
+    const char* labels[K_SCENE_MATERIAL_COMBO_MAX_ENTRIES]
+) {
+    if (!vkrt || !labels) return;
+
     snprintf(storage[0], sizeof(storage[0]), "None");
     labels[0] = storage[0];
 
@@ -365,31 +385,40 @@ static void drawMeshMaterialBindingEditor(VKRT* vkrt, uint32_t meshIndex, const 
                 visibleMaterialIndex
             );
         } else {
-            snprintf(storage[visibleMaterialIndex + 1u], sizeof(storage[visibleMaterialIndex + 1u]), "Material %u", visibleMaterialIndex);
+            snprintf(
+                storage[visibleMaterialIndex + 1u],
+                sizeof(storage[visibleMaterialIndex + 1u]),
+                "Material %u",
+                visibleMaterialIndex
+            );
         }
         labels[visibleMaterialIndex + 1u] = storage[visibleMaterialIndex + 1u];
     }
+}
 
+static float queryMaterialAssignmentComboWidth(void) {
     float frameHeight = ImGui_GetFrameHeight();
     const ImGuiStyle* style = ImGui_GetStyle();
     float buttonWidth = frameHeight;
     float spacing = style ? style->ItemInnerSpacing.x : 4.0f;
-    float comboWidth = ImGui_CalcItemWidth() - buttonWidth * 2.0f - spacing * 2.0f;
-    if (comboWidth < 96.0f) comboWidth = 96.0f;
+    float comboWidth = ImGui_CalcItemWidth() - (buttonWidth * 2.0f) - (spacing * 2.0f);
+    return comboWidth < 96.0f ? 96.0f : comboWidth;
+}
 
-    ImGui_SetNextItemWidth(comboWidth);
-    if (currentMaterialIndex > (int)visibleMaterialCount) {
-        currentMaterialIndex = 0;
+static void applyMeshMaterialAssignment(VKRT* vkrt, uint32_t meshIndex, int currentMaterialIndex) {
+    if (!vkrt) return;
+
+    VKRT_Result result = currentMaterialIndex == 0
+        ? VKRT_clearMeshMaterialAssignment(vkrt, meshIndex)
+        : VKRT_setMeshMaterialIndex(vkrt, meshIndex, (uint32_t)currentMaterialIndex);
+    if (result != VKRT_SUCCESS) {
+        LOG_ERROR("Updating mesh material assignment failed (%d)", (int)result);
     }
-    if (drawMaterialAssignmentCombo(vkrt, mesh, labels, visibleMaterialCount + 1u, &currentMaterialIndex)) {
-        VKRT_Result result = currentMaterialIndex == 0
-            ? VKRT_clearMeshMaterialAssignment(vkrt, meshIndex)
-            : VKRT_setMeshMaterialIndex(vkrt, meshIndex, (uint32_t)currentMaterialIndex);
-        if (result != VKRT_SUCCESS) {
-            LOG_ERROR("Updating mesh material assignment failed (%d)", (int)result);
-        }
-    }
-    ImGui_SameLine();
+}
+
+static void drawCreateMaterialButton(VKRT* vkrt, uint32_t meshIndex, const VKRT_MeshSnapshot* mesh, float buttonWidth, float frameHeight) {
+    if (!vkrt || !mesh) return;
+
     if (ImGui_ButtonEx(ICON_FA_PLUS, (ImVec2){buttonWidth, frameHeight})) {
         char materialName[VKRT_NAME_LEN];
         const char* baseName = mesh->name[0] ? mesh->name : "Material";
@@ -408,12 +437,16 @@ static void drawMeshMaterialBindingEditor(VKRT* vkrt, uint32_t meshIndex, const 
         }
     }
     tooltipOnHover("Create a new material and assign it to this mesh.");
+}
+
+static void drawDeleteMaterialButton(const VKRT_MeshSnapshot* mesh, VKRT* vkrt, float buttonWidth, float frameHeight) {
+    if (!vkrt || !mesh) return;
 
     uint8_t canDeleteMaterial = mesh->hasMaterialAssignment && mesh->materialIndex != 0u;
     uint32_t currentAssignedMaterialIndex = mesh->materialIndex;
 
     ImGui_SameLine();
-    ImGui_BeginDisabled(!canDeleteMaterial);
+    ImGui_BeginDisabled((!canDeleteMaterial) != 0);
     if (ImGui_ButtonEx(ICON_FA_TRASH, (ImVec2){buttonWidth, frameHeight})) {
         VKRT_Result result = VKRT_removeMaterial(vkrt, currentAssignedMaterialIndex);
         if (result != VKRT_SUCCESS) {
@@ -428,6 +461,34 @@ static void drawMeshMaterialBindingEditor(VKRT* vkrt, uint32_t meshIndex, const 
         tooltipOnHover("No material assigned.");
     }
     ImGui_EndDisabled();
+}
+
+static void drawMeshMaterialBindingEditor(VKRT* vkrt, uint32_t meshIndex, const VKRT_MeshSnapshot* mesh) {
+    if (!vkrt || !mesh) return;
+
+    uint32_t internalMaterialCount = 0;
+    if (VKRT_getMaterialCount(vkrt, &internalMaterialCount) != VKRT_SUCCESS || internalMaterialCount == 0) {
+        ImGui_TextDisabled("No materials available.");
+        return;
+    }
+
+    uint32_t visibleMaterialCount = queryVisibleMaterialCount(internalMaterialCount);
+    int currentMaterialIndex = queryCurrentAssignedMaterialIndex(mesh, visibleMaterialCount);
+    char storage[K_SCENE_MATERIAL_COMBO_MAX_ENTRIES][K_SCENE_MATERIAL_NAME_TEXT_CAPACITY];
+    const char* labels[K_SCENE_MATERIAL_COMBO_MAX_ENTRIES];
+    buildMaterialAssignmentLabels(vkrt, visibleMaterialCount, storage, labels);
+
+    float frameHeight = ImGui_GetFrameHeight();
+    float buttonWidth = frameHeight;
+    float comboWidth = queryMaterialAssignmentComboWidth();
+
+    ImGui_SetNextItemWidth(comboWidth);
+    if (drawMaterialAssignmentCombo(vkrt, mesh, labels, visibleMaterialCount + 1u, &currentMaterialIndex)) {
+        applyMeshMaterialAssignment(vkrt, meshIndex, currentMaterialIndex);
+    }
+    ImGui_SameLine();
+    drawCreateMaterialButton(vkrt, meshIndex, mesh, buttonWidth, frameHeight);
+    drawDeleteMaterialButton(mesh, vkrt, buttonWidth, frameHeight);
 }
 
 static uint32_t queryMaterialTextureIndex(const Material* material, uint32_t textureSlot) {
@@ -477,9 +538,11 @@ static void formatTextureAssignmentLabel(
 
     VKRT_TextureSnapshot texture = {0};
     if (VKRT_getTextureSnapshot(vkrt, textureIndex, &texture) == VKRT_SUCCESS) {
-        int nameLimit = outSize > 1u
-            ? (outSize - 1u > (size_t)INT_MAX ? INT_MAX : (int)(outSize - 1u))
-            : 0;
+        int nameLimit = 0;
+        if (outSize > 1u) {
+            size_t maxNameLength = outSize - 1u;
+            nameLimit = maxNameLength > (size_t)INT_MAX ? INT_MAX : (int)maxNameLength;
+        }
         snprintf(out, outSize, "%.*s", nameLimit, texture.name[0] ? texture.name : "Texture");
         return;
     }
@@ -509,7 +572,8 @@ static void drawMaterialTextureSlotEditor(
     }
 
     ImGui_PushStyleVarImVec2(ImGuiStyleVar_FramePadding, kTextureActionButtonPadding);
-    float actionButtonWidth = ImGui_CalcTextSize(actionLabel).x + kTextureActionButtonPadding.x * 2.0f;
+    float actionButtonWidth =
+        ImGui_CalcTextSize(actionLabel).x + (kTextureActionButtonPadding.x * 2.0f);
     ImGui_TableSetupColumnEx("Value", ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_NoHide, 0.0f, 0);
     ImGui_TableSetupColumnEx("Action", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoHide, actionButtonWidth, 0);
 
@@ -517,7 +581,7 @@ static void drawMaterialTextureSlotEditor(
     ImGui_TableSetColumnIndex(0);
     ImGui_AlignTextToFramePadding();
     if (hasTexture) {
-        char textureLabel[kSceneTextureNameTextCapacity];
+        char textureLabel[K_SCENE_TEXTURE_NAME_TEXT_CAPACITY];
         formatTextureAssignmentLabel(vkrt, textureIndex, textureLabel, sizeof(textureLabel));
         ImGui_Text("%s", textureLabel);
     } else {
@@ -557,7 +621,8 @@ static void drawMaterialTexturesEditor(VKRT* vkrt, Session* session, uint32_t ma
             VKRT_MATERIAL_TEXTURE_SLOT_EMISSIVE,
         };
 
-        for (uint32_t i = 0; i < VKRT_ARRAY_COUNT(textureSlots); i++) {
+        const uint32_t textureSlotCount = 4u;
+        for (uint32_t i = 0; i < textureSlotCount; i++) {
             uint32_t textureSlot = textureSlots[i];
             uint32_t textureIndex = queryMaterialTextureIndex(&materialSnapshot->material, textureSlot);
 
@@ -581,6 +646,106 @@ static void drawMaterialTexturesEditor(VKRT* vkrt, Session* session, uint32_t ma
     inspectorEndCollapsingHeaderSection();
 }
 
+static bool beginMaterialSection(const char* sectionName, ImGuiTreeNodeFlags flags) {
+    if (!sectionName) return false;
+
+    if (!inspectorBeginCollapsingHeaderSection(sectionName, flags)) {
+        return false;
+    }
+    inspectorIndentSection();
+    return true;
+}
+
+static void endMaterialSection(void) {
+    inspectorUnindentSection();
+    inspectorEndCollapsingHeaderSection();
+}
+
+static void drawSurfaceMaterialSection(Material* material, bool* materialChanged) {
+    if (!material || !materialChanged) return;
+    if (!beginMaterialSection("Surface", ImGuiTreeNodeFlags_DefaultOpen)) return;
+
+    *materialChanged |= ImGui_ColorEdit3("Base Color", material->baseColor, ImGuiColorEditFlags_Float);
+    *materialChanged |= ImGui_SliderFloatEx("Metallic", &material->metallic, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    *materialChanged |= ImGui_SliderFloatEx("Roughness", &material->roughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    *materialChanged |= ImGui_SliderFloatEx("Diffuse Roughness", &material->diffuseRoughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    *materialChanged |= ImGui_SliderFloatEx("Subsurface", &material->subsurface, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+
+    const char* alphaModes[] = {"Opaque", "Mask", "Blend"};
+    int alphaMode = (int)material->alphaMode;
+    if (alphaMode < 0 || alphaMode > 2) alphaMode = 0;
+    if (ImGui_ComboCharEx("Alpha Mode", &alphaMode, alphaModes, 3, 3)) {
+        material->alphaMode = (uint32_t)alphaMode;
+        *materialChanged = true;
+    }
+    if (material->alphaMode != VKRT_MATERIAL_ALPHA_MODE_OPAQUE) {
+        *materialChanged |= ImGui_SliderFloatEx("Opacity", &material->opacity, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    }
+    if (material->alphaMode == VKRT_MATERIAL_ALPHA_MODE_MASK) {
+        *materialChanged |= ImGui_SliderFloatEx("Alpha Cutoff", &material->alphaCutoff, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    }
+    endMaterialSection();
+}
+
+static void drawSpecularMaterialSection(Material* material, bool* materialChanged) {
+    if (!material || !materialChanged) return;
+    if (!beginMaterialSection("Specular", ImGuiTreeNodeFlags_DefaultOpen)) return;
+
+    *materialChanged |= ImGui_DragFloatEx("IOR", &material->ior, 0.01f, 1.0f, 4.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    *materialChanged |= ImGui_SliderFloatEx("Weight", &material->specular, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    *materialChanged |= ImGui_SliderFloatEx("Tint", &material->specularTint, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    *materialChanged |= ImGui_SliderFloatEx("Anisotropic", &material->anisotropic, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    endMaterialSection();
+}
+
+static void drawTransmissionMaterialSection(Material* material, bool* materialChanged) {
+    if (!material || !materialChanged) return;
+    if (!beginMaterialSection("Transmission", ImGuiTreeNodeFlags_DefaultOpen)) return;
+
+    *materialChanged |= ImGui_SliderFloatEx("Weight", &material->transmission, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    *materialChanged |= ImGui_ColorEdit3("Attenuation Color", material->attenuationColor, ImGuiColorEditFlags_Float);
+    *materialChanged |= ImGui_DragFloatEx(
+        "Absorption",
+        &material->absorptionCoefficient,
+        0.01f,
+        0.0f,
+        VKRT_MAX_ABSORPTION_COEFFICIENT,
+        "%.3f",
+        ImGuiSliderFlags_AlwaysClamp
+    );
+    endMaterialSection();
+}
+
+static void drawCoatingMaterialSection(Material* material, bool* materialChanged) {
+    if (!material || !materialChanged) return;
+    if (!beginMaterialSection("Coating", ImGuiTreeNodeFlags_DefaultOpen)) return;
+
+    *materialChanged |= ImGui_SliderFloatEx("Clearcoat", &material->clearcoat, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    *materialChanged |= ImGui_SliderFloatEx("Clearcoat Gloss", &material->clearcoatGloss, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    *materialChanged |= ImGui_SliderFloatEx("Sheen Weight", &material->sheenTintWeight[3], 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    *materialChanged |= ImGui_ColorEdit3("Sheen Tint", material->sheenTintWeight, ImGuiColorEditFlags_Float);
+    *materialChanged |= ImGui_SliderFloatEx("Sheen Roughness", &material->sheenRoughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    endMaterialSection();
+}
+
+static void drawEmissionMaterialSection(Material* material, bool* materialChanged) {
+    if (!material || !materialChanged) return;
+    if (!beginMaterialSection("Emission", ImGuiTreeNodeFlags_DefaultOpen)) return;
+
+    *materialChanged |= ImGui_DragFloatEx("Luminance", &material->emissionLuminance, 0.1f, 0.0f, 1000000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    *materialChanged |= ImGui_ColorEdit3("Color", material->emissionColor, ImGuiColorEditFlags_Float);
+    endMaterialSection();
+}
+
+static void drawAdvancedMaterialSection(Material* material, bool* materialChanged) {
+    if (!material || !materialChanged) return;
+    if (!beginMaterialSection("Advanced", ImGuiTreeNodeFlags_None)) return;
+
+    *materialChanged |= ImGui_DragFloat3Ex("Conductor Eta", material->eta, 0.01f, 0.0f, 10.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    *materialChanged |= ImGui_DragFloat3Ex("Conductor K", material->k, 0.01f, 0.0f, 10.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    endMaterialSection();
+}
+
 static void drawMaterialPropertiesEditor(
     VKRT* vkrt,
     Session* session,
@@ -593,76 +758,23 @@ static void drawMaterialPropertiesEditor(
     bool materialChanged = false;
 
     ImGui_PushID("mat_surface");
-    if (inspectorBeginCollapsingHeaderSection("Surface", ImGuiTreeNodeFlags_DefaultOpen)) {
-        inspectorIndentSection();
-        materialChanged |= ImGui_ColorEdit3("Base Color", material.baseColor, ImGuiColorEditFlags_Float);
-        materialChanged |= ImGui_SliderFloatEx("Metallic", &material.metallic, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-        materialChanged |= ImGui_SliderFloatEx("Roughness", &material.roughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-        materialChanged |= ImGui_SliderFloatEx("Diffuse Roughness", &material.diffuseRoughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-        materialChanged |= ImGui_SliderFloatEx("Subsurface", &material.subsurface, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-
-        const char* alphaModes[] = {"Opaque", "Mask", "Blend"};
-        int alphaMode = (int)material.alphaMode;
-        if (alphaMode < 0 || alphaMode > 2) alphaMode = 0;
-        if (ImGui_ComboCharEx("Alpha Mode", &alphaMode, alphaModes, 3, 3)) {
-            material.alphaMode = (uint32_t)alphaMode;
-            materialChanged = true;
-        }
-        if (material.alphaMode != VKRT_MATERIAL_ALPHA_MODE_OPAQUE) {
-            materialChanged |= ImGui_SliderFloatEx("Opacity", &material.opacity, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-        }
-        if (material.alphaMode == VKRT_MATERIAL_ALPHA_MODE_MASK) {
-            materialChanged |= ImGui_SliderFloatEx("Alpha Cutoff", &material.alphaCutoff, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-        }
-        inspectorUnindentSection();
-        inspectorEndCollapsingHeaderSection();
-    }
+    drawSurfaceMaterialSection(&material, &materialChanged);
     ImGui_PopID();
 
     ImGui_PushID("mat_specular");
-    if (inspectorBeginCollapsingHeaderSection("Specular", ImGuiTreeNodeFlags_DefaultOpen)) {
-        inspectorIndentSection();
-        materialChanged |= ImGui_DragFloatEx("IOR", &material.ior, 0.01f, 1.0f, 4.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-        materialChanged |= ImGui_SliderFloatEx("Weight", &material.specular, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-        materialChanged |= ImGui_SliderFloatEx("Tint", &material.specularTint, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-        materialChanged |= ImGui_SliderFloatEx("Anisotropic", &material.anisotropic, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-        inspectorUnindentSection();
-        inspectorEndCollapsingHeaderSection();
-    }
+    drawSpecularMaterialSection(&material, &materialChanged);
     ImGui_PopID();
 
     ImGui_PushID("mat_transmission");
-    if (inspectorBeginCollapsingHeaderSection("Transmission", ImGuiTreeNodeFlags_DefaultOpen)) {
-        inspectorIndentSection();
-        materialChanged |= ImGui_SliderFloatEx("Weight", &material.transmission, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-        materialChanged |= ImGui_ColorEdit3("Attenuation Color", material.attenuationColor, ImGuiColorEditFlags_Float);
-        materialChanged |= ImGui_DragFloatEx("Absorption", &material.absorptionCoefficient, 0.01f, 0.0f, VKRT_MAX_ABSORPTION_COEFFICIENT, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-        inspectorUnindentSection();
-        inspectorEndCollapsingHeaderSection();
-    }
+    drawTransmissionMaterialSection(&material, &materialChanged);
     ImGui_PopID();
 
     ImGui_PushID("mat_coating");
-    if (inspectorBeginCollapsingHeaderSection("Coating", ImGuiTreeNodeFlags_DefaultOpen)) {
-        inspectorIndentSection();
-        materialChanged |= ImGui_SliderFloatEx("Clearcoat", &material.clearcoat, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-        materialChanged |= ImGui_SliderFloatEx("Clearcoat Gloss", &material.clearcoatGloss, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-        materialChanged |= ImGui_SliderFloatEx("Sheen Weight", &material.sheenTintWeight[3], 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-        materialChanged |= ImGui_ColorEdit3("Sheen Tint", material.sheenTintWeight, ImGuiColorEditFlags_Float);
-        materialChanged |= ImGui_SliderFloatEx("Sheen Roughness", &material.sheenRoughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-        inspectorUnindentSection();
-        inspectorEndCollapsingHeaderSection();
-    }
+    drawCoatingMaterialSection(&material, &materialChanged);
     ImGui_PopID();
 
     ImGui_PushID("mat_emission");
-    if (inspectorBeginCollapsingHeaderSection("Emission", ImGuiTreeNodeFlags_DefaultOpen)) {
-        inspectorIndentSection();
-        materialChanged |= ImGui_DragFloatEx("Luminance", &material.emissionLuminance, 0.1f, 0.0f, 1000000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-        materialChanged |= ImGui_ColorEdit3("Color", material.emissionColor, ImGuiColorEditFlags_Float);
-        inspectorUnindentSection();
-        inspectorEndCollapsingHeaderSection();
-    }
+    drawEmissionMaterialSection(&material, &materialChanged);
     ImGui_PopID();
 
     ImGui_PushID("mat_textures");
@@ -670,13 +782,7 @@ static void drawMaterialPropertiesEditor(
     ImGui_PopID();
 
     ImGui_PushID("mat_advanced");
-    if (inspectorBeginCollapsingHeaderSection("Advanced", ImGuiTreeNodeFlags_None)) {
-        inspectorIndentSection();
-        materialChanged |= ImGui_DragFloat3Ex("Conductor Eta", material.eta, 0.01f, 0.0f, 10.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-        materialChanged |= ImGui_DragFloat3Ex("Conductor K", material.k, 0.01f, 0.0f, 10.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-        inspectorUnindentSection();
-        inspectorEndCollapsingHeaderSection();
-    }
+    drawAdvancedMaterialSection(&material, &materialChanged);
     ImGui_PopID();
 
     if (!materialChanged) return;
@@ -769,24 +875,115 @@ static void drawSelectedSceneObjectEditor(VKRT* vkrt, Session* session, uint32_t
 
 static const int kMaxTreeDepth = 64;
 
-static void drawSceneObjectBrowserTree(VKRT* vkrt, Session* session, uint32_t objectIndex, uint32_t selectedObjectIndex, int depth) {
-    if (depth >= kMaxTreeDepth) return;
-    const SessionSceneObject* object = sessionGetSceneObject(session, objectIndex);
+typedef struct SceneBrowserNode {
+    uint32_t objectIndex;
+    int depth;
+} SceneBrowserNode;
+
+static int collectChildSceneObjects(Session* session, uint32_t parentIndex, uint32_t* children, uint32_t childCapacity) {
+    if (!session || !children) return 0;
+
+    uint32_t objectCount = sessionGetSceneObjectCount(session);
+    uint32_t childCount = 0u;
+    for (uint32_t objectIndex = 0; objectIndex < objectCount; objectIndex++) {
+        const SessionSceneObject* child = sessionGetSceneObject(session, objectIndex);
+        if (!child || child->parentIndex != parentIndex) continue;
+        if (childCount >= childCapacity) return -1;
+        children[childCount++] = objectIndex;
+    }
+    return (int)childCount;
+}
+
+static int initializeSceneBrowserTraversal(
+    Session* session,
+    SceneBrowserNode** outStack,
+    uint32_t** outChildren,
+    uint32_t* outObjectCount
+) {
+    if (!session || !outStack || !outChildren || !outObjectCount) return 0;
+
+    uint32_t objectCount = sessionGetSceneObjectCount(session);
+    if (objectCount == 0u) return 0;
+
+    SceneBrowserNode* stack = (SceneBrowserNode*)malloc(sizeof(SceneBrowserNode) * objectCount);
+    uint32_t* children = (uint32_t*)malloc(sizeof(uint32_t) * objectCount);
+    if (!stack || !children) {
+        free(stack);
+        free(children);
+        return 0;
+    }
+
+    *outStack = stack;
+    *outChildren = children;
+    *outObjectCount = objectCount;
+    return 1;
+}
+
+static uint32_t queryNextSelectedObjectIndex(uint32_t objectIndex, bool isSelected) {
+    if (isSelected) {
+        return VKRT_INVALID_INDEX;
+    }
+    return objectIndex;
+}
+
+static void pushSceneBrowserChildren(
+    Session* session,
+    SceneBrowserNode* stack,
+    size_t* stackSize,
+    uint32_t stackCapacity,
+    uint32_t* children,
+    const SceneBrowserNode* node
+) {
+    if (!session || !stack || !stackSize || !children || !node) return;
+
+    int childCount = collectChildSceneObjects(session, node->objectIndex, children, stackCapacity);
+    if (childCount < 0) return;
+
+    for (int childIndex = childCount - 1; childIndex >= 0; childIndex--) {
+        if (*stackSize >= stackCapacity) break;
+        stack[(*stackSize)++] = (SceneBrowserNode){children[childIndex], node->depth + 1};
+    }
+}
+
+static void drawSceneBrowserNode(
+    VKRT* vkrt,
+    Session* session,
+    const SceneBrowserNode* node,
+    uint32_t* selectedObjectIndex
+) {
+    if (!vkrt || !session || !node || !selectedObjectIndex) return;
+    if (node->depth >= kMaxTreeDepth) return;
+
+    const SessionSceneObject* object = sessionGetSceneObject(session, node->objectIndex);
     if (!object) return;
 
     const char* label = object->name[0] ? object->name : "(unnamed)";
-    bool isSelected = selectedObjectIndex == objectIndex;
-    if (drawSceneBrowserEntry(objectIndex, label, object->meshIndex == VKRT_INVALID_INDEX, isSelected, depth)) {
-        updateSelectedSceneObject(vkrt, session, isSelected ? VKRT_INVALID_INDEX : objectIndex);
-        selectedObjectIndex = isSelected ? VKRT_INVALID_INDEX : objectIndex;
+    bool isSelected = *selectedObjectIndex == node->objectIndex;
+    if (drawSceneBrowserEntry(node->objectIndex, label, object->meshIndex == VKRT_INVALID_INDEX, isSelected, node->depth)) {
+        *selectedObjectIndex = queryNextSelectedObjectIndex(node->objectIndex, isSelected);
+        updateSelectedSceneObject(vkrt, session, *selectedObjectIndex);
+    }
+}
+
+static void drawSceneObjectBrowserTree(VKRT* vkrt, Session* session, uint32_t rootObjectIndex, uint32_t selectedObjectIndex) {
+    if (!vkrt || !session) return;
+
+    uint32_t objectCount = 0u;
+    SceneBrowserNode* stack = NULL;
+    uint32_t* children = NULL;
+    if (!initializeSceneBrowserTraversal(session, &stack, &children, &objectCount)) return;
+
+    size_t stackSize = 0u;
+    stack[stackSize++] = (SceneBrowserNode){rootObjectIndex, 0};
+
+    while (stackSize > 0u) {
+        SceneBrowserNode node = stack[--stackSize];
+        drawSceneBrowserNode(vkrt, session, &node, &selectedObjectIndex);
+        pushSceneBrowserChildren(session, stack, &stackSize, objectCount, children, &node);
     }
 
-    uint32_t objectCount = sessionGetSceneObjectCount(session);
-    for (uint32_t childIndex = 0; childIndex < objectCount; childIndex++) {
-        const SessionSceneObject* child = sessionGetSceneObject(session, childIndex);
-        if (!child || child->parentIndex != objectIndex) continue;
-        drawSceneObjectBrowserTree(vkrt, session, childIndex, sessionGetSelectedSceneObject(session), depth + 1);
-    }
+    free(children);
+    free(stack);
 }
 
 void inspectorDrawSceneBrowserSection(VKRT* vkrt, Session* session) {
@@ -799,7 +996,7 @@ void inspectorDrawSceneBrowserSection(VKRT* vkrt, Session* session) {
     for (uint32_t objectIndex = 0; objectIndex < objectCount; objectIndex++) {
         const SessionSceneObject* object = sessionGetSceneObject(session, objectIndex);
         if (!object || object->parentIndex != VKRT_INVALID_INDEX) continue;
-        drawSceneObjectBrowserTree(vkrt, session, objectIndex, selectedObjectIndex, 0);
+        drawSceneObjectBrowserTree(vkrt, session, objectIndex, selectedObjectIndex);
     }
     ImGui_PopStyleVar();
 

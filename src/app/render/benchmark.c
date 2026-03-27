@@ -1,8 +1,12 @@
 #include "benchmark.h"
 
+#include "cli/cli.h"
 #include "debug.h"
+#include "vkrt.h"
+#include "vkrt_types.h"
 
-#include <inttypes.h>
+#include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 static const uint32_t kBenchmarkSetupFrameCount = 2u;
@@ -19,6 +23,12 @@ typedef struct BenchmarkState {
     uint64_t measurementSamplesStart;
     uint64_t startTimeUs;
 } BenchmarkState;
+
+typedef enum BenchmarkStepResult {
+    BENCHMARK_STEP_CONTINUE = 0,
+    BENCHMARK_STEP_SUCCESS,
+    BENCHMARK_STEP_FAILURE,
+} BenchmarkStepResult;
 
 static uint32_t queryBenchmarkWarmupSamples(uint32_t targetSamples) {
     uint32_t warmupSamples = kBenchmarkWarmupSamples;
@@ -59,6 +69,171 @@ static int lockBenchmarkSampling(VKRT* vkrt, uint32_t* outSamplesPerFrame) {
     return 1;
 }
 
+static int beginBenchmarkRender(VKRT* vkrt, const CLIBenchmarkOptions* options, BenchmarkState* state) {
+    if (!vkrt || !options || !state) return 0;
+    if (VKRT_startRender(vkrt, options->width, options->height, UINT32_MAX) != VKRT_SUCCESS) {
+        return 0;
+    }
+    state->renderStarted = 1u;
+    state->renderStartTimeUs = getMicroseconds();
+    return 1;
+}
+
+static int queryBenchmarkStatus(VKRT* vkrt, VKRT_RenderStatusSnapshot* status) {
+    return vkrt && status && VKRT_getRenderStatus(vkrt, status) == VKRT_SUCCESS;
+}
+
+static int beginBenchmarkTiming(VKRT* vkrt, BenchmarkState* state, uint64_t totalSamples, uint64_t nowUs) {
+    int warmupSamplesReached = 0;
+    int warmupTimeReached = 0;
+
+    if (!vkrt || !state || state->timingStarted) return 1;
+    warmupSamplesReached = totalSamples >= state->warmupSamples;
+    warmupTimeReached = state->renderStartTimeUs > 0u &&
+                        nowUs >= state->renderStartTimeUs &&
+                        nowUs - state->renderStartTimeUs >= kBenchmarkWarmupTimeUs;
+    if (!warmupSamplesReached || !warmupTimeReached) return 1;
+    if (!lockBenchmarkSampling(vkrt, &state->lockedSamplesPerFrame)) return 0;
+
+    state->timingStarted = 1u;
+    state->measurementSamplesStart = totalSamples;
+    state->startTimeUs = getMicroseconds();
+    return 1;
+}
+
+static uint64_t queryMeasuredSamples(const BenchmarkState* state, uint64_t totalSamples) {
+    if (!state || totalSamples < state->measurementSamplesStart) return 0u;
+    return totalSamples - state->measurementSamplesStart;
+}
+
+static void printBenchmarkResult(const BenchmarkState* state, const CLIBenchmarkOptions* options, uint64_t nowUs, uint64_t measuredSamples) {
+    double elapsedSeconds = 0.0;
+    double normalizedSeconds = 0.0;
+    double samplesPerSecond = 0.0;
+    double millisecondsPerSample = 0.0;
+
+    if (state && nowUs >= state->startTimeUs) {
+        elapsedSeconds = (double)(nowUs - state->startTimeUs) / 1000000.0;
+    }
+    normalizedSeconds = normalizeBenchmarkSeconds(
+        elapsedSeconds,
+        measuredSamples,
+        options ? options->targetSamples : 0u
+    );
+    samplesPerSecond = elapsedSeconds > 0.0 ? (double)measuredSamples / elapsedSeconds : 0.0;
+    millisecondsPerSample = measuredSamples > 0u ? (elapsedSeconds * 1000.0) / (double)measuredSamples : 0.0;
+
+    printf(
+        "Benchmark complete: %.3f s, %.2f samples/s, %.3f ms/sample, %u spp/frame, actual %llu samples\n",
+        normalizedSeconds,
+        samplesPerSecond,
+        millisecondsPerSample,
+        state ? state->lockedSamplesPerFrame : 0u,
+        (unsigned long long)measuredSamples
+    );
+}
+
+static void queryBenchmarkDeviceName(VKRT* vkrt, char* outName, size_t outNameSize) {
+    VKRT_SystemInfo systemInfo = {0};
+    if (!outName || outNameSize == 0u) return;
+
+    outName[0] = '\0';
+    if (VKRT_getSystemInfo(vkrt, &systemInfo) == VKRT_SUCCESS && systemInfo.deviceName[0]) {
+        snprintf(outName, outNameSize, "%s", systemInfo.deviceName);
+        return;
+    }
+    snprintf(outName, outNameSize, "%s", "(unknown device)");
+}
+
+static void printBenchmarkHeader(VKRT* vkrt, const CLIBenchmarkOptions* options) {
+    char deviceName[256];
+
+    queryBenchmarkDeviceName(vkrt, deviceName, sizeof(deviceName));
+    printf(
+        "Benchmark %s: %s, %ux%u, target %u samples\n",
+        queryBenchmarkModeName(options),
+        deviceName,
+        options->width,
+        options->height,
+        options->targetSamples
+    );
+}
+
+static int handleBenchmarkWindowClose(VKRT* vkrt, const CLIBenchmarkOptions* options) {
+    if (options->headless || !VKRT_shouldDeinit(vkrt)) return 1;
+    LOG_ERROR("Benchmark aborted after window close");
+    return 0;
+}
+
+static int startBenchmarkRenderIfReady(VKRT* vkrt, const CLIBenchmarkOptions* options, BenchmarkState* state) {
+    if (!vkrt || !options || !state) return 0;
+    if (state->renderStarted || state->setupFramesRemaining > 0u) return 1;
+    if (beginBenchmarkRender(vkrt, options, state)) return 1;
+    LOG_ERROR("Failed to start benchmark render");
+    return 0;
+}
+
+static int drawBenchmarkFrame(VKRT* vkrt) {
+    if (VKRT_draw(vkrt) == VKRT_SUCCESS) return 1;
+    LOG_ERROR("Frame render failed");
+    return 0;
+}
+
+static BenchmarkStepResult advanceBenchmarkSetup(BenchmarkState* state) {
+    if (!state || state->renderStarted) return BENCHMARK_STEP_CONTINUE;
+    if (state->setupFramesRemaining > 0u) state->setupFramesRemaining--;
+    return BENCHMARK_STEP_CONTINUE;
+}
+
+static BenchmarkStepResult finishBenchmarkIfTargetReached(
+    const BenchmarkState* state,
+    const CLIBenchmarkOptions* options,
+    const VKRT_RenderStatusSnapshot* status,
+    uint64_t nowUs
+) {
+    uint64_t measuredSamples = 0u;
+
+    if (!state || !options || !status || !state->timingStarted) return BENCHMARK_STEP_CONTINUE;
+
+    measuredSamples = queryMeasuredSamples(state, status->totalSamples);
+    if (measuredSamples >= options->targetSamples) {
+        printBenchmarkResult(state, options, nowUs, measuredSamples);
+        return BENCHMARK_STEP_SUCCESS;
+    }
+    if (VKRT_renderStatusIsComplete(status)) {
+        LOG_ERROR("Benchmark render finished before reaching the timed sample target");
+        return BENCHMARK_STEP_FAILURE;
+    }
+    return BENCHMARK_STEP_CONTINUE;
+}
+
+static BenchmarkStepResult runBenchmarkIteration(VKRT* vkrt, const CLIBenchmarkOptions* options, BenchmarkState* state) {
+    VKRT_RenderStatusSnapshot status = {0};
+    uint64_t nowUs = 0u;
+
+    VKRT_poll(vkrt);
+    if (!handleBenchmarkWindowClose(vkrt, options)) return BENCHMARK_STEP_FAILURE;
+    if (!startBenchmarkRenderIfReady(vkrt, options, state)) return BENCHMARK_STEP_FAILURE;
+    if (!drawBenchmarkFrame(vkrt)) return BENCHMARK_STEP_FAILURE;
+    if (!state->renderStarted) return advanceBenchmarkSetup(state);
+
+    if (!queryBenchmarkStatus(vkrt, &status)) {
+        LOG_ERROR("Failed to query benchmark status");
+        return BENCHMARK_STEP_FAILURE;
+    }
+
+    nowUs = getMicroseconds();
+    if (!beginBenchmarkTiming(vkrt, state, status.totalSamples, nowUs)) {
+        LOG_ERROR("Failed to lock benchmark sampling");
+        return BENCHMARK_STEP_FAILURE;
+    }
+    if (state->timingStarted && (state->startTimeUs == 0u || state->startTimeUs > nowUs)) {
+        return BENCHMARK_STEP_CONTINUE;
+    }
+
+    return finishBenchmarkIfTargetReached(state, options, &status, nowUs);
+}
+
 void benchmarkPrepareLaunchOptions(CLILaunchOptions* options) {
     if (!options || !options->benchmark.enabled) return;
 
@@ -74,6 +249,8 @@ void benchmarkPrepareLaunchOptions(CLILaunchOptions* options) {
 }
 
 int benchmarkRun(VKRT* vkrt, const CLIBenchmarkOptions* options) {
+    BenchmarkStepResult stepResult = BENCHMARK_STEP_CONTINUE;
+
     if (!vkrt || !options || !options->enabled) return EXIT_FAILURE;
     if (!configureBenchmarkWarmup(vkrt)) {
         LOG_ERROR("Failed to configure benchmark warmup");
@@ -85,107 +262,11 @@ int benchmarkRun(VKRT* vkrt, const CLIBenchmarkOptions* options) {
         .warmupSamples = queryBenchmarkWarmupSamples(options->targetSamples),
     };
 
-    VKRT_SystemInfo systemInfo = {0};
-    const char* deviceName = "(unknown device)";
-    if (VKRT_getSystemInfo(vkrt, &systemInfo) == VKRT_SUCCESS && systemInfo.deviceName[0]) {
-        deviceName = systemInfo.deviceName;
-    }
-
-    printf(
-        "Benchmark %s: %s, %ux%u, target %u samples\n",
-        queryBenchmarkModeName(options),
-        deviceName,
-        options->width,
-        options->height,
-        options->targetSamples
-    );
+    printBenchmarkHeader(vkrt, options);
 
     for (;;) {
-        VKRT_poll(vkrt);
-        if (!options->headless && VKRT_shouldDeinit(vkrt)) {
-            LOG_ERROR("Benchmark aborted after window close");
-            return EXIT_FAILURE;
-        }
-
-        if (!state.renderStarted && state.setupFramesRemaining == 0u) {
-            if (VKRT_startRender(vkrt, options->width, options->height, UINT32_MAX) != VKRT_SUCCESS) {
-                LOG_ERROR("Failed to start benchmark render");
-                return EXIT_FAILURE;
-            }
-            state.renderStarted = 1u;
-            state.renderStartTimeUs = getMicroseconds();
-        }
-
-        if (VKRT_draw(vkrt) != VKRT_SUCCESS) {
-            LOG_ERROR("Frame render failed");
-            return EXIT_FAILURE;
-        }
-
-        if (!state.renderStarted) {
-            if (state.setupFramesRemaining > 0u) state.setupFramesRemaining--;
-            continue;
-        }
-
-        VKRT_RenderStatusSnapshot status = {0};
-        if (VKRT_getRenderStatus(vkrt, &status) != VKRT_SUCCESS) {
-            LOG_ERROR("Failed to query benchmark status");
-            return EXIT_FAILURE;
-        }
-
-        uint64_t nowUs = getMicroseconds();
-        int warmupSamplesReached = status.totalSamples >= state.warmupSamples;
-        int warmupTimeReached = state.renderStartTimeUs > 0u &&
-                                nowUs >= state.renderStartTimeUs &&
-                                nowUs - state.renderStartTimeUs >= kBenchmarkWarmupTimeUs;
-        if (!state.timingStarted && warmupSamplesReached && warmupTimeReached) {
-            if (!lockBenchmarkSampling(vkrt, &state.lockedSamplesPerFrame)) {
-                LOG_ERROR("Failed to lock benchmark sampling");
-                return EXIT_FAILURE;
-            }
-            state.timingStarted = 1u;
-            state.measurementSamplesStart = status.totalSamples;
-            state.startTimeUs = getMicroseconds();
-            continue;
-        }
-
-        uint64_t measuredSamples = status.totalSamples;
-        if (measuredSamples >= state.measurementSamplesStart) {
-            measuredSamples -= state.measurementSamplesStart;
-        } else {
-            measuredSamples = 0u;
-        }
-
-        if (state.timingStarted && measuredSamples >= options->targetSamples) {
-            double elapsedSeconds = 0.0;
-            if (nowUs >= state.startTimeUs) {
-                elapsedSeconds = (double)(nowUs - state.startTimeUs) / 1000000.0;
-            }
-            double normalizedSeconds = normalizeBenchmarkSeconds(
-                elapsedSeconds,
-                measuredSamples,
-                options->targetSamples
-            );
-            double samplesPerSecond = elapsedSeconds > 0.0
-                ? (double)measuredSamples / elapsedSeconds
-                : 0.0;
-            double millisecondsPerSample = measuredSamples > 0
-                ? (elapsedSeconds * 1000.0) / (double)measuredSamples
-                : 0.0;
-
-            printf(
-                "Benchmark complete: %.3f s, %.2f samples/s, %.3f ms/sample, %u spp/frame, actual %" PRIu64 " samples\n",
-                normalizedSeconds,
-                samplesPerSecond,
-                millisecondsPerSample,
-                state.lockedSamplesPerFrame,
-                measuredSamples
-            );
-            return EXIT_SUCCESS;
-        }
-
-        if (VKRT_renderStatusIsComplete(&status)) {
-            LOG_ERROR("Benchmark render finished before reaching the timed sample target");
-            return EXIT_FAILURE;
-        }
+        stepResult = runBenchmarkIteration(vkrt, options, &state);
+        if (stepResult == BENCHMARK_STEP_SUCCESS) return EXIT_SUCCESS;
+        if (stepResult == BENCHMARK_STEP_FAILURE) return EXIT_FAILURE;
     }
 }

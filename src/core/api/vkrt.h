@@ -70,12 +70,7 @@ VKRT_Result VKRT_getTextureCount(const VKRT* vkrt, uint32_t* outTextureCount);
 VKRT_Result VKRT_getTextureSnapshot(const VKRT* vkrt, uint32_t textureIndex, VKRT_TextureSnapshot* outTexture);
 VKRT_Result VKRT_addTextureFromPixels(
     VKRT* vkrt,
-    const char* name,
-    const void* pixels,
-    uint32_t width,
-    uint32_t height,
-    uint32_t format,
-    uint32_t colorSpace,
+    const VKRT_TextureUpload* upload,
     uint32_t* outTextureIndex
 );
 VKRT_Result VKRT_addTextureFromFile(
@@ -114,8 +109,8 @@ VKRT_Result VKRT_consumeSelectedMesh(VKRT* vkrt, uint32_t* outMeshIndex, uint8_t
 VKRT_Result VKRT_setSelectedMesh(VKRT* vkrt, uint32_t meshIndex);
 VKRT_Result VKRT_getSelectedMesh(const VKRT* vkrt, uint32_t* outMeshIndex);
 VKRT_Result VKRT_setRenderViewport(VKRT* vkrt, uint32_t x, uint32_t y, uint32_t width, uint32_t height);
-VKRT_Result VKRT_cameraSetPose(VKRT* vkrt, vec3 position, vec3 target, vec3 up, float vfov);
-VKRT_Result VKRT_cameraGetPose(const VKRT* vkrt, vec3 position, vec3 target, vec3 up, float* vfov);
+VKRT_Result VKRT_cameraSetPose(VKRT* vkrt, vec3 position, vec3 target, vec3 upVector, float vfov);
+VKRT_Result VKRT_cameraGetPose(const VKRT* vkrt, vec3 position, vec3 target, vec3 upVector, float* vfov);
 
 void buildMeshTransformMatrix(const vec3 position, const vec3 rotationDegrees, const vec3 scale, mat4 outMatrix);
 void buildImportedMeshNodeTransformMatrix(mat4 worldTransform, mat4 outEngineTransform);

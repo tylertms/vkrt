@@ -1,15 +1,20 @@
-#include "scene.h"
-
 #include "buffer.h"
 #include "command/record.h"
-#include "debug.h"
+#include "config.h"
+#include "constants.h"
+#include "scene.h"
+#include "vkrt_internal.h"
+#include "vkrt_types.h"
+#include "vulkan/vulkan_core.h"
 
 #include <math.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <string.h>
 
 enum {
-    kAutoExposureGridDimension = 16u,
-    kAutoExposureSampleCount = kAutoExposureGridDimension * kAutoExposureGridDimension,
+    K_AUTO_EXPOSURE_GRID_DIMENSION = 16u,
+    K_AUTO_EXPOSURE_SAMPLE_COUNT = K_AUTO_EXPOSURE_GRID_DIMENSION * K_AUTO_EXPOSURE_GRID_DIMENSION,
 };
 static const float kAutoExposureKey = 0.18f;
 static const float kAutoExposureSmoothing = 0.18f;
@@ -17,15 +22,15 @@ static const float kAutoExposureAdaptationStrength = 0.65f;
 
 static float luminanceRGB(const float* rgba) {
     if (!rgba) return 0.0f;
-    return rgba[0] * 0.2126f + rgba[1] * 0.7152f + rgba[2] * 0.0722f;
+    return (rgba[0] * 0.2126f) + (rgba[1] * 0.7152f) + (rgba[2] * 0.0722f);
 }
 
 static float filterAutoExposureLuminance(float previousFiltered, float averageLuminance) {
     if (previousFiltered <= 0.0f) {
         return averageLuminance;
     }
-    return previousFiltered * (1.0f - kAutoExposureSmoothing) +
-        averageLuminance * kAutoExposureSmoothing;
+    return (previousFiltered * (1.0f - kAutoExposureSmoothing))
+         + (averageLuminance * kAutoExposureSmoothing);
 }
 
 static int computeAutoExposureTarget(float filteredLuminance, float* outExposure) {
@@ -50,8 +55,8 @@ static int computeAutoExposureAverageLuminance(const float* samples, float* outA
 
     float luminanceSum = 0.0f;
     uint32_t count = 0u;
-    for (uint32_t i = 0; i < kAutoExposureSampleCount; i++) {
-        float luminance = luminanceRGB(&samples[i * 4u]);
+    for (uint32_t i = 0; i < K_AUTO_EXPOSURE_SAMPLE_COUNT; i++) {
+        float luminance = luminanceRGB(&samples[(size_t)(i * 4u)]);
         if (!isfinite(luminance)) continue;
         luminanceSum += luminance;
         count++;
@@ -65,7 +70,7 @@ static int computeAutoExposureAverageLuminance(const float* samples, float* outA
 VKRT_Result createAutoExposureReadbacks(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
 
-    VkDeviceSize readbackBytes = (VkDeviceSize)kAutoExposureSampleCount * 4u * sizeof(float);
+    VkDeviceSize readbackBytes = (VkDeviceSize)K_AUTO_EXPOSURE_SAMPLE_COUNT * 4u * sizeof(float);
     for (uint32_t i = 0; i < VKRT_MAX_FRAMES_IN_FLIGHT; i++) {
         VKRT_AutoExposureReadback* readback = &vkrt->renderControl.autoExposure.readbacks[i];
         clearAutoExposureReadback(readback);
@@ -90,7 +95,7 @@ VKRT_Result createAutoExposureReadbacks(VKRT* vkrt) {
         }
 
         readback->buffer.deviceAddress = 0;
-        readback->buffer.count = kAutoExposureSampleCount;
+        readback->buffer.count = K_AUTO_EXPOSURE_SAMPLE_COUNT;
         readback->pending = 0u;
     }
 
@@ -125,12 +130,14 @@ void recordAutoExposureReadback(VKRT* vkrt, VkCommandBuffer commandBuffer, VkIma
 
     transitionImageLayout(commandBuffer, accumulationImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 
-    VkBufferImageCopy copyRegions[kAutoExposureSampleCount];
+    VkBufferImageCopy copyRegions[K_AUTO_EXPOSURE_SAMPLE_COUNT];
     uint32_t regionIndex = 0u;
-    for (uint32_t y = 0; y < kAutoExposureGridDimension; y++) {
-        for (uint32_t x = 0; x < kAutoExposureGridDimension; x++) {
-            uint32_t sampleX = ((2u * x + 1u) * renderExtent.width) / (2u * kAutoExposureGridDimension);
-            uint32_t sampleY = ((2u * y + 1u) * renderExtent.height) / (2u * kAutoExposureGridDimension);
+    for (uint32_t y = 0; y < K_AUTO_EXPOSURE_GRID_DIMENSION; y++) {
+        for (uint32_t x = 0; x < K_AUTO_EXPOSURE_GRID_DIMENSION; x++) {
+            uint32_t sampleX =
+                (((2u * x) + 1u) * renderExtent.width) / (2u * K_AUTO_EXPOSURE_GRID_DIMENSION);
+            uint32_t sampleY =
+                (((2u * y) + 1u) * renderExtent.height) / (2u * K_AUTO_EXPOSURE_GRID_DIMENSION);
             if (sampleX >= renderExtent.width) sampleX = renderExtent.width - 1u;
             if (sampleY >= renderExtent.height) sampleY = renderExtent.height - 1u;
 
@@ -151,14 +158,12 @@ void recordAutoExposureReadback(VKRT* vkrt, VkCommandBuffer commandBuffer, VkIma
         }
     }
 
-    vkCmdCopyImageToBuffer(
-        commandBuffer,
-        accumulationImage,
-        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-        readback->buffer.buffer,
-        kAutoExposureSampleCount,
-        copyRegions
-    );
+    vkCmdCopyImageToBuffer(commandBuffer,
+                           accumulationImage,
+                           VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                           readback->buffer.buffer,
+                           K_AUTO_EXPOSURE_SAMPLE_COUNT,
+                           copyRegions);
 
     transitionImageLayout(commandBuffer, accumulationImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
     readback->pending = 1u;

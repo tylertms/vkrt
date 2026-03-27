@@ -1,5 +1,7 @@
-#include "editor_internal.h"
+#include "GLFW/glfw3.h"
 #include "debug.h"
+#include "editor.h"
+#include "editor_internal.h"
 #include "session.h"
 
 void editorUIInitializeDialogs(Session* session, GLFWwindow* window) {

@@ -1,12 +1,15 @@
 #include "accel.h"
-
 #include "buffer.h"
 #include "device.h"
 #include "geometry.h"
 #include "scene.h"
 #include "state.h"
-#include "debug.h"
+#include "vkrt_engine_types.h"
+#include "vkrt_internal.h"
+#include "vkrt_types.h"
+#include "vulkan/vulkan_core.h"
 
+#include <stdint.h>
 #include <stdlib.h>
 
 typedef struct TLASBuildResources {
@@ -16,6 +19,38 @@ typedef struct TLASBuildResources {
     VkBool32* buildPending;
 } TLASBuildResources;
 
+typedef struct PreparedTLASState {
+    Buffer meshData;
+    AccelerationStructure sceneTLAS;
+    AccelerationStructure selectionTLAS;
+    FrameTransfer sceneTLASInstanceBuffer;
+    FrameTransfer sceneTLASScratch;
+    FrameTransfer selectionTLASInstanceBuffer;
+    FrameTransfer selectionTLASScratch;
+    uint32_t sceneTLASInstanceCount;
+    uint32_t selectionTLASInstanceCount;
+    VkBool32 sceneTLASBuildPending;
+    VkBool32 selectionTLASBuildPending;
+} PreparedTLASState;
+
+static TLASBuildResources querySceneTLASBuildResources(PreparedTLASState* state) {
+    return (TLASBuildResources){
+        .accelerationStructure = &state->sceneTLAS,
+        .instanceBuffer = &state->sceneTLASInstanceBuffer,
+        .scratchBuffer = &state->sceneTLASScratch,
+        .buildPending = &state->sceneTLASBuildPending,
+    };
+}
+
+static TLASBuildResources querySelectionTLASBuildResources(PreparedTLASState* state) {
+    return (TLASBuildResources){
+        .accelerationStructure = &state->selectionTLAS,
+        .instanceBuffer = &state->selectionTLASInstanceBuffer,
+        .scratchBuffer = &state->selectionTLASScratch,
+        .buildPending = &state->selectionTLASBuildPending,
+    };
+}
+
 static void resetTLASBuildResources(VKRT* vkrt, const TLASBuildResources* resources) {
     if (!vkrt || !resources) return;
     destroyTransfer(vkrt, resources->instanceBuffer);
@@ -24,6 +59,93 @@ static void resetTLASBuildResources(VKRT* vkrt, const TLASBuildResources* resour
     if (resources->buildPending) {
         *resources->buildPending = VK_FALSE;
     }
+}
+
+static VKRT_Result createTLASAccelerationStructure(
+    VKRT* vkrt,
+    TLASBuildResources* resources,
+    const VkAccelerationStructureBuildSizesInfoKHR* buildSizesInfo
+) {
+    if (!vkrt || !resources || !buildSizesInfo) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    uint32_t graphicsFamily = vkrt->core.indices.graphics;
+    VkBufferCreateInfo tlasBufferCreateInfo = {0};
+    tlasBufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    tlasBufferCreateInfo.size = buildSizesInfo->accelerationStructureSize;
+    tlasBufferCreateInfo.usage =
+        VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+    tlasBufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    tlasBufferCreateInfo.queueFamilyIndexCount = 1;
+    tlasBufferCreateInfo.pQueueFamilyIndices = &graphicsFamily;
+
+    if (vkCreateBuffer(
+        vkrt->core.device,
+        &tlasBufferCreateInfo,
+        NULL,
+        &resources->accelerationStructure->buffer
+    ) != VK_SUCCESS) {
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+
+    VkMemoryRequirements tlasMemoryRequirements = {0};
+    vkGetBufferMemoryRequirements(vkrt->core.device, resources->accelerationStructure->buffer, &tlasMemoryRequirements);
+
+    VkMemoryAllocateFlagsInfo allocateFlags = {0};
+    allocateFlags.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
+    allocateFlags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+
+    VkMemoryAllocateInfo tlasAllocateInfo = {0};
+    tlasAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    tlasAllocateInfo.pNext = &allocateFlags;
+    tlasAllocateInfo.allocationSize = tlasMemoryRequirements.size;
+    if (findMemoryType(
+        vkrt,
+        tlasMemoryRequirements.memoryTypeBits,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        &tlasAllocateInfo.memoryTypeIndex
+    ) != VKRT_SUCCESS) {
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+
+    if (vkAllocateMemory(
+        vkrt->core.device,
+        &tlasAllocateInfo,
+        NULL,
+        &resources->accelerationStructure->memory
+    ) != VK_SUCCESS) {
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+
+    if (vkBindBufferMemory(
+        vkrt->core.device,
+        resources->accelerationStructure->buffer,
+        resources->accelerationStructure->memory,
+        0
+    ) != VK_SUCCESS) {
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+
+    VkAccelerationStructureCreateInfoKHR createInfo = {0};
+    createInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
+    createInfo.buffer = resources->accelerationStructure->buffer;
+    createInfo.size = buildSizesInfo->accelerationStructureSize;
+    createInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+
+    if (vkrt->core.procs.vkCreateAccelerationStructureKHR(
+        vkrt->core.device,
+        &createInfo,
+        NULL,
+        &resources->accelerationStructure->structure
+    ) != VK_SUCCESS) {
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+
+    VkAccelerationStructureDeviceAddressInfoKHR addressInfo = {0};
+    addressInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR;
+    addressInfo.accelerationStructure = resources->accelerationStructure->structure;
+    resources->accelerationStructure->deviceAddress =
+        vkrt->core.procs.vkGetAccelerationStructureDeviceAddressKHR(vkrt->core.device, &addressInfo);
+    return VKRT_SUCCESS;
 }
 
 static VKRT_Result prepareTLASBuild(
@@ -36,7 +158,6 @@ static VKRT_Result prepareTLASBuild(
 
     resetTLASBuildResources(vkrt, resources);
 
-    uint32_t graphicsFamily = vkrt->core.indices.graphics;
     VkDeviceAddress instanceDeviceAddress = 0;
     VkAccelerationStructureInstanceKHR emptyInstance = {0};
     const VkAccelerationStructureInstanceKHR* instanceData = instances ? instances : &emptyInstance;
@@ -84,87 +205,11 @@ static VKRT_Result prepareTLASBuild(
         &buildSizesInfo
     );
 
-    VkBufferCreateInfo tlasBufferCreateInfo = {0};
-    tlasBufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    tlasBufferCreateInfo.size = buildSizesInfo.accelerationStructureSize;
-    tlasBufferCreateInfo.usage =
-        VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
-    tlasBufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    tlasBufferCreateInfo.queueFamilyIndexCount = 1;
-    tlasBufferCreateInfo.pQueueFamilyIndices = &graphicsFamily;
-
-    if (vkCreateBuffer(
-        vkrt->core.device,
-        &tlasBufferCreateInfo,
-        NULL,
-        &resources->accelerationStructure->buffer
-    ) != VK_SUCCESS) {
+    result = createTLASAccelerationStructure(vkrt, (TLASBuildResources*)resources, &buildSizesInfo);
+    if (result != VKRT_SUCCESS) {
         resetTLASBuildResources(vkrt, resources);
-        return VKRT_ERROR_OPERATION_FAILED;
+        return result;
     }
-
-    VkMemoryRequirements tlasMemoryRequirements = {0};
-    vkGetBufferMemoryRequirements(vkrt->core.device, resources->accelerationStructure->buffer, &tlasMemoryRequirements);
-
-    VkMemoryAllocateFlagsInfo allocateFlags = {0};
-    allocateFlags.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
-    allocateFlags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
-
-    VkMemoryAllocateInfo tlasAllocateInfo = {0};
-    tlasAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    tlasAllocateInfo.pNext = &allocateFlags;
-    tlasAllocateInfo.allocationSize = tlasMemoryRequirements.size;
-    if (findMemoryType(
-        vkrt,
-        tlasMemoryRequirements.memoryTypeBits,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        &tlasAllocateInfo.memoryTypeIndex
-    ) != VKRT_SUCCESS) {
-        resetTLASBuildResources(vkrt, resources);
-        return VKRT_ERROR_OPERATION_FAILED;
-    }
-
-    if (vkAllocateMemory(
-        vkrt->core.device,
-        &tlasAllocateInfo,
-        NULL,
-        &resources->accelerationStructure->memory
-    ) != VK_SUCCESS) {
-        resetTLASBuildResources(vkrt, resources);
-        return VKRT_ERROR_OPERATION_FAILED;
-    }
-
-    if (vkBindBufferMemory(
-        vkrt->core.device,
-        resources->accelerationStructure->buffer,
-        resources->accelerationStructure->memory,
-        0
-    ) != VK_SUCCESS) {
-        resetTLASBuildResources(vkrt, resources);
-        return VKRT_ERROR_OPERATION_FAILED;
-    }
-
-    VkAccelerationStructureCreateInfoKHR createInfo = {0};
-    createInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
-    createInfo.buffer = resources->accelerationStructure->buffer;
-    createInfo.size = buildSizesInfo.accelerationStructureSize;
-    createInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
-
-    if (vkrt->core.procs.vkCreateAccelerationStructureKHR(
-        vkrt->core.device,
-        &createInfo,
-        NULL,
-        &resources->accelerationStructure->structure
-    ) != VK_SUCCESS) {
-        resetTLASBuildResources(vkrt, resources);
-        return VKRT_ERROR_OPERATION_FAILED;
-    }
-
-    VkAccelerationStructureDeviceAddressInfoKHR addressInfo = {0};
-    addressInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR;
-    addressInfo.accelerationStructure = resources->accelerationStructure->structure;
-    resources->accelerationStructure->deviceAddress =
-        vkrt->core.procs.vkGetAccelerationStructureDeviceAddressKHR(vkrt->core.device, &addressInfo);
 
     result = createBuffer(
         vkrt,
@@ -181,6 +226,16 @@ static VKRT_Result prepareTLASBuild(
 
     *resources->buildPending = VK_TRUE;
     return VKRT_SUCCESS;
+}
+
+static void destroyPreparedTLASState(VKRT* vkrt, PreparedTLASState* state) {
+    if (!vkrt || !state) return;
+
+    TLASBuildResources sceneResources = querySceneTLASBuildResources(state);
+    TLASBuildResources selectionResources = querySelectionTLASBuildResources(state);
+    destroyBufferResources(vkrt, &state->meshData);
+    resetTLASBuildResources(vkrt, &sceneResources);
+    resetTLASBuildResources(vkrt, &selectionResources);
 }
 
 static VKRT_Result recordTLASBuild(
@@ -275,6 +330,112 @@ static VkBool32 buildSelectionTLASInstance(
     return buildTLASInstanceForMesh(vkrt, vkrt->sceneSettings.selectedMeshIndex, outInstance);
 }
 
+static VKRT_Result allocateSceneTLASInstances(
+    const VKRT* vkrt,
+    VkAccelerationStructureInstanceKHR** outInstances,
+    uint32_t* outInstanceCount
+) {
+    if (outInstances) *outInstances = NULL;
+    if (outInstanceCount) *outInstanceCount = 0u;
+    if (!vkrt || !outInstances || !outInstanceCount) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    uint32_t meshCount = vkrt->core.meshCount;
+    if (meshCount == 0u) return VKRT_SUCCESS;
+
+    VkAccelerationStructureInstanceKHR* instances =
+        (VkAccelerationStructureInstanceKHR*)malloc(sizeof(*instances) * meshCount);
+    if (!instances) return VKRT_ERROR_OPERATION_FAILED;
+
+    for (uint32_t meshIndex = 0; meshIndex < meshCount; meshIndex++) {
+        if (!buildTLASInstanceForMesh(vkrt, meshIndex, &instances[meshIndex])) {
+            free(instances);
+            return VKRT_ERROR_OPERATION_FAILED;
+        }
+    }
+
+    *outInstances = instances;
+    *outInstanceCount = meshCount;
+    return VKRT_SUCCESS;
+}
+
+static VKRT_Result prepareSceneTLASState(
+    VKRT* vkrt,
+    PreparedTLASState* state,
+    const VkAccelerationStructureInstanceKHR* sceneInstances,
+    uint32_t sceneInstanceCount
+) {
+    if (!vkrt || !state) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    VKRT_Result result = vkrtSceneBuildMeshInfoBuffer(vkrt, &state->meshData);
+    if (result != VKRT_SUCCESS) return result;
+
+    TLASBuildResources sceneResources = querySceneTLASBuildResources(state);
+    result = prepareTLASBuild(vkrt, &sceneResources, sceneInstances, sceneInstanceCount);
+    if (result != VKRT_SUCCESS) return result;
+
+    state->sceneTLASInstanceCount = sceneInstanceCount;
+    return VKRT_SUCCESS;
+}
+
+static VKRT_Result prepareSelectionTLASState(VKRT* vkrt, PreparedTLASState* state) {
+    if (!vkrt || !state) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    VkAccelerationStructureInstanceKHR selectionInstance = {0};
+    if (!buildSelectionTLASInstance(vkrt, &selectionInstance)) return VKRT_SUCCESS;
+
+    TLASBuildResources selectionResources = querySelectionTLASBuildResources(state);
+    VKRT_Result result = prepareTLASBuild(vkrt, &selectionResources, &selectionInstance, 1u);
+    if (result != VKRT_SUCCESS) return result;
+
+    state->selectionTLASInstanceCount = 1u;
+    return VKRT_SUCCESS;
+}
+
+static void commitPreparedTLASState(VKRT* vkrt, PreparedTLASState* state) {
+    if (!vkrt || !state) return;
+
+    FrameSceneUpdate* update = vkrtCurrentFrameSceneUpdate(vkrt);
+    Buffer previousMeshData = vkrt->core.sceneMeshData;
+    AccelerationStructure previousSceneTLAS = vkrt->core.sceneTopLevelAccelerationStructure;
+    AccelerationStructure previousSelectionTLAS = vkrt->core.selectionTopLevelAccelerationStructure;
+    FrameTransfer previousSceneTLASInstanceBuffer = update->sceneTLASInstanceBuffer;
+    FrameTransfer previousSceneTLASScratch = update->sceneTLASScratch;
+    FrameTransfer previousSelectionTLASInstanceBuffer = update->selectionTLASInstanceBuffer;
+    FrameTransfer previousSelectionTLASScratch = update->selectionTLASScratch;
+
+    vkrt->core.sceneMeshData = state->meshData;
+    vkrt->core.sceneTopLevelAccelerationStructure = state->sceneTLAS;
+    vkrt->core.selectionTopLevelAccelerationStructure = state->selectionTLAS;
+    update->sceneTLASInstanceBuffer = state->sceneTLASInstanceBuffer;
+    update->sceneTLASScratch = state->sceneTLASScratch;
+    update->selectionTLASInstanceBuffer = state->selectionTLASInstanceBuffer;
+    update->selectionTLASScratch = state->selectionTLASScratch;
+    update->sceneTLASInstanceCount = state->sceneTLASInstanceCount;
+    update->selectionTLASInstanceCount = state->selectionTLASInstanceCount;
+    update->sceneTLASBuildPending = state->sceneTLASBuildPending;
+    update->selectionTLASBuildPending = state->selectionTLASBuildPending;
+
+    state->meshData = (Buffer){0};
+    state->sceneTLAS = (AccelerationStructure){0};
+    state->selectionTLAS = (AccelerationStructure){0};
+    state->sceneTLASInstanceBuffer = (FrameTransfer){0};
+    state->sceneTLASScratch = (FrameTransfer){0};
+    state->selectionTLASInstanceBuffer = (FrameTransfer){0};
+    state->selectionTLASScratch = (FrameTransfer){0};
+    state->sceneTLASInstanceCount = 0u;
+    state->selectionTLASInstanceCount = 0u;
+    state->sceneTLASBuildPending = VK_FALSE;
+    state->selectionTLASBuildPending = VK_FALSE;
+
+    destroyBufferResources(vkrt, &previousMeshData);
+    destroyTransfer(vkrt, &previousSceneTLASInstanceBuffer);
+    destroyTransfer(vkrt, &previousSceneTLASScratch);
+    destroyTransfer(vkrt, &previousSelectionTLASInstanceBuffer);
+    destroyTransfer(vkrt, &previousSelectionTLASScratch);
+    vkrtDestroyAccelerationStructureResources(vkrt, &previousSceneTLAS);
+    vkrtDestroyAccelerationStructureResources(vkrt, &previousSelectionTLAS);
+}
+
 VKRT_Result createSelectionTopLevelAccelerationStructure(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
 
@@ -319,122 +480,27 @@ VKRT_Result createSelectionTopLevelAccelerationStructure(VKRT* vkrt) {
 
 VKRT_Result createTopLevelAccelerationStructures(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
-    uint64_t startTime = getMicroseconds();
-
-    FrameSceneUpdate* update = vkrtCurrentFrameSceneUpdate(vkrt);
-    Buffer nextMeshData = {0};
-    AccelerationStructure nextSceneTLAS = {0};
-    AccelerationStructure nextSelectionTLAS = {0};
-    FrameTransfer nextSceneTLASInstanceBuffer = {0};
-    FrameTransfer nextSceneTLASScratch = {0};
-    FrameTransfer nextSelectionTLASInstanceBuffer = {0};
-    FrameTransfer nextSelectionTLASScratch = {0};
-    uint32_t nextSceneTLASInstanceCount = 0u;
-    uint32_t nextSelectionTLASInstanceCount = 0u;
-    VkBool32 nextSceneTLASBuildPending = VK_FALSE;
-    VkBool32 nextSelectionTLASBuildPending = VK_FALSE;
-    TLASBuildResources sceneTLASResources = {
-        .accelerationStructure = &nextSceneTLAS,
-        .instanceBuffer = &nextSceneTLASInstanceBuffer,
-        .scratchBuffer = &nextSceneTLASScratch,
-        .buildPending = &nextSceneTLASBuildPending,
-    };
-    TLASBuildResources selectionTLASResources = {
-        .accelerationStructure = &nextSelectionTLAS,
-        .instanceBuffer = &nextSelectionTLASInstanceBuffer,
-        .scratchBuffer = &nextSelectionTLASScratch,
-        .buildPending = &nextSelectionTLASBuildPending,
-    };
-
-    VKRT_Result result = VKRT_SUCCESS;
-    uint32_t meshCount = vkrt->core.meshCount;
-    uint32_t sceneInstanceCount = meshCount;
-    VkAccelerationStructureInstanceKHR* allocatedInstances = NULL;
+    PreparedTLASState state = {0};
     VkAccelerationStructureInstanceKHR* sceneInstances = NULL;
-    VkAccelerationStructureInstanceKHR selectionInstance = {0};
+    uint32_t sceneInstanceCount = 0u;
 
-    result = vkrtSceneBuildMeshInfoBuffer(vkrt, &nextMeshData);
+    VKRT_Result result = allocateSceneTLASInstances(vkrt, &sceneInstances, &sceneInstanceCount);
     if (result != VKRT_SUCCESS) {
-        goto cleanup;
-    }
-
-    if (meshCount > 0) {
-        allocatedInstances = (VkAccelerationStructureInstanceKHR*)malloc(sizeof(*allocatedInstances) * meshCount);
-        if (!allocatedInstances) {
-            result = VKRT_ERROR_OPERATION_FAILED;
-            goto cleanup;
-        }
-
-        for (uint32_t i = 0; i < meshCount; i++) {
-            if (!buildTLASInstanceForMesh(vkrt, i, &allocatedInstances[i])) {
-                result = VKRT_ERROR_OPERATION_FAILED;
-                goto cleanup;
-            }
-        }
-
-        sceneInstances = allocatedInstances;
-    }
-
-    result = prepareTLASBuild(vkrt, &sceneTLASResources, sceneInstances, sceneInstanceCount);
-    if (result != VKRT_SUCCESS) {
-        goto cleanup;
-    }
-    nextSceneTLASInstanceCount = sceneInstanceCount;
-
-    if (buildSelectionTLASInstance(vkrt, &selectionInstance)) {
-        result = prepareTLASBuild(vkrt, &selectionTLASResources, &selectionInstance, 1u);
-        if (result != VKRT_SUCCESS) {
-            goto cleanup;
-        }
-        nextSelectionTLASInstanceCount = 1u;
-    }
-
-cleanup:
-    free(allocatedInstances);
-
-    if (result != VKRT_SUCCESS) {
-        destroyBufferResources(vkrt, &nextMeshData);
-        resetTLASBuildResources(vkrt, &sceneTLASResources);
-        resetTLASBuildResources(vkrt, &selectionTLASResources);
         return result;
     }
 
-    {
-        Buffer previousMeshData = vkrt->core.sceneMeshData;
-        AccelerationStructure previousSceneTLAS = vkrt->core.sceneTopLevelAccelerationStructure;
-        AccelerationStructure previousSelectionTLAS = vkrt->core.selectionTopLevelAccelerationStructure;
-        FrameTransfer previousSceneTLASInstanceBuffer = update->sceneTLASInstanceBuffer;
-        FrameTransfer previousSceneTLASScratch = update->sceneTLASScratch;
-        FrameTransfer previousSelectionTLASInstanceBuffer = update->selectionTLASInstanceBuffer;
-        FrameTransfer previousSelectionTLASScratch = update->selectionTLASScratch;
-
-        vkrt->core.sceneMeshData = nextMeshData;
-        vkrt->core.sceneTopLevelAccelerationStructure = nextSceneTLAS;
-        vkrt->core.selectionTopLevelAccelerationStructure = nextSelectionTLAS;
-        update->sceneTLASInstanceBuffer = nextSceneTLASInstanceBuffer;
-        update->sceneTLASScratch = nextSceneTLASScratch;
-        update->selectionTLASInstanceBuffer = nextSelectionTLASInstanceBuffer;
-        update->selectionTLASScratch = nextSelectionTLASScratch;
-        update->sceneTLASInstanceCount = nextSceneTLASInstanceCount;
-        update->selectionTLASInstanceCount = nextSelectionTLASInstanceCount;
-        update->sceneTLASBuildPending = nextSceneTLASBuildPending;
-        update->selectionTLASBuildPending = nextSelectionTLASBuildPending;
-
-        destroyBufferResources(vkrt, &previousMeshData);
-        destroyTransfer(vkrt, &previousSceneTLASInstanceBuffer);
-        destroyTransfer(vkrt, &previousSceneTLASScratch);
-        destroyTransfer(vkrt, &previousSelectionTLASInstanceBuffer);
-        destroyTransfer(vkrt, &previousSelectionTLASScratch);
-        vkrtDestroyAccelerationStructureResources(vkrt, &previousSceneTLAS);
-        vkrtDestroyAccelerationStructureResources(vkrt, &previousSelectionTLAS);
+    result = prepareSceneTLASState(vkrt, &state, sceneInstances, sceneInstanceCount);
+    if (result == VKRT_SUCCESS) {
+        result = prepareSelectionTLASState(vkrt, &state);
     }
 
-    LOG_TRACE(
-        "TLAS prepared. Instances: %u, Selection Instances: %u, in %.3f ms",
-        nextSceneTLASInstanceCount,
-        nextSelectionTLASInstanceCount,
-        (double)(getMicroseconds() - startTime) / 1e3
-    );
+    free(sceneInstances);
+    if (result != VKRT_SUCCESS) {
+        destroyPreparedTLASState(vkrt, &state);
+        return result;
+    }
+
+    commitPreparedTLASState(vkrt, &state);
     return VKRT_SUCCESS;
 }
 

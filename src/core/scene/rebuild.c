@@ -1,10 +1,16 @@
 #include "rebuild.h"
 
+#include "accel/accel.h"
+#include "buffer.h"
+#include "config.h"
+#include "debug.h"
 #include "lighting.h"
 #include "state.h"
-#include "buffer.h"
-#include "accel/accel.h"
-#include "debug.h"
+#include "types.h"
+#include "vkrt_engine_types.h"
+#include "vkrt_internal.h"
+#include "vkrt_types.h"
+#include "vulkan/vulkan_core.h"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -132,7 +138,8 @@ VKRT_Result vkrtSceneRebuildMaterialBuffer(VKRT* vkrt) {
     free(materials);
     if (result != VKRT_SUCCESS) return result;
 
-    if ((result = vkrtSceneRebuildLightBuffers(vkrt)) != VKRT_SUCCESS) {
+    result = vkrtSceneRebuildLightBuffers(vkrt);
+    if (result != VKRT_SUCCESS) {
         destroyBufferResources(vkrt, &nextMaterialData);
         return result;
     }

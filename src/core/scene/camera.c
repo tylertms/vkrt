@@ -1,69 +1,108 @@
 #include "scene.h"
+#include "vkrt_types.h"
 
+#include <cam.h>
+#include <mat4.h>
 #include <math.h>
+#include <stdint.h>
+#include <types.h>
+#include <util.h>
+#include <vec3.h>
+
+static void queryCameraBasis(const float* position, const float* target, vec3 viewDirection, vec3 right, vec3 upVector) {
+    viewDirection[0] = target[0] - position[0];
+    viewDirection[1] = target[1] - position[1];
+    viewDirection[2] = target[2] - position[2];
+
+    glm_vec3_cross(viewDirection, (vec3){0, 0, 1}, right);
+    if (glm_vec3_norm(right) < 1e-6f) {
+        right[0] = 0.0f;
+        right[1] = 1.0f;
+        right[2] = 0.0f;
+    } else {
+        glm_vec3_normalize(right);
+    }
+
+    glm_vec3_cross(right, viewDirection, upVector);
+    glm_vec3_normalize(upVector);
+}
+
+static void applyPanInput(
+    const VKRT_CameraInput* input,
+    float distance,
+    const vec3 right,
+    const vec3 upVector,
+    float* position,
+    float* target
+) {
+    float panScale = 0.001f * distance;
+    float moveX = -input->panDx * panScale;
+    float moveY = input->panDy * panScale;
+
+    for (int axisIndex = 0; axisIndex < 3; axisIndex++) {
+        float delta = (right[axisIndex] * moveX) + (upVector[axisIndex] * moveY);
+        position[axisIndex] += delta;
+        target[axisIndex] += delta;
+    }
+}
+
+static void applyOrbitInput(const VKRT_CameraInput* input, const vec3 viewDirection, float distance, float* position, const float* target) {
+    const float orbitSpeed = 0.004f;
+    const float piOverTwo = 1.5707963267948966f;
+    const float epsilon = 0.001f;
+    float yaw = atan2f(viewDirection[1], viewDirection[0]) - (input->orbitDx * orbitSpeed);
+    float pitch =
+        atan2f(viewDirection[2], sqrtf((viewDirection[0] * viewDirection[0]) + (viewDirection[1] * viewDirection[1])))
+        - (input->orbitDy * orbitSpeed);
+    float cosinePitch = 0.0f;
+    vec3 forward = GLM_VEC3_ZERO_INIT;
+
+    pitch = glm_clamp(pitch, -piOverTwo + epsilon, piOverTwo - epsilon);
+    cosinePitch = cosf(pitch);
+    forward[0] = cosinePitch * cosf(yaw);
+    forward[1] = cosinePitch * sinf(yaw);
+    forward[2] = sinf(pitch);
+
+    for (int axisIndex = 0; axisIndex < 3; axisIndex++) {
+        position[axisIndex] = target[axisIndex] - (forward[axisIndex] * distance);
+    }
+}
+
+static void applyZoomInput(const VKRT_CameraInput* input, const vec3 viewDirection, float* position) {
+    float zoomStep = input->scroll * -0.075f;
+    for (int axisIndex = 0; axisIndex < 3; axisIndex++) {
+        position[axisIndex] -= viewDirection[axisIndex] * zoomStep;
+    }
+}
 
 void applyCameraInput(VKRT* vkrt, const VKRT_CameraInput* input) {
     if (!vkrt || !input) return;
     if (input->captureMouse) return;
 
-    const float panSpeed = 0.001f;
-    const float orbitSpeed = 0.004f;
-    const float zoomSpeed = -0.075f;
-
     float* pos = vkrt->sceneSettings.camera.pos;
     float* tgt = vkrt->sceneSettings.camera.target;
-    vec3 viewDir = {tgt[0] - pos[0], tgt[1] - pos[1], tgt[2] - pos[2]};
-    float dist = glm_vec3_norm(viewDir);
-
-    vec3 right, up;
-    glm_vec3_cross(viewDir, (vec3){0, 0, 1}, right);
-
-    if (glm_vec3_norm(right) < 1e-6f) {
-        right[0] = 0;
-        right[1] = 1;
-        right[2] = 0;
-    } else {
-        glm_vec3_normalize(right);
-    }
-
-    glm_vec3_cross(right, viewDir, up);
-    glm_vec3_normalize(up);
-
+    vec3 viewDir = GLM_VEC3_ZERO_INIT;
+    vec3 right;
+    vec3 upVector;
+    float dist = 0.0f;
     int hasPanDelta = input->panDx != 0.0f || input->panDy != 0.0f;
     int hasOrbitDelta = input->orbitDx != 0.0f || input->orbitDy != 0.0f;
 
+    queryCameraBasis(pos, tgt, viewDir, right, upVector);
+    dist = glm_vec3_norm(viewDir);
+
     if (input->panning && hasPanDelta) {
-        float s = panSpeed * dist;
-        float mx = -input->panDx * s;
-        float my = input->panDy * s;
-        for (int i = 0; i < 3; i++) {
-            float d = right[i] * mx + up[i] * my;
-            pos[i] += d;
-            tgt[i] += d;
-        }
+        applyPanInput(input, dist, right, upVector, pos, tgt);
         updateCamera(vkrt);
     }
 
     if (input->orbiting && hasOrbitDelta) {
-        const float PI_2 = 1.5707963267948966f;
-        const float EPS = 0.001f;
-
-        float yaw = atan2f(viewDir[1], viewDir[0]) - input->orbitDx * orbitSpeed;
-        float pitch = atan2f(viewDir[2], sqrtf(viewDir[0] * viewDir[0] + viewDir[1] * viewDir[1])) - input->orbitDy * orbitSpeed;
-        pitch = glm_clamp(pitch, -PI_2 + EPS, PI_2 - EPS);
-
-        float cp = cosf(pitch);
-        vec3 fwd = {cp * cosf(yaw), cp * sinf(yaw), sinf(pitch)};
-        for (int i = 0; i < 3; i++)
-            pos[i] = tgt[i] - fwd[i] * dist;
-
+        applyOrbitInput(input, viewDir, dist, pos, tgt);
         updateCamera(vkrt);
     }
 
     if (input->scroll != 0.0f) {
-        float s = input->scroll * zoomSpeed;
-        for (int i = 0; i < 3; i++)
-            pos[i] -= viewDir[i] * s;
+        applyZoomInput(input, viewDir, pos);
         updateCamera(vkrt);
     }
 }
@@ -77,7 +116,8 @@ void updateCamera(VKRT* vkrt) {
 void syncCameraMatrices(VKRT* vkrt) {
     if (!vkrt || !vkrt->core.sceneData) return;
 
-    mat4 view, proj;
+    mat4 view;
+    mat4 proj;
     Camera cam = vkrt->sceneSettings.camera;
     uint32_t viewportWidth = vkrt->core.sceneData->viewportRect[2] > 0u ? vkrt->core.sceneData->viewportRect[2] : 1u;
     uint32_t viewportHeight = vkrt->core.sceneData->viewportRect[3] > 0u ? vkrt->core.sceneData->viewportRect[3] : 1u;

@@ -1,23 +1,37 @@
-#include "internal.h"
+#include "image.h"
 
+#include "constants.h"
 #include "debug.h"
 #include "denoise.h"
 #include "exr.h"
-#include "image.h"
+#include "internal.h"
 #include "io.h"
-
-#include <spng.h>
-#include <turbojpeg.h>
+#include "vkrt_types.h"
 
 #include <ctype.h>
+#include <limits.h>
 #include <math.h>
+#include <spng.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <turbojpeg.h>
 
 static const int kJPEGQuality = 95;
+
+typedef struct LinearRenderOutputRequest {
+    const char* label;
+    const RenderImageBuffer* beautyBuffer;
+    const RenderImageBuffer* albedoBuffer;
+    const RenderImageBuffer* normalBuffer;
+    uint32_t width;
+    uint32_t height;
+    const VKRT_RenderExportSettings* settings;
+    const VKRT_SceneSettingsSnapshot* sceneSettings;
+    int allowRawFallback;
+} LinearRenderOutputRequest;
 
 static int tryComputePixelCount(uint32_t width, uint32_t height, size_t* outPixelCount) {
     if (!outPixelCount || width == 0u || height == 0u) return 0;
@@ -53,7 +67,7 @@ int queryRenderImageBufferByteCount(
 }
 
 static uint8_t convertUnorm16ToUnorm8(uint16_t value) {
-    return (uint8_t)(((uint32_t)value * 255u + 32767u) / 65535u);
+    return (uint8_t)((((uint32_t)value * 255u) + 32767u) / 65535u);
 }
 
 static const char* queryPathExtension(const char* path) {
@@ -137,7 +151,7 @@ static int openBinaryFileForWrite(const char* path, FILE** outFile) {
     if (!path || !path[0] || !outFile) return 0;
 
     FILE* file = NULL;
-#if defined(_WIN32)
+#ifdef _WIN32
     if (fopen_s(&file, path, "wb") != 0) file = NULL;
 #else
     file = fopen(path, "wb");
@@ -170,7 +184,7 @@ static int writePNGFile(const char* path, const uint16_t* rgba16, uint32_t width
 
     spng_ctx* context = spng_ctx_new(SPNG_CTX_ENCODER);
     if (!context) {
-        fclose(file);
+        (void)fclose(file);
         LOG_ERROR("PNG encoder initialization failed for '%s'", path);
         return 0;
     }
@@ -193,7 +207,7 @@ static int writePNGFile(const char* path, const uint16_t* rgba16, uint32_t width
     }
 
     spng_ctx_free(context);
-    fclose(file);
+    (void)fclose(file);
 
     if (error != 0) {
         LOG_ERROR("PNG export failed for '%s' (%s)", path, spng_strerror(error));
@@ -237,7 +251,7 @@ static int writeJPEGFile(const char* path, const uint8_t* rgba8, uint32_t width,
 
     FILE* file = NULL;
     int writeOk = openBinaryFileForWrite(path, &file) && writeFileBytes(file, encodedBytes, (size_t)encodedSize);
-    if (file) fclose(file);
+    if (file) (void)fclose(file);
 
     tjFree(encodedBytes);
     tjDestroy(handle);
@@ -265,7 +279,7 @@ static int writeRenderImageFile(
 
     if (format == RENDER_IMAGE_FORMAT_EXR) {
         if (!vkrtWriteEXRFromRGBA32F(path, (const float*)pixels, width, height)) {
-            remove(path);
+            (void)remove(path);
             LOG_ERROR("Render export failed for '%s'", path);
             return -1;
         }
@@ -275,7 +289,7 @@ static int writeRenderImageFile(
     const uint16_t* rgba16 = (const uint16_t*)pixels;
     if (format == RENDER_IMAGE_FORMAT_PNG) {
         if (!writePNGFile(path, rgba16, width, height)) {
-            remove(path);
+            (void)remove(path);
             LOG_ERROR("Render export failed for '%s'", path);
             return -1;
         }
@@ -306,7 +320,7 @@ static int writeRenderImageFile(
     free(rgba8);
 
     if (!writeOk) {
-        remove(path);
+        (void)remove(path);
         LOG_ERROR("Render export failed for '%s'", path);
         return -1;
     }
@@ -367,14 +381,15 @@ static float clampf(float value, float minValue, float maxValue) {
 static float srgbEncodeScalar(float value) {
     value = clampf(value, 0.0f, 1.0f);
     if (value <= 0.0031308f) return 12.92f * value;
-    return 1.055f * powf(value, 1.0f / 2.4f) - 0.055f;
+    return (1.055f * powf(value, 1.0f / 2.4f)) - 0.055f;
 }
 
 static void toneMapACES(const float* input, float* output) {
     if (!input || !output) return;
     for (uint32_t channel = 0; channel < 3u; channel++) {
         float color = input[channel];
-        output[channel] = (color * (2.51f * color + 0.03f)) / (color * (2.43f * color + 0.59f) + 0.14f);
+        output[channel] =
+            (color * ((2.51f * color) + 0.03f)) / ((color * ((2.43f * color) + 0.59f)) + 0.14f);
     }
 }
 
@@ -400,7 +415,7 @@ static void encodeDisplayColor(const float* linear, float* encoded) {
 
 static uint16_t floatToUnorm16(float value) {
     value = clampf(value, 0.0f, 1.0f);
-    return (uint16_t)(value * 65535.0f + 0.5f);
+    return (uint16_t)((value * 65535.0f) + 0.5f);
 }
 
 static int prepareRGBA32FBuffer(
@@ -436,15 +451,23 @@ static int prepareRGBA32FBuffer(
         return 0;
     }
 
+    size_t componentCount = pixelCount * 4u;
     for (size_t pixelIndex = 0; pixelIndex < pixelCount; pixelIndex++) {
-        float* pixel = converted + pixelIndex * 4u;
+        size_t baseIndex = pixelIndex * 4u;
+        if (baseIndex + 3u >= componentCount) {
+            free(converted);
+            return 0;
+        }
+
+        float* pixel = &converted[baseIndex];
         if (clampNonNegative) {
             pixel[0] = fmaxf(pixel[0], 0.0f);
             pixel[1] = fmaxf(pixel[1], 0.0f);
             pixel[2] = fmaxf(pixel[2], 0.0f);
         }
         if (normalizeVectors) {
-            float lengthSquared = pixel[0] * pixel[0] + pixel[1] * pixel[1] + pixel[2] * pixel[2];
+            float lengthSquared =
+                (pixel[0] * pixel[0]) + (pixel[1] * pixel[1]) + (pixel[2] * pixel[2]);
             if (lengthSquared > 1e-20f) {
                 float invLength = 1.0f / sqrtf(lengthSquared);
                 pixel[0] *= invLength;
@@ -488,7 +511,7 @@ static int convertLinearToDisplayRGBA16(
     if (!isfinite(exposure) || exposure < 0.0f) exposure = 1.0f;
 
     for (size_t pixelIndex = 0; pixelIndex < pixelCount; pixelIndex++) {
-        const float* src = linearPixels + pixelIndex * 4u;
+        const float* src = linearPixels + (pixelIndex * 4u);
         float mapped[3] = {src[0], src[1], src[2]};
         float encoded[3] = {0.0f, 0.0f, 0.0f};
 
@@ -500,53 +523,119 @@ static int convertLinearToDisplayRGBA16(
         }
 
         encodeDisplayColor(mapped, encoded);
-        displayPixels[pixelIndex * 4u + 0u] = floatToUnorm16(encoded[0]);
-        displayPixels[pixelIndex * 4u + 1u] = floatToUnorm16(encoded[1]);
-        displayPixels[pixelIndex * 4u + 2u] = floatToUnorm16(encoded[2]);
-        displayPixels[pixelIndex * 4u + 3u] = 65535u;
+        displayPixels[(pixelIndex * 4u) + 0u] = floatToUnorm16(encoded[0]);
+        displayPixels[(pixelIndex * 4u) + 1u] = floatToUnorm16(encoded[1]);
+        displayPixels[(pixelIndex * 4u) + 2u] = floatToUnorm16(encoded[2]);
+        displayPixels[(pixelIndex * 4u) + 3u] = 65535u;
     }
 
     *outPixels = displayPixels;
     return 1;
 }
 
-static int prepareLinearRenderOutput(
-    const char* label,
-    const RenderImageBuffer* beautyBuffer,
-    const RenderImageBuffer* albedoBuffer,
-    const RenderImageBuffer* normalBuffer,
-    uint32_t width,
-    uint32_t height,
-    const VKRT_RenderExportSettings* settings,
-    const VKRT_SceneSettingsSnapshot* sceneSettings,
-    int allowRawFallback,
-    float** outLinearOutput
+static int prepareDenoiseFeatureBuffers(
+    const LinearRenderOutputRequest* request,
+    float** outAlbedo,
+    float** outNormal
 ) {
-    if (outLinearOutput) *outLinearOutput = NULL;
-    if (!beautyBuffer || !beautyBuffer->pixels || width == 0u || height == 0u || !settings || !sceneSettings || !outLinearOutput) {
+    if (!request || !outAlbedo || !outNormal) return 0;
+
+    *outAlbedo = NULL;
+    *outNormal = NULL;
+    if (!request->albedoBuffer || !request->albedoBuffer->pixels || !request->normalBuffer || !request->normalBuffer->pixels) {
         return 0;
     }
 
-    const char* outputLabel = (label && label[0]) ? label : "render output";
-    float* beauty = NULL;
+    return prepareRGBA32FBuffer(request->albedoBuffer, request->width, request->height, 1, 0, outAlbedo) &&
+           prepareRGBA32FBuffer(request->normalBuffer, request->width, request->height, 0, 1, outNormal);
+}
+
+static int denoiseLinearRenderOutput(
+    const LinearRenderOutputRequest* request,
+    const char* outputLabel,
+    float** inOutLinearOutput
+) {
     float* albedo = NULL;
     float* normal = NULL;
     float* denoised = NULL;
+    size_t rgba32fByteCount = 0u;
+    int featureBuffersReady = prepareDenoiseFeatureBuffers(request, &albedo, &normal);
+    int succeeded = 0;
+
+    if (!tryComputeRGBAByteCount(request->width, request->height, sizeof(float), &rgba32fByteCount)) {
+        goto cleanup;
+    }
+
+    denoised = (float*)malloc(rgba32fByteCount);
+    if (!denoised) {
+        LOG_ERROR("Failed to allocate denoised output buffer for '%s'", outputLabel);
+        goto cleanup;
+    }
+
+    const char* errorMessage = NULL;
+    VKRT_OIDNFilterInput input = {
+        .color = *inOutLinearOutput,
+        .albedo = featureBuffersReady ? albedo : NULL,
+        .normal = featureBuffersReady ? normal : NULL,
+        .width = request->width,
+        .height = request->height,
+        .cleanAux = 0u,
+    };
+
+    if (vkrtOIDNDenoise(&input, denoised, &errorMessage)) {
+        free(*inOutLinearOutput);
+        *inOutLinearOutput = denoised;
+        denoised = NULL;
+        succeeded = 1;
+        goto cleanup;
+    }
+
+    if (!request->allowRawFallback) {
+        LOG_ERROR("OIDN denoising failed for '%s'", outputLabel);
+    } else {
+        LOG_INFO("OIDN denoising failed for '%s'; using raw render", outputLabel);
+    }
+    if (errorMessage && errorMessage[0]) {
+        LOG_INFO("OIDN error detail: %s", errorMessage);
+    }
+    if (request->allowRawFallback) {
+        succeeded = 1;
+    }
+
+cleanup:
+    free(denoised);
+    free(normal);
+    free(albedo);
+    return succeeded;
+}
+
+static int prepareLinearRenderOutput(
+    const LinearRenderOutputRequest* request,
+    float** outLinearOutput
+) {
+    if (outLinearOutput) *outLinearOutput = NULL;
+    if (!request || !request->beautyBuffer || !request->beautyBuffer->pixels || request->width == 0u ||
+        request->height == 0u || !request->settings || !request->sceneSettings || !outLinearOutput) {
+        return 0;
+    }
+
+    const char* outputLabel = (request->label && request->label[0]) ? request->label : "render output";
+    float* beauty = NULL;
     float* linearOutput = NULL;
     int result = 0;
 
-    if (!prepareRGBA32FBuffer(beautyBuffer, width, height, 0, 0, &beauty)) {
+    if (!prepareRGBA32FBuffer(request->beautyBuffer, request->width, request->height, 0, 0, &beauty)) {
         LOG_ERROR("Failed to prepare beauty buffer for '%s'", outputLabel);
         goto cleanup;
     }
     linearOutput = beauty;
     beauty = NULL;
 
-    int shouldDenoise = settings->denoiseEnabled != 0u &&
-                        sceneSettings->debugMode == VKRT_DEBUG_MODE_NONE;
+    int shouldDenoise = request->settings->denoiseEnabled != 0u &&
+                        request->sceneSettings->debugMode == VKRT_DEBUG_MODE_NONE;
 
     if (shouldDenoise && !vkrtOIDNAvailable()) {
-        if (!allowRawFallback) {
+        if (!request->allowRawFallback) {
             LOG_ERROR("OIDN denoising is unavailable for '%s'", outputLabel);
             goto cleanup;
         }
@@ -554,55 +643,8 @@ static int prepareLinearRenderOutput(
         shouldDenoise = 0;
     }
 
-    if (shouldDenoise) {
-        int featureBuffersReady = 0;
-        if (albedoBuffer &&
-            albedoBuffer->pixels != NULL &&
-            normalBuffer &&
-            normalBuffer->pixels != NULL &&
-            prepareRGBA32FBuffer(albedoBuffer, width, height, 1, 0, &albedo) &&
-            prepareRGBA32FBuffer(normalBuffer, width, height, 0, 1, &normal)) {
-            featureBuffersReady = 1;
-        }
-
-        size_t rgba32fByteCount = 0u;
-        if (!tryComputeRGBAByteCount(width, height, sizeof(float), &rgba32fByteCount)) {
-            goto cleanup;
-        }
-
-        denoised = (float*)malloc(rgba32fByteCount);
-        if (!denoised) {
-            LOG_ERROR("Failed to allocate denoised output buffer for '%s'", outputLabel);
-            goto cleanup;
-        }
-
-        const char* errorMessage = NULL;
-        VKRT_OIDNFilterInput input = {
-            .color = linearOutput,
-            .albedo = featureBuffersReady ? albedo : NULL,
-            .normal = featureBuffersReady ? normal : NULL,
-            .width = width,
-            .height = height,
-            .cleanAux = 0u,
-        };
-
-        if (vkrtOIDNDenoise(&input, denoised, &errorMessage)) {
-            free(linearOutput);
-            linearOutput = denoised;
-            denoised = NULL;
-        } else {
-            if (!allowRawFallback) {
-                LOG_ERROR("OIDN denoising failed for '%s'", outputLabel);
-            } else {
-                LOG_INFO("OIDN denoising failed for '%s'; using raw render", outputLabel);
-            }
-            if (errorMessage && errorMessage[0]) {
-                LOG_INFO("OIDN error detail: %s", errorMessage);
-            }
-            if (!allowRawFallback) {
-                goto cleanup;
-            }
-        }
+    if (shouldDenoise && !denoiseLinearRenderOutput(request, outputLabel, &linearOutput)) {
+        goto cleanup;
     }
 
     *outLinearOutput = linearOutput;
@@ -611,9 +653,6 @@ static int prepareLinearRenderOutput(
 
 cleanup:
     free(linearOutput);
-    free(denoised);
-    free(normal);
-    free(albedo);
     free(beauty);
     return result;
 }
@@ -624,19 +663,19 @@ int processRenderImageExportJob(RenderImageExportJob* job) {
     float* linearOutput = NULL;
     uint16_t* displayPixels = NULL;
     int result = -1;
+    LinearRenderOutputRequest request = {
+        .label = job->path,
+        .beautyBuffer = &job->beauty,
+        .albedoBuffer = &job->albedo,
+        .normalBuffer = &job->normal,
+        .width = job->width,
+        .height = job->height,
+        .settings = &job->settings,
+        .sceneSettings = &job->sceneSettings,
+        .allowRawFallback = 1,
+    };
 
-    if (!prepareLinearRenderOutput(
-        job->path,
-        &job->beauty,
-        &job->albedo,
-        &job->normal,
-        job->width,
-        job->height,
-        &job->settings,
-        &job->sceneSettings,
-        1,
-        &linearOutput
-    )) {
+    if (!prepareLinearRenderOutput(&request, &linearOutput)) {
         goto cleanup;
     }
 
@@ -669,19 +708,19 @@ int processViewportDenoiseJob(RenderImageExportJob* job, uint16_t** outPixels, s
     uint16_t* displayPixels = NULL;
     size_t displayByteCount = 0u;
     int result = -1;
+    LinearRenderOutputRequest request = {
+        .label = "viewport denoise",
+        .beautyBuffer = &job->beauty,
+        .albedoBuffer = &job->albedo,
+        .normalBuffer = &job->normal,
+        .width = job->width,
+        .height = job->height,
+        .settings = &job->settings,
+        .sceneSettings = &job->sceneSettings,
+        .allowRawFallback = 0,
+    };
 
-    if (!prepareLinearRenderOutput(
-        "viewport denoise",
-        &job->beauty,
-        &job->albedo,
-        &job->normal,
-        job->width,
-        job->height,
-        &job->settings,
-        &job->sceneSettings,
-        0,
-        &linearOutput
-    )) {
+    if (!prepareLinearRenderOutput(&request, &linearOutput)) {
         goto cleanup;
     }
 

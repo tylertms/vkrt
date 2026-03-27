@@ -1,6 +1,10 @@
 #include "view.h"
 
+#include "config.h"
 #include "numeric.h"
+#include "vulkan/vulkan_core.h"
+
+#include <stdint.h>
 
 static VkExtent2D normalizeExtent(VkExtent2D extent) {
     VkExtent2D normalized = extent;

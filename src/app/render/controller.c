@@ -1,83 +1,106 @@
 #include "controller.h"
 
 #include "debug.h"
+#include "session.h"
+#include "vkrt.h"
+#include "vkrt_types.h"
 
 #include <stdlib.h>
+
+static int applyRenderDenoiseSetting(VKRT* vkrt, const SessionRenderSettings* settings) {
+    if (!vkrt || !settings) return 0;
+
+    VKRT_Result result = VKRT_setRenderDenoiseEnabled(vkrt, settings->denoiseEnabled);
+    if (result != VKRT_SUCCESS) {
+        LOG_ERROR("Updating render denoise setting failed (%d)", (int)result);
+        return 0;
+    }
+    return 1;
+}
+
+static void startRenderCommand(VKRT* vkrt, const SessionRenderSettings* settings) {
+    if (!applyRenderDenoiseSetting(vkrt, settings)) return;
+
+    VKRT_Result result = VKRT_startRender(vkrt, settings->width, settings->height, settings->targetSamples);
+    if (result != VKRT_SUCCESS) {
+        LOG_ERROR("Starting render command failed (%d)", (int)result);
+    }
+}
+
+static void stopRenderSamplingCommand(VKRT* vkrt, const SessionRenderSettings* settings) {
+    if (!applyRenderDenoiseSetting(vkrt, settings)) return;
+
+    VKRT_Result result = VKRT_stopRenderSampling(vkrt);
+    if (result != VKRT_SUCCESS) {
+        LOG_ERROR("Stopping render sampling failed (%d)", (int)result);
+    }
+}
+
+static void denoiseRenderCommand(VKRT* vkrt, const SessionRenderSettings* settings) {
+    if (!applyRenderDenoiseSetting(vkrt, settings)) return;
+
+    VKRT_Result result = VKRT_denoiseRenderToViewport(vkrt);
+    if (result != VKRT_SUCCESS) {
+        LOG_ERROR("Starting viewport denoise failed (%d)", (int)result);
+    }
+}
+
+static void stopRenderCommand(VKRT* vkrt) {
+    if (!vkrt) return;
+
+    VKRT_RenderStatusSnapshot status = {0};
+    if (VKRT_getRenderStatus(vkrt, &status) != VKRT_SUCCESS || !VKRT_renderStatusIsActive(&status)) {
+        return;
+    }
+    if (!VKRT_renderStatusIsComplete(&status)) {
+        return;
+    }
+
+    VKRT_Result result = VKRT_stopRender(vkrt);
+    if (result != VKRT_SUCCESS) {
+        LOG_ERROR("Stopping render mode failed (%d)", (int)result);
+    }
+}
+
+static void resetRenderAccumulation(VKRT* vkrt) {
+    if (!vkrt) return;
+
+    VKRT_Result result = VKRT_invalidateAccumulation(vkrt);
+    if (result != VKRT_SUCCESS) {
+        LOG_ERROR("Resetting accumulation failed (%d)", (int)result);
+    }
+}
 
 static void applyRenderCommand(VKRT* vkrt, SessionRenderCommand command, const SessionRenderSettings* settings) {
     if (!vkrt || command == SESSION_RENDER_COMMAND_NONE) return;
 
     if (command == SESSION_RENDER_COMMAND_START) {
-        VKRT_Result result = VKRT_setRenderDenoiseEnabled(vkrt, settings->denoiseEnabled);
-        if (result != VKRT_SUCCESS) {
-            LOG_ERROR("Updating render denoise setting failed (%d)", (int)result);
-            return;
-        }
-
-        result = VKRT_startRender(vkrt, settings->width, settings->height, settings->targetSamples);
-        if (result != VKRT_SUCCESS) {
-            LOG_ERROR("Starting render command failed (%d)", (int)result);
-        }
+        startRenderCommand(vkrt, settings);
         return;
     }
 
     if (command == SESSION_RENDER_COMMAND_SET_DENOISE) {
-        VKRT_Result result = VKRT_setRenderDenoiseEnabled(vkrt, settings->denoiseEnabled);
-        if (result != VKRT_SUCCESS) {
-            LOG_ERROR("Updating render denoise setting failed (%d)", (int)result);
-        }
+        (void)applyRenderDenoiseSetting(vkrt, settings);
         return;
     }
 
     if (command == SESSION_RENDER_COMMAND_STOP_SAMPLING) {
-        VKRT_Result result = VKRT_setRenderDenoiseEnabled(vkrt, settings->denoiseEnabled);
-        if (result != VKRT_SUCCESS) {
-            LOG_ERROR("Updating render denoise setting failed (%d)", (int)result);
-            return;
-        }
-
-        result = VKRT_stopRenderSampling(vkrt);
-        if (result != VKRT_SUCCESS) {
-            LOG_ERROR("Stopping render sampling failed (%d)", (int)result);
-        }
+        stopRenderSamplingCommand(vkrt, settings);
         return;
     }
 
     if (command == SESSION_RENDER_COMMAND_DENOISE) {
-        VKRT_Result result = VKRT_setRenderDenoiseEnabled(vkrt, settings->denoiseEnabled);
-        if (result != VKRT_SUCCESS) {
-            LOG_ERROR("Updating render denoise setting failed (%d)", (int)result);
-            return;
-        }
-
-        result = VKRT_denoiseRenderToViewport(vkrt);
-        if (result != VKRT_SUCCESS) {
-            LOG_ERROR("Starting viewport denoise failed (%d)", (int)result);
-        }
+        denoiseRenderCommand(vkrt, settings);
         return;
     }
 
     if (command == SESSION_RENDER_COMMAND_STOP) {
-        VKRT_RenderStatusSnapshot status = {0};
-        if (VKRT_getRenderStatus(vkrt, &status) != VKRT_SUCCESS || !VKRT_renderStatusIsActive(&status)) {
-            return;
-        }
-        if (!VKRT_renderStatusIsComplete(&status)) {
-            return;
-        }
-
-        VKRT_Result result = VKRT_stopRender(vkrt);
-        if (result != VKRT_SUCCESS) {
-            LOG_ERROR("Stopping render mode failed (%d)", (int)result);
-        }
+        stopRenderCommand(vkrt);
         return;
     }
 
     if (command == SESSION_RENDER_COMMAND_RESET_ACCUMULATION) {
-        VKRT_Result result = VKRT_invalidateAccumulation(vkrt);
-        if (result != VKRT_SUCCESS) {
-            LOG_ERROR("Resetting accumulation failed (%d)", (int)result);
-        }
+        resetRenderAccumulation(vkrt);
     }
 }
 

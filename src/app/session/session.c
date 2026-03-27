@@ -1,13 +1,22 @@
 #include "session.h"
-#include "debug.h"
+
+#include "constants.h"
 #include "io.h"
 #include "vkrt.h"
+#include "vkrt_types.h"
 
+#include "../../../external/cglm/include/types.h"
+#include <affine-pre.h>
+#include <affine.h>
+#include <mat3.h>
+#include <mat4.h>
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <util.h>
+#include <vec3.h>
 
 static const uint32_t kDefaultRenderTargetSamples = 1024u;
 
@@ -106,7 +115,7 @@ static int ensureMeshImportBatchCapacity(Session* session, uint32_t additionalCo
     }
 
     char** resized = (char**)realloc(
-        session->editor.meshImportPaths,
+        (void*)session->editor.meshImportPaths,
         (size_t)nextCapacity * sizeof(*resized)
     );
     if (!resized) return 0;
@@ -254,27 +263,77 @@ static void pruneEmptyLeafGroups(Session* session) {
     }
 }
 
-static int syncSceneObjectSubtree(VKRT* vkrt, Session* session, uint32_t objectIndex, mat4 parentWorldTransform) {
-    if (!vkrt || !session || objectIndex >= session->editor.sceneObjectCount) return 0;
+typedef struct SceneObjectSyncNode {
+    uint32_t objectIndex;
+    mat4 parentWorldTransform;
+} SceneObjectSyncNode;
 
-    const SessionSceneObject* object = &session->editor.sceneObjects[objectIndex];
-    mat4 localTransform = GLM_MAT4_IDENTITY_INIT;
-    mat4 worldTransform = GLM_MAT4_IDENTITY_INIT;
-    memcpy(localTransform, object->localTransform, sizeof(localTransform));
-    glm_mat4_mul(parentWorldTransform, localTransform, worldTransform);
+static int pushSceneObjectSyncNode(
+    SceneObjectSyncNode** stack,
+    uint32_t* stackCount,
+    uint32_t* stackCapacity,
+    uint32_t objectIndex,
+    mat4 parentWorldTransform
+) {
+    if (!stack || !stackCount || !stackCapacity) return 0;
 
-    if (object->meshIndex != VKRT_INVALID_INDEX &&
-        VKRT_setMeshTransformMatrix(vkrt, object->meshIndex, worldTransform) != VKRT_SUCCESS) {
-        return 0;
+    if (*stackCount == *stackCapacity) {
+        uint32_t nextCapacity = *stackCapacity > 0u ? (*stackCapacity * 2u) : 16u;
+        SceneObjectSyncNode* resized = (SceneObjectSyncNode*)realloc(*stack, (size_t)nextCapacity * sizeof(*resized));
+        if (!resized) return 0;
+        *stack = resized;
+        *stackCapacity = nextCapacity;
     }
 
-    for (uint32_t childIndex = 0; childIndex < session->editor.sceneObjectCount; childIndex++) {
-        if (session->editor.sceneObjects[childIndex].parentIndex != objectIndex) continue;
-        if (!syncSceneObjectSubtree(vkrt, session, childIndex, worldTransform)) {
+    SceneObjectSyncNode* node = &(*stack)[*stackCount];
+    node->objectIndex = objectIndex;
+    memcpy(node->parentWorldTransform, parentWorldTransform, sizeof(node->parentWorldTransform));
+    (*stackCount)++;
+    return 1;
+}
+
+static int syncSceneObjectTransformsIterative(VKRT* vkrt, Session* session) {
+    if (!vkrt || !session) return 0;
+
+    SceneObjectSyncNode* stack = NULL;
+    uint32_t stackCount = 0u;
+    uint32_t stackCapacity = 0u;
+    mat4 identity = GLM_MAT4_IDENTITY_INIT;
+
+    for (uint32_t objectIndex = session->editor.sceneObjectCount; objectIndex > 0u; objectIndex--) {
+        uint32_t rootIndex = objectIndex - 1u;
+        if (session->editor.sceneObjects[rootIndex].parentIndex != VKRT_INVALID_INDEX) continue;
+        if (!pushSceneObjectSyncNode(&stack, &stackCount, &stackCapacity, rootIndex, identity)) {
+            free(stack);
             return 0;
         }
     }
 
+    while (stackCount > 0u) {
+        SceneObjectSyncNode node = stack[--stackCount];
+        const SessionSceneObject* object = &session->editor.sceneObjects[node.objectIndex];
+        mat4 localTransform = GLM_MAT4_IDENTITY_INIT;
+        mat4 worldTransform = GLM_MAT4_IDENTITY_INIT;
+        memcpy(localTransform, object->localTransform, sizeof(localTransform));
+        glm_mat4_mul(node.parentWorldTransform, localTransform, worldTransform);
+
+        if (object->meshIndex != VKRT_INVALID_INDEX &&
+            VKRT_setMeshTransformMatrix(vkrt, object->meshIndex, worldTransform) != VKRT_SUCCESS) {
+            free(stack);
+            return 0;
+        }
+
+        for (uint32_t childIndex = session->editor.sceneObjectCount; childIndex > 0u; childIndex--) {
+            uint32_t nextChildIndex = childIndex - 1u;
+            if (session->editor.sceneObjects[nextChildIndex].parentIndex != node.objectIndex) continue;
+            if (!pushSceneObjectSyncNode(&stack, &stackCount, &stackCapacity, nextChildIndex, worldTransform)) {
+                free(stack);
+                return 0;
+            }
+        }
+    }
+
+    free(stack);
     return 1;
 }
 
@@ -315,11 +374,11 @@ void sessionDeinit(Session* session) {
         clearTextureRecord(&session->editor.textureRecords[i]);
     }
 
-    free(session->editor.sceneObjects);
-    free(session->editor.meshImportPaths);
+    free((void*)session->editor.sceneObjects);
+    free((void*)session->editor.meshImportPaths);
     free(session->editor.meshRecords);
     free(session->editor.textureRecords);
-    memset(&session->editor.sceneObjects, 0, sizeof(session->editor.sceneObjects));
+    session->editor.sceneObjects = NULL;
     session->editor.sceneObjectCount = 0;
     session->editor.sceneObjectCapacity = 0;
     session->editor.meshImportPaths = NULL;
@@ -474,8 +533,11 @@ int sessionTakeMeshImport(Session* session, char** outPath) {
     char* path = session->commands.meshImportPath;
     session->commands.meshImportPath = NULL;
 
-    if (outPath) *outPath = path;
-    else free(path);
+    if (outPath) {
+        *outPath = path;
+    } else {
+        free(path);
+    }
 
     return 1;
 }
@@ -486,8 +548,11 @@ int sessionTakeSceneOpen(Session* session, char** outPath) {
     char* path = session->commands.sceneOpenPath;
     session->commands.sceneOpenPath = NULL;
 
-    if (outPath) *outPath = path;
-    else free(path);
+    if (outPath) {
+        *outPath = path;
+    } else {
+        free(path);
+    }
 
     return 1;
 }
@@ -498,8 +563,11 @@ int sessionTakeSceneSave(Session* session, char** outPath) {
     char* path = session->commands.sceneSavePath;
     session->commands.sceneSavePath = NULL;
 
-    if (outPath) *outPath = path;
-    else free(path);
+    if (outPath) {
+        *outPath = path;
+    } else {
+        free(path);
+    }
 
     return 1;
 }
@@ -516,8 +584,11 @@ int sessionTakeTextureImport(Session* session, uint32_t* outMaterialIndex, uint3
     session->commands.textureImportMaterialIndex = VKRT_INVALID_INDEX;
     session->commands.textureImportSlot = VKRT_INVALID_INDEX;
 
-    if (outPath) *outPath = path;
-    else free(path);
+    if (outPath) {
+        *outPath = path;
+    } else {
+        free(path);
+    }
 
     return 1;
 }
@@ -528,8 +599,11 @@ int sessionTakeEnvironmentImport(Session* session, char** outPath) {
     char* path = session->commands.environmentImportPath;
     session->commands.environmentImportPath = NULL;
 
-    if (outPath) *outPath = path;
-    else free(path);
+    if (outPath) {
+        *outPath = path;
+    } else {
+        free(path);
+    }
 
     return 1;
 }
@@ -621,33 +695,27 @@ void sessionSetSelectedSceneObject(Session* session, uint32_t objectIndex) {
         objectIndex < session->editor.sceneObjectCount ? objectIndex : VKRT_INVALID_INDEX;
 }
 
-int sessionAddSceneObject(
-    Session* session,
-    const char* name,
-    uint32_t parentIndex,
-    uint32_t meshIndex,
-    vec3 localPosition,
-    vec3 localRotation,
-    vec3 localScale,
-    uint32_t* outObjectIndex
-) {
+int sessionAddSceneObject(Session* session, const SessionSceneObjectCreateInfo* createInfo, uint32_t* outObjectIndex) {
     if (!session) return 0;
-    if (parentIndex != VKRT_INVALID_INDEX && parentIndex >= session->editor.sceneObjectCount) return 0;
+    if (!createInfo) return 0;
+    if (createInfo->parentIndex != VKRT_INVALID_INDEX && createInfo->parentIndex >= session->editor.sceneObjectCount) {
+        return 0;
+    }
     if (!ensureSceneObjectCapacity(session, 1u)) return 0;
 
     uint32_t objectIndex = session->editor.sceneObjectCount++;
     SessionSceneObject* object = &session->editor.sceneObjects[objectIndex];
     memset(object, 0, sizeof(*object));
-    object->parentIndex = parentIndex;
-    object->meshIndex = meshIndex;
+    object->parentIndex = createInfo->parentIndex;
+    object->meshIndex = createInfo->meshIndex;
     object->localScale[0] = 1.0f;
     object->localScale[1] = 1.0f;
     object->localScale[2] = 1.0f;
-    if (localPosition) glm_vec3_copy(localPosition, object->localPosition);
-    if (localRotation) glm_vec3_copy(localRotation, object->localRotation);
-    if (localScale) glm_vec3_copy(localScale, object->localScale);
+    if (createInfo->localPosition) memcpy(object->localPosition, *createInfo->localPosition, sizeof(object->localPosition));
+    if (createInfo->localRotation) memcpy(object->localRotation, *createInfo->localRotation, sizeof(object->localRotation));
+    if (createInfo->localScale) memcpy(object->localScale, *createInfo->localScale, sizeof(object->localScale));
     buildLocalTransformMatrix(object->localPosition, object->localRotation, object->localScale, object->localTransform);
-    snprintf(object->name, sizeof(object->name), "%s", (name && name[0]) ? name : "Object");
+    snprintf(object->name, sizeof(object->name), "%s", (createInfo->name && createInfo->name[0]) ? createInfo->name : "Object");
     if (outObjectIndex) *outObjectIndex = objectIndex;
     return 1;
 }
@@ -719,7 +787,7 @@ void sessionRemoveSceneObjectSubtree(Session* session, uint32_t objectIndex) {
 
     for (uint32_t i = session->editor.sceneObjectCount; i > 0u; i--) {
         uint32_t candidateIndex = i - 1u;
-        if (!sceneObjectDescendsFrom(session, candidateIndex, objectIndex)) continue;
+        if (!sceneObjectDescendsFrom(session, objectIndex, candidateIndex)) continue;
         removeSceneObjectAt(session, candidateIndex);
     }
 }
@@ -743,15 +811,7 @@ void sessionRemoveMeshReferences(Session* session, uint32_t meshIndex) {
 }
 
 int sessionSyncSceneObjectTransforms(VKRT* vkrt, Session* session) {
-    if (!vkrt || !session) return 0;
-    mat4 identity = GLM_MAT4_IDENTITY_INIT;
-    for (uint32_t i = 0; i < session->editor.sceneObjectCount; i++) {
-        if (session->editor.sceneObjects[i].parentIndex != VKRT_INVALID_INDEX) continue;
-        if (!syncSceneObjectSubtree(vkrt, session, i, identity)) {
-            return 0;
-        }
-    }
-    return 1;
+    return syncSceneObjectTransformsIterative(vkrt, session);
 }
 
 uint32_t sessionCountSceneObjectChildren(const Session* session, uint32_t objectIndex) {

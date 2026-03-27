@@ -1,5 +1,9 @@
 #include "surface.h"
+
+#include "GLFW/glfw3.h"
 #include "debug.h"
+#include "vkrt_types.h"
+#include "vulkan/vulkan_core.h"
 
 #include <stdio.h>
 #include <stdlib.h>

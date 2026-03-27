@@ -1,14 +1,15 @@
 #include "cli.h"
 
+#include "vkrt.h"
+#include "vulkan/vulkan_core.h"
+
 #include <dcimgui.h>
 #include <errno.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#include <types.h>
 #include <version.h>
-#include <vulkan/vulkan.h>
 
 #ifndef VKRT_VERSION
 #define VKRT_VERSION "dev"
@@ -135,6 +136,121 @@ void CLIDefaultLaunchOptions(CLILaunchOptions* options) {
     VKRT_defaultCreateInfo(&options->createInfo);
 }
 
+static int setCLIError(char* error, size_t errorSize, const char* message, const char* value) {
+    if (!error || errorSize == 0u || !message) return 0;
+    if (value) {
+        snprintf(error, errorSize, message, value);
+    } else {
+        snprintf(error, errorSize, "%s", message);
+    }
+    return 0;
+}
+
+static int parseWindowArgument(
+    const char* arg,
+    int argc,
+    char* argv[],
+    int* index,
+    CLILaunchOptions* options,
+    char* error,
+    size_t errorSize
+) {
+    if (optionMatches(arg, "--width")) {
+        const char* value = requireOptionValue(argc, argv, index, "--width", error, errorSize);
+        return value && parseUnsignedValue(value, &options->createInfo.width, "--width", error, errorSize);
+    }
+    if (optionMatches(arg, "--height")) {
+        const char* value = requireOptionValue(argc, argv, index, "--height", error, errorSize);
+        return value && parseUnsignedValue(value, &options->createInfo.height, "--height", error, errorSize);
+    }
+    if (stringsEqual(arg, "--fullscreen")) {
+        options->createInfo.startFullscreen = 1u;
+        return 1;
+    }
+    if (stringsEqual(arg, "--no-ser")) {
+        options->createInfo.disableSER = 1u;
+        return 1;
+    }
+    if (optionMatches(arg, "--device-index")) {
+        const char* value = requireOptionValue(argc, argv, index, "--device-index", error, errorSize);
+        return value && parseDeviceIndexValue(value, &options->createInfo.preferredDeviceIndex, error, errorSize);
+    }
+    if (optionMatches(arg, "--device-name")) {
+        const char* value = requireOptionValue(argc, argv, index, "--device-name", error, errorSize);
+        if (!value || !value[0]) return setCLIError(error, errorSize, "Invalid value for --device-name", NULL);
+        options->createInfo.preferredDeviceName = value;
+        return 1;
+    }
+    return -1;
+}
+
+static int parseBenchmarkArgument(
+    const char* arg,
+    int argc,
+    char* argv[],
+    int* index,
+    CLILaunchOptions* options,
+    char* error,
+    size_t errorSize
+) {
+    if (stringsEqual(arg, "--benchmark")) {
+        options->benchmark.enabled = 1u;
+        options->benchmark.headless = 0u;
+        return 1;
+    }
+    if (stringsEqual(arg, "--benchmark-headless")) {
+        options->benchmark.enabled = 1u;
+        options->benchmark.headless = 1u;
+        return 1;
+    }
+    if (optionMatches(arg, "--benchmark-width")) {
+        const char* value = requireOptionValue(argc, argv, index, "--benchmark-width", error, errorSize);
+        return value && parseUnsignedValue(value, &options->benchmark.width, "--benchmark-width", error, errorSize);
+    }
+    if (optionMatches(arg, "--benchmark-height")) {
+        const char* value = requireOptionValue(argc, argv, index, "--benchmark-height", error, errorSize);
+        return value && parseUnsignedValue(value, &options->benchmark.height, "--benchmark-height", error, errorSize);
+    }
+    if (optionMatches(arg, "--benchmark-samples")) {
+        const char* value = requireOptionValue(argc, argv, index, "--benchmark-samples", error, errorSize);
+        return value && parseUnsignedValue(value, &options->benchmark.targetSamples, "--benchmark-samples", error, errorSize);
+    }
+    return -1;
+}
+
+static int parseSceneArgument(
+    const char* arg,
+    int argc,
+    char* argv[],
+    int* index,
+    CLILaunchOptions* options,
+    char* error,
+    size_t errorSize
+) {
+    if (stringsEqual(arg, "--empty-scene")) {
+        options->loadDefaultScene = 0u;
+        return 1;
+    }
+    if (optionMatches(arg, "--import")) {
+        const char* value = requireOptionValue(argc, argv, index, "--import", error, errorSize);
+        if (!value || !value[0]) return setCLIError(error, errorSize, "Invalid value for --import", NULL);
+        options->startupImportPath = value;
+        return 1;
+    }
+    return -1;
+}
+
+static int validateCLIArgumentCombination(const CLILaunchOptions* options, char* error, size_t errorSize) {
+    if (!options->benchmark.enabled) return 1;
+    if (!options->loadDefaultScene) {
+        return setCLIError(error, errorSize, "--benchmark requires the default scene", NULL);
+    }
+    if (options->startupImportPath) {
+        return setCLIError(error, errorSize, "--benchmark cannot be combined with --import", NULL);
+    }
+    return 1;
+}
+
 int CLIParseArguments(int argc, char* argv[], CLILaunchOptions* outOptions, char* error, size_t errorSize) {
     if (!outOptions || !error || errorSize == 0) return 0;
 
@@ -154,111 +270,23 @@ int CLIParseArguments(int argc, char* argv[], CLILaunchOptions* outOptions, char
             return 1;
         }
 
-        if (optionMatches(arg, "--width")) {
-            const char* value = requireOptionValue(argc, argv, &i, "--width", error, errorSize);
-            if (!value) return 0;
-            if (!parseUnsignedValue(value, &outOptions->createInfo.width, "--width", error, errorSize)) {
-                return 0;
-            }
-            continue;
-        }
-        if (optionMatches(arg, "--height")) {
-            const char* value = requireOptionValue(argc, argv, &i, "--height", error, errorSize);
-            if (!value) return 0;
-            if (!parseUnsignedValue(value, &outOptions->createInfo.height, "--height", error, errorSize)) {
-                return 0;
-            }
-            continue;
-        }
-        if (stringsEqual(arg, "--fullscreen")) {
-            outOptions->createInfo.startFullscreen = 1u;
-            continue;
-        }
-        if (stringsEqual(arg, "--no-ser")) {
-            outOptions->createInfo.disableSER = 1u;
-            continue;
-        }
-        if (optionMatches(arg, "--device-index")) {
-            const char* value = requireOptionValue(argc, argv, &i, "--device-index", error, errorSize);
-            if (!value) return 0;
-            if (!parseDeviceIndexValue(value, &outOptions->createInfo.preferredDeviceIndex, error, errorSize)) {
-                return 0;
-            }
-            continue;
-        }
-        if (optionMatches(arg, "--device-name")) {
-            const char* value = requireOptionValue(argc, argv, &i, "--device-name", error, errorSize);
-            if (!value || !value[0]) {
-                snprintf(error, errorSize, "Invalid value for --device-name");
-                return 0;
-            }
-            outOptions->createInfo.preferredDeviceName = value;
-            continue;
-        }
-        if (stringsEqual(arg, "--empty-scene")) {
-            outOptions->loadDefaultScene = 0u;
-            continue;
-        }
-        if (stringsEqual(arg, "--benchmark")) {
-            outOptions->benchmark.enabled = 1u;
-            outOptions->benchmark.headless = 0u;
-            continue;
-        }
-        if (stringsEqual(arg, "--benchmark-headless")) {
-            outOptions->benchmark.enabled = 1u;
-            outOptions->benchmark.headless = 1u;
-            continue;
-        }
-        if (optionMatches(arg, "--benchmark-width")) {
-            const char* value = requireOptionValue(argc, argv, &i, "--benchmark-width", error, errorSize);
-            if (!value) return 0;
-            if (!parseUnsignedValue(value, &outOptions->benchmark.width, "--benchmark-width", error, errorSize)) {
-                return 0;
-            }
-            continue;
-        }
-        if (optionMatches(arg, "--benchmark-height")) {
-            const char* value = requireOptionValue(argc, argv, &i, "--benchmark-height", error, errorSize);
-            if (!value) return 0;
-            if (!parseUnsignedValue(value, &outOptions->benchmark.height, "--benchmark-height", error, errorSize)) {
-                return 0;
-            }
-            continue;
-        }
-        if (optionMatches(arg, "--benchmark-samples")) {
-            const char* value = requireOptionValue(argc, argv, &i, "--benchmark-samples", error, errorSize);
-            if (!value) return 0;
-            if (!parseUnsignedValue(value, &outOptions->benchmark.targetSamples, "--benchmark-samples", error, errorSize)) {
-                return 0;
-            }
-            continue;
-        }
-        if (optionMatches(arg, "--import")) {
-            const char* value = requireOptionValue(argc, argv, &i, "--import", error, errorSize);
-            if (!value || !value[0]) {
-                snprintf(error, errorSize, "Invalid value for --import");
-                return 0;
-            }
-            outOptions->startupImportPath = value;
-            continue;
-        }
+        int parseResult = parseWindowArgument(arg, argc, argv, &i, outOptions, error, errorSize);
+        if (parseResult == 0) return 0;
+        if (parseResult > 0) continue;
 
-        snprintf(error, errorSize, "Unknown option: %s", arg);
+        parseResult = parseBenchmarkArgument(arg, argc, argv, &i, outOptions, error, errorSize);
+        if (parseResult == 0) return 0;
+        if (parseResult > 0) continue;
+
+        parseResult = parseSceneArgument(arg, argc, argv, &i, outOptions, error, errorSize);
+        if (parseResult == 0) return 0;
+        if (parseResult > 0) continue;
+
+        setCLIError(error, errorSize, "Unknown option: %s", arg);
         return 0;
     }
 
-    if (outOptions->benchmark.enabled) {
-        if (!outOptions->loadDefaultScene) {
-            snprintf(error, errorSize, "--benchmark requires the default scene");
-            return 0;
-        }
-        if (outOptions->startupImportPath) {
-            snprintf(error, errorSize, "--benchmark cannot be combined with --import");
-            return 0;
-        }
-    }
-
-    return 1;
+    return validateCLIArgumentCombination(outOptions, error, errorSize);
 }
 
 int CLIHandleImmediateMode(const CLILaunchOptions* options, int* outExitCode) {
@@ -280,8 +308,9 @@ int CLIHandleImmediateMode(const CLILaunchOptions* options, int* outExitCode) {
 
 void CLIPrintArgumentError(const char* error) {
     if (!error || !error[0]) return;
-    fprintf(stderr, "Error: %s\n\n", error);
-    fprintf(stderr, "Use --help to show available options.\n");
+    (void)fputs("Error: ", stderr);
+    (void)fputs(error, stderr);
+    (void)fputs("\n\nUse --help to show available options.\n", stderr);
 }
 
 void CLIPrintVersion(void) {

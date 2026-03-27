@@ -1,19 +1,25 @@
 #include "controller.h"
 
-#include "mesh/controller.h"
+#include "cJSON.h"
+#include "constants.h"
 #include "debug.h"
 #include "io.h"
-
-#include "cJSON.h"
+#include "mesh/controller.h"
+#include "platform.h"
+#include "session.h"
+#include "vkrt.h"
+#include "vkrt_types.h"
 
 #include <ctype.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <types.h>
 
 enum {
-    kSceneFileVersion = 1,
-    kPathComponentCapacity = 128,
+    K_SCENE_FILE_VERSION = 1,
+    K_PATH_COMPONENT_CAPACITY = 128,
 };
 
 static const char* kDefaultScenePath = "assets/scenes/cornell.json";
@@ -23,9 +29,28 @@ typedef struct LoadedMeshImportBatch {
     uint32_t meshCount;
 } LoadedMeshImportBatch;
 
+typedef struct SceneLoadContext {
+    VKRT* vkrt;
+    Session* session;
+    cJSON* root;
+    const cJSON* materialsArray;
+    const cJSON* meshesArray;
+    const cJSON* sceneObjectsArray;
+    const cJSON* settingsObject;
+    const char* path;
+    const char* targetScenePath;
+    uint32_t savedMeshCount;
+    uint32_t textureIndexMapCount;
+    uint32_t* textureIndexMap;
+    uint32_t* savedToLoadedMeshIndex;
+    uint8_t* keepMesh;
+    LoadedMeshImportBatch* loadedBatches;
+    uint32_t loadedBatchCount;
+} SceneLoadContext;
+
 static FILE* openFileForWrite(const char* path) {
     if (!path || !path[0]) return NULL;
-#if defined(_WIN32)
+#ifdef _WIN32
     FILE* file = NULL;
     return fopen_s(&file, path, "wb") == 0 ? file : NULL;
 #else
@@ -37,7 +62,7 @@ static int readTextFile(const char* path, char** outText) {
     if (outText) *outText = NULL;
     if (!path || !path[0] || !outText) return 0;
 
-#if defined(_WIN32)
+#ifdef _WIN32
     FILE* file = NULL;
     if (fopen_s(&file, path, "rb") != 0) return 0;
 #else
@@ -46,29 +71,29 @@ static int readTextFile(const char* path, char** outText) {
 #endif
 
     if (fseek(file, 0, SEEK_END) != 0) {
-        fclose(file);
+        (void)fclose(file);
         return 0;
     }
     long fileSize = ftell(file);
     if (fileSize < 0 || fseek(file, 0, SEEK_SET) != 0) {
-        fclose(file);
+        (void)fclose(file);
         return 0;
     }
 
-    char* text = (char*)malloc((size_t)fileSize + 1u);
+    size_t textCapacity = (size_t)fileSize + 1u;
+    char* text = (char*)calloc(textCapacity, 1u);
     if (!text) {
-        fclose(file);
+        (void)fclose(file);
         return 0;
     }
 
-    size_t bytesRead = fread(text, 1, (size_t)fileSize, file);
-    fclose(file);
-    if (bytesRead != (size_t)fileSize) {
+    size_t bytesRead = fread(text, 1, textCapacity - 1u, file);
+    (void)fclose(file);
+    if (bytesRead != textCapacity - 1u) {
         free(text);
         return 0;
     }
 
-    text[fileSize] = '\0';
     *outText = text;
     return 1;
 }
@@ -105,7 +130,7 @@ static int joinPath(char* outPath, size_t outPathSize, const char* base, const c
 
 static int pathIsAbsolute(const char* path) {
     if (!path || !path[0]) return 0;
-#if defined(_WIN32)
+#ifdef _WIN32
     if ((path[0] >= 'A' && path[0] <= 'Z') || (path[0] >= 'a' && path[0] <= 'z')) {
         return path[1] == ':';
     }
@@ -144,7 +169,7 @@ static void normalizePathSeparators(char* path) {
 
 static size_t queryPathRootLength(const char* path) {
     if (!path || !path[0]) return 0u;
-#if defined(_WIN32)
+#ifdef _WIN32
     if (((path[0] >= 'A' && path[0] <= 'Z') || (path[0] >= 'a' && path[0] <= 'z')) && path[1] == ':') {
         return 2u;
     }
@@ -153,7 +178,7 @@ static size_t queryPathRootLength(const char* path) {
 }
 
 static int pathCharsEqual(char left, char right) {
-#if defined(_WIN32)
+#ifdef _WIN32
     return tolower((unsigned char)left) == tolower((unsigned char)right);
 #else
     return left == right;
@@ -209,55 +234,60 @@ static int appendPathSegment(char* outPath, size_t outPathSize, size_t* inOutLen
     return 1;
 }
 
-static int copyPortableStoredPath(const char* scenePath, const char* sourcePath, char outStoredPath[VKRT_PATH_MAX]) {
-    if (!sourcePath || !sourcePath[0] || !outStoredPath) return 0;
+static int copyStringToPath(char outPath[VKRT_PATH_MAX], const char* value) {
+    if (!outPath || !value) return 0;
+    return snprintf(outPath, VKRT_PATH_MAX, "%s", value) < VKRT_PATH_MAX;
+}
 
-    char resolvedSource[VKRT_PATH_MAX];
-    const char* sourceForStorage = sourcePath;
-    if (!pathIsAbsolute(sourcePath) && resolveExistingPath(sourcePath, resolvedSource, sizeof(resolvedSource)) == 0) {
-        sourceForStorage = resolvedSource;
-    }
-
-    if (snprintf(outStoredPath, VKRT_PATH_MAX, "%s", sourceForStorage) >= VKRT_PATH_MAX) return 0;
-    normalizePathSeparators(outStoredPath);
-
-    if (!scenePath || !scenePath[0] || !pathIsAbsolute(outStoredPath)) {
-        return 1;
-    }
-
+static int normalizeSceneAndSourcePaths(
+    const char* scenePath,
+    const char* sourcePath,
+    char outSceneNormalized[VKRT_PATH_MAX],
+    char outSourceNormalized[VKRT_PATH_MAX]
+) {
     char sceneDirectory[VKRT_PATH_MAX];
-    char sceneNormalized[VKRT_PATH_MAX];
-    char sourceNormalized[VKRT_PATH_MAX];
     if (!copyParentDirectory(scenePath, sceneDirectory) ||
-        snprintf(sceneNormalized, sizeof(sceneNormalized), "%s", sceneDirectory) >= (int)sizeof(sceneNormalized) ||
-        snprintf(sourceNormalized, sizeof(sourceNormalized), "%s", outStoredPath) >= (int)sizeof(sourceNormalized)) {
-        return 1;
+        !copyStringToPath(outSceneNormalized, sceneDirectory) ||
+        !copyStringToPath(outSourceNormalized, sourcePath)) {
+        return 0;
     }
 
-    normalizePathSeparators(sceneNormalized);
-    normalizePathSeparators(sourceNormalized);
-    if (!pathIsAbsolute(sceneNormalized) || !pathIsAbsolute(sourceNormalized)) return 1;
+    normalizePathSeparators(outSceneNormalized);
+    normalizePathSeparators(outSourceNormalized);
+    return 1;
+}
 
-    size_t sceneRootLength = queryPathRootLength(sceneNormalized);
-    size_t sourceRootLength = queryPathRootLength(sourceNormalized);
-    if (sceneRootLength != sourceRootLength) return 1;
-    for (size_t i = 0; i < sceneRootLength; i++) {
-        if (!pathCharsEqual(sceneNormalized[i], sourceNormalized[i])) return 1;
+static int pathsShareSameRoot(const char* leftPath, const char* rightPath) {
+    size_t leftRootLength = queryPathRootLength(leftPath);
+    size_t rightRootLength = queryPathRootLength(rightPath);
+    if (leftRootLength != rightRootLength) return 0;
+
+    for (size_t index = 0u; index < leftRootLength; index++) {
+        if (!pathCharsEqual(leftPath[index], rightPath[index])) return 0;
     }
 
-    char* sceneComponents[kPathComponentCapacity];
-    char* sourceComponents[kPathComponentCapacity];
+    return 1;
+}
+
+static int buildRelativeStoredPath(
+    char outStoredPath[VKRT_PATH_MAX],
+    char sceneNormalized[VKRT_PATH_MAX],
+    char sourceNormalized[VKRT_PATH_MAX]
+) {
+    char* sceneComponents[K_PATH_COMPONENT_CAPACITY];
+    char* sourceComponents[K_PATH_COMPONENT_CAPACITY];
+    const uint32_t pathComponentCapacity = (uint32_t)(sizeof(sceneComponents) / sizeof(sceneComponents[0]));
     uint32_t sceneComponentCount = splitPathComponents(
         sceneNormalized,
-        sceneRootLength,
+        queryPathRootLength(sceneNormalized),
         sceneComponents,
-        VKRT_ARRAY_COUNT(sceneComponents)
+        pathComponentCapacity
     );
     uint32_t sourceComponentCount = splitPathComponents(
         sourceNormalized,
-        sourceRootLength,
+        queryPathRootLength(sourceNormalized),
         sourceComponents,
-        VKRT_ARRAY_COUNT(sourceComponents)
+        pathComponentCapacity
     );
     if (sceneComponentCount == UINT32_MAX || sourceComponentCount == UINT32_MAX) return 1;
 
@@ -268,27 +298,41 @@ static int copyPortableStoredPath(const char* scenePath, const char* sourcePath,
         commonComponentCount++;
     }
 
-    char relativePath[VKRT_PATH_MAX];
+    char relativePath[VKRT_PATH_MAX] = {0};
     size_t relativeLength = 0u;
-    relativePath[0] = '\0';
-    for (uint32_t i = commonComponentCount; i < sceneComponentCount; i++) {
-        if (!appendPathSegment(relativePath, sizeof(relativePath), &relativeLength, "..")) {
-            return 1;
-        }
+    for (uint32_t index = commonComponentCount; index < sceneComponentCount; index++) {
+        if (!appendPathSegment(relativePath, sizeof(relativePath), &relativeLength, "..")) return 1;
     }
-    for (uint32_t i = commonComponentCount; i < sourceComponentCount; i++) {
-        if (!appendPathSegment(relativePath, sizeof(relativePath), &relativeLength, sourceComponents[i])) {
+    for (uint32_t index = commonComponentCount; index < sourceComponentCount; index++) {
+        if (!appendPathSegment(relativePath, sizeof(relativePath), &relativeLength, sourceComponents[index])) {
             return 1;
         }
     }
 
-    if (relativeLength == 0u) {
-        if (snprintf(outStoredPath, VKRT_PATH_MAX, ".") >= VKRT_PATH_MAX) return 0;
-        return 1;
+    if (relativeLength == 0u) return copyStringToPath(outStoredPath, ".");
+    return copyStringToPath(outStoredPath, relativePath);
+}
+
+static int copyPortableStoredPath(const char* scenePath, const char* sourcePath, char outStoredPath[VKRT_PATH_MAX]) {
+    if (!sourcePath || !sourcePath[0] || !outStoredPath) return 0;
+
+    char resolvedSource[VKRT_PATH_MAX];
+    const char* sourceForStorage = sourcePath;
+    if (!pathIsAbsolute(sourcePath) && resolveExistingPath(sourcePath, resolvedSource, sizeof(resolvedSource)) == 0) {
+        sourceForStorage = resolvedSource;
     }
 
-    if (snprintf(outStoredPath, VKRT_PATH_MAX, "%s", relativePath) >= VKRT_PATH_MAX) return 0;
-    return 1;
+    if (!copyStringToPath(outStoredPath, sourceForStorage)) return 0;
+    normalizePathSeparators(outStoredPath);
+
+    if (!scenePath || !scenePath[0] || !pathIsAbsolute(outStoredPath)) return 1;
+
+    char sceneNormalized[VKRT_PATH_MAX];
+    char sourceNormalized[VKRT_PATH_MAX];
+    if (!normalizeSceneAndSourcePaths(scenePath, outStoredPath, sceneNormalized, sourceNormalized)) return 1;
+    if (!pathIsAbsolute(sceneNormalized) || !pathIsAbsolute(sourceNormalized)) return 1;
+    if (!pathsShareSameRoot(sceneNormalized, sourceNormalized)) return 1;
+    return buildRelativeStoredPath(outStoredPath, sceneNormalized, sourceNormalized);
 }
 
 static cJSON* createFloatArray(const float* values, size_t count) {
@@ -307,6 +351,11 @@ static void addUIntOrNull(cJSON* object, const char* name, uint32_t value) {
     } else {
         cJSON_AddNumberToObject(object, name, (double)value);
     }
+}
+
+static void addObjectItem(cJSON* targetObject, const char* key, cJSON* childItem) {
+    if (!targetObject || !key || !childItem) return;
+    cJSON_AddItemToObject(targetObject, key, childItem);
 }
 
 static int jsonToUInt32(const cJSON* item, uint32_t* outValue) {
@@ -346,9 +395,35 @@ static int jsonToFloatArray(const cJSON* item, float* outValues, size_t count) {
     return 1;
 }
 
+static int floatArrayEquals(const float* left, const float* right, size_t count) {
+    if (!left || !right) return 0;
+
+    for (size_t i = 0; i < count; i++) {
+        if (left[i] != right[i]) return 0;
+    }
+    return 1;
+}
+
+static void addFloatArrayIfDifferent(cJSON* object, const char* name, const float* values, const float* defaults, size_t count) {
+    if (!object || !name || !values || !defaults) return;
+    if (!floatArrayEquals(values, defaults, count)) {
+        cJSON_AddItemToObject(object, name, createFloatArray(values, count));
+    }
+}
+
+static void addFloatIfDifferent(cJSON* object, const char* name, float value, float defaultValue) {
+    if (!object || !name) return;
+    if (value != defaultValue) cJSON_AddNumberToObject(object, name, value);
+}
+
+static void addUIntIfDifferent(cJSON* object, const char* name, uint32_t value, uint32_t defaultValue) {
+    if (!object || !name) return;
+    if (value != defaultValue) cJSON_AddNumberToObject(object, name, value);
+}
+
 static int jsonToMat4(const cJSON* item, mat4 outMatrix) {
     float values[16];
-    if (!jsonToFloatArray(item, values, VKRT_ARRAY_COUNT(values))) return 0;
+    if (!jsonToFloatArray(item, values, 16u)) return 0;
 
     size_t valueIndex = 0u;
     for (int column = 0; column < 4; column++) {
@@ -403,66 +478,75 @@ static cJSON* createMaterialJSON(const Material* material) {
     cJSON* object = cJSON_CreateObject();
     if (!object) return NULL;
 
-    if (memcmp(material->baseColor, defaults.baseColor, sizeof(material->baseColor)) != 0) {
-        cJSON_AddItemToObject(object, "baseColor", createFloatArray(material->baseColor, 3u));
+    addFloatArrayIfDifferent(object, "baseColor", material->baseColor, defaults.baseColor, 3u);
+    addFloatIfDifferent(object, "metallic", material->metallic, defaults.metallic);
+    addFloatIfDifferent(object, "roughness", material->roughness, defaults.roughness);
+    addFloatIfDifferent(object, "diffuseRoughness", material->diffuseRoughness, defaults.diffuseRoughness);
+    addFloatIfDifferent(object, "subsurface", material->subsurface, defaults.subsurface);
+    addFloatIfDifferent(object, "opacity", material->opacity, defaults.opacity);
+    addFloatIfDifferent(object, "alphaCutoff", material->alphaCutoff, defaults.alphaCutoff);
+    addUIntIfDifferent(object, "alphaMode", material->alphaMode, defaults.alphaMode);
+
+    addFloatIfDifferent(object, "ior", material->ior, defaults.ior);
+    addFloatIfDifferent(object, "specular", material->specular, defaults.specular);
+    addFloatIfDifferent(object, "specularTint", material->specularTint, defaults.specularTint);
+    addFloatIfDifferent(object, "anisotropic", material->anisotropic, defaults.anisotropic);
+
+    addFloatIfDifferent(object, "transmission", material->transmission, defaults.transmission);
+    addFloatArrayIfDifferent(object, "attenuationColor", material->attenuationColor, defaults.attenuationColor, 3u);
+    addFloatIfDifferent(
+        object,
+        "absorptionCoefficient",
+        material->absorptionCoefficient,
+        defaults.absorptionCoefficient
+    );
+
+    addFloatIfDifferent(object, "clearcoat", material->clearcoat, defaults.clearcoat);
+    addFloatIfDifferent(object, "clearcoatGloss", material->clearcoatGloss, defaults.clearcoatGloss);
+    addFloatArrayIfDifferent(object, "sheenTintWeight", material->sheenTintWeight, defaults.sheenTintWeight, 4u);
+    addFloatIfDifferent(object, "sheenRoughness", material->sheenRoughness, defaults.sheenRoughness);
+
+    addFloatIfDifferent(object, "emissionLuminance", material->emissionLuminance, defaults.emissionLuminance);
+    addFloatArrayIfDifferent(object, "emissionColor", material->emissionColor, defaults.emissionColor, 3u);
+
+    addFloatIfDifferent(object, "normalTextureScale", material->normalTextureScale, defaults.normalTextureScale);
+    if (material->baseColorTextureIndex != defaults.baseColorTextureIndex) {
+        addUIntOrNull(object, "baseColorTextureIndex", material->baseColorTextureIndex);
     }
-    if (material->roughness != defaults.roughness) cJSON_AddNumberToObject(object, "roughness", material->roughness);
-    if (memcmp(material->emissionColor, defaults.emissionColor, sizeof(material->emissionColor)) != 0) {
-        cJSON_AddItemToObject(object, "emissionColor", createFloatArray(material->emissionColor, 3u));
+    if (material->metallicRoughnessTextureIndex != defaults.metallicRoughnessTextureIndex) {
+        addUIntOrNull(object, "metallicRoughnessTextureIndex", material->metallicRoughnessTextureIndex);
     }
-    if (material->emissionLuminance != defaults.emissionLuminance) cJSON_AddNumberToObject(object, "emissionLuminance", material->emissionLuminance);
-    if (memcmp(material->eta, defaults.eta, sizeof(material->eta)) != 0) {
-        cJSON_AddItemToObject(object, "eta", createFloatArray(material->eta, 3u));
+    if (material->normalTextureIndex != defaults.normalTextureIndex) {
+        addUIntOrNull(object, "normalTextureIndex", material->normalTextureIndex);
     }
-    if (material->metallic != defaults.metallic) cJSON_AddNumberToObject(object, "metallic", material->metallic);
-    if (memcmp(material->k, defaults.k, sizeof(material->k)) != 0) {
-        cJSON_AddItemToObject(object, "k", createFloatArray(material->k, 3u));
+    if (material->emissiveTextureIndex != defaults.emissiveTextureIndex) {
+        addUIntOrNull(object, "emissiveTextureIndex", material->emissiveTextureIndex);
     }
-    if (material->anisotropic != defaults.anisotropic) cJSON_AddNumberToObject(object, "anisotropic", material->anisotropic);
-    if (material->specular != defaults.specular) cJSON_AddNumberToObject(object, "specular", material->specular);
-    if (material->specularTint != defaults.specularTint) cJSON_AddNumberToObject(object, "specularTint", material->specularTint);
-    if (memcmp(material->sheenTintWeight, defaults.sheenTintWeight, sizeof(material->sheenTintWeight)) != 0) {
-        cJSON_AddItemToObject(object, "sheenTintWeight", createFloatArray(material->sheenTintWeight, 4u));
-    }
-    if (material->clearcoat != defaults.clearcoat) cJSON_AddNumberToObject(object, "clearcoat", material->clearcoat);
-    if (material->clearcoatGloss != defaults.clearcoatGloss) cJSON_AddNumberToObject(object, "clearcoatGloss", material->clearcoatGloss);
-    if (material->ior != defaults.ior) cJSON_AddNumberToObject(object, "ior", material->ior);
-    if (material->diffuseRoughness != defaults.diffuseRoughness) cJSON_AddNumberToObject(object, "diffuseRoughness", material->diffuseRoughness);
-    if (material->transmission != defaults.transmission) cJSON_AddNumberToObject(object, "transmission", material->transmission);
-    if (material->subsurface != defaults.subsurface) cJSON_AddNumberToObject(object, "subsurface", material->subsurface);
-    if (material->sheenRoughness != defaults.sheenRoughness) cJSON_AddNumberToObject(object, "sheenRoughness", material->sheenRoughness);
-    if (material->absorptionCoefficient != defaults.absorptionCoefficient) cJSON_AddNumberToObject(object, "absorptionCoefficient", material->absorptionCoefficient);
-    if (memcmp(material->attenuationColor, defaults.attenuationColor, sizeof(material->attenuationColor)) != 0) {
-        cJSON_AddItemToObject(object, "attenuationColor", createFloatArray(material->attenuationColor, 3u));
-    }
-    if (material->normalTextureScale != defaults.normalTextureScale) cJSON_AddNumberToObject(object, "normalTextureScale", material->normalTextureScale);
-    if (material->baseColorTextureIndex != defaults.baseColorTextureIndex) addUIntOrNull(object, "baseColorTextureIndex", material->baseColorTextureIndex);
-    if (material->metallicRoughnessTextureIndex != defaults.metallicRoughnessTextureIndex) addUIntOrNull(object, "metallicRoughnessTextureIndex", material->metallicRoughnessTextureIndex);
-    if (material->normalTextureIndex != defaults.normalTextureIndex) addUIntOrNull(object, "normalTextureIndex", material->normalTextureIndex);
-    if (material->emissiveTextureIndex != defaults.emissiveTextureIndex) addUIntOrNull(object, "emissiveTextureIndex", material->emissiveTextureIndex);
-    if (material->baseColorTextureWrap != defaults.baseColorTextureWrap) cJSON_AddNumberToObject(object, "baseColorTextureWrap", material->baseColorTextureWrap);
-    if (material->metallicRoughnessTextureWrap != defaults.metallicRoughnessTextureWrap) cJSON_AddNumberToObject(object, "metallicRoughnessTextureWrap", material->metallicRoughnessTextureWrap);
-    if (material->normalTextureWrap != defaults.normalTextureWrap) cJSON_AddNumberToObject(object, "normalTextureWrap", material->normalTextureWrap);
-    if (material->emissiveTextureWrap != defaults.emissiveTextureWrap) cJSON_AddNumberToObject(object, "emissiveTextureWrap", material->emissiveTextureWrap);
-    if (material->opacity != defaults.opacity) cJSON_AddNumberToObject(object, "opacity", material->opacity);
-    if (material->alphaCutoff != defaults.alphaCutoff) cJSON_AddNumberToObject(object, "alphaCutoff", material->alphaCutoff);
-    if (material->alphaMode != defaults.alphaMode) cJSON_AddNumberToObject(object, "alphaMode", material->alphaMode);
-    if (material->textureTexcoordSets != defaults.textureTexcoordSets) cJSON_AddNumberToObject(object, "textureTexcoordSets", material->textureTexcoordSets);
-    if (memcmp(material->baseColorTextureTransform, defaults.baseColorTextureTransform, sizeof(material->baseColorTextureTransform)) != 0) {
-        cJSON_AddItemToObject(object, "baseColorTextureTransform", createFloatArray(material->baseColorTextureTransform, 4u));
-    }
-    if (memcmp(material->metallicRoughnessTextureTransform, defaults.metallicRoughnessTextureTransform, sizeof(material->metallicRoughnessTextureTransform)) != 0) {
-        cJSON_AddItemToObject(object, "metallicRoughnessTextureTransform", createFloatArray(material->metallicRoughnessTextureTransform, 4u));
-    }
-    if (memcmp(material->normalTextureTransform, defaults.normalTextureTransform, sizeof(material->normalTextureTransform)) != 0) {
-        cJSON_AddItemToObject(object, "normalTextureTransform", createFloatArray(material->normalTextureTransform, 4u));
-    }
-    if (memcmp(material->emissiveTextureTransform, defaults.emissiveTextureTransform, sizeof(material->emissiveTextureTransform)) != 0) {
-        cJSON_AddItemToObject(object, "emissiveTextureTransform", createFloatArray(material->emissiveTextureTransform, 4u));
-    }
-    if (memcmp(material->textureRotations, defaults.textureRotations, sizeof(material->textureRotations)) != 0) {
-        cJSON_AddItemToObject(object, "textureRotations", createFloatArray(material->textureRotations, 4u));
-    }
+    addUIntIfDifferent(object, "baseColorTextureWrap", material->baseColorTextureWrap, defaults.baseColorTextureWrap);
+    addUIntIfDifferent(
+        object,
+        "metallicRoughnessTextureWrap",
+        material->metallicRoughnessTextureWrap,
+        defaults.metallicRoughnessTextureWrap
+    );
+    addUIntIfDifferent(object, "normalTextureWrap", material->normalTextureWrap, defaults.normalTextureWrap);
+    addUIntIfDifferent(object, "emissiveTextureWrap", material->emissiveTextureWrap, defaults.emissiveTextureWrap);
+    addUIntIfDifferent(object, "textureTexcoordSets", material->textureTexcoordSets, defaults.textureTexcoordSets);
+    addFloatArrayIfDifferent(object, "baseColorTextureTransform", material->baseColorTextureTransform, defaults.baseColorTextureTransform, 4u);
+    addFloatArrayIfDifferent(
+        object,
+        "metallicRoughnessTextureTransform",
+        material->metallicRoughnessTextureTransform,
+        defaults.metallicRoughnessTextureTransform,
+        4u
+    );
+    addFloatArrayIfDifferent(object, "normalTextureTransform", material->normalTextureTransform, defaults.normalTextureTransform, 4u);
+    addFloatArrayIfDifferent(object, "emissiveTextureTransform", material->emissiveTextureTransform, defaults.emissiveTextureTransform, 4u);
+    addFloatArrayIfDifferent(object, "textureRotations", material->textureRotations, defaults.textureRotations, 4u);
+
+    addFloatArrayIfDifferent(object, "eta", material->eta, defaults.eta, 3u);
+    addFloatArrayIfDifferent(object, "k", material->k, defaults.k, 3u);
+
     return object;
 }
 
@@ -524,8 +608,9 @@ static void remapStandaloneTextureIndices(Material* material, const uint32_t* te
         &material->normalTextureIndex,
         &material->emissiveTextureIndex,
     };
+    const uint32_t textureIndexCount = (uint32_t)(sizeof(textureIndices) / sizeof(textureIndices[0]));
 
-    for (uint32_t i = 0; i < VKRT_ARRAY_COUNT(textureIndices); i++) {
+    for (uint32_t i = 0; i < textureIndexCount; i++) {
         if (*textureIndices[i] == VKRT_INVALID_INDEX || *textureIndices[i] >= textureIndexMapCount) continue;
         if (textureIndexMap[*textureIndices[i]] != VKRT_INVALID_INDEX) {
             *textureIndices[i] = textureIndexMap[*textureIndices[i]];
@@ -644,37 +729,60 @@ static int parseSceneObjectTransformJSON(
     return 1;
 }
 
-static int saveSceneSettings(cJSON* root, const VKRT_SceneSettingsSnapshot* settings) {
-    if (!root || !settings) return 0;
+static int saveSceneSettings(cJSON* sceneRoot, const VKRT_SceneSettingsSnapshot* settings) {
+    if (!sceneRoot || !settings) return 0;
 
-    cJSON* object = cJSON_CreateObject();
-    if (!object) return 0;
+    cJSON* settingsObject = cJSON_CreateObject();
+    if (!settingsObject) return 0;
 
     cJSON* camera = cJSON_CreateObject();
     if (!camera) {
-        cJSON_Delete(object);
+        cJSON_Delete(settingsObject);
         return 0;
     }
     cJSON_AddItemToObject(camera, "position", createFloatArray(settings->camera.pos, 3u));
     cJSON_AddItemToObject(camera, "target", createFloatArray(settings->camera.target, 3u));
     cJSON_AddItemToObject(camera, "up", createFloatArray(settings->camera.up, 3u));
     cJSON_AddNumberToObject(camera, "vfov", settings->camera.vfov);
-    cJSON_AddItemToObject(object, "camera", camera);
-    cJSON_AddNumberToObject(object, "samplesPerPixel", settings->samplesPerPixel);
-    cJSON_AddNumberToObject(object, "rrMinDepth", settings->rrMinDepth);
-    cJSON_AddNumberToObject(object, "rrMaxDepth", settings->rrMaxDepth);
-    cJSON_AddNumberToObject(object, "toneMappingMode", settings->toneMappingMode);
-    cJSON_AddNumberToObject(object, "exposure", settings->exposure);
-    cJSON_AddBoolToObject(object, "autoExposureEnabled", settings->autoExposureEnabled != 0u);
-    cJSON_AddBoolToObject(object, "autoSPPEnabled", settings->autoSPPEnabled != 0u);
-    cJSON_AddItemToObject(object, "environmentColor", createFloatArray(settings->environmentColor, 3u));
-    cJSON_AddNumberToObject(object, "environmentStrength", settings->environmentStrength);
-    cJSON_AddNumberToObject(object, "debugMode", settings->debugMode);
-    cJSON_AddBoolToObject(object, "misNeeEnabled", settings->misNeeEnabled != 0u);
-    addUIntOrNull(object, "selectedMeshIndex", settings->selectedMeshIndex);
+    cJSON_AddItemToObject(settingsObject, "camera", camera);
+    cJSON_AddNumberToObject(settingsObject, "samplesPerPixel", settings->samplesPerPixel);
+    cJSON_AddNumberToObject(settingsObject, "rrMinDepth", settings->rrMinDepth);
+    cJSON_AddNumberToObject(settingsObject, "rrMaxDepth", settings->rrMaxDepth);
+    cJSON_AddNumberToObject(settingsObject, "toneMappingMode", settings->toneMappingMode);
+    cJSON_AddNumberToObject(settingsObject, "exposure", settings->exposure);
+    cJSON_AddBoolToObject(settingsObject, "autoExposureEnabled", settings->autoExposureEnabled != 0u);
+    cJSON_AddBoolToObject(settingsObject, "autoSPPEnabled", settings->autoSPPEnabled != 0u);
+    cJSON_AddItemToObject(settingsObject, "environmentColor", createFloatArray(settings->environmentColor, 3u));
+    cJSON_AddNumberToObject(settingsObject, "environmentStrength", settings->environmentStrength);
+    cJSON_AddNumberToObject(settingsObject, "debugMode", settings->debugMode);
+    cJSON_AddBoolToObject(settingsObject, "misNeeEnabled", settings->misNeeEnabled != 0u);
+    addUIntOrNull(settingsObject, "selectedMeshIndex", settings->selectedMeshIndex);
 
-    cJSON_AddItemToObject(root, "sceneSettings", object);
+    addObjectItem(sceneRoot, "sceneSettings", settingsObject);
     return 1;
+}
+
+static int querySceneHasBackupState(
+    VKRT* vkrt,
+    Session* session,
+    const char* previousScenePath,
+    uint32_t* outMeshCount,
+    uint32_t* outMaterialCount,
+    uint32_t* outTextureCount
+) {
+    if (!vkrt || !session || !outMeshCount || !outMaterialCount || !outTextureCount) return 0;
+    if (VKRT_getMeshCount(vkrt, outMeshCount) != VKRT_SUCCESS ||
+        VKRT_getMaterialCount(vkrt, outMaterialCount) != VKRT_SUCCESS ||
+        VKRT_getTextureCount(vkrt, outTextureCount) != VKRT_SUCCESS) {
+        return 0;
+    }
+
+    return *outMeshCount > 0u ||
+        *outMaterialCount > 1u ||
+        *outTextureCount > 0u ||
+        sessionGetSceneObjectCount(session) > 0u ||
+        sessionGetEnvironmentTexturePath(session)[0] ||
+        (previousScenePath && previousScenePath[0]);
 }
 
 static int applySceneSettings(
@@ -803,6 +911,203 @@ static int ensureMaterialCapacityForSceneLoad(VKRT* vkrt, uint32_t requiredCount
     return 1;
 }
 
+static int createSceneRoot(
+    cJSON** outRoot,
+    cJSON** outMeshImportsArray,
+    cJSON** outTextureImportsArray,
+    cJSON** outMaterialsArray,
+    cJSON** outMeshesArray,
+    cJSON** outSceneObjectsArray
+) {
+    if (!outRoot || !outMeshImportsArray || !outTextureImportsArray ||
+        !outMaterialsArray || !outMeshesArray || !outSceneObjectsArray) {
+        return 0;
+    }
+
+    cJSON* root = cJSON_CreateObject();
+    if (!root) return 0;
+
+    cJSON* meshImportsArray = cJSON_CreateArray();
+    cJSON* textureImportsArray = cJSON_CreateArray();
+    cJSON* materialsArray = cJSON_CreateArray();
+    cJSON* meshesArray = cJSON_CreateArray();
+    cJSON* sceneObjectsArray = cJSON_CreateArray();
+    if (!meshImportsArray || !textureImportsArray || !materialsArray || !meshesArray || !sceneObjectsArray) {
+        cJSON_Delete(meshImportsArray);
+        cJSON_Delete(textureImportsArray);
+        cJSON_Delete(materialsArray);
+        cJSON_Delete(meshesArray);
+        cJSON_Delete(sceneObjectsArray);
+        cJSON_Delete(root);
+        return 0;
+    }
+
+    cJSON_AddStringToObject(root, "format", "vkrt.scene");
+    cJSON_AddNumberToObject(root, "version", K_SCENE_FILE_VERSION);
+    cJSON_AddItemToObject(root, "meshImports", meshImportsArray);
+    cJSON_AddItemToObject(root, "textureImports", textureImportsArray);
+    cJSON_AddItemToObject(root, "materials", materialsArray);
+    cJSON_AddItemToObject(root, "meshes", meshesArray);
+    cJSON_AddItemToObject(root, "sceneObjects", sceneObjectsArray);
+
+    *outRoot = root;
+    *outMeshImportsArray = meshImportsArray;
+    *outTextureImportsArray = textureImportsArray;
+    *outMaterialsArray = materialsArray;
+    *outMeshesArray = meshesArray;
+    *outSceneObjectsArray = sceneObjectsArray;
+    return 1;
+}
+
+static int addEnvironmentTexturePathJSON(cJSON* root, Session* session, const char* scenePath) {
+    if (!root || !session) return 0;
+    if (!sessionGetEnvironmentTexturePath(session)[0]) return 1;
+
+    char storedPath[VKRT_PATH_MAX];
+    if (!copyPortableStoredPath(scenePath, sessionGetEnvironmentTexturePath(session), storedPath)) return 0;
+    cJSON_AddStringToObject(root, "environmentTexturePath", storedPath);
+    return 1;
+}
+
+static int appendMaterialsJSON(cJSON* materialsArray, VKRT* vkrt, uint32_t materialCount) {
+    if (!materialsArray || !vkrt) return 0;
+
+    for (uint32_t materialIndex = 1u; materialIndex < materialCount; materialIndex++) {
+        VKRT_MaterialSnapshot material = {0};
+        if (VKRT_getMaterialSnapshot(vkrt, materialIndex, &material) != VKRT_SUCCESS) return 0;
+
+        cJSON* materialObject = cJSON_CreateObject();
+        cJSON* materialJSON = createMaterialJSON(&material.material);
+        if (!materialObject || !materialJSON) {
+            cJSON_Delete(materialObject);
+            cJSON_Delete(materialJSON);
+            return 0;
+        }
+
+        cJSON_AddNumberToObject(materialObject, "index", materialIndex);
+        cJSON_AddStringToObject(materialObject, "name", material.name);
+        cJSON_AddItemToObject(materialObject, "material", materialJSON);
+        cJSON_AddItemToArray(materialsArray, materialObject);
+    }
+
+    return 1;
+}
+
+static uint32_t findImportBatchIndex(
+    const uint32_t* importBatchIndices,
+    uint32_t importBatchCount,
+    uint32_t importBatchIndex
+) {
+    if (!importBatchIndices) return VKRT_INVALID_INDEX;
+
+    for (uint32_t candidateIndex = 0u; candidateIndex < importBatchCount; candidateIndex++) {
+        if (importBatchIndices[candidateIndex] == importBatchIndex) return candidateIndex;
+    }
+
+    return VKRT_INVALID_INDEX;
+}
+
+static int appendMeshImportsAndMeshesJSON(
+    cJSON* meshImportsArray,
+    cJSON* meshesArray,
+    VKRT* vkrt,
+    Session* session,
+    const char* scenePath,
+    uint32_t meshCount
+) {
+    if (!meshImportsArray || !meshesArray || !vkrt || !session) return 0;
+
+    uint32_t* importBatchIndices = meshCount > 0u ? (uint32_t*)malloc((size_t)meshCount * sizeof(*importBatchIndices)) : NULL;
+    uint32_t importBatchCount = 0u;
+    if (meshCount > 0u && !importBatchIndices) return 0;
+
+    for (uint32_t meshIndex = 0u; meshIndex < meshCount; meshIndex++) {
+        const SessionMeshRecord* meshRecord = sessionGetMeshRecord(session, meshIndex);
+        VKRT_MeshSnapshot mesh = {0};
+        if (!meshRecord || VKRT_getMeshSnapshot(vkrt, meshIndex, &mesh) != VKRT_SUCCESS) {
+            free(importBatchIndices);
+            return 0;
+        }
+
+        uint32_t importIndex = findImportBatchIndex(importBatchIndices, importBatchCount, meshRecord->importBatchIndex);
+        if (importIndex == VKRT_INVALID_INDEX) {
+            const char* batchPath = sessionGetMeshImportPath(session, meshRecord->importBatchIndex);
+            char storedPath[VKRT_PATH_MAX];
+            if (!batchPath || !batchPath[0] || !copyPortableStoredPath(scenePath, batchPath, storedPath)) {
+                free(importBatchIndices);
+                return 0;
+            }
+
+            importIndex = importBatchCount;
+            importBatchIndices[importBatchCount++] = meshRecord->importBatchIndex;
+            cJSON_AddItemToArray(meshImportsArray, cJSON_CreateString(storedPath));
+        }
+
+        cJSON* meshObject = cJSON_CreateObject();
+        if (!meshObject) {
+            free(importBatchIndices);
+            return 0;
+        }
+
+        cJSON_AddStringToObject(meshObject, "name", mesh.name);
+        cJSON_AddNumberToObject(meshObject, "materialIndex", mesh.materialIndex);
+        cJSON_AddBoolToObject(meshObject, "hasMaterialAssignment", mesh.hasMaterialAssignment != 0u);
+        cJSON_AddBoolToObject(meshObject, "renderBackfaces", mesh.info.renderBackfaces != 0u);
+        cJSON_AddNumberToObject(meshObject, "opacity", mesh.info.opacity);
+        cJSON_AddNumberToObject(meshObject, "importIndex", importIndex);
+        cJSON_AddNumberToObject(meshObject, "importLocalIndex", meshRecord->importLocalIndex);
+        cJSON_AddItemToArray(meshesArray, meshObject);
+    }
+
+    free(importBatchIndices);
+    return 1;
+}
+
+static int appendTextureImportsJSON(cJSON* textureImportsArray, Session* session, const char* scenePath) {
+    if (!textureImportsArray || !session) return 0;
+
+    for (uint32_t textureIndex = 0u; textureIndex < sessionGetTextureRecordCount(session); textureIndex++) {
+        const SessionTextureRecord* texture = sessionGetTextureRecord(session, textureIndex);
+        if (!texture || !texture->sourcePath || !texture->sourcePath[0]) continue;
+
+        char storedPath[VKRT_PATH_MAX];
+        if (!copyPortableStoredPath(scenePath, texture->sourcePath, storedPath)) return 0;
+
+        cJSON* textureObject = cJSON_CreateObject();
+        if (!textureObject) return 0;
+
+        cJSON_AddNumberToObject(textureObject, "index", textureIndex);
+        cJSON_AddNumberToObject(textureObject, "colorSpace", texture->colorSpace);
+        cJSON_AddStringToObject(textureObject, "path", storedPath);
+        cJSON_AddItemToArray(textureImportsArray, textureObject);
+    }
+
+    return 1;
+}
+
+static int appendSceneObjectsJSON(cJSON* sceneObjectsArray, Session* session) {
+    if (!sceneObjectsArray || !session) return 0;
+
+    for (uint32_t objectIndex = 0u; objectIndex < sessionGetSceneObjectCount(session); objectIndex++) {
+        const SessionSceneObject* object = sessionGetSceneObject(session, objectIndex);
+        if (!object) continue;
+
+        cJSON* objectJSON = cJSON_CreateObject();
+        if (!objectJSON) return 0;
+
+        cJSON_AddStringToObject(objectJSON, "name", object->name);
+        addUIntOrNull(objectJSON, "parentIndex", object->parentIndex);
+        addUIntOrNull(objectJSON, "meshIndex", object->meshIndex);
+        if (!addSceneObjectTransformJSON(objectJSON, object)) {
+            cJSON_Delete(objectJSON);
+            return 0;
+        }
+        cJSON_AddItemToArray(sceneObjectsArray, objectJSON);
+    }
+
+    return 1;
+}
+
 static cJSON* createSceneJSON(VKRT* vkrt, Session* session, const char* scenePath) {
     if (!vkrt || !session) return NULL;
 
@@ -816,163 +1121,28 @@ static cJSON* createSceneJSON(VKRT* vkrt, Session* session, const char* scenePat
         return NULL;
     }
 
-    cJSON* root = cJSON_CreateObject();
-    if (!root) return NULL;
-
-    cJSON_AddStringToObject(root, "format", "vkrt.scene");
-    cJSON_AddNumberToObject(root, "version", kSceneFileVersion);
-
-    cJSON* meshImportsArray = cJSON_CreateArray();
-    cJSON* textureImportsArray = cJSON_CreateArray();
-    cJSON* materialsArray = cJSON_CreateArray();
-    cJSON* meshesArray = cJSON_CreateArray();
-    cJSON* sceneObjects = cJSON_CreateArray();
-    if (!meshImportsArray || !textureImportsArray || !materialsArray || !meshesArray || !sceneObjects) {
-        cJSON_Delete(meshImportsArray);
-        cJSON_Delete(textureImportsArray);
-        cJSON_Delete(materialsArray);
-        cJSON_Delete(meshesArray);
-        cJSON_Delete(sceneObjects);
+    cJSON* root = NULL;
+    cJSON* meshImportsArray = NULL;
+    cJSON* textureImportsArray = NULL;
+    cJSON* materialsArray = NULL;
+    cJSON* meshesArray = NULL;
+    cJSON* sceneObjectsArray = NULL;
+    if (!createSceneRoot(
+            &root,
+            &meshImportsArray,
+            &textureImportsArray,
+            &materialsArray,
+            &meshesArray,
+            &sceneObjectsArray
+        ) ||
+        !saveSceneSettings(root, &settings) ||
+        !addEnvironmentTexturePathJSON(root, session, scenePath) ||
+        !appendMaterialsJSON(materialsArray, vkrt, materialCount) ||
+        !appendMeshImportsAndMeshesJSON(meshImportsArray, meshesArray, vkrt, session, scenePath, meshCount) ||
+        !appendTextureImportsJSON(textureImportsArray, session, scenePath) ||
+        !appendSceneObjectsJSON(sceneObjectsArray, session)) {
         cJSON_Delete(root);
         return NULL;
-    }
-    cJSON_AddItemToObject(root, "meshImports", meshImportsArray);
-    cJSON_AddItemToObject(root, "textureImports", textureImportsArray);
-    cJSON_AddItemToObject(root, "materials", materialsArray);
-    cJSON_AddItemToObject(root, "meshes", meshesArray);
-    cJSON_AddItemToObject(root, "sceneObjects", sceneObjects);
-
-    if (!saveSceneSettings(root, &settings)) {
-        cJSON_Delete(root);
-        return NULL;
-    }
-
-    if (sessionGetEnvironmentTexturePath(session)[0]) {
-        char storedPath[VKRT_PATH_MAX];
-        if (!copyPortableStoredPath(scenePath, sessionGetEnvironmentTexturePath(session), storedPath)) {
-            cJSON_Delete(root);
-            return NULL;
-        }
-        cJSON_AddStringToObject(root, "environmentTexturePath", storedPath);
-    }
-
-    for (uint32_t i = 1u; i < materialCount; i++) {
-        VKRT_MaterialSnapshot material = {0};
-        if (VKRT_getMaterialSnapshot(vkrt, i, &material) != VKRT_SUCCESS) {
-            cJSON_Delete(root);
-            return NULL;
-        }
-
-        cJSON* materialObject = cJSON_CreateObject();
-        cJSON* materialJSON = createMaterialJSON(&material.material);
-        if (!materialObject || !materialJSON) {
-            cJSON_Delete(materialObject);
-            cJSON_Delete(materialJSON);
-            cJSON_Delete(root);
-            return NULL;
-        }
-
-        cJSON_AddNumberToObject(materialObject, "index", i);
-        cJSON_AddStringToObject(materialObject, "name", material.name);
-        cJSON_AddItemToObject(materialObject, "material", materialJSON);
-        cJSON_AddItemToArray(materialsArray, materialObject);
-    }
-
-    uint32_t* importBatchIndices = meshCount > 0u ? (uint32_t*)malloc((size_t)meshCount * sizeof(*importBatchIndices)) : NULL;
-    uint32_t importBatchCount = 0u;
-    if (meshCount > 0u && !importBatchIndices) {
-        cJSON_Delete(root);
-        return NULL;
-    }
-
-    for (uint32_t i = 0; i < meshCount; i++) {
-        const SessionMeshRecord* meshRecord = sessionGetMeshRecord(session, i);
-        VKRT_MeshSnapshot mesh = {0};
-        if (!meshRecord || VKRT_getMeshSnapshot(vkrt, i, &mesh) != VKRT_SUCCESS) {
-            free(importBatchIndices);
-            cJSON_Delete(root);
-            return NULL;
-        }
-
-        uint32_t importIndex = VKRT_INVALID_INDEX;
-        for (uint32_t importCandidate = 0u; importCandidate < importBatchCount; importCandidate++) {
-            if (importBatchIndices[importCandidate] == meshRecord->importBatchIndex) {
-                importIndex = importCandidate;
-                break;
-            }
-        }
-        if (importIndex == VKRT_INVALID_INDEX) {
-            const char* batchPath = sessionGetMeshImportPath(session, meshRecord->importBatchIndex);
-            char storedPath[VKRT_PATH_MAX];
-            if (!batchPath || !batchPath[0] || !copyPortableStoredPath(scenePath, batchPath, storedPath)) {
-                free(importBatchIndices);
-                cJSON_Delete(root);
-                return NULL;
-            }
-            importIndex = importBatchCount;
-            importBatchIndices[importBatchCount++] = meshRecord->importBatchIndex;
-            cJSON_AddItemToArray(meshImportsArray, cJSON_CreateString(storedPath));
-        }
-
-        cJSON* meshObject = cJSON_CreateObject();
-        if (!meshObject) {
-            free(importBatchIndices);
-            cJSON_Delete(root);
-            return NULL;
-        }
-
-        cJSON_AddStringToObject(meshObject, "name", mesh.name);
-        cJSON_AddNumberToObject(meshObject, "materialIndex", mesh.materialIndex);
-        cJSON_AddBoolToObject(meshObject, "hasMaterialAssignment", mesh.hasMaterialAssignment != 0u);
-        cJSON_AddBoolToObject(meshObject, "renderBackfaces", mesh.info.renderBackfaces != 0u);
-        cJSON_AddNumberToObject(meshObject, "opacity", mesh.info.opacity);
-        cJSON_AddNumberToObject(meshObject, "importIndex", importIndex);
-        cJSON_AddNumberToObject(meshObject, "importLocalIndex", meshRecord->importLocalIndex);
-        cJSON_AddItemToArray(meshesArray, meshObject);
-    }
-    free(importBatchIndices);
-
-    for (uint32_t i = 0; i < sessionGetTextureRecordCount(session); i++) {
-        const SessionTextureRecord* texture = sessionGetTextureRecord(session, i);
-        if (!texture || !texture->sourcePath || !texture->sourcePath[0]) continue;
-
-        char storedPath[VKRT_PATH_MAX];
-        if (!copyPortableStoredPath(scenePath, texture->sourcePath, storedPath)) {
-            cJSON_Delete(root);
-            return NULL;
-        }
-
-        cJSON* textureObject = cJSON_CreateObject();
-        if (!textureObject) {
-            cJSON_Delete(root);
-            return NULL;
-        }
-
-        cJSON_AddNumberToObject(textureObject, "index", i);
-        cJSON_AddNumberToObject(textureObject, "colorSpace", texture->colorSpace);
-        cJSON_AddStringToObject(textureObject, "path", storedPath);
-        cJSON_AddItemToArray(textureImportsArray, textureObject);
-    }
-
-    for (uint32_t i = 0; i < sessionGetSceneObjectCount(session); i++) {
-        const SessionSceneObject* object = sessionGetSceneObject(session, i);
-        if (!object) continue;
-
-        cJSON* objectJSON = cJSON_CreateObject();
-        if (!objectJSON) {
-            cJSON_Delete(root);
-            return NULL;
-        }
-
-        cJSON_AddStringToObject(objectJSON, "name", object->name);
-        addUIntOrNull(objectJSON, "parentIndex", object->parentIndex);
-        addUIntOrNull(objectJSON, "meshIndex", object->meshIndex);
-        if (!addSceneObjectTransformJSON(objectJSON, object)) {
-            cJSON_Delete(objectJSON);
-            cJSON_Delete(root);
-            return NULL;
-        }
-        cJSON_AddItemToArray(sceneObjects, objectJSON);
     }
 
     return root;
@@ -996,12 +1166,326 @@ static int sceneControllerSaveScene(VKRT* vkrt, Session* session, const char* pa
 
     size_t length = strlen(jsonText);
     size_t written = fwrite(jsonText, 1, length, file);
-    fclose(file);
+    (void)fclose(file);
     cJSON_free(jsonText);
     if (written != length) return 0;
 
     sessionSetCurrentScenePath(session, path);
     return 1;
+}
+
+static void cleanupSceneLoadContext(SceneLoadContext* context) {
+    if (!context) return;
+    free(context->textureIndexMap);
+    free(context->savedToLoadedMeshIndex);
+    free(context->loadedBatches);
+    free(context->keepMesh);
+    cJSON_Delete(context->root);
+}
+
+static int allocateSceneLoadMaps(SceneLoadContext* context, uint32_t savedMeshCount, uint32_t textureIndexMapCount) {
+    if (!context) return 0;
+
+    context->textureIndexMap = textureIndexMapCount > 0u
+        ? (uint32_t*)malloc((size_t)textureIndexMapCount * sizeof(uint32_t))
+        : NULL;
+    context->savedToLoadedMeshIndex = savedMeshCount > 0u
+        ? (uint32_t*)malloc((size_t)savedMeshCount * sizeof(uint32_t))
+        : NULL;
+
+    return (textureIndexMapCount == 0u || context->textureIndexMap) &&
+        (savedMeshCount == 0u || context->savedToLoadedMeshIndex);
+}
+
+static void clearSceneLoadMaps(SceneLoadContext* context, uint32_t savedMeshCount, uint32_t textureIndexMapCount) {
+    if (!context) return;
+
+    for (uint32_t textureIndex = 0u; textureIndex < textureIndexMapCount; textureIndex++) {
+        context->textureIndexMap[textureIndex] = VKRT_INVALID_INDEX;
+    }
+    for (uint32_t meshIndex = 0u; meshIndex < savedMeshCount; meshIndex++) {
+        context->savedToLoadedMeshIndex[meshIndex] = VKRT_INVALID_INDEX;
+    }
+}
+
+static int loadImportedMeshBatches(SceneLoadContext* context, const cJSON* meshImportsArray) {
+    if (!context || !meshImportsArray) return 0;
+
+    cJSON* meshImport = NULL;
+    cJSON_ArrayForEach(meshImport, (cJSON*)meshImportsArray) {
+        char resolvedPath[VKRT_PATH_MAX];
+        if (!meshImport || !cJSON_IsString(meshImport) ||
+            !resolveSceneAssetPath(context->path, meshImport->valuestring, resolvedPath)) {
+            return 0;
+        }
+
+        uint32_t meshCountBefore = 0u;
+        uint32_t meshCountAfter = 0u;
+        if (VKRT_getMeshCount(context->vkrt, &meshCountBefore) != VKRT_SUCCESS ||
+            !meshControllerImportMesh(context->vkrt, context->session, resolvedPath, NULL, NULL) ||
+            VKRT_getMeshCount(context->vkrt, &meshCountAfter) != VKRT_SUCCESS ||
+            meshCountAfter < meshCountBefore) {
+            return 0;
+        }
+
+        LoadedMeshImportBatch* resizedBatches = (LoadedMeshImportBatch*)realloc(
+            context->loadedBatches,
+            (size_t)(context->loadedBatchCount + 1u) * sizeof(*context->loadedBatches)
+        );
+        if (!resizedBatches) return 0;
+
+        context->loadedBatches = resizedBatches;
+        context->loadedBatches[context->loadedBatchCount++] = (LoadedMeshImportBatch){
+            .firstMeshIndex = meshCountBefore,
+            .meshCount = meshCountAfter - meshCountBefore,
+        };
+    }
+
+    return 1;
+}
+
+static int loadStandaloneTextures(SceneLoadContext* context, const cJSON* textureImportsArray) {
+    if (!context) return 0;
+    if (!textureImportsArray) return 1;
+
+    cJSON* textureObject = NULL;
+    cJSON_ArrayForEach(textureObject, (cJSON*)textureImportsArray) {
+        const cJSON* pathItem = cJSON_GetObjectItemCaseSensitive(textureObject, "path");
+        uint32_t savedTextureIndex = 0u;
+        uint32_t colorSpace = 0u;
+        char resolvedPath[VKRT_PATH_MAX];
+        uint32_t newTextureIndex = VKRT_INVALID_INDEX;
+        if (!textureObject || !cJSON_IsObject(textureObject) ||
+            !pathItem || !cJSON_IsString(pathItem) ||
+            !jsonToUInt32(cJSON_GetObjectItemCaseSensitive(textureObject, "index"), &savedTextureIndex) ||
+            !jsonToUInt32(cJSON_GetObjectItemCaseSensitive(textureObject, "colorSpace"), &colorSpace) ||
+            !resolveSceneAssetPath(context->path, pathItem->valuestring, resolvedPath) ||
+            VKRT_addTextureFromFile(context->vkrt, resolvedPath, NULL, colorSpace, &newTextureIndex) != VKRT_SUCCESS ||
+            !sessionAppendStandaloneTextureRecord(context->session, resolvedPath, colorSpace) ||
+            savedTextureIndex >= context->textureIndexMapCount) {
+            return 0;
+        }
+        context->textureIndexMap[savedTextureIndex] = newTextureIndex;
+    }
+
+    return 1;
+}
+
+static int loadEnvironmentTexture(SceneLoadContext* context, const cJSON* environmentTexturePath) {
+    if (!context) return 0;
+    if (!environmentTexturePath || !cJSON_IsString(environmentTexturePath)) return 1;
+
+    char resolvedEnvironmentPath[VKRT_PATH_MAX];
+    if (!resolveSceneAssetPath(context->path, environmentTexturePath->valuestring, resolvedEnvironmentPath) ||
+        VKRT_setEnvironmentTextureFromFile(context->vkrt, resolvedEnvironmentPath) != VKRT_SUCCESS) {
+        return 0;
+    }
+
+    sessionSetEnvironmentTexturePath(context->session, resolvedEnvironmentPath);
+    return 1;
+}
+
+static int buildSavedMeshIndexMap(SceneLoadContext* context) {
+    if (!context) return 0;
+    if (context->savedMeshCount == 0u) return 1;
+    if (!context->savedToLoadedMeshIndex) return 0;
+
+    cJSON* meshObject = NULL;
+    uint32_t savedMeshIndex = 0u;
+    cJSON_ArrayForEach(meshObject, (cJSON*)context->meshesArray) {
+        uint32_t importIndex = 0u;
+        uint32_t importLocalIndex = 0u;
+        if (savedMeshIndex >= context->savedMeshCount ||
+            !jsonToUInt32(cJSON_GetObjectItemCaseSensitive(meshObject, "importIndex"), &importIndex) ||
+            !jsonToUInt32(cJSON_GetObjectItemCaseSensitive(meshObject, "importLocalIndex"), &importLocalIndex) ||
+            importIndex >= context->loadedBatchCount ||
+            importLocalIndex >= context->loadedBatches[importIndex].meshCount) {
+            return 0;
+        }
+
+        context->savedToLoadedMeshIndex[savedMeshIndex++] =
+            context->loadedBatches[importIndex].firstMeshIndex + importLocalIndex;
+    }
+
+    return 1;
+}
+
+static int pruneNonSceneMeshes(SceneLoadContext* context) {
+    if (!context) return 0;
+
+    uint32_t currentMeshCount = 0u;
+    if (VKRT_getMeshCount(context->vkrt, &currentMeshCount) != VKRT_SUCCESS) return 0;
+
+    context->keepMesh = currentMeshCount > 0u ? (uint8_t*)calloc(currentMeshCount, sizeof(uint8_t)) : NULL;
+    if (currentMeshCount > 0u && !context->keepMesh) return 0;
+
+    for (uint32_t meshIndex = 0u; meshIndex < context->savedMeshCount; meshIndex++) {
+        if (!context->savedToLoadedMeshIndex || context->savedToLoadedMeshIndex[meshIndex] >= currentMeshCount) return 0;
+        context->keepMesh[context->savedToLoadedMeshIndex[meshIndex]] = 1u;
+    }
+
+    sessionTruncateSceneObjects(context->session, 0u);
+    sessionSetSelectedSceneObject(context->session, VKRT_INVALID_INDEX);
+    for (uint32_t meshIndex = currentMeshCount; meshIndex > 0u; meshIndex--) {
+        uint32_t removeIndex = meshIndex - 1u;
+        if (context->keepMesh[removeIndex]) continue;
+        if (VKRT_removeMesh(context->vkrt, removeIndex) != VKRT_SUCCESS) return 0;
+
+        sessionRemoveMeshRecord(context->session, removeIndex);
+        sessionRemoveMeshReferences(context->session, removeIndex);
+        for (uint32_t savedMeshIndex = 0u; savedMeshIndex < context->savedMeshCount; savedMeshIndex++) {
+            if (context->savedToLoadedMeshIndex[savedMeshIndex] != VKRT_INVALID_INDEX &&
+                context->savedToLoadedMeshIndex[savedMeshIndex] > removeIndex) {
+                context->savedToLoadedMeshIndex[savedMeshIndex]--;
+            }
+        }
+    }
+
+    return 1;
+}
+
+static int applyLoadedMaterials(SceneLoadContext* context) {
+    if (!context) return 0;
+
+    uint32_t highestSavedMaterialIndex = 0u;
+    if (!queryHighestSavedMaterialIndex(context->materialsArray, context->meshesArray, &highestSavedMaterialIndex) ||
+        !ensureMaterialCapacityForSceneLoad(context->vkrt, highestSavedMaterialIndex + 1u)) {
+        return 0;
+    }
+
+    if (!context->materialsArray) return 1;
+
+    cJSON* materialObject = NULL;
+    uint32_t contiguousMaterialIndex = 0u;
+    cJSON_ArrayForEach(materialObject, (cJSON*)context->materialsArray) {
+        const cJSON* name = cJSON_GetObjectItemCaseSensitive(materialObject, "name");
+        const cJSON* materialValue = cJSON_GetObjectItemCaseSensitive(materialObject, "material");
+        const cJSON* explicitIndex = cJSON_GetObjectItemCaseSensitive(materialObject, "index");
+        uint32_t materialIndex = contiguousMaterialIndex;
+        Material material = VKRT_materialDefault();
+        if ((explicitIndex && !jsonToUInt32(explicitIndex, &materialIndex)) ||
+            !name || !cJSON_IsString(name) || !parseMaterialJSON(materialValue, &material)) {
+            return 0;
+        }
+
+        remapStandaloneTextureIndices(&material, context->textureIndexMap, context->textureIndexMapCount);
+        if (VKRT_setMaterial(context->vkrt, materialIndex, &material) != VKRT_SUCCESS ||
+            VKRT_setMaterialName(context->vkrt, materialIndex, name->valuestring) != VKRT_SUCCESS) {
+            return 0;
+        }
+        contiguousMaterialIndex++;
+    }
+
+    return 1;
+}
+
+static int applyLoadedMeshes(SceneLoadContext* context) {
+    if (!context) return 0;
+    if (context->savedMeshCount > 0u && !context->savedToLoadedMeshIndex) return 0;
+
+    cJSON* meshObject = NULL;
+    uint32_t savedMeshIndex = 0u;
+    cJSON_ArrayForEach(meshObject, (cJSON*)context->meshesArray) {
+        const cJSON* name = cJSON_GetObjectItemCaseSensitive(meshObject, "name");
+        const cJSON* hasMaterialAssignment = cJSON_GetObjectItemCaseSensitive(meshObject, "hasMaterialAssignment");
+        const cJSON* renderBackfaces = cJSON_GetObjectItemCaseSensitive(meshObject, "renderBackfaces");
+        uint32_t materialRef = 0u;
+        uint8_t assigned = 0u;
+        uint8_t backfaces = 0u;
+        float opacity = 1.0f;
+        if (savedMeshIndex >= context->savedMeshCount) return 0;
+
+        uint32_t loadedMeshIndex = context->savedToLoadedMeshIndex[savedMeshIndex++];
+        if (!name || !cJSON_IsString(name) ||
+            !jsonToUInt32(cJSON_GetObjectItemCaseSensitive(meshObject, "materialIndex"), &materialRef) ||
+            !jsonToBool(hasMaterialAssignment, &assigned) ||
+            !jsonToBool(renderBackfaces, &backfaces) ||
+            !jsonToFloat(cJSON_GetObjectItemCaseSensitive(meshObject, "opacity"), &opacity) ||
+            VKRT_setMeshName(context->vkrt, loadedMeshIndex, name->valuestring) != VKRT_SUCCESS ||
+            (assigned
+                ? VKRT_setMeshMaterialIndex(context->vkrt, loadedMeshIndex, materialRef)
+                : VKRT_clearMeshMaterialAssignment(context->vkrt, loadedMeshIndex)) != VKRT_SUCCESS ||
+            VKRT_setMeshOpacity(context->vkrt, loadedMeshIndex, opacity) != VKRT_SUCCESS ||
+            VKRT_setMeshRenderBackfaces(context->vkrt, loadedMeshIndex, backfaces ? 1u : 0u) != VKRT_SUCCESS) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+static int resolveLoadedSceneObjectMeshIndex(
+    const SceneLoadContext* context,
+    uint32_t savedMeshRef,
+    uint32_t* outLoadedMeshIndex
+) {
+    if (outLoadedMeshIndex) *outLoadedMeshIndex = VKRT_INVALID_INDEX;
+    if (!context || !outLoadedMeshIndex) return 0;
+    if (savedMeshRef == VKRT_INVALID_INDEX) return 1;
+    if (savedMeshRef >= context->savedMeshCount || !context->savedToLoadedMeshIndex) return 0;
+
+    *outLoadedMeshIndex = context->savedToLoadedMeshIndex[savedMeshRef];
+    return 1;
+}
+
+static int applyLoadedSceneObjects(SceneLoadContext* context) {
+    if (!context) return 0;
+
+    cJSON* sceneObject = NULL;
+    uint32_t sceneObjectIndex = 0u;
+    cJSON_ArrayForEach(sceneObject, (cJSON*)context->sceneObjectsArray) {
+        const cJSON* name = cJSON_GetObjectItemCaseSensitive(sceneObject, "name");
+        uint32_t parentIndex = VKRT_INVALID_INDEX;
+        uint32_t savedMeshRef = VKRT_INVALID_INDEX;
+        vec3 localPosition = {0.0f, 0.0f, 0.0f};
+        vec3 localRotation = {0.0f, 0.0f, 0.0f};
+        vec3 localScale = {1.0f, 1.0f, 1.0f};
+        mat4 localTransform = {
+            {1.0f, 0.0f, 0.0f, 0.0f},
+            {0.0f, 1.0f, 0.0f, 0.0f},
+            {0.0f, 0.0f, 1.0f, 0.0f},
+            {0.0f, 0.0f, 0.0f, 1.0f},
+        };
+        uint8_t useMatrix = 0u;
+        vec3 zero = {0.0f, 0.0f, 0.0f};
+        vec3 one = {1.0f, 1.0f, 1.0f};
+        uint32_t loadedMeshIndex = VKRT_INVALID_INDEX;
+        if (!name || !cJSON_IsString(name) ||
+            !jsonToIndexOrInvalid(cJSON_GetObjectItemCaseSensitive(sceneObject, "parentIndex"), &parentIndex) ||
+            !jsonToIndexOrInvalid(cJSON_GetObjectItemCaseSensitive(sceneObject, "meshIndex"), &savedMeshRef) ||
+            !parseSceneObjectTransformJSON(sceneObject, localPosition, localRotation, localScale, localTransform, &useMatrix)) {
+            return 0;
+        }
+        if (parentIndex != VKRT_INVALID_INDEX && parentIndex >= sceneObjectIndex) return 0;
+
+        if (!resolveLoadedSceneObjectMeshIndex(context, savedMeshRef, &loadedMeshIndex)) return 0;
+
+        if (!sessionAddSceneObject(
+                context->session,
+                &(SessionSceneObjectCreateInfo){
+                    .name = name->valuestring,
+                    .parentIndex = parentIndex,
+                    .meshIndex = loadedMeshIndex,
+                    .localPosition = useMatrix ? &zero : &localPosition,
+                    .localRotation = useMatrix ? &zero : &localRotation,
+                    .localScale = useMatrix ? &one : &localScale,
+                },
+                NULL
+            ) ||
+            (useMatrix && !sessionSetSceneObjectLocalTransformMatrix(context->session, sceneObjectIndex, localTransform))) {
+            return 0;
+        }
+
+        sceneObjectIndex++;
+    }
+
+    return sessionSyncSceneObjectTransforms(context->vkrt, context->session) &&
+        applySceneSettings(
+            context->vkrt,
+            context->settingsObject,
+            context->savedToLoadedMeshIndex,
+            context->savedMeshCount
+        );
 }
 
 static int loadSceneDocument(VKRT* vkrt, Session* session, cJSON* root, const char* path, const char* targetScenePath) {
@@ -1020,14 +1504,14 @@ static int loadSceneDocument(VKRT* vkrt, Session* session, cJSON* root, const ch
     const cJSON* settingsObject = cJSON_GetObjectItemCaseSensitive(root, "sceneSettings");
     const cJSON* environmentTexturePath = cJSON_GetObjectItemCaseSensitive(root, "environmentTexturePath");
     uint32_t fileVersion = 0u;
-    if (!cJSON_IsString(format) || strcmp(format->valuestring, "vkrt.scene") != 0 ||
-        !jsonToUInt32(version, &fileVersion) || fileVersion != kSceneFileVersion ||
-        !cJSON_IsArray(meshImportsArray) ||
-        (textureImportsArray && !cJSON_IsArray(textureImportsArray)) ||
-        !cJSON_IsArray(meshesArray) || !cJSON_IsArray(sceneObjectsArray) ||
-        !cJSON_IsObject(settingsObject) ||
-        (materialsArray && !cJSON_IsArray(materialsArray)) ||
-        (environmentTexturePath && !cJSON_IsString(environmentTexturePath) && !cJSON_IsNull(environmentTexturePath))) {
+    if (!cJSON_IsString(format) || strcmp(format->valuestring, "vkrt.scene") != 0
+        || !jsonToUInt32(version, &fileVersion) || fileVersion != K_SCENE_FILE_VERSION
+        || !cJSON_IsArray(meshImportsArray)
+        || (textureImportsArray && !cJSON_IsArray(textureImportsArray))
+        || !cJSON_IsArray(meshesArray) || !cJSON_IsArray(sceneObjectsArray)
+        || !cJSON_IsObject(settingsObject) || (materialsArray && !cJSON_IsArray(materialsArray))
+        || (environmentTexturePath && !cJSON_IsString(environmentTexturePath)
+            && !cJSON_IsNull(environmentTexturePath))) {
         cJSON_Delete(root);
         return 0;
     }
@@ -1038,349 +1522,45 @@ static int loadSceneDocument(VKRT* vkrt, Session* session, cJSON* root, const ch
         cJSON_Delete(root);
         return 0;
     }
-    uint32_t* textureIndexMap = textureIndexMapCount > 0u
-        ? (uint32_t*)malloc((size_t)textureIndexMapCount * sizeof(uint32_t))
-        : NULL;
-    uint32_t* savedToLoadedMeshIndex = savedMeshCount > 0u
-        ? (uint32_t*)malloc((size_t)savedMeshCount * sizeof(uint32_t))
-        : NULL;
-    uint8_t* keepMesh = NULL;
-    LoadedMeshImportBatch* loadedBatches = NULL;
-    uint32_t loadedBatchCount = 0u;
-
-    if ((textureIndexMapCount > 0u && !textureIndexMap) || (savedMeshCount > 0u && !savedToLoadedMeshIndex)) {
-        free(textureIndexMap);
-        free(savedToLoadedMeshIndex);
-        cJSON_Delete(root);
+    SceneLoadContext context = {
+        .vkrt = vkrt,
+        .session = session,
+        .root = root,
+        .materialsArray = materialsArray,
+        .meshesArray = meshesArray,
+        .sceneObjectsArray = sceneObjectsArray,
+        .settingsObject = settingsObject,
+        .path = path,
+        .targetScenePath = targetScenePath,
+        .savedMeshCount = savedMeshCount,
+        .textureIndexMapCount = textureIndexMapCount,
+    };
+    if (!allocateSceneLoadMaps(&context, savedMeshCount, textureIndexMapCount)) {
+        cleanupSceneLoadContext(&context);
         return 0;
     }
-
-    for (uint32_t i = 0; i < textureIndexMapCount; i++) {
-        textureIndexMap[i] = VKRT_INVALID_INDEX;
-    }
-    for (uint32_t i = 0; i < savedMeshCount; i++) {
-        savedToLoadedMeshIndex[i] = VKRT_INVALID_INDEX;
-    }
+    clearSceneLoadMaps(&context, savedMeshCount, textureIndexMapCount);
 
     sessionSetCurrentScenePath(session, NULL);
     if (!clearCurrentScene(vkrt, session)) {
-        free(textureIndexMap);
-        free(savedToLoadedMeshIndex);
-        cJSON_Delete(root);
+        cleanupSceneLoadContext(&context);
         return 0;
     }
 
-    cJSON* meshImport = NULL;
-    cJSON_ArrayForEach(meshImport, (cJSON*)meshImportsArray) {
-        char resolvedPath[VKRT_PATH_MAX];
-        if (!meshImport || !cJSON_IsString(meshImport) ||
-            !resolveSceneAssetPath(path, meshImport->valuestring, resolvedPath)) {
-            loadedBatchCount = UINT32_MAX;
-            break;
-        }
-
-        uint32_t meshCountBefore = 0u;
-        uint32_t meshCountAfter = 0u;
-        if (VKRT_getMeshCount(vkrt, &meshCountBefore) != VKRT_SUCCESS ||
-            !meshControllerImportMesh(vkrt, session, resolvedPath, NULL, NULL) ||
-            VKRT_getMeshCount(vkrt, &meshCountAfter) != VKRT_SUCCESS ||
-            meshCountAfter < meshCountBefore) {
-            loadedBatchCount = UINT32_MAX;
-            break;
-        }
-
-        LoadedMeshImportBatch* resized = (LoadedMeshImportBatch*)realloc(
-            loadedBatches,
-            (size_t)(loadedBatchCount + 1u) * sizeof(*loadedBatches)
-        );
-        if (!resized) {
-            loadedBatchCount = UINT32_MAX;
-            break;
-        }
-        loadedBatches = resized;
-        loadedBatches[loadedBatchCount++] = (LoadedMeshImportBatch){
-            .firstMeshIndex = meshCountBefore,
-            .meshCount = meshCountAfter - meshCountBefore,
-        };
-    }
-
-    if (loadedBatchCount == UINT32_MAX) {
-        free(textureIndexMap);
-        free(savedToLoadedMeshIndex);
-        free(loadedBatches);
-        cJSON_Delete(root);
-        return 0;
-    }
-
-    if (textureImportsArray) {
-        cJSON* textureObject = NULL;
-        cJSON_ArrayForEach(textureObject, (cJSON*)textureImportsArray) {
-            const cJSON* pathItem = cJSON_GetObjectItemCaseSensitive(textureObject, "path");
-            uint32_t savedTextureIndex = 0u;
-            uint32_t colorSpace = 0u;
-            char resolvedPath[VKRT_PATH_MAX];
-            uint32_t newTextureIndex = VKRT_INVALID_INDEX;
-            if (!textureObject || !cJSON_IsObject(textureObject) ||
-                !pathItem || !cJSON_IsString(pathItem) ||
-                !jsonToUInt32(cJSON_GetObjectItemCaseSensitive(textureObject, "index"), &savedTextureIndex) ||
-                !jsonToUInt32(cJSON_GetObjectItemCaseSensitive(textureObject, "colorSpace"), &colorSpace) ||
-                !resolveSceneAssetPath(path, pathItem->valuestring, resolvedPath) ||
-                VKRT_addTextureFromFile(vkrt, resolvedPath, NULL, colorSpace, &newTextureIndex) != VKRT_SUCCESS ||
-                !sessionAppendStandaloneTextureRecord(session, resolvedPath, colorSpace) ||
-                savedTextureIndex >= textureIndexMapCount) {
-                loadedBatchCount = UINT32_MAX;
-                break;
-            }
-            textureIndexMap[savedTextureIndex] = newTextureIndex;
-        }
-    }
-
-    if (loadedBatchCount == UINT32_MAX) {
-        free(textureIndexMap);
-        free(savedToLoadedMeshIndex);
-        free(loadedBatches);
-        cJSON_Delete(root);
-        return 0;
-    }
-
-    if (environmentTexturePath && cJSON_IsString(environmentTexturePath)) {
-        char resolvedEnvironmentPath[VKRT_PATH_MAX];
-        if (!resolveSceneAssetPath(path, environmentTexturePath->valuestring, resolvedEnvironmentPath) ||
-            VKRT_setEnvironmentTextureFromFile(vkrt, resolvedEnvironmentPath) != VKRT_SUCCESS) {
-            free(textureIndexMap);
-            free(savedToLoadedMeshIndex);
-            free(loadedBatches);
-            cJSON_Delete(root);
-            return 0;
-        }
-        sessionSetEnvironmentTexturePath(session, resolvedEnvironmentPath);
-    }
-
-    cJSON* meshObject = NULL;
-    uint32_t savedMeshIndex = 0u;
-    cJSON_ArrayForEach(meshObject, (cJSON*)meshesArray) {
-        uint32_t importIndex = 0u;
-        uint32_t importLocalIndex = 0u;
-        if (!jsonToUInt32(cJSON_GetObjectItemCaseSensitive(meshObject, "importIndex"), &importIndex) ||
-            !jsonToUInt32(cJSON_GetObjectItemCaseSensitive(meshObject, "importLocalIndex"), &importLocalIndex)) {
-            savedMeshIndex = UINT32_MAX;
-            break;
-        }
-
-        if (importIndex >= loadedBatchCount || importLocalIndex >= loadedBatches[importIndex].meshCount) {
-            savedMeshIndex = UINT32_MAX;
-            break;
-        }
-        savedToLoadedMeshIndex[savedMeshIndex++] = loadedBatches[importIndex].firstMeshIndex + importLocalIndex;
-    }
-
-    if (savedMeshIndex == UINT32_MAX) {
-        free(textureIndexMap);
-        free(savedToLoadedMeshIndex);
-        free(loadedBatches);
-        cJSON_Delete(root);
-        return 0;
-    }
-
-    uint32_t currentMeshCount = 0u;
-    if (VKRT_getMeshCount(vkrt, &currentMeshCount) != VKRT_SUCCESS) {
-        free(textureIndexMap);
-        free(savedToLoadedMeshIndex);
-        free(loadedBatches);
-        cJSON_Delete(root);
-        return 0;
-    }
-
-    keepMesh = currentMeshCount > 0u ? (uint8_t*)calloc(currentMeshCount, sizeof(uint8_t)) : NULL;
-    if (currentMeshCount > 0u && !keepMesh) {
-        free(textureIndexMap);
-        free(savedToLoadedMeshIndex);
-        free(loadedBatches);
-        cJSON_Delete(root);
-        return 0;
-    }
-
-    for (uint32_t i = 0; i < savedMeshCount; i++) {
-        if (savedToLoadedMeshIndex[i] >= currentMeshCount) {
-            free(textureIndexMap);
-            free(savedToLoadedMeshIndex);
-            free(loadedBatches);
-            free(keepMesh);
-            cJSON_Delete(root);
-            return 0;
-        }
-        keepMesh[savedToLoadedMeshIndex[i]] = 1u;
-    }
-
-    sessionTruncateSceneObjects(session, 0u);
-    sessionSetSelectedSceneObject(session, VKRT_INVALID_INDEX);
-    for (uint32_t meshIndex = currentMeshCount; meshIndex > 0u; meshIndex--) {
-        uint32_t removeIndex = meshIndex - 1u;
-        if (keepMesh[removeIndex]) continue;
-        if (VKRT_removeMesh(vkrt, removeIndex) != VKRT_SUCCESS) {
-            free(textureIndexMap);
-            free(savedToLoadedMeshIndex);
-            free(loadedBatches);
-            free(keepMesh);
-            cJSON_Delete(root);
-            return 0;
-        }
-        sessionRemoveMeshRecord(session, removeIndex);
-        sessionRemoveMeshReferences(session, removeIndex);
-        for (uint32_t i = 0; i < savedMeshCount; i++) {
-            if (savedToLoadedMeshIndex[i] != VKRT_INVALID_INDEX && savedToLoadedMeshIndex[i] > removeIndex) {
-                savedToLoadedMeshIndex[i]--;
-            }
-        }
-    }
-
-    uint32_t highestSavedMaterialIndex = 0u;
-    if (!queryHighestSavedMaterialIndex(materialsArray, meshesArray, &highestSavedMaterialIndex) ||
-        !ensureMaterialCapacityForSceneLoad(vkrt, highestSavedMaterialIndex + 1u)) {
-        free(textureIndexMap);
-        free(savedToLoadedMeshIndex);
-        free(loadedBatches);
-        free(keepMesh);
-        cJSON_Delete(root);
-        return 0;
-    }
-
-    cJSON* materialObject = NULL;
-    uint32_t contiguousMaterialIndex = 0u;
-    if (materialsArray) {
-        cJSON_ArrayForEach(materialObject, (cJSON*)materialsArray) {
-            const cJSON* name = cJSON_GetObjectItemCaseSensitive(materialObject, "name");
-            const cJSON* materialValue = cJSON_GetObjectItemCaseSensitive(materialObject, "material");
-            const cJSON* explicitIndex = cJSON_GetObjectItemCaseSensitive(materialObject, "index");
-            uint32_t materialIndex = contiguousMaterialIndex;
-            Material material = VKRT_materialDefault();
-            if ((explicitIndex && !jsonToUInt32(explicitIndex, &materialIndex)) ||
-                !name || !cJSON_IsString(name) || !parseMaterialJSON(materialValue, &material)) {
-                contiguousMaterialIndex = UINT32_MAX;
-                break;
-            }
-
-            remapStandaloneTextureIndices(&material, textureIndexMap, textureIndexMapCount);
-            if (VKRT_setMaterial(vkrt, materialIndex, &material) != VKRT_SUCCESS ||
-                VKRT_setMaterialName(vkrt, materialIndex, name->valuestring) != VKRT_SUCCESS) {
-                contiguousMaterialIndex = UINT32_MAX;
-                break;
-            }
-            contiguousMaterialIndex++;
-        }
-    }
-
-    if (contiguousMaterialIndex == UINT32_MAX) {
-        free(textureIndexMap);
-        free(savedToLoadedMeshIndex);
-        free(loadedBatches);
-        free(keepMesh);
-        cJSON_Delete(root);
-        return 0;
-    }
-
-    meshObject = NULL;
-    savedMeshIndex = 0u;
-    cJSON_ArrayForEach(meshObject, (cJSON*)meshesArray) {
-        const cJSON* name = cJSON_GetObjectItemCaseSensitive(meshObject, "name");
-        const cJSON* hasMaterialAssignment = cJSON_GetObjectItemCaseSensitive(meshObject, "hasMaterialAssignment");
-        const cJSON* renderBackfaces = cJSON_GetObjectItemCaseSensitive(meshObject, "renderBackfaces");
-        uint32_t materialRef = 0u;
-        uint8_t assigned = 0u;
-        uint8_t backfaces = 0u;
-        float opacity = 1.0f;
-        uint32_t loadedMeshIndex = savedToLoadedMeshIndex[savedMeshIndex++];
-        if (!name || !cJSON_IsString(name) ||
-            !jsonToUInt32(cJSON_GetObjectItemCaseSensitive(meshObject, "materialIndex"), &materialRef) ||
-            !jsonToBool(hasMaterialAssignment, &assigned) ||
-            !jsonToBool(renderBackfaces, &backfaces) ||
-            !jsonToFloat(cJSON_GetObjectItemCaseSensitive(meshObject, "opacity"), &opacity) ||
-            VKRT_setMeshName(vkrt, loadedMeshIndex, name->valuestring) != VKRT_SUCCESS ||
-            (assigned
-                ? VKRT_setMeshMaterialIndex(vkrt, loadedMeshIndex, materialRef)
-                : VKRT_clearMeshMaterialAssignment(vkrt, loadedMeshIndex)) != VKRT_SUCCESS ||
-            VKRT_setMeshOpacity(vkrt, loadedMeshIndex, opacity) != VKRT_SUCCESS ||
-            VKRT_setMeshRenderBackfaces(vkrt, loadedMeshIndex, backfaces ? 1u : 0u) != VKRT_SUCCESS) {
-            savedMeshIndex = UINT32_MAX;
-            break;
-        }
-    }
-
-    if (savedMeshIndex == UINT32_MAX) {
-        free(textureIndexMap);
-        free(savedToLoadedMeshIndex);
-        free(loadedBatches);
-        free(keepMesh);
-        cJSON_Delete(root);
-        return 0;
-    }
-
-    cJSON* sceneObject = NULL;
-    uint32_t sceneObjectIndex = 0u;
-    cJSON_ArrayForEach(sceneObject, (cJSON*)sceneObjectsArray) {
-        const cJSON* name = cJSON_GetObjectItemCaseSensitive(sceneObject, "name");
-        uint32_t parentIndex = VKRT_INVALID_INDEX;
-        uint32_t savedMeshRef = VKRT_INVALID_INDEX;
-        vec3 localPosition = GLM_VEC3_ZERO_INIT;
-        vec3 localRotation = GLM_VEC3_ZERO_INIT;
-        vec3 localScale = {1.0f, 1.0f, 1.0f};
-        mat4 localTransform = GLM_MAT4_IDENTITY_INIT;
-        uint8_t useMatrix = 0u;
-        vec3 zero = GLM_VEC3_ZERO_INIT;
-        vec3 one = {1.0f, 1.0f, 1.0f};
-        uint32_t loadedMeshIndex = VKRT_INVALID_INDEX;
-        if (!name || !cJSON_IsString(name) ||
-            !jsonToIndexOrInvalid(cJSON_GetObjectItemCaseSensitive(sceneObject, "parentIndex"), &parentIndex) ||
-            !jsonToIndexOrInvalid(cJSON_GetObjectItemCaseSensitive(sceneObject, "meshIndex"), &savedMeshRef) ||
-            !parseSceneObjectTransformJSON(sceneObject, localPosition, localRotation, localScale, localTransform, &useMatrix)) {
-            sceneObjectIndex = UINT32_MAX;
-            break;
-        }
-        if (parentIndex != VKRT_INVALID_INDEX && parentIndex >= sceneObjectIndex) {
-            sceneObjectIndex = UINT32_MAX;
-            break;
-        }
-        if (savedMeshRef != VKRT_INVALID_INDEX) {
-            if (savedMeshRef >= savedMeshCount) {
-                sceneObjectIndex = UINT32_MAX;
-                break;
-            }
-            loadedMeshIndex = savedToLoadedMeshIndex[savedMeshRef];
-        }
-        if (!sessionAddSceneObject(
-                session,
-                name->valuestring,
-                parentIndex,
-                loadedMeshIndex,
-                useMatrix ? zero : localPosition,
-                useMatrix ? zero : localRotation,
-                useMatrix ? one : localScale,
-                NULL
-            ) ||
-            (useMatrix && !sessionSetSceneObjectLocalTransformMatrix(session, sceneObjectIndex, localTransform))) {
-            sceneObjectIndex = UINT32_MAX;
-            break;
-        }
-        sceneObjectIndex++;
-    }
-
-    if (sceneObjectIndex == UINT32_MAX ||
-        !sessionSyncSceneObjectTransforms(vkrt, session) ||
-        !applySceneSettings(vkrt, settingsObject, savedToLoadedMeshIndex, savedMeshCount)) {
-        free(textureIndexMap);
-        free(savedToLoadedMeshIndex);
-        free(loadedBatches);
-        free(keepMesh);
-        cJSON_Delete(root);
+    if (!loadImportedMeshBatches(&context, meshImportsArray) ||
+        !loadStandaloneTextures(&context, textureImportsArray) ||
+        !loadEnvironmentTexture(&context, environmentTexturePath) ||
+        !buildSavedMeshIndexMap(&context) ||
+        !pruneNonSceneMeshes(&context) ||
+        !applyLoadedMaterials(&context) ||
+        !applyLoadedMeshes(&context) ||
+        !applyLoadedSceneObjects(&context)) {
+        cleanupSceneLoadContext(&context);
         return 0;
     }
 
     sessionSetCurrentScenePath(session, targetScenePath && targetScenePath[0] ? targetScenePath : NULL);
-    free(textureIndexMap);
-    free(savedToLoadedMeshIndex);
-    free(loadedBatches);
-    free(keepMesh);
-    cJSON_Delete(root);
+    cleanupSceneLoadContext(&context);
     return 1;
 }
 
@@ -1405,17 +1585,13 @@ static int sceneControllerLoadScene(VKRT* vkrt, Session* session, const char* pa
     uint32_t meshCount = 0u;
     uint32_t materialCount = 0u;
     uint32_t textureCount = 0u;
-    int canBackupState =
-        VKRT_getMeshCount(vkrt, &meshCount) == VKRT_SUCCESS &&
-        VKRT_getMaterialCount(vkrt, &materialCount) == VKRT_SUCCESS &&
-        VKRT_getTextureCount(vkrt, &textureCount) == VKRT_SUCCESS;
-    int haveSceneState = canBackupState && (
-        meshCount > 0u ||
-        materialCount > 1u ||
-        textureCount > 0u ||
-        sessionGetSceneObjectCount(session) > 0u ||
-        sessionGetEnvironmentTexturePath(session)[0] ||
-        previousScenePath[0]
+    int haveSceneState = querySceneHasBackupState(
+        vkrt,
+        session,
+        previousScenePath,
+        &meshCount,
+        &materialCount,
+        &textureCount
     );
 
     cJSON* backupRoot = NULL;

@@ -9,7 +9,7 @@ sys = host_machine.system()
 cpu = host_machine.cpu_family()
 python = find_program('python3', 'python', required: true)
 
-oidn_include = include_directories('include')
+oidn_include = include_directories('include', is_system: true)
 oidn_lib = cc.find_library('OpenImageDenoise', dirs: [meson.current_source_dir() / 'lib'], required: true)
 oidn_runtime_files = []
 oidn_link_args = []

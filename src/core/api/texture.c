@@ -1,21 +1,20 @@
+#include "constants.h"
 #include "textures.h"
+#include "vkrt_types.h"
+
+#include <stddef.h>
+#include <stdint.h>
 
 VKRT_Result VKRT_addTextureFromPixels(
     VKRT* vkrt,
-    const char* name,
-    const void* pixels,
-    uint32_t width,
-    uint32_t height,
-    uint32_t format,
-    uint32_t colorSpace,
+    const VKRT_TextureUpload* upload,
     uint32_t* outTextureIndex
 ) {
     if (outTextureIndex) *outTextureIndex = VKRT_INVALID_INDEX;
-    if (!vkrt || !pixels || width == 0u || height == 0u ||
-        !vkrtTextureFormatCompatibleWithColorSpace(format, colorSpace)) {
+    if (!vkrt || !vkrtTextureUploadValid(upload)) {
         return VKRT_ERROR_INVALID_ARGUMENT;
     }
-    return vkrtSceneAddTextureFromPixels(vkrt, name, pixels, width, height, format, colorSpace, outTextureIndex);
+    return vkrtSceneAddTextureFromPixels(vkrt, upload, outTextureIndex);
 }
 
 VKRT_Result VKRT_addTextureFromFile(

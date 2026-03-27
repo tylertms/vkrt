@@ -1,14 +1,16 @@
 #include "cli/cli.h"
-#include "session.h"
+#include "debug.h"
+#include "editor/editor.h"
 #include "mesh/controller.h"
 #include "render/benchmark.h"
 #include "render/controller.h"
-#include "editor/editor.h"
 #include "scene/controller.h"
+#include "session.h"
 #include "vkrt.h"
 #include "vkrt_overlay.h"
-#include "debug.h"
+#include "vkrt_types.h"
 
+#include <stdint.h>
 #include <stdlib.h>
 
 int main(int argc, char* argv[]) {

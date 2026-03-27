@@ -1,15 +1,21 @@
+#include "GLFW/glfw3.h"
+#include "accel/accel.h"
 #include "command/record.h"
-#include "geometry.h"
-#include "rebuild.h"
-#include "lighting.h"
-#include "state.h"
+#include "config.h"
+#include "debug.h"
 #include "descriptor.h"
 #include "export.h"
+#include "geometry.h"
+#include "lighting.h"
+#include "rebuild.h"
 #include "scene.h"
+#include "state.h"
 #include "swapchain.h"
-#include "accel/accel.h"
+#include "types.h"
+#include "vkrt.h"
 #include "vkrt_internal.h"
-#include "debug.h"
+#include "vkrt_types.h"
+#include "vulkan/vulkan_core.h"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -45,15 +51,18 @@ static void resolveCompletedSelection(VKRT* vkrt) {
     vkrt->core.selectionSubmitted = 0;
 }
 
+static uint32_t queryCurrentFrameIndex(const VKRT* vkrt) {
+    if (!vkrt) return 0u;
+    return vkrt->runtime.currentFrame % VKRT_MAX_FRAMES_IN_FLIGHT;
+}
+
 static uint32_t queryRenderedSamplesPerPixel(const VKRT* vkrt) {
     if (!vkrt) return 1u;
 
-    uint32_t frameIndex = vkrt->runtime.currentFrame;
-    if (frameIndex < VKRT_MAX_FRAMES_IN_FLIGHT) {
-        const SceneData* frameSceneData = vkrt->core.sceneFrameData[frameIndex];
-        if (frameSceneData && frameSceneData->samplesPerPixel > 0u) {
-            return frameSceneData->samplesPerPixel;
-        }
+    uint32_t frameIndex = queryCurrentFrameIndex(vkrt);
+    const SceneData* frameSceneData = vkrt->core.sceneFrameData[frameIndex];
+    if (frameSceneData && frameSceneData->samplesPerPixel > 0u) {
+        return frameSceneData->samplesPerPixel;
     }
 
     if (vkrt->core.sceneData && vkrt->core.sceneData->samplesPerPixel > 0u) {
@@ -126,36 +135,107 @@ VKRT_Result VKRT_beginFrame(VKRT* vkrt) {
     return VKRT_SUCCESS;
 }
 
-VKRT_Result VKRT_updateScene(VKRT* vkrt) {
-    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
-    if (!vkrt->runtime.frameAcquired && !vkrt->runtime.frameOffscreen) return VKRT_SUCCESS;
+typedef struct SceneUpdateState {
+    VkBool32 materialDirty;
+    VkBool32 textureDirty;
+    VkBool32 sceneDirty;
+    VkBool32 selectionDirty;
+    VkBool32 lightDirty;
+    VkBool32 lightsRebuilt;
+} SceneUpdateState;
 
-    VkBool32 materialDirty = vkrt->core.materialResourceRevision != vkrt->core.materialRevision;
-    VkBool32 textureDirty = vkrt->core.textureResourceRevision != vkrt->core.textureRevision;
-    VkBool32 sceneDirty = vkrt->core.sceneResourceRevision != vkrt->core.sceneRevision;
-    VkBool32 selectionDirty = vkrt->core.selectionResourceRevision != vkrt->core.selectionRevision;
-    VkBool32 lightDirty = vkrt->core.lightResourceRevision != vkrt->core.lightRevision;
-    VkBool32 lightsRebuilt = VK_FALSE;
-    if (materialDirty || sceneDirty || selectionDirty || lightDirty) {
-        VKRT_Result result = vkrtWaitForAllInFlightFrames(vkrt);
-        if (result != VKRT_SUCCESS) {
-            return result;
-        }
+static void querySceneUpdateState(const VKRT* vkrt, SceneUpdateState* state) {
+    if (!vkrt || !state) return;
+
+    *state = (SceneUpdateState){
+        .materialDirty = vkrt->core.materialResourceRevision != vkrt->core.materialRevision,
+        .textureDirty = vkrt->core.textureResourceRevision != vkrt->core.textureRevision,
+        .sceneDirty = vkrt->core.sceneResourceRevision != vkrt->core.sceneRevision,
+        .selectionDirty = vkrt->core.selectionResourceRevision != vkrt->core.selectionRevision,
+        .lightDirty = vkrt->core.lightResourceRevision != vkrt->core.lightRevision,
+        .lightsRebuilt = VK_FALSE,
+    };
+}
+
+static int sceneUpdateRequiresFullFrameSync(const SceneUpdateState* state) {
+    if (!state) return 0;
+    return state->materialDirty || state->sceneDirty || state->selectionDirty || state->lightDirty;
+}
+
+static int sceneUpdateRequiresDescriptorReset(const SceneUpdateState* state) {
+    if (!state) return 0;
+    return state->materialDirty || state->textureDirty || state->sceneDirty || state->selectionDirty || state->lightDirty;
+}
+
+static VKRT_Result synchronizeSceneUpdate(VKRT* vkrt, const SceneUpdateState* state) {
+    if (!vkrt || !state) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    if (sceneUpdateRequiresFullFrameSync(state)) {
+        return vkrtWaitForAllInFlightFrames(vkrt);
     }
+    return VKRT_SUCCESS;
+}
 
-    if (materialDirty || textureDirty || sceneDirty || selectionDirty || lightDirty) {
+static VKRT_Result rebuildDirtySceneResources(VKRT* vkrt, SceneUpdateState* state) {
+    if (!vkrt || !state) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    if (sceneUpdateRequiresDescriptorReset(state)) {
         invalidateDescriptorSets(vkrt);
     }
 
-    if (materialDirty) {
+    if (state->materialDirty) {
         VKRT_Result result = vkrtSceneRebuildMaterialBuffer(vkrt);
         if (result != VKRT_SUCCESS) {
             return result;
         }
-        lightsRebuilt = VK_TRUE;
+        state->lightsRebuilt = VK_TRUE;
     }
 
-    VKRT_Result result = vkrtScenePreparePendingGeometryUploads(vkrt);
+    if (state->lightDirty && !state->lightsRebuilt) {
+        VKRT_Result result = vkrtSceneRebuildLightBuffers(vkrt);
+        if (result != VKRT_SUCCESS) {
+            return result;
+        }
+        state->lightsRebuilt = VK_TRUE;
+    }
+
+    if (state->lightsRebuilt && !state->sceneDirty) {
+        return vkrtSceneRebuildMeshInfoBuffer(vkrt);
+    }
+
+    return VKRT_SUCCESS;
+}
+
+static VKRT_Result rebuildSceneAccelerationStructures(VKRT* vkrt, const SceneUpdateState* state) {
+    if (!vkrt || !state) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    if (state->sceneDirty) {
+        return vkrtSceneRebuildTopLevelAccelerationStructures(vkrt);
+    }
+    if (state->selectionDirty) {
+        return createSelectionTopLevelAccelerationStructure(vkrt);
+    }
+    return VKRT_SUCCESS;
+}
+
+VKRT_Result VKRT_updateScene(VKRT* vkrt) {
+    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+    if (!vkrt->runtime.frameAcquired && !vkrt->runtime.frameOffscreen) return VKRT_SUCCESS;
+
+    SceneUpdateState state = {0};
+    querySceneUpdateState(vkrt, &state);
+
+    VKRT_Result result = synchronizeSceneUpdate(vkrt, &state);
+    if (result != VKRT_SUCCESS) {
+        return result;
+    }
+
+    result = rebuildDirtySceneResources(vkrt, &state);
+    if (result != VKRT_SUCCESS) {
+        return result;
+    }
+
+    result = vkrtScenePreparePendingGeometryUploads(vkrt);
     if (result != VKRT_SUCCESS) {
         return result;
     }
@@ -165,33 +245,9 @@ VKRT_Result VKRT_updateScene(VKRT* vkrt) {
         return result;
     }
 
-    if (lightDirty) {
-        if (!lightsRebuilt) {
-            result = vkrtSceneRebuildLightBuffers(vkrt);
-            if (result != VKRT_SUCCESS) {
-                return result;
-            }
-            lightsRebuilt = VK_TRUE;
-        }
-    }
-
-    if (lightsRebuilt && !sceneDirty) {
-        result = vkrtSceneRebuildMeshInfoBuffer(vkrt);
-        if (result != VKRT_SUCCESS) {
-            return result;
-        }
-    }
-
-    if (sceneDirty) {
-        result = vkrtSceneRebuildTopLevelAccelerationStructures(vkrt);
-        if (result != VKRT_SUCCESS) {
-            return result;
-        }
-    } else if (selectionDirty) {
-        result = createSelectionTopLevelAccelerationStructure(vkrt);
-        if (result != VKRT_SUCCESS) {
-            return result;
-        }
+    result = rebuildSceneAccelerationStructures(vkrt, &state);
+    if (result != VKRT_SUCCESS) {
+        return result;
     }
 
     syncCurrentFrameSceneData(vkrt);
@@ -316,8 +372,9 @@ VKRT_Result VKRT_endFrame(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
 
     if (vkrt->runtime.framePresented) {
+        uint32_t frameIndex = queryCurrentFrameIndex(vkrt);
         uint32_t renderedSPP = queryRenderedSamplesPerPixel(vkrt);
-        VkBool32 traceContributed = vkrt->core.descriptorSetReady[vkrt->runtime.currentFrame] &&
+        VkBool32 traceContributed = vkrt->core.descriptorSetReady[frameIndex] &&
                                     !vkrt->core.accumulationNeedsReset &&
                                     vkrt->runtime.frameTraced &&
                                     !VKRT_renderPhaseSamplingFinished(vkrt->renderStatus.renderPhase);

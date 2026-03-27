@@ -1,14 +1,16 @@
+#include "IconsFontAwesome6.h"
 #include "common.h"
 #include "config.h"
+#include "debug.h"
+#include "sections.h"
 #include "session.h"
 #include "vkrt.h"
+#include "vkrt_types.h"
 
-#include "IconsFontAwesome6.h"
-#include "debug.h"
-
-#include <inttypes.h>
+#include <dcimgui.h>
 #include <limits.h>
 #include <math.h>
+#include <stdint.h>
 #include <stdio.h>
 
 static const float kMicrosecondsPerSecond = 1000000.0f;
@@ -16,8 +18,8 @@ static const int kRenderOutputDimensionMin = 1;
 static const int kRenderOutputDimensionMax = 16384;
 
 enum {
-    kRenderTimeTextCapacity = 32,
-    kRenderProgressOverlayCapacity = 96,
+    K_RENDER_TIME_TEXT_CAPACITY = 32,
+    K_RENDER_PROGRESS_OVERLAY_CAPACITY = 96,
 };
 
 static void initializeRenderConfig(VKRT* vkrt, Session* session) {
@@ -125,7 +127,7 @@ static void drawFinalImageControls(Session* session, const VKRT_RenderStatusSnap
 #endif
 
     if (ImGui_Checkbox("Denoise (OIDN)", &denoiseEnabled)) {
-        session->editor.renderExportSettings.denoiseEnabled = denoiseEnabled ? 1u : 0u;
+        session->editor.renderExportSettings.denoiseEnabled = (int)denoiseEnabled ? 1u : 0u;
         if (status) {
             sessionQueueRenderSetDenoise(session, session->editor.renderExportSettings.denoiseEnabled);
         }
@@ -148,10 +150,89 @@ static void drawIdleRenderState(Session* session, const SessionRenderTimer* time
     }
 
     if (timer->completedSeconds > 0.0f) {
-        char totalText[kRenderTimeTextCapacity];
+        char totalText[K_RENDER_TIME_TEXT_CAPACITY];
         formatTime(timer->completedSeconds, totalText, sizeof(totalText));
         ImGui_TextDisabled(ICON_FA_CLOCK " Last render: %s", totalText);
     }
+}
+
+static float queryRenderProgressFraction(const VKRT_RenderStatusSnapshot* status, uint64_t shownSamples) {
+    float progress = 0.0f;
+
+    if (!status) return 0.0f;
+    if (VKRT_renderStatusIsDenoising(status)) return 1.0f;
+    if (status->renderTargetSamples == 0u) {
+        return VKRT_renderStatusIsBusy(status) ? 1.0f : 0.0f;
+    }
+
+    progress = (float)shownSamples / (float)status->renderTargetSamples;
+    if (progress < 0.0f) return 0.0f;
+    if (progress > 1.0f) return 1.0f;
+    return progress;
+}
+
+static void formatRenderProgressOverlay(const VKRT_RenderStatusSnapshot* status, char* out, size_t outSize, uint64_t* outShownSamples) {
+    uint64_t shownSamples = 0u;
+
+    if (!status || !out || outSize == 0u) return;
+
+    shownSamples = status->totalSamples;
+    if (status->renderTargetSamples > 0u && shownSamples > status->renderTargetSamples) {
+        shownSamples = status->renderTargetSamples;
+    }
+
+    if (VKRT_renderStatusIsDenoising(status)) {
+        snprintf(out, outSize, "Denoising...");
+    } else if (status->renderTargetSamples > 0u) {
+        snprintf(out, outSize, "%llu / %u samples", (unsigned long long)shownSamples, status->renderTargetSamples);
+    } else {
+        snprintf(out, outSize, "%llu samples", (unsigned long long)status->totalSamples);
+    }
+
+    if (outShownSamples) *outShownSamples = shownSamples;
+}
+
+static float queryRenderEtaSeconds(const VKRT_RenderStatusSnapshot* status, float elapsedActiveSeconds) {
+    float samplesPerSecond = 0.0f;
+
+    if (!status || status->renderTargetSamples == 0u || status->totalSamples == 0u || elapsedActiveSeconds <= 0.0f) {
+        return -1.0f;
+    }
+
+    samplesPerSecond = (float)status->totalSamples / elapsedActiveSeconds;
+    if (samplesPerSecond <= 0.0f || status->renderTargetSamples <= status->totalSamples) {
+        return -1.0f;
+    }
+    return (float)(status->renderTargetSamples - status->totalSamples) / samplesPerSecond;
+}
+
+static void drawRenderProgressStatusText(
+    const VKRT_RenderStatusSnapshot* status,
+    float elapsedActiveSeconds,
+    float completedSeconds
+) {
+    if (VKRT_renderStatusIsDenoising(status)) {
+        ImGui_Text("Denoising...");
+        return;
+    }
+
+    if (VKRT_renderStatusIsComplete(status)) {
+        float elapsedDoneSeconds = completedSeconds > 0.0f ? completedSeconds : elapsedActiveSeconds;
+        char elapsedText[K_RENDER_TIME_TEXT_CAPACITY];
+        formatTime(fmaxf(elapsedDoneSeconds, 0.0f), elapsedText, sizeof(elapsedText));
+        ImGui_Text(ICON_FA_CHECK " Complete  " ICON_FA_CLOCK " %s", elapsedText);
+        return;
+    }
+
+    float etaSeconds = queryRenderEtaSeconds(status, elapsedActiveSeconds);
+    if (etaSeconds >= 0.0f) {
+        char etaText[K_RENDER_TIME_TEXT_CAPACITY];
+        formatTime(etaSeconds, etaText, sizeof(etaText));
+        ImGui_Text("Rendering  " ICON_FA_CLOCK " ETA %s", etaText);
+        return;
+    }
+
+    ImGui_Text("Rendering...");
 }
 
 static void drawRenderProgressSection(
@@ -163,77 +244,16 @@ static void drawRenderProgressSection(
     if (!status || !runtime) return;
 
     ImGui_TextDisabled("Output %ux%u", runtime->renderWidth, runtime->renderHeight);
-    if (status->renderTargetSamples > 0) {
-        uint64_t shownSamples = status->totalSamples;
-        if (shownSamples > status->renderTargetSamples) {
-            shownSamples = status->renderTargetSamples;
-        }
-        float progress = VKRT_renderStatusIsDenoising(status)
-            ? 1.0f
-            : (float)shownSamples / (float)status->renderTargetSamples;
-        if (progress < 0.0f) progress = 0.0f;
-        if (progress > 1.0f) progress = 1.0f;
+    {
+        char overlay[K_RENDER_PROGRESS_OVERLAY_CAPACITY];
+        float progress = 0.0f;
+        uint64_t shownSamples = 0u;
 
-        char overlay[kRenderProgressOverlayCapacity];
-        if (VKRT_renderStatusIsDenoising(status)) {
-            snprintf(overlay, sizeof(overlay), "Denoising...");
-        } else {
-            snprintf(
-                overlay,
-                sizeof(overlay),
-                "%" PRIu64 " / %u samples",
-                shownSamples,
-                status->renderTargetSamples
-            );
-        }
+        formatRenderProgressOverlay(status, overlay, sizeof(overlay), &shownSamples);
+        progress = queryRenderProgressFraction(status, shownSamples);
         ImGui_ProgressBar(progress, (ImVec2){-1.0f, 0.0f}, overlay);
-    } else {
-        char overlay[kRenderProgressOverlayCapacity];
-        if (VKRT_renderStatusIsDenoising(status)) {
-            snprintf(overlay, sizeof(overlay), "Denoising...");
-        } else {
-            snprintf(
-                overlay,
-                sizeof(overlay),
-                "%" PRIu64 " samples",
-                status->totalSamples
-            );
-        }
-        ImGui_ProgressBar(
-            VKRT_renderStatusIsBusy(status) ? 1.0f : 0.0f,
-            (ImVec2){-1.0f, 0.0f},
-            overlay
-        );
     }
-
-    if (VKRT_renderStatusIsDenoising(status)) {
-        ImGui_Text("Denoising...");
-        return;
-    }
-
-    if (VKRT_renderStatusIsComplete(status)) {
-        float elapsedDoneSeconds = completedSeconds > 0.0f ? completedSeconds : elapsedActiveSeconds;
-        char elapsedText[kRenderTimeTextCapacity];
-        formatTime(fmaxf(elapsedDoneSeconds, 0.0f), elapsedText, sizeof(elapsedText));
-        ImGui_Text(ICON_FA_CHECK " Complete  " ICON_FA_CLOCK " %s", elapsedText);
-        return;
-    }
-
-    float etaSeconds = -1.0f;
-    if (status->renderTargetSamples > 0 && status->totalSamples > 0 && elapsedActiveSeconds > 0.0f) {
-        float samplesPerSecond = (float)status->totalSamples / elapsedActiveSeconds;
-        if (samplesPerSecond > 0.0f && status->renderTargetSamples > status->totalSamples) {
-            etaSeconds = (float)(status->renderTargetSamples - status->totalSamples) / samplesPerSecond;
-        }
-    }
-
-    if (etaSeconds >= 0.0f) {
-        char etaText[kRenderTimeTextCapacity];
-        formatTime(etaSeconds, etaText, sizeof(etaText));
-        ImGui_Text("Rendering  " ICON_FA_CLOCK " ETA %s", etaText);
-    } else {
-        ImGui_Text("Rendering...");
-    }
+    drawRenderProgressStatusText(status, elapsedActiveSeconds, completedSeconds);
 }
 
 static void drawRenderActionsSection(Session* session, const VKRT_RenderStatusSnapshot* status) {

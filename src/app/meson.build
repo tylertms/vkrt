@@ -3,6 +3,7 @@ app_sources = files(
   'cli/cli.c',
   'session/session.c',
   'mesh/loader.c',
+  'mesh/cgltf_impl.c',
   'mesh/controller.c',
   'scene/controller.c',
   'render/benchmark.c',

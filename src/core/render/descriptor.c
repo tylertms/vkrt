@@ -1,8 +1,21 @@
 #include "descriptor.h"
-#include "debug.h"
 
+#include "config.h"
+#include "constants.h"
+#include "debug.h"
+#include "types.h"
 #include "vkrt_internal.h"
+#include "vkrt_types.h"
+
+#include <stdint.h>
 #include <vulkan/vulkan_core.h>
+
+enum {
+    K_ACCELERATION_STRUCTURE_DESCRIPTOR_COUNT = 2u,
+    K_IMAGE_DESCRIPTOR_COUNT = 8u,
+    K_BUFFER_DESCRIPTOR_COUNT = 12u,
+    K_RENDER_DESCRIPTOR_BINDING_COUNT = 24u,
+};
 
 static VkBool32 textureDescriptorsReady(const VKRT* vkrt) {
     if (!vkrt ||
@@ -54,6 +67,168 @@ static VkBool32 descriptorResourcesReadyForFrame(VKRT* vkrt, uint32_t frameIndex
            textureDescriptorsReady(vkrt);
 }
 
+static VkWriteDescriptorSet makeDescriptorWrite(
+    VkDescriptorSet descriptorSet,
+    uint32_t binding,
+    VkDescriptorType descriptorType,
+    uint32_t descriptorCount
+) {
+    return (VkWriteDescriptorSet){
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = descriptorSet,
+        .dstBinding = binding,
+        .descriptorType = descriptorType,
+        .descriptorCount = descriptorCount,
+    };
+}
+
+static VkDescriptorImageInfo makeImageInfo(VkImageView imageView, VkImageLayout imageLayout) {
+    return (VkDescriptorImageInfo){
+        .imageView = imageView,
+        .imageLayout = imageLayout,
+    };
+}
+
+static VkDescriptorBufferInfo makeBufferInfo(VkBuffer buffer, VkDeviceSize range) {
+    return (VkDescriptorBufferInfo){
+        .buffer = buffer,
+        .offset = 0,
+        .range = range,
+    };
+}
+
+static void appendAccelerationStructureWrite(
+    VkWriteDescriptorSet* write,
+    VkWriteDescriptorSetAccelerationStructureKHR* info,
+    VkDescriptorSet descriptorSet,
+    uint32_t binding,
+    VkAccelerationStructureKHR* structure
+) {
+    if (!write || !info || !structure) return;
+
+    *info = (VkWriteDescriptorSetAccelerationStructureKHR){
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR,
+        .accelerationStructureCount = 1,
+        .pAccelerationStructures = structure,
+    };
+    *write = makeDescriptorWrite(descriptorSet, binding, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1);
+    write->pNext = info;
+}
+
+typedef struct ImageDescriptorBinding {
+    uint32_t binding;
+    VkImageView imageView;
+} ImageDescriptorBinding;
+
+typedef struct BufferDescriptorBinding {
+    uint32_t binding;
+    VkDescriptorType descriptorType;
+    VkBuffer buffer;
+    VkDeviceSize range;
+} BufferDescriptorBinding;
+
+typedef struct AccelerationStructureWriteState {
+    VkAccelerationStructureKHR structures[K_ACCELERATION_STRUCTURE_DESCRIPTOR_COUNT];
+    VkWriteDescriptorSetAccelerationStructureKHR infos[K_ACCELERATION_STRUCTURE_DESCRIPTOR_COUNT];
+    VkWriteDescriptorSet writes[K_ACCELERATION_STRUCTURE_DESCRIPTOR_COUNT];
+} AccelerationStructureWriteState;
+
+typedef struct ImageDescriptorWriteState {
+    VkDescriptorImageInfo infos[K_IMAGE_DESCRIPTOR_COUNT];
+    VkWriteDescriptorSet writes[K_IMAGE_DESCRIPTOR_COUNT];
+} ImageDescriptorWriteState;
+
+typedef struct BufferDescriptorWriteState {
+    VkDescriptorBufferInfo infos[K_BUFFER_DESCRIPTOR_COUNT];
+    VkWriteDescriptorSet writes[K_BUFFER_DESCRIPTOR_COUNT];
+} BufferDescriptorWriteState;
+
+typedef struct TextureDescriptorWriteState {
+    VkDescriptorImageInfo samplerInfos[VKRT_TEXTURE_SAMPLER_VARIANT_COUNT];
+    VkDescriptorImageInfo textureBindings[VKRT_MAX_BINDLESS_TEXTURES];
+    VkWriteDescriptorSet samplerWrite;
+    VkWriteDescriptorSet textureWrite;
+} TextureDescriptorWriteState;
+
+static void initializeAccelerationStructureWrites(
+    VkDescriptorSet descriptorSet,
+    VkAccelerationStructureKHR sceneTLAS,
+    VkAccelerationStructureKHR selectionTLAS,
+    AccelerationStructureWriteState* state
+) {
+    if (!state) return;
+
+    state->structures[0] = sceneTLAS;
+    state->structures[1] = selectionTLAS != VK_NULL_HANDLE ? selectionTLAS : sceneTLAS;
+    appendAccelerationStructureWrite(&state->writes[0], &state->infos[0], descriptorSet, 0u, &state->structures[0]);
+    appendAccelerationStructureWrite(&state->writes[1], &state->infos[1], descriptorSet, 1u, &state->structures[1]);
+}
+
+static void appendImageDescriptorWrites(
+    VkDescriptorSet descriptorSet,
+    const ImageDescriptorBinding* bindings,
+    uint32_t bindingCount,
+    ImageDescriptorWriteState* state
+) {
+    if (!bindings || !state) return;
+
+    for (uint32_t i = 0; i < bindingCount; i++) {
+        state->infos[i] = makeImageInfo(bindings[i].imageView, VK_IMAGE_LAYOUT_GENERAL);
+        state->writes[i] = makeDescriptorWrite(descriptorSet, bindings[i].binding, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1);
+        state->writes[i].pImageInfo = &state->infos[i];
+    }
+}
+
+static void appendBufferDescriptorWrites(
+    VkDescriptorSet descriptorSet,
+    const BufferDescriptorBinding* bindings,
+    uint32_t bindingCount,
+    BufferDescriptorWriteState* state
+) {
+    if (!bindings || !state) return;
+
+    for (uint32_t i = 0; i < bindingCount; i++) {
+        state->infos[i] = makeBufferInfo(bindings[i].buffer, bindings[i].range);
+        state->writes[i] = makeDescriptorWrite(
+            descriptorSet,
+            bindings[i].binding,
+            bindings[i].descriptorType,
+            1
+        );
+        state->writes[i].pBufferInfo = &state->infos[i];
+    }
+}
+
+static void initializeTextureDescriptorWrites(VKRT* vkrt, VkDescriptorSet descriptorSet, TextureDescriptorWriteState* state) {
+    if (!vkrt || !state) return;
+
+    for (uint32_t i = 0; i < VKRT_TEXTURE_SAMPLER_VARIANT_COUNT; i++) {
+        state->samplerInfos[i].sampler = vkrt->core.textureSamplers[i];
+    }
+    state->samplerWrite = makeDescriptorWrite(
+        descriptorSet,
+        22u,
+        VK_DESCRIPTOR_TYPE_SAMPLER,
+        VKRT_TEXTURE_SAMPLER_VARIANT_COUNT
+    );
+    state->samplerWrite.pImageInfo = state->samplerInfos;
+
+    for (uint32_t i = 0; i < VKRT_MAX_BINDLESS_TEXTURES; i++) {
+        state->textureBindings[i].imageView = vkrt->core.textureFallbackView;
+        state->textureBindings[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    }
+    for (uint32_t i = 0; i < vkrt->core.textureCount; i++) {
+        state->textureBindings[i].imageView = vkrt->core.textures[i].view;
+    }
+    state->textureWrite = makeDescriptorWrite(
+        descriptorSet,
+        23u,
+        VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+        VKRT_MAX_BINDLESS_TEXTURES
+    );
+    state->textureWrite.pImageInfo = state->textureBindings;
+}
+
 static VKRT_Result updateDescriptorSetForFrame(VKRT* vkrt, uint32_t frameIndex) {
     if (!vkrt || frameIndex >= VKRT_MAX_FRAMES_IN_FLIGHT) return VKRT_ERROR_INVALID_ARGUMENT;
     if (!descriptorResourcesReadyForFrame(vkrt, frameIndex) ||
@@ -61,381 +236,73 @@ static VKRT_Result updateDescriptorSetForFrame(VKRT* vkrt, uint32_t frameIndex) 
         vkrt->core.descriptorSetReady[frameIndex] = VK_FALSE;
         return VKRT_SUCCESS;
     }
-    Buffer* meshData = &vkrt->core.sceneMeshData;
-    Buffer* materialData = &vkrt->core.sceneMaterialData;
-    Buffer* emissiveMeshData = &vkrt->core.sceneEmissiveMeshData;
-    Buffer* emissiveTriangleData = &vkrt->core.sceneEmissiveTriangleData;
-    Buffer* meshAliasQBuf = &vkrt->core.sceneMeshAliasQ;
-    Buffer* meshAliasIdxBuf = &vkrt->core.sceneMeshAliasIdx;
-    Buffer* triAliasQBuf = &vkrt->core.sceneTriAliasQ;
-    Buffer* triAliasIdxBuf = &vkrt->core.sceneTriAliasIdx;
+
     VkDescriptorSet descriptorSet = vkrt->core.descriptorSets[frameIndex];
-    VkAccelerationStructureKHR sceneTLAS = vkrt->core.sceneTopLevelAccelerationStructure.structure;
-    VkAccelerationStructureKHR selectionTLAS = vkrt->core.selectionTopLevelAccelerationStructure.structure;
+    AccelerationStructureWriteState accelerationState = {0};
+    initializeAccelerationStructureWrites(
+        descriptorSet,
+        vkrt->core.sceneTopLevelAccelerationStructure.structure,
+        vkrt->core.selectionTopLevelAccelerationStructure.structure,
+        &accelerationState
+    );
 
-    if (selectionTLAS == VK_NULL_HANDLE) {
-        selectionTLAS = sceneTLAS;
+    ImageDescriptorBinding imageBindings[] = {
+        {2u, vkrt->core.accumulationImageViews[vkrt->core.accumulationReadIndex]},
+        {3u, vkrt->core.accumulationImageViews[vkrt->core.accumulationWriteIndex]},
+        {4u, vkrt->core.outputImageView},
+        {5u, vkrt->core.selectionMaskImageView},
+        {6u, vkrt->core.albedoImageViews[vkrt->core.accumulationReadIndex]},
+        {7u, vkrt->core.albedoImageViews[vkrt->core.accumulationWriteIndex]},
+        {8u, vkrt->core.normalImageViews[vkrt->core.accumulationReadIndex]},
+        {9u, vkrt->core.normalImageViews[vkrt->core.accumulationWriteIndex]},
+    };
+    ImageDescriptorWriteState imageState = {0};
+    appendImageDescriptorWrites(
+        descriptorSet,
+        imageBindings,
+        (uint32_t)(sizeof(imageBindings) / sizeof(imageBindings[0])),
+        &imageState
+    );
+
+    BufferDescriptorBinding bufferBindings[] = {
+        {10u, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, vkrt->core.vertexData.buffer, VK_WHOLE_SIZE},
+        {11u, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, vkrt->core.indexData.buffer, VK_WHOLE_SIZE},
+        {12u, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, vkrt->core.sceneDataBuffers[frameIndex], sizeof(SceneData)},
+        {13u, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, vkrt->core.selection.buffer, sizeof(Selection)},
+        {14u, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, vkrt->core.sceneMeshData.buffer, VK_WHOLE_SIZE},
+        {15u, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, vkrt->core.sceneMaterialData.buffer, VK_WHOLE_SIZE},
+        {16u, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, vkrt->core.sceneEmissiveMeshData.buffer, VK_WHOLE_SIZE},
+        {17u, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, vkrt->core.sceneEmissiveTriangleData.buffer, VK_WHOLE_SIZE},
+        {18u, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, vkrt->core.sceneMeshAliasQ.buffer, VK_WHOLE_SIZE},
+        {19u, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, vkrt->core.sceneMeshAliasIdx.buffer, VK_WHOLE_SIZE},
+        {20u, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, vkrt->core.sceneTriAliasQ.buffer, VK_WHOLE_SIZE},
+        {21u, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, vkrt->core.sceneTriAliasIdx.buffer, VK_WHOLE_SIZE},
+    };
+    BufferDescriptorWriteState bufferState = {0};
+    appendBufferDescriptorWrites(
+        descriptorSet,
+        bufferBindings,
+        (uint32_t)(sizeof(bufferBindings) / sizeof(bufferBindings[0])),
+        &bufferState
+    );
+    TextureDescriptorWriteState textureState = {0};
+    initializeTextureDescriptorWrites(vkrt, descriptorSet, &textureState);
+
+    VkWriteDescriptorSet writeDescriptorSets[K_RENDER_DESCRIPTOR_BINDING_COUNT] = {0};
+    uint32_t writeCount = 0u;
+    for (uint32_t i = 0; i < K_ACCELERATION_STRUCTURE_DESCRIPTOR_COUNT; i++) {
+        writeDescriptorSets[writeCount++] = accelerationState.writes[i];
     }
-
-    VkAccelerationStructureKHR accelerationStructures[] = {
-        sceneTLAS,
-        selectionTLAS,
-    };
-
-    VkWriteDescriptorSetAccelerationStructureKHR accelerationStructureInfos[2] = {
-        {
-            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR,
-            .accelerationStructureCount = 1,
-            .pAccelerationStructures = &accelerationStructures[0],
-        },
-        {
-            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR,
-            .accelerationStructureCount = 1,
-            .pAccelerationStructures = &accelerationStructures[1],
-        },
-    };
-
-    VkWriteDescriptorSet accelerationStructureWrites[2] = {
-        {
-            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .pNext = &accelerationStructureInfos[0],
-            .dstSet = descriptorSet,
-            .dstBinding = 0,
-            .descriptorCount = 1,
-            .descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
-        },
-        {
-            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .pNext = &accelerationStructureInfos[1],
-            .dstSet = descriptorSet,
-            .dstBinding = 1,
-            .descriptorCount = 1,
-            .descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
-        },
-    };
-
-    VkDescriptorImageInfo accumulationReadInfo = {0};
-    accumulationReadInfo.imageView = vkrt->core.accumulationImageViews[vkrt->core.accumulationReadIndex];
-    accumulationReadInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-
-    VkWriteDescriptorSet accumulationReadWrite = {0};
-    accumulationReadWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    accumulationReadWrite.dstSet = descriptorSet;
-    accumulationReadWrite.dstBinding = 2;
-    accumulationReadWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    accumulationReadWrite.descriptorCount = 1;
-    accumulationReadWrite.pImageInfo = &accumulationReadInfo;
-
-    VkDescriptorImageInfo accumulationWriteInfo = {0};
-    accumulationWriteInfo.imageView = vkrt->core.accumulationImageViews[vkrt->core.accumulationWriteIndex];
-    accumulationWriteInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-
-    VkWriteDescriptorSet accumulationWrite = {0};
-    accumulationWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    accumulationWrite.dstSet = descriptorSet;
-    accumulationWrite.dstBinding = 3;
-    accumulationWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    accumulationWrite.descriptorCount = 1;
-    accumulationWrite.pImageInfo = &accumulationWriteInfo;
-
-    VkDescriptorImageInfo outputImageInfo = {0};
-    outputImageInfo.imageView = vkrt->core.outputImageView;
-    outputImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-
-    VkWriteDescriptorSet outputImageWrite = {0};
-    outputImageWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    outputImageWrite.dstSet = descriptorSet;
-    outputImageWrite.dstBinding = 4;
-    outputImageWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    outputImageWrite.descriptorCount = 1;
-    outputImageWrite.pImageInfo = &outputImageInfo;
-
-    VkDescriptorImageInfo selectionMaskImageInfo = {0};
-    selectionMaskImageInfo.imageView = vkrt->core.selectionMaskImageView;
-    selectionMaskImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-
-    VkWriteDescriptorSet selectionMaskImageWrite = {0};
-    selectionMaskImageWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    selectionMaskImageWrite.dstSet = descriptorSet;
-    selectionMaskImageWrite.dstBinding = 5;
-    selectionMaskImageWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    selectionMaskImageWrite.descriptorCount = 1;
-    selectionMaskImageWrite.pImageInfo = &selectionMaskImageInfo;
-
-    VkDescriptorImageInfo albedoReadImageInfo = {0};
-    albedoReadImageInfo.imageView = vkrt->core.albedoImageViews[vkrt->core.accumulationReadIndex];
-    albedoReadImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-
-    VkWriteDescriptorSet albedoReadImageWrite = {0};
-    albedoReadImageWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    albedoReadImageWrite.dstSet = descriptorSet;
-    albedoReadImageWrite.dstBinding = 6;
-    albedoReadImageWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    albedoReadImageWrite.descriptorCount = 1;
-    albedoReadImageWrite.pImageInfo = &albedoReadImageInfo;
-
-    VkDescriptorImageInfo albedoWriteImageInfo = {0};
-    albedoWriteImageInfo.imageView = vkrt->core.albedoImageViews[vkrt->core.accumulationWriteIndex];
-    albedoWriteImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-
-    VkWriteDescriptorSet albedoWriteImageWrite = {0};
-    albedoWriteImageWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    albedoWriteImageWrite.dstSet = descriptorSet;
-    albedoWriteImageWrite.dstBinding = 7;
-    albedoWriteImageWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    albedoWriteImageWrite.descriptorCount = 1;
-    albedoWriteImageWrite.pImageInfo = &albedoWriteImageInfo;
-
-    VkDescriptorImageInfo normalReadImageInfo = {0};
-    normalReadImageInfo.imageView = vkrt->core.normalImageViews[vkrt->core.accumulationReadIndex];
-    normalReadImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-
-    VkWriteDescriptorSet normalReadImageWrite = {0};
-    normalReadImageWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    normalReadImageWrite.dstSet = descriptorSet;
-    normalReadImageWrite.dstBinding = 8;
-    normalReadImageWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    normalReadImageWrite.descriptorCount = 1;
-    normalReadImageWrite.pImageInfo = &normalReadImageInfo;
-
-    VkDescriptorImageInfo normalWriteImageInfo = {0};
-    normalWriteImageInfo.imageView = vkrt->core.normalImageViews[vkrt->core.accumulationWriteIndex];
-    normalWriteImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-
-    VkWriteDescriptorSet normalWriteImageWrite = {0};
-    normalWriteImageWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    normalWriteImageWrite.dstSet = descriptorSet;
-    normalWriteImageWrite.dstBinding = 9;
-    normalWriteImageWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    normalWriteImageWrite.descriptorCount = 1;
-    normalWriteImageWrite.pImageInfo = &normalWriteImageInfo;
-
-    VkDescriptorBufferInfo verticesInfo = {
-        .buffer = vkrt->core.vertexData.buffer,
-        .offset = 0,
-        .range = VK_WHOLE_SIZE,
-    };
-
-    VkWriteDescriptorSet verticesWrite = {0};
-    verticesWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    verticesWrite.dstSet = descriptorSet;
-    verticesWrite.dstBinding = 10;
-    verticesWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    verticesWrite.descriptorCount = 1;
-    verticesWrite.pBufferInfo = &verticesInfo;
-
-    VkDescriptorBufferInfo indicesInfo = {
-        .buffer = vkrt->core.indexData.buffer,
-        .offset = 0,
-        .range = VK_WHOLE_SIZE,
-    };
-
-    VkWriteDescriptorSet indicesWrite = {0};
-    indicesWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    indicesWrite.dstSet = descriptorSet;
-    indicesWrite.dstBinding = 11;
-    indicesWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    indicesWrite.descriptorCount = 1;
-    indicesWrite.pBufferInfo = &indicesInfo;
-
-    VkDescriptorBufferInfo sceneDataInfo = {
-        .buffer = vkrt->core.sceneDataBuffers[frameIndex],
-        .offset = 0,
-        .range = sizeof(SceneData),
-    };
-
-    VkWriteDescriptorSet sceneDataWrite = {0};
-    sceneDataWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    sceneDataWrite.dstSet = descriptorSet;
-    sceneDataWrite.dstBinding = 12;
-    sceneDataWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    sceneDataWrite.descriptorCount = 1;
-    sceneDataWrite.pBufferInfo = &sceneDataInfo;
-
-    VkDescriptorBufferInfo selectionInfo = {
-        .buffer = vkrt->core.selection.buffer,
-        .offset = 0,
-        .range = sizeof(Selection),
-    };
-
-    VkWriteDescriptorSet selectionWrite = {0};
-    selectionWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    selectionWrite.dstSet = descriptorSet;
-    selectionWrite.dstBinding = 13;
-    selectionWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    selectionWrite.descriptorCount = 1;
-    selectionWrite.pBufferInfo = &selectionInfo;
-
-    VkDescriptorBufferInfo meshInfo = {
-        .buffer = meshData->buffer,
-        .offset = 0,
-        .range = VK_WHOLE_SIZE,
-    };
-
-    VkWriteDescriptorSet meshInfoWrite = {0};
-    meshInfoWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    meshInfoWrite.dstSet = descriptorSet;
-    meshInfoWrite.dstBinding = 14;
-    meshInfoWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    meshInfoWrite.descriptorCount = 1;
-    meshInfoWrite.pBufferInfo = &meshInfo;
-
-    VkDescriptorBufferInfo materialInfo = {
-        .buffer = materialData->buffer,
-        .offset = 0,
-        .range = VK_WHOLE_SIZE,
-    };
-
-    VkWriteDescriptorSet materialWrite = {0};
-    materialWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    materialWrite.dstSet = descriptorSet;
-    materialWrite.dstBinding = 15;
-    materialWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    materialWrite.descriptorCount = 1;
-    materialWrite.pBufferInfo = &materialInfo;
-
-    VkDescriptorBufferInfo emissiveMeshInfo = {
-        .buffer = emissiveMeshData->buffer,
-        .offset = 0,
-        .range = VK_WHOLE_SIZE,
-    };
-
-    VkWriteDescriptorSet emissiveMeshWrite = {0};
-    emissiveMeshWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    emissiveMeshWrite.dstSet = descriptorSet;
-    emissiveMeshWrite.dstBinding = 16;
-    emissiveMeshWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    emissiveMeshWrite.descriptorCount = 1;
-    emissiveMeshWrite.pBufferInfo = &emissiveMeshInfo;
-
-    VkDescriptorBufferInfo emissiveTriangleInfo = {
-        .buffer = emissiveTriangleData->buffer,
-        .offset = 0,
-        .range = VK_WHOLE_SIZE,
-    };
-
-    VkWriteDescriptorSet emissiveTriangleWrite = {0};
-    emissiveTriangleWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    emissiveTriangleWrite.dstSet = descriptorSet;
-    emissiveTriangleWrite.dstBinding = 17;
-    emissiveTriangleWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    emissiveTriangleWrite.descriptorCount = 1;
-    emissiveTriangleWrite.pBufferInfo = &emissiveTriangleInfo;
-
-    VkDescriptorBufferInfo meshAliasQInfo = {
-        .buffer = meshAliasQBuf->buffer,
-        .offset = 0,
-        .range = VK_WHOLE_SIZE,
-    };
-
-    VkWriteDescriptorSet meshAliasQWrite = {0};
-    meshAliasQWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    meshAliasQWrite.dstSet = descriptorSet;
-    meshAliasQWrite.dstBinding = 18;
-    meshAliasQWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    meshAliasQWrite.descriptorCount = 1;
-    meshAliasQWrite.pBufferInfo = &meshAliasQInfo;
-
-    VkDescriptorBufferInfo meshAliasIdxInfo = {
-        .buffer = meshAliasIdxBuf->buffer,
-        .offset = 0,
-        .range = VK_WHOLE_SIZE,
-    };
-
-    VkWriteDescriptorSet meshAliasIdxWrite = {0};
-    meshAliasIdxWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    meshAliasIdxWrite.dstSet = descriptorSet;
-    meshAliasIdxWrite.dstBinding = 19;
-    meshAliasIdxWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    meshAliasIdxWrite.descriptorCount = 1;
-    meshAliasIdxWrite.pBufferInfo = &meshAliasIdxInfo;
-
-    VkDescriptorBufferInfo triAliasQInfo = {
-        .buffer = triAliasQBuf->buffer,
-        .offset = 0,
-        .range = VK_WHOLE_SIZE,
-    };
-
-    VkWriteDescriptorSet triAliasQWrite = {0};
-    triAliasQWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    triAliasQWrite.dstSet = descriptorSet;
-    triAliasQWrite.dstBinding = 20;
-    triAliasQWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    triAliasQWrite.descriptorCount = 1;
-    triAliasQWrite.pBufferInfo = &triAliasQInfo;
-
-    VkDescriptorBufferInfo triAliasIdxInfo = {
-        .buffer = triAliasIdxBuf->buffer,
-        .offset = 0,
-        .range = VK_WHOLE_SIZE,
-    };
-
-    VkWriteDescriptorSet triAliasIdxWrite = {0};
-    triAliasIdxWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    triAliasIdxWrite.dstSet = descriptorSet;
-    triAliasIdxWrite.dstBinding = 21;
-    triAliasIdxWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    triAliasIdxWrite.descriptorCount = 1;
-    triAliasIdxWrite.pBufferInfo = &triAliasIdxInfo;
-
-    VkDescriptorImageInfo samplerInfos[VKRT_TEXTURE_SAMPLER_VARIANT_COUNT] = {0};
-    for (uint32_t i = 0; i < VKRT_TEXTURE_SAMPLER_VARIANT_COUNT; i++) {
-        samplerInfos[i].sampler = vkrt->core.textureSamplers[i];
+    for (uint32_t i = 0; i < K_IMAGE_DESCRIPTOR_COUNT; i++) {
+        writeDescriptorSets[writeCount++] = imageState.writes[i];
     }
-
-    VkWriteDescriptorSet samplerWrite = {0};
-    samplerWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    samplerWrite.dstSet = descriptorSet;
-    samplerWrite.dstBinding = 22;
-    samplerWrite.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
-    samplerWrite.descriptorCount = VKRT_TEXTURE_SAMPLER_VARIANT_COUNT;
-    samplerWrite.pImageInfo = samplerInfos;
-
-    VkDescriptorImageInfo textureBindings[VKRT_MAX_BINDLESS_TEXTURES] = {0};
-    for (uint32_t i = 0; i < VKRT_MAX_BINDLESS_TEXTURES; i++) {
-        textureBindings[i].imageView = vkrt->core.textureFallbackView;
-        textureBindings[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    for (uint32_t i = 0; i < K_BUFFER_DESCRIPTOR_COUNT; i++) {
+        writeDescriptorSets[writeCount++] = bufferState.writes[i];
     }
-    for (uint32_t i = 0; i < vkrt->core.textureCount; i++) {
-        textureBindings[i].imageView = vkrt->core.textures[i].view;
-    }
+    writeDescriptorSets[writeCount++] = textureState.samplerWrite;
+    writeDescriptorSets[writeCount++] = textureState.textureWrite;
 
-    VkWriteDescriptorSet textureWrite = {0};
-    textureWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    textureWrite.dstSet = descriptorSet;
-    textureWrite.dstBinding = 23;
-    textureWrite.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-    textureWrite.descriptorCount = VKRT_MAX_BINDLESS_TEXTURES;
-    textureWrite.pImageInfo = textureBindings;
-
-    VkWriteDescriptorSet writeDescriptorSets[] = {
-        accelerationStructureWrites[0],
-        accelerationStructureWrites[1],
-        accumulationReadWrite,
-        accumulationWrite,
-        outputImageWrite,
-        selectionMaskImageWrite,
-        albedoReadImageWrite,
-        albedoWriteImageWrite,
-        normalReadImageWrite,
-        normalWriteImageWrite,
-        verticesWrite,
-        indicesWrite,
-        sceneDataWrite,
-        selectionWrite,
-        meshInfoWrite,
-        materialWrite,
-        emissiveMeshWrite,
-        emissiveTriangleWrite,
-        meshAliasQWrite,
-        meshAliasIdxWrite,
-        triAliasQWrite,
-        triAliasIdxWrite,
-        samplerWrite,
-        textureWrite,
-    };
-
-    vkUpdateDescriptorSets(vkrt->core.device, VKRT_ARRAY_COUNT(writeDescriptorSets), writeDescriptorSets, 0, VK_NULL_HANDLE);
+    vkUpdateDescriptorSets(vkrt->core.device, writeCount, writeDescriptorSets, 0, VK_NULL_HANDLE);
     vkrt->core.descriptorSetReady[frameIndex] = VK_TRUE;
     return VKRT_SUCCESS;
 }
@@ -480,7 +347,7 @@ VKRT_Result createDescriptorSetLayout(VKRT* vkrt) {
 
     VkDescriptorSetLayoutCreateInfo createInfo = {0};
     createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    createInfo.bindingCount = VKRT_ARRAY_COUNT(bindings);
+    createInfo.bindingCount = (uint32_t)(sizeof(bindings) / sizeof(bindings[0]));
     createInfo.pBindings = bindings;
 
     if (vkCreateDescriptorSetLayout(vkrt->core.device, &createInfo, NULL, &vkrt->core.descriptorSetLayout) != VK_SUCCESS) {
@@ -517,7 +384,7 @@ VKRT_Result createDescriptorPool(VKRT* vkrt) {
 
     VkDescriptorPoolCreateInfo createInfo = {0};
     createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    createInfo.poolSizeCount = VKRT_ARRAY_COUNT(rendererPoolSizes);
+    createInfo.poolSizeCount = (uint32_t)(sizeof(rendererPoolSizes) / sizeof(rendererPoolSizes[0]));
     createInfo.pPoolSizes = rendererPoolSizes;
     createInfo.maxSets = VKRT_MAX_FRAMES_IN_FLIGHT + 4u;
     createInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
@@ -527,7 +394,7 @@ VKRT_Result createDescriptorPool(VKRT* vkrt) {
         return VKRT_ERROR_OPERATION_FAILED;
     }
 
-    createInfo.poolSizeCount = VKRT_ARRAY_COUNT(overlayPoolSizes);
+    createInfo.poolSizeCount = (uint32_t)(sizeof(overlayPoolSizes) / sizeof(overlayPoolSizes[0]));
     createInfo.pPoolSizes = overlayPoolSizes;
     createInfo.maxSets = 512u;
 

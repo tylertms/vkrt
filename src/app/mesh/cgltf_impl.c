@@ -1,0 +1,4 @@
+#define CGLTF_IMPLEMENTATION
+// NOLINTBEGIN
+#include "cgltf.h"
+// NOLINTEND

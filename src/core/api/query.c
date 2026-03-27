@@ -1,7 +1,12 @@
 #include "state.h"
 #include "textures.h"
+#include "types.h"
+#include "vkrt_engine_types.h"
 #include "vkrt_internal.h"
+#include "vkrt_overlay.h"
+#include "vkrt_types.h"
 
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 

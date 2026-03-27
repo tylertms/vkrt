@@ -1,16 +1,23 @@
-#include "images.h"
+#include "config.h"
+#include "constants.h"
+#include "denoise.h"
 #include "descriptor.h"
+#include "export.h"
+#include "images.h"
+#include "numeric.h"
 #include "scene.h"
 #include "state.h"
 #include "swapchain.h"
-#include "denoise.h"
 #include "view.h"
-#include "export.h"
 #include "vkrt_internal.h"
-#include "numeric.h"
+#include "vkrt_types.h"
+#include "vulkan/vulkan_core.h"
 
 #include <math.h>
+#include <stdint.h>
 #include <string.h>
+#include <types.h>
+#include <vec3.h>
 
 void VKRT_defaultRenderExportSettings(VKRT_RenderExportSettings* settings) {
     if (!settings) return;
@@ -379,23 +386,35 @@ VKRT_Result VKRT_setRenderViewState(VKRT* vkrt, float zoom, float panX, float pa
     return VKRT_SUCCESS;
 }
 
-VKRT_Result VKRT_cameraSetPose(VKRT* vkrt, vec3 position, vec3 target, vec3 up, float vfov) {
+static int cameraVectorsEqual(const vec3 left, const vec3 right) {
+    return left[0] == right[0] && left[1] == right[1] && left[2] == right[2];
+}
+
+static int cameraEqual(const Camera* left, const Camera* right) {
+    if (!left || !right) return 0;
+    return cameraVectorsEqual(left->pos, right->pos) &&
+           cameraVectorsEqual(left->target, right->target) &&
+           cameraVectorsEqual(left->up, right->up) &&
+           left->vfov == right->vfov &&
+           left->nearZ == right->nearZ &&
+           left->farZ == right->farZ;
+}
+
+static VKRT_Result assignCameraVector(vec3 destination, vec3 source) {
+    if (!source) return VKRT_SUCCESS;
+    if (!vector3Finite(source)) return VKRT_ERROR_INVALID_ARGUMENT;
+    glm_vec3_copy(source, destination);
+    return VKRT_SUCCESS;
+}
+
+VKRT_Result VKRT_cameraSetPose(VKRT* vkrt, vec3 position, vec3 target, vec3 upVector, float vfov) {
     VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
     if (stateReady != VKRT_SUCCESS) return stateReady;
 
     Camera nextCamera = vkrt->sceneSettings.camera;
-    if (position) {
-        if (!vector3Finite(position)) return VKRT_ERROR_INVALID_ARGUMENT;
-        glm_vec3_copy(position, nextCamera.pos);
-    }
-    if (target) {
-        if (!vector3Finite(target)) return VKRT_ERROR_INVALID_ARGUMENT;
-        glm_vec3_copy(target, nextCamera.target);
-    }
-    if (up) {
-        if (!vector3Finite(up)) return VKRT_ERROR_INVALID_ARGUMENT;
-        glm_vec3_copy(up, nextCamera.up);
-    }
+    if (assignCameraVector(nextCamera.pos, position) != VKRT_SUCCESS) return VKRT_ERROR_INVALID_ARGUMENT;
+    if (assignCameraVector(nextCamera.target, target) != VKRT_SUCCESS) return VKRT_ERROR_INVALID_ARGUMENT;
+    if (assignCameraVector(nextCamera.up, upVector) != VKRT_SUCCESS) return VKRT_ERROR_INVALID_ARGUMENT;
     if (vfov != 0.0f) {
         if (!isfinite(vfov) || vfov <= 0.0f || vfov >= 179.0f) {
             return VKRT_ERROR_INVALID_ARGUMENT;
@@ -405,7 +424,7 @@ VKRT_Result VKRT_cameraSetPose(VKRT* vkrt, vec3 position, vec3 target, vec3 up, 
 
     if (!cameraPoseValid(&nextCamera)) return VKRT_ERROR_INVALID_ARGUMENT;
 
-    if (memcmp(&vkrt->sceneSettings.camera, &nextCamera, sizeof(nextCamera)) == 0) {
+    if (cameraEqual(&vkrt->sceneSettings.camera, &nextCamera)) {
         return VKRT_SUCCESS;
     }
 
@@ -415,12 +434,12 @@ VKRT_Result VKRT_cameraSetPose(VKRT* vkrt, vec3 position, vec3 target, vec3 up, 
     return VKRT_SUCCESS;
 }
 
-VKRT_Result VKRT_cameraGetPose(const VKRT* vkrt, vec3 position, vec3 target, vec3 up, float* vfov) {
+VKRT_Result VKRT_cameraGetPose(const VKRT* vkrt, vec3 position, vec3 target, vec3 upVector, float* vfov) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
 
     if (position) memcpy(position, vkrt->sceneSettings.camera.pos, sizeof(vec3));
     if (target) memcpy(target, vkrt->sceneSettings.camera.target, sizeof(vec3));
-    if (up) memcpy(up, vkrt->sceneSettings.camera.up, sizeof(vec3));
+    if (upVector) memcpy(upVector, vkrt->sceneSettings.camera.up, sizeof(vec3));
     if (vfov) *vfov = vkrt->sceneSettings.camera.vfov;
     return VKRT_SUCCESS;
 }

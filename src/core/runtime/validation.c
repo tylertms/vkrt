@@ -1,5 +1,12 @@
 #include "validation.h"
+
+#include "GLFW/glfw3.h"
 #include "debug.h"
+#include "vkrt_types.h"
+#include "vulkan/vk_platform.h"
+#include "vulkan/vulkan_core.h"
+
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -123,8 +130,9 @@ void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT* create
 VKRT_Result setupDebugMessenger(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
 
-    if (!enableValidationLayers)
+    if (!enableValidationLayers) {
         return VKRT_SUCCESS;
+    }
 
     VkDebugUtilsMessengerCreateInfoEXT createInfo = {0};
     populateDebugMessengerCreateInfo(&createInfo);
@@ -141,9 +149,8 @@ VkResult createDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMes
     PFN_vkCreateDebugUtilsMessengerEXT func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
     if (func != 0) {
         return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
-    } else {
-        return VK_ERROR_EXTENSION_NOT_PRESENT;
     }
+    return VK_ERROR_EXTENSION_NOT_PRESENT;
 }
 
 void destroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator) {

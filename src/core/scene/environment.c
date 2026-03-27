@@ -1,7 +1,12 @@
 #include "environment.h"
 
+#include "constants.h"
 #include "scene.h"
 #include "textures.h"
+#include "vkrt_engine_types.h"
+#include "vkrt_types.h"
+
+#include <stdint.h>
 
 static VKRT_Result replaceEnvironmentTexture(VKRT* vkrt, uint32_t nextTextureIndex) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;

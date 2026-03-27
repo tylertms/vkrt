@@ -1,16 +1,18 @@
 #include "image.h"
 
+#include "constants.h"
 #include "debug.h"
 #include "exr.h"
-
-#include <spng.h>
-#include <turbojpeg.h>
+#include "formats.h"
 
 #include <limits.h>
 #include <math.h>
+#include <spng.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <turbojpeg.h>
 
 typedef enum ImageCodec {
     IMAGE_CODEC_UNKNOWN = 0,
@@ -71,12 +73,12 @@ static void convertSRGB16PNGToLinearRGBA16(uint16_t* rgba16, uint32_t width, uin
     size_t pixelCount = (size_t)width * (size_t)height;
     for (size_t i = 0; i < pixelCount; i++) {
         for (size_t channel = 0; channel < 3u; channel++) {
-            float encoded = (float)rgba16[i * 4u + channel] / 65535.0f;
+            float encoded = (float)rgba16[(i * 4u) + channel] / 65535.0f;
             float linear = srgbDecodeScalar(encoded);
             long unorm16 = lrintf(linear * 65535.0f);
-            if (unorm16 < 0l) unorm16 = 0l;
-            if (unorm16 > 65535l) unorm16 = 65535l;
-            rgba16[i * 4u + channel] = (uint16_t)unorm16;
+            if (unorm16 < 0L) unorm16 = 0L;
+            if (unorm16 > 65535L) unorm16 = 65535L;
+            rgba16[(i * 4u) + channel] = (uint16_t)unorm16;
         }
     }
 }
@@ -322,7 +324,7 @@ static int readBinaryFile(const char* path, uint8_t** outData, size_t* outSize) 
     *outSize = 0u;
 
     FILE* file = NULL;
-#if defined(_WIN32)
+#ifdef _WIN32
     if (fopen_s(&file, path, "rb") != 0) file = NULL;
 #else
     file = fopen(path, "rb");
@@ -334,20 +336,20 @@ static int readBinaryFile(const char* path, uint8_t** outData, size_t* outSize) 
 
     if (fseek(file, 0, SEEK_END) != 0) {
         LOG_ERROR("Failed to seek image file: %s", path);
-        fclose(file);
+        (void)fclose(file);
         return 0;
     }
 
     long fileLength = ftell(file);
     if (fileLength <= 0) {
         LOG_ERROR("Failed to determine image file size: %s", path);
-        fclose(file);
+        (void)fclose(file);
         return 0;
     }
 
     if (fseek(file, 0, SEEK_SET) != 0) {
         LOG_ERROR("Failed to rewind image file: %s", path);
-        fclose(file);
+        (void)fclose(file);
         return 0;
     }
 
@@ -355,12 +357,12 @@ static int readBinaryFile(const char* path, uint8_t** outData, size_t* outSize) 
     uint8_t* buffer = (uint8_t*)malloc(bufferSize);
     if (!buffer) {
         LOG_ERROR("Failed to allocate image file buffer for %s", path);
-        fclose(file);
+        (void)fclose(file);
         return 0;
     }
 
     size_t bytesRead = fread(buffer, 1u, bufferSize, file);
-    fclose(file);
+    (void)fclose(file);
     if (bytesRead != bufferSize) {
         free(buffer);
         LOG_ERROR("Failed to read image file: %s", path);

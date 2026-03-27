@@ -1,10 +1,19 @@
 #include "editor.h"
-#include "editor_internal.h"
-#include "inspector/panel.h"
 
+#include "GLFW/glfw3.h"
+#include "config.h"
+#include "constants.h"
 #include "dcimgui.h"
 #include "dcimgui_impl_glfw.h"
 #include "dcimgui_impl_vulkan.h"
+#include "editor_internal.h"
+#include "inspector/panel.h"
+#include "vkrt.h"
+#include "vkrt_overlay.h"
+#include "vkrt_types.h"
+#include "vulkan/vulkan_core.h"
+
+#include <stdint.h>
 #ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable : 5287)
@@ -86,17 +95,14 @@ static float queryEditorContentScale(GLFWwindow* window) {
 static bool overlayInfoMatches(const VKRT_OverlayInfo* a, const VKRT_OverlayInfo* b) {
     if (!a || !b) return false;
 
-    return a->window == b->window &&
-        a->apiVersion == b->apiVersion &&
-        a->instance == b->instance &&
-        a->physicalDevice == b->physicalDevice &&
-        a->device == b->device &&
-        a->graphicsQueueFamily == b->graphicsQueueFamily &&
-        a->graphicsQueue == b->graphicsQueue &&
-        a->descriptorPool == b->descriptorPool &&
-        a->colorAttachmentFormat == b->colorAttachmentFormat &&
-        a->swapchainImageCount == b->swapchainImageCount &&
-        a->swapchainMinImageCount == b->swapchainMinImageCount;
+    return (a->window == b->window && a->apiVersion == b->apiVersion && a->instance == b->instance
+            && a->physicalDevice == b->physicalDevice && a->device == b->device
+            && a->graphicsQueueFamily == b->graphicsQueueFamily
+            && a->graphicsQueue == b->graphicsQueue && a->descriptorPool == b->descriptorPool
+            && a->colorAttachmentFormat == b->colorAttachmentFormat
+            && a->swapchainImageCount == b->swapchainImageCount
+            && a->swapchainMinImageCount == b->swapchainMinImageCount)
+        != 0;
 }
 
 static void populateVulkanInitInfo(const VKRT_OverlayInfo* overlay, ImGui_ImplVulkan_InitInfo* outInitInfo) {
@@ -114,6 +120,7 @@ static void populateVulkanInitInfo(const VKRT_OverlayInfo* overlay, ImGui_ImplVu
         .Allocator = VK_NULL_HANDLE,
         .MinImageCount = overlay->swapchainMinImageCount,
         .ImageCount = overlay->swapchainImageCount,
+        .MSAASamples = VK_SAMPLE_COUNT_1_BIT,
         .CheckVkResultFn = VK_NULL_HANDLE,
         .UseDynamicRendering = true,
         .PipelineRenderingCreateInfo = {
@@ -141,7 +148,9 @@ static bool initializeEditorVulkanBackend(EditorUIState* state, const VKRT_Overl
 
     state->overlay = *overlay;
 
-    ImGui_ImplVulkan_InitInfo initInfo = {0};
+    ImGui_ImplVulkan_InitInfo initInfo = {
+        .MSAASamples = VK_SAMPLE_COUNT_1_BIT,
+    };
     populateVulkanInitInfo(&state->overlay, &initInfo);
     if (!cImGui_ImplVulkan_Init(&initInfo)) {
         memset(&state->overlay, 0, sizeof(state->overlay));
@@ -227,33 +236,33 @@ static bool refreshEditorOverlayBackend(EditorUIState* state, VKRT* vkrt) {
     return true;
 }
 
-static void rebuildEditorFonts(ImGuiIO* io, float uiScale) {
-    if (!io) return;
+static void rebuildEditorFonts(ImGuiIO* imguiIO, float uiScale) {
+    if (!imguiIO) return;
 
-    ImFontAtlas_Clear(io->Fonts);
+    ImFontAtlas_Clear(imguiIO->Fonts);
 
     ImFontConfig textConfig = makeDefaultFontConfig();
     textConfig.FontDataOwnedByAtlas = false;
-    ImFontAtlas_AddFontFromMemoryTTF(io->Fonts, (void*)IBMPlexMono_Regular, IBMPlexMono_Regular_len, kEditorBaseTextSizePx * uiScale, &textConfig, NULL);
+    ImFontAtlas_AddFontFromMemoryTTF(imguiIO->Fonts, (void*)IBMPlexMono_Regular, IBMPlexMono_Regular_len, kEditorBaseTextSizePx * uiScale, &textConfig, NULL);
 
     ImFontConfig iconConfig = makeDefaultFontConfig();
     iconConfig.FontDataOwnedByAtlas = false;
     iconConfig.MergeMode = true;
     iconConfig.PixelSnapH = true;
     static const ImWchar iconRanges[] = {ICON_MIN_FA, ICON_MAX_FA, 0};
-    ImFontAtlas_AddFontFromMemoryTTF(io->Fonts, (void*)fa_solid_900, fa_solid_900_len, kEditorBaseIconSizePx * uiScale, &iconConfig, iconRanges);
+    ImFontAtlas_AddFontFromMemoryTTF(imguiIO->Fonts, (void*)fa_solid_900, fa_solid_900_len, kEditorBaseIconSizePx * uiScale, &iconConfig, iconRanges);
 
     unsigned char* pixels = NULL;
     int width = 0;
     int height = 0;
-    ImFontAtlas_GetTexDataAsRGBA32(io->Fonts, &pixels, &width, &height, NULL);
+    ImFontAtlas_GetTexDataAsRGBA32(imguiIO->Fonts, &pixels, &width, &height, NULL);
 }
 
 static void applyEditorUIScale(EditorUIState* state, float uiScale, bool refreshVulkanFonts) {
     if (!state) return;
     if (state->uiScale > 0.0f && fabsf(uiScale - state->uiScale) <= kEditorScaleEpsilon) return;
 
-    ImGuiIO* io = ImGui_GetIO();
+    ImGuiIO* imguiIO = ImGui_GetIO();
     ImGuiStyle* style = ImGui_GetStyle();
     if (state->uiScale <= 0.0f) {
         editorThemeApplyDefault();
@@ -262,7 +271,7 @@ static void applyEditorUIScale(EditorUIState* state, float uiScale, bool refresh
         ImGuiStyle_ScaleAllSizes(style, uiScale / state->uiScale);
     }
 
-    rebuildEditorFonts(io, uiScale);
+    rebuildEditorFonts(imguiIO, uiScale);
     state->uiScale = uiScale;
 
     if (refreshVulkanFonts) {
@@ -328,14 +337,13 @@ static void applyMainMenuShortcuts(
 ) {
     if (!session) return;
 
-    ImGuiIO* io = ImGui_GetIO();
-    if (io->WantTextInput || ImGui_IsAnyItemActive() || ImGui_IsPopupOpen(NULL, ImGuiPopupFlags_AnyPopupId)) {
+    ImGuiIO* imguiIO = ImGui_GetIO();
+    if (imguiIO->WantTextInput || ImGui_IsAnyItemActive() || ImGui_IsPopupOpen(NULL, ImGuiPopupFlags_AnyPopupId)) {
         return;
     }
 
-    bool haveCurrentScenePath = currentScenePath && currentScenePath[0];
-    bool canSaveRender = status &&
-        VKRT_renderStatusIsComplete(status);
+    bool haveCurrentScenePath = (currentScenePath && currentScenePath[0]) != 0;
+    bool canSaveRender = (status && VKRT_renderStatusIsComplete(status)) != 0;
 
     if (ImGui_IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_O)) {
         queueEditorMenuAction(session, EDITOR_MENU_ACTION_OPEN_SCENE, currentScenePath);
@@ -363,6 +371,67 @@ static void applyMainMenuShortcuts(
     }
 }
 
+static void drawFileMenu(
+    Session* session,
+    const VKRT_RenderStatusSnapshot* status,
+    const char* currentScenePath,
+    bool canClearEnvironment
+) {
+    bool haveCurrentScenePath = (currentScenePath && currentScenePath[0]) != 0;
+    bool canSaveRender = (status && VKRT_renderStatusIsComplete(status)) != 0;
+
+    if (!ImGui_BeginMenu("File")) return;
+
+    if (ImGui_MenuItemEx("Open", "\tCtrl+O", false, true)) {
+        queueEditorMenuAction(session, EDITOR_MENU_ACTION_OPEN_SCENE, currentScenePath);
+    }
+    if (ImGui_MenuItemEx("Save", "\tCtrl+S", false, haveCurrentScenePath)) {
+        queueEditorMenuAction(session, EDITOR_MENU_ACTION_SAVE_SCENE, currentScenePath);
+    }
+    if (ImGui_MenuItemEx("Save As", "\tCtrl+Shift+S", false, true)) {
+        queueEditorMenuAction(session, EDITOR_MENU_ACTION_SAVE_SCENE_AS, currentScenePath);
+    }
+
+    ImGui_Separator();
+    if (ImGui_BeginMenu("Import")) {
+        if (ImGui_MenuItemEx("Mesh", "\tCtrl+I", false, true)) {
+            queueEditorMenuAction(session, EDITOR_MENU_ACTION_IMPORT_MESH, currentScenePath);
+        }
+        ImGui_EndMenu();
+    }
+    if (ImGui_BeginMenu("Environment")) {
+        if (ImGui_MenuItemEx("Load", "\tCtrl+Shift+E", false, true)) {
+            queueEditorMenuAction(session, EDITOR_MENU_ACTION_LOAD_ENVIRONMENT, currentScenePath);
+        }
+        if (ImGui_MenuItemEx("Clear", "\tCtrl+Alt+E", false, canClearEnvironment)) {
+            queueEditorMenuAction(session, EDITOR_MENU_ACTION_CLEAR_ENVIRONMENT, currentScenePath);
+        }
+        ImGui_EndMenu();
+    }
+    if (ImGui_MenuItemEx("Save Render", "\tCtrl+Shift+R", false, canSaveRender)) {
+        queueEditorMenuAction(session, EDITOR_MENU_ACTION_SAVE_RENDER, currentScenePath);
+    }
+    ImGui_EndMenu();
+}
+
+static void drawViewMenu(Session* session, const VKRT_RenderStatusSnapshot* status, const char* currentScenePath) {
+    if (!ImGui_BeginMenu("View")) return;
+
+    if (ImGui_MenuItemEx("Reset Accumulation", "\tCtrl+R", false, status != NULL)) {
+        queueEditorMenuAction(session, EDITOR_MENU_ACTION_RESET_ACCUMULATION, currentScenePath);
+    }
+    ImGui_Separator();
+    ImGui_MenuItemEx("Panels", NULL, false, false);
+    ImGui_EndMenu();
+}
+
+static void drawHelpMenu(void) {
+    if (!ImGui_BeginMenu("Help")) return;
+    ImGui_MenuItemEx("Controls", NULL, false, false);
+    ImGui_MenuItemEx("About", NULL, false, false);
+    ImGui_EndMenu();
+}
+
 static void drawMainMenuBar(
     Session* session,
     const VKRT_RenderStatusSnapshot* status,
@@ -372,63 +441,82 @@ static void drawMainMenuBar(
     if (!session) return;
     if (!ImGui_BeginMainMenuBar()) return;
 
-    bool haveCurrentScenePath = currentScenePath && currentScenePath[0];
-
-    if (ImGui_BeginMenu("File")) {
-        if (ImGui_MenuItemEx("Open", "\tCtrl+O", false, true)) {
-            queueEditorMenuAction(session, EDITOR_MENU_ACTION_OPEN_SCENE, currentScenePath);
-        }
-        if (ImGui_MenuItemEx("Save", "\tCtrl+S", false, haveCurrentScenePath)) {
-            queueEditorMenuAction(session, EDITOR_MENU_ACTION_SAVE_SCENE, currentScenePath);
-        }
-        if (ImGui_MenuItemEx("Save As", "\tCtrl+Shift+S", false, true)) {
-            queueEditorMenuAction(session, EDITOR_MENU_ACTION_SAVE_SCENE_AS, currentScenePath);
-        }
-
-        ImGui_Separator();
-
-        if (ImGui_BeginMenu("Import")) {
-            if (ImGui_MenuItemEx("Mesh", "\tCtrl+I", false, true)) {
-                queueEditorMenuAction(session, EDITOR_MENU_ACTION_IMPORT_MESH, currentScenePath);
-            }
-            ImGui_EndMenu();
-        }
-
-        if (ImGui_BeginMenu("Environment")) {
-            if (ImGui_MenuItemEx("Load", "\tCtrl+Shift+E", false, true)) {
-                queueEditorMenuAction(session, EDITOR_MENU_ACTION_LOAD_ENVIRONMENT, currentScenePath);
-            }
-            if (ImGui_MenuItemEx("Clear", "\tCtrl+Alt+E", false, canClearEnvironment)) {
-                queueEditorMenuAction(session, EDITOR_MENU_ACTION_CLEAR_ENVIRONMENT, currentScenePath);
-            }
-            ImGui_EndMenu();
-        }
-
-        bool canSaveRender = status &&
-            VKRT_renderStatusIsComplete(status);
-        if (ImGui_MenuItemEx("Save Render", "\tCtrl+Shift+R", false, canSaveRender)) {
-            queueEditorMenuAction(session, EDITOR_MENU_ACTION_SAVE_RENDER, currentScenePath);
-        }
-        ImGui_EndMenu();
-    }
-
-    if (ImGui_BeginMenu("View")) {
-        if (ImGui_MenuItemEx("Reset Accumulation", "\tCtrl+R", false, status != NULL)) {
-            queueEditorMenuAction(session, EDITOR_MENU_ACTION_RESET_ACCUMULATION, currentScenePath);
-        }
-
-        ImGui_Separator();
-        ImGui_MenuItemEx("Panels", NULL, false, false);
-        ImGui_EndMenu();
-    }
-
-    if (ImGui_BeginMenu("Help")) {
-        ImGui_MenuItemEx("Controls", NULL, false, false);
-        ImGui_MenuItemEx("About", NULL, false, false);
-        ImGui_EndMenu();
-    }
-
+    drawFileMenu(session, status, currentScenePath, canClearEnvironment);
+    drawViewMenu(session, status, currentScenePath);
+    drawHelpMenu();
     ImGui_EndMainMenuBar();
+}
+
+static int updateRenderViewState(VKRT* vkrt, float zoom, float panX, float panY, const char* failureLabel) {
+    VKRT_Result result = VKRT_setRenderViewState(vkrt, zoom, panX, panY);
+    if (result == VKRT_SUCCESS) return 1;
+
+    LOG_ERROR("%s (%d)", failureLabel, (int)result);
+    return 0;
+}
+
+static void applyInteractiveCameraInput(VKRT* vkrt, bool viewportHovered, ImGuiIO* imguiIO) {
+    VKRT_CameraInput cameraInput = {
+        .orbitDx = imguiIO->MouseDelta.x,
+        .orbitDy = imguiIO->MouseDelta.y,
+        .panDx = imguiIO->MouseDelta.x,
+        .panDy = imguiIO->MouseDelta.y,
+        .scroll = imguiIO->MouseWheel,
+        .orbiting = viewportHovered && !imguiIO->KeyShift && ImGui_IsMouseDragging(ImGuiMouseButton_Middle, -1.0f),
+        .panning = viewportHovered &&
+            ((imguiIO->KeyShift && ImGui_IsMouseDragging(ImGuiMouseButton_Middle, -1.0f)) ||
+             ImGui_IsMouseDragging(ImGuiMouseButton_Right, -1.0f)),
+        .captureMouse = !viewportHovered,
+    };
+    VKRT_Result result = VKRT_applyCameraInput(vkrt, &cameraInput);
+    if (result != VKRT_SUCCESS) {
+        LOG_ERROR("Applying camera input failed (%d)", (int)result);
+    }
+}
+
+static int applyRenderViewCameraInput(VKRT* vkrt, const VKRT_RuntimeSnapshot* runtime, bool viewportHovered, ImGuiIO* imguiIO) {
+    float zoom = 1.0f;
+    float panX = 0.0f;
+    float panY = 0.0f;
+    VKRT_Result result = VKRT_getRenderViewState(vkrt, &zoom, &panX, &panY);
+    if (result != VKRT_SUCCESS) {
+        LOG_ERROR("Querying render view state failed (%d)", (int)result);
+        return 0;
+    }
+    if (!viewportHovered) return 1;
+
+    if (imguiIO->MouseWheel != 0.0f) {
+        zoom = zoom * powf(kRenderViewWheelStep, imguiIO->MouseWheel);
+        zoom = vkrtClampf(zoom, VKRT_RENDER_VIEW_ZOOM_MIN, VKRT_RENDER_VIEW_ZOOM_MAX);
+        if (!updateRenderViewState(vkrt, zoom, panX, panY, "Updating render zoom failed")) return 0;
+        result = VKRT_getRenderViewState(vkrt, &zoom, &panX, &panY);
+        if (result != VKRT_SUCCESS) {
+            LOG_ERROR("Querying render view state failed (%d)", (int)result);
+            return 0;
+        }
+    }
+
+    if ((ImGui_IsMouseDragging(ImGuiMouseButton_Middle, -1.0f) ||
+         ImGui_IsMouseDragging(ImGuiMouseButton_Right, -1.0f)) == 0) {
+        return 1;
+    }
+
+    float scaleX = imguiIO->DisplayFramebufferScale.x > 0.0f ? imguiIO->DisplayFramebufferScale.x : 1.0f;
+    float scaleY = imguiIO->DisplayFramebufferScale.y > 0.0f ? imguiIO->DisplayFramebufferScale.y : 1.0f;
+    float viewWidth = (float)(runtime->displayViewportRect[2] > 0 ? runtime->displayViewportRect[2] : 1u) / scaleX;
+    float viewHeight = (float)(runtime->displayViewportRect[3] > 0 ? runtime->displayViewportRect[3] : 1u) / scaleY;
+    float cropWidth = 1.0f;
+    float cropHeight = 1.0f;
+
+    result = VKRT_getRenderViewCrop(vkrt, zoom, &cropWidth, &cropHeight);
+    if (result != VKRT_SUCCESS) {
+        LOG_ERROR("Querying render view crop failed (%d)", (int)result);
+        return 0;
+    }
+
+    panX -= (imguiIO->MouseDelta.x * cropWidth) / viewWidth;
+    panY -= (imguiIO->MouseDelta.y * cropHeight) / viewHeight;
+    return updateRenderViewState(vkrt, zoom, panX, panY, "Updating render pan failed");
 }
 
 static void initializeDockLayout(EditorUIState* state) {
@@ -464,39 +552,30 @@ static void initializeDockLayout(EditorUIState* state) {
 
     ImGuiDockNode* sceneDockNode = ImGui_DockBuilderGetNode(sceneDockID);
     if (sceneDockNode) {
-        ImGuiDockNodeFlags localFlags = composeDockNodeFlags(
-            (ImGuiDockNodeFlags)sceneDockNode->LocalFlags,
-            (ImGuiDockNodeFlags)(
-                (int)ImGuiDockNodeFlags_NoTabBar |
-                (int)ImGuiDockNodeFlags_NoWindowMenuButton |
-                (int)ImGuiDockNodeFlags_NoCloseButton
-            )
-        );
+        ImGuiDockNodeFlags localFlags =
+            composeDockNodeFlags(sceneDockNode->LocalFlags,
+                                 (ImGuiDockNodeFlags)(ImGuiDockNodeFlags_NoTabBar
+                                                      | ImGuiDockNodeFlags_NoWindowMenuButton
+                                                      | ImGuiDockNodeFlags_NoCloseButton));
         ImGuiDockNode_SetLocalFlags(sceneDockNode, localFlags);
     }
     ImGuiDockNode* propertiesDockNode = ImGui_DockBuilderGetNode(propertiesDockID);
     if (propertiesDockNode) {
-        ImGuiDockNodeFlags localFlags = composeDockNodeFlags(
-            (ImGuiDockNodeFlags)propertiesDockNode->LocalFlags,
-            (ImGuiDockNodeFlags)(
-                (int)ImGuiDockNodeFlags_NoTabBar |
-                (int)ImGuiDockNodeFlags_NoWindowMenuButton |
-                (int)ImGuiDockNodeFlags_NoCloseButton
-            )
-        );
+        ImGuiDockNodeFlags localFlags =
+            composeDockNodeFlags(propertiesDockNode->LocalFlags,
+                                 (ImGuiDockNodeFlags)(ImGuiDockNodeFlags_NoTabBar
+                                                      | ImGuiDockNodeFlags_NoWindowMenuButton
+                                                      | ImGuiDockNodeFlags_NoCloseButton));
         ImGuiDockNode_SetLocalFlags(propertiesDockNode, localFlags);
     }
     ImGuiDockNode* viewportDockNode = ImGui_DockBuilderGetNode(viewportDockID);
     if (viewportDockNode) {
-        ImGuiDockNodeFlags localFlags = composeDockNodeFlags(
-            (ImGuiDockNodeFlags)viewportDockNode->LocalFlags,
-            (ImGuiDockNodeFlags)(
-                (int)ImGuiDockNodeFlags_NoTabBar |
-                (int)ImGuiDockNodeFlags_NoUndocking |
-                (int)ImGuiDockNodeFlags_NoWindowMenuButton |
-                (int)ImGuiDockNodeFlags_NoCloseButton
-            )
-        );
+        ImGuiDockNodeFlags localFlags =
+            composeDockNodeFlags(viewportDockNode->LocalFlags,
+                                 (ImGuiDockNodeFlags)(ImGuiDockNodeFlags_NoTabBar
+                                                      | ImGuiDockNodeFlags_NoUndocking
+                                                      | ImGuiDockNodeFlags_NoWindowMenuButton
+                                                      | ImGuiDockNodeFlags_NoCloseButton));
         ImGuiDockNode_SetLocalFlags(viewportDockNode, localFlags);
     }
 
@@ -542,15 +621,12 @@ static bool drawViewportWindow(
     if (!vkrt || !status || !runtime) return false;
 
     ImGuiWindowClass viewportWindowClass = {0};
-    viewportWindowClass.DockNodeFlagsOverrideSet = composeDockNodeFlags(
-        ImGuiDockNodeFlags_None,
-        (ImGuiDockNodeFlags)(
-            (int)ImGuiDockNodeFlags_NoTabBar |
-            (int)ImGuiDockNodeFlags_NoUndocking |
-            (int)ImGuiDockNodeFlags_NoWindowMenuButton |
-            (int)ImGuiDockNodeFlags_NoCloseButton
-        )
-    );
+    viewportWindowClass.DockNodeFlagsOverrideSet =
+        composeDockNodeFlags(ImGuiDockNodeFlags_None,
+                             (ImGuiDockNodeFlags)(ImGuiDockNodeFlags_NoTabBar
+                                                  | ImGuiDockNodeFlags_NoUndocking
+                                                  | ImGuiDockNodeFlags_NoWindowMenuButton
+                                                  | ImGuiDockNodeFlags_NoCloseButton));
     ImGui_SetNextWindowClass(&viewportWindowClass);
 
     ImGui_PushStyleVarImVec2(ImGuiStyleVar_WindowPadding, (ImVec2){0.0f, 0.0f});
@@ -633,11 +709,11 @@ static void applyCompletedViewportSelection(VKRT* vkrt, Session* session) {
 static bool queryViewportMousePixel(uint32_t* outX, uint32_t* outY) {
     if (!outX || !outY) return false;
 
-    ImGuiIO* io = ImGui_GetIO();
-    float scaleX = io->DisplayFramebufferScale.x > 0.0f ? io->DisplayFramebufferScale.x : 1.0f;
-    float scaleY = io->DisplayFramebufferScale.y > 0.0f ? io->DisplayFramebufferScale.y : 1.0f;
-    float mouseX = io->MousePos.x * scaleX;
-    float mouseY = io->MousePos.y * scaleY;
+    ImGuiIO* imguiIO = ImGui_GetIO();
+    float scaleX = imguiIO->DisplayFramebufferScale.x > 0.0f ? imguiIO->DisplayFramebufferScale.x : 1.0f;
+    float scaleY = imguiIO->DisplayFramebufferScale.y > 0.0f ? imguiIO->DisplayFramebufferScale.y : 1.0f;
+    float mouseX = imguiIO->MousePos.x * scaleX;
+    float mouseY = imguiIO->MousePos.y * scaleY;
     if (!isfinite(mouseX) || !isfinite(mouseY) || mouseX < 0.0f || mouseY < 0.0f) return false;
 
     *outX = (uint32_t)mouseX;
@@ -706,8 +782,8 @@ static void queueSelectedSceneObjectRemovalOnDelete(
     if (!vkrt || !session || !status) return;
     if (VKRT_renderStatusIsActive(status)) return;
 
-    ImGuiIO* io = ImGui_GetIO();
-    if (io->WantTextInput || ImGui_IsAnyItemActive() || ImGui_IsPopupOpen(NULL, ImGuiPopupFlags_AnyPopupId)) {
+    ImGuiIO* imguiIO = ImGui_GetIO();
+    if (imguiIO->WantTextInput || ImGui_IsAnyItemActive() || ImGui_IsPopupOpen(NULL, ImGuiPopupFlags_AnyPopupId)) {
         return;
     }
     if (!ImGui_IsKeyPressed(ImGuiKey_Delete) && !ImGui_IsKeyPressed(ImGuiKey_Backspace)) return;
@@ -738,77 +814,12 @@ static void applyEditorCameraInput(
 ) {
     if (!vkrt || !status || !runtime) return;
 
-    ImGuiIO* io = ImGui_GetIO();
+    ImGuiIO* imguiIO = ImGui_GetIO();
     if (VKRT_renderStatusIsActive(status)) {
-        if (!viewportHovered) return;
-
-        float zoom = 1.0f;
-        float panX = 0.0f;
-        float panY = 0.0f;
-        VKRT_Result result = VKRT_getRenderViewState(vkrt, &zoom, &panX, &panY);
-        if (result != VKRT_SUCCESS) {
-            LOG_ERROR("Querying render view state failed (%d)", (int)result);
-            return;
-        }
-
-        if (io->MouseWheel != 0.0f) {
-            zoom = zoom * powf(kRenderViewWheelStep, io->MouseWheel);
-            zoom = vkrtClampf(zoom, VKRT_RENDER_VIEW_ZOOM_MIN, VKRT_RENDER_VIEW_ZOOM_MAX);
-            result = VKRT_setRenderViewState(vkrt, zoom, panX, panY);
-            if (result != VKRT_SUCCESS) {
-                LOG_ERROR("Updating render zoom failed (%d)", (int)result);
-                return;
-            }
-            result = VKRT_getRenderViewState(vkrt, &zoom, &panX, &panY);
-            if (result != VKRT_SUCCESS) {
-                LOG_ERROR("Querying render view state failed (%d)", (int)result);
-                return;
-            }
-        }
-
-        bool panning = ImGui_IsMouseDragging(ImGuiMouseButton_Middle, -1.0f) ||
-                       ImGui_IsMouseDragging(ImGuiMouseButton_Right, -1.0f);
-        if (panning) {
-            float scaleX = io->DisplayFramebufferScale.x > 0.0f ? io->DisplayFramebufferScale.x : 1.0f;
-            float scaleY = io->DisplayFramebufferScale.y > 0.0f ? io->DisplayFramebufferScale.y : 1.0f;
-            float viewWidth = (float)(runtime->displayViewportRect[2] > 0 ? runtime->displayViewportRect[2] : 1u) / scaleX;
-            float viewHeight = (float)(runtime->displayViewportRect[3] > 0 ? runtime->displayViewportRect[3] : 1u) / scaleY;
-            float cropWidth = 1.0f;
-            float cropHeight = 1.0f;
-
-            result = VKRT_getRenderViewCrop(vkrt, zoom, &cropWidth, &cropHeight);
-            if (result != VKRT_SUCCESS) {
-                LOG_ERROR("Querying render view crop failed (%d)", (int)result);
-                return;
-            }
-
-            panX -= (io->MouseDelta.x * cropWidth) / viewWidth;
-            panY -= (io->MouseDelta.y * cropHeight) / viewHeight;
-            result = VKRT_setRenderViewState(vkrt, zoom, panX, panY);
-            if (result != VKRT_SUCCESS) {
-                LOG_ERROR("Updating render pan failed (%d)", (int)result);
-                return;
-            }
-        }
+        (void)applyRenderViewCameraInput(vkrt, runtime, viewportHovered, imguiIO);
         return;
     }
-
-    VKRT_CameraInput cameraInput = {
-        .orbitDx = io->MouseDelta.x,
-        .orbitDy = io->MouseDelta.y,
-        .panDx = io->MouseDelta.x,
-        .panDy = io->MouseDelta.y,
-        .scroll = io->MouseWheel,
-        .orbiting = viewportHovered && !io->KeyShift && ImGui_IsMouseDragging(ImGuiMouseButton_Middle, -1.0f),
-        .panning = viewportHovered &&
-            ((io->KeyShift && ImGui_IsMouseDragging(ImGuiMouseButton_Middle, -1.0f)) ||
-             ImGui_IsMouseDragging(ImGuiMouseButton_Right, -1.0f)),
-        .captureMouse = !viewportHovered,
-    };
-    VKRT_Result result = VKRT_applyCameraInput(vkrt, &cameraInput);
-    if (result != VKRT_SUCCESS) {
-        LOG_ERROR("Applying camera input failed (%d)", (int)result);
-    }
+    applyInteractiveCameraInput(vkrt, viewportHovered, imguiIO);
 }
 
 void editorUIInitialize(VKRT* vkrt, void* userData) {
@@ -825,8 +836,8 @@ void editorUIInitialize(VKRT* vkrt, void* userData) {
     ImGui_CreateContext(NULL);
     state->frameReady = false;
 
-    ImGuiIO* io = ImGui_GetIO();
-    io->ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    ImGuiIO* imguiIO = ImGui_GetIO();
+    imguiIO->ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
     VKRT_OverlayInfo overlay = {0};
     if (!queryEditorOverlayInfo(vkrt, &overlay)) {
@@ -865,23 +876,14 @@ void editorUIShutdown(VKRT* vkrt, void* userData) {
     EditorUIState* state = getEditorUIState(session);
     if (!state) return;
 
-    uint64_t shutdownStartTime = getMicroseconds();
-
-    uint64_t vulkanShutdownStartTime = getMicroseconds();
     shutdownEditorVulkanBackend(state);
-    double vulkanShutdownMs = (double)(getMicroseconds() - vulkanShutdownStartTime) / 1e3;
-
-    uint64_t glfwShutdownStartTime = getMicroseconds();
     shutdownEditorGlfwBackend(state);
-    double glfwShutdownMs = (double)(getMicroseconds() - glfwShutdownStartTime) / 1e3;
-
-    LOG_TRACE("UI backends shut down. Vulkan: %.3f ms, GLFW: %.3f ms", vulkanShutdownMs, glfwShutdownMs);
     LOG_TRACE("Destroying UI context");
 
     ImGui_DestroyContext(NULL);
     editorUIShutdownDialogs(session);
 
-    LOG_TRACE("UI shutdown complete in %.3f ms", (double)(getMicroseconds() - shutdownStartTime) / 1e3);
+    LOG_TRACE("UI shutdown complete");
 
     free(state);
     session->editor.uiState = NULL;
@@ -918,14 +920,21 @@ void editorUIUpdate(VKRT* vkrt, Session* session) {
     bool hasStatus = VKRT_getRenderStatus(vkrt, &status) == VKRT_SUCCESS;
     VKRT_SceneSettingsSnapshot sceneSettings = {0};
     bool haveSceneSettings = VKRT_getSceneSettings(vkrt, &sceneSettings) == VKRT_SUCCESS;
-    bool canClearEnvironment = haveSceneSettings && sceneSettings.environmentTextureIndex != VKRT_INVALID_INDEX;
+    bool canClearEnvironment =
+        (haveSceneSettings && sceneSettings.environmentTextureIndex != VKRT_INVALID_INDEX) != 0;
     const char* currentScenePath = sessionGetCurrentScenePath(session);
     VKRT_RuntimeSnapshot runtime = {0};
     bool hasRuntime = VKRT_getRuntimeSnapshot(vkrt, &runtime) == VKRT_SUCCESS;
-    queueSelectedSceneObjectRemovalOnDelete(vkrt, session, hasStatus ? &status : NULL);
-    applyMainMenuShortcuts(session, hasStatus ? &status : NULL, currentScenePath, canClearEnvironment);
+    queueSelectedSceneObjectRemovalOnDelete(vkrt, session, (int)hasStatus ? &status : NULL);
+    applyMainMenuShortcuts(session,
+                           (int)hasStatus ? &status : NULL,
+                           currentScenePath,
+                           canClearEnvironment);
 
-    drawMainMenuBar(session, hasStatus ? &status : NULL, currentScenePath, canClearEnvironment);
+    drawMainMenuBar(session,
+                    (int)hasStatus ? &status : NULL,
+                    currentScenePath,
+                    canClearEnvironment);
     drawWorkspaceDockspace(state);
 
     bool viewportHovered = false;

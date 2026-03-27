@@ -1,5 +1,8 @@
 #include "sync.h"
+
 #include "debug.h"
+#include "vkrt_types.h"
+#include "vulkan/vulkan_core.h"
 
 #include <stdlib.h>
 
@@ -14,7 +17,7 @@ VKRT_Result resetRenderFinishedSemaphores(VKRT* vkrt, size_t oldSemaphoreCount, 
                 }
             }
         }
-        free(vkrt->runtime.renderFinishedSemaphores);
+        free((void*)vkrt->runtime.renderFinishedSemaphores);
         vkrt->runtime.renderFinishedSemaphores = NULL;
     }
 
@@ -42,7 +45,7 @@ VKRT_Result resetRenderFinishedSemaphores(VKRT* vkrt, size_t oldSemaphoreCount, 
                     vkDestroySemaphore(vkrt->core.device, semaphores[j], NULL);
                 }
             }
-            free(semaphores);
+            free((void*)semaphores);
             return VKRT_ERROR_OPERATION_FAILED;
         }
         createdSemaphoreCount++;

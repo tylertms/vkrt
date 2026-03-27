@@ -1,11 +1,18 @@
 #include "swapchain.h"
-#include "images.h"
+
+#include "GLFW/glfw3.h"
+#include "config.h"
+#include "debug.h"
 #include "descriptor.h"
-#include "sync.h"
+#include "images.h"
 #include "scene.h"
 #include "state.h"
-#include "debug.h"
+#include "sync.h"
+#include "vkrt.h"
+#include "vkrt_types.h"
+#include "vulkan/vulkan_core.h"
 
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -67,6 +74,11 @@ static const VkPresentModeKHR kRenderPresentModeRanking[] = {
     VK_PRESENT_MODE_FIFO_KHR,
 };
 
+enum {
+    K_INTERACTIVE_PRESENT_MODE_COUNT = sizeof(kInteractivePresentModeRanking) / sizeof(kInteractivePresentModeRanking[0]),
+    K_RENDER_PRESENT_MODE_COUNT = sizeof(kRenderPresentModeRanking) / sizeof(kRenderPresentModeRanking[0]),
+};
+
 static const char* presentProfileName(VkBool32 useRenderPresentProfile) {
     return useRenderPresentProfile ? "render" : "interactive";
 }
@@ -97,16 +109,14 @@ static int hasPresentMode(const SwapChainSupportDetails* supportDetails, VkPrese
 static uint32_t collectPresentModeCandidates(
     const SwapChainSupportDetails* supportDetails,
     VkBool32 useRenderPresentProfile,
-    VkPresentModeKHR outModes[VKRT_ARRAY_COUNT(kRenderPresentModeRanking)]
+    VkPresentModeKHR outModes[K_RENDER_PRESENT_MODE_COUNT]
 ) {
     if (!supportDetails || !outModes) return 0;
 
     const VkPresentModeKHR* ranking = useRenderPresentProfile
         ? kRenderPresentModeRanking
         : kInteractivePresentModeRanking;
-    uint32_t rankingCount = useRenderPresentProfile
-        ? VKRT_ARRAY_COUNT(kRenderPresentModeRanking)
-        : VKRT_ARRAY_COUNT(kInteractivePresentModeRanking);
+    uint32_t rankingCount = useRenderPresentProfile ? K_RENDER_PRESENT_MODE_COUNT : K_INTERACTIVE_PRESENT_MODE_COUNT;
     uint32_t writeCount = 0;
 
     for (uint32_t i = 0; i < rankingCount; i++) {
@@ -246,36 +256,15 @@ static void destroySwapChainState(VKRT* vkrt, SwapChainState* state) {
         destroySemaphoreList(vkrt, state->renderFinishedSemaphores, state->swapChainImageCount);
     }
 
-    free(state->swapChainImageViews);
-    free(state->swapChainImages);
-    free(state->renderFinishedSemaphores);
+    free((void*)state->swapChainImageViews);
+    free((void*)state->swapChainImages);
+    free((void*)state->renderFinishedSemaphores);
     *state = (SwapChainState){0};
 }
 
-static VKRT_Result createSwapChainWithOld(VKRT* vkrt, VkSwapchainKHR oldSwapchain, VkResult* outCreateVkResult) {
-    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
-    if (outCreateVkResult) *outCreateVkResult = VK_SUCCESS;
+static void logSelectedSwapChainFormat(VKRT* vkrt, VkSurfaceFormatKHR surfaceFormat, VkPresentModeKHR preferredPresentMode, VkBool32 useRenderPresentProfile) {
+    if (!vkrt) return;
 
-    SwapChainSupportDetails supportDetails = {0};
-    if (querySwapChainSupport(vkrt, &supportDetails) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
-
-    VkSurfaceFormatKHR surfaceFormat = {0};
-    if (chooseSwapSurfaceFormat(&supportDetails, &surfaceFormat) != VKRT_SUCCESS) {
-        free(supportDetails.formats);
-        free(supportDetails.presentModes);
-        return VKRT_ERROR_OPERATION_FAILED;
-    }
-
-    VkBool32 useRenderPresentProfile = vkrtUsesRenderPresentProfile(vkrt);
-    VkPresentModeKHR presentModes[VKRT_ARRAY_COUNT(kRenderPresentModeRanking)] = {0};
-    uint32_t presentModeCount = collectPresentModeCandidates(
-        &supportDetails,
-        useRenderPresentProfile,
-        presentModes
-    );
-    VkPresentModeKHR preferredPresentMode = presentModes[0];
-    VkExtent2D extent = chooseSwapExtent(vkrt, &supportDetails);
-    vkrtQueryDisplayMetrics(vkrt->runtime.window, &vkrt->runtime.displayWidth, &vkrt->runtime.displayHeight, &vkrt->runtime.displayRefreshHz);
     if (!vkrt->runtime.swapChainFormatLogInitialized ||
         vkrt->runtime.lastLoggedSwapChainFormat != surfaceFormat.format ||
         vkrt->runtime.lastLoggedSwapChainColorSpace != surfaceFormat.colorSpace) {
@@ -290,11 +279,238 @@ static VKRT_Result createSwapChainWithOld(VKRT* vkrt, VkSwapchainKHR oldSwapchai
         vkrt->runtime.lastLoggedSwapChainFormat = surfaceFormat.format;
         vkrt->runtime.lastLoggedSwapChainColorSpace = surfaceFormat.colorSpace;
     }
+
     LOG_TRACE(
         "Swapchain present mode selected. Profile: %s, preferred: %s",
         presentProfileName(useRenderPresentProfile),
         presentModeName(preferredPresentMode)
     );
+}
+
+static VkSwapchainCreateInfoKHR buildSwapChainCreateInfo(
+    const VKRT* vkrt,
+    const SwapChainSupportDetails* supportDetails,
+    VkSurfaceFormatKHR surfaceFormat,
+    VkExtent2D extent,
+    uint32_t imageCount,
+    VkSwapchainKHR oldSwapchain,
+    uint32_t outQueueFamilyIndices[2]
+) {
+    VkSwapchainCreateInfoKHR createInfo = {
+        .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+        .surface = vkrt->runtime.surface,
+        .minImageCount = imageCount,
+        .imageFormat = surfaceFormat.format,
+        .imageColorSpace = surfaceFormat.colorSpace,
+        .imageExtent = extent,
+        .imageArrayLayers = 1u,
+        .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        .preTransform = supportDetails->capabilities.currentTransform,
+        .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+        .presentMode = VK_PRESENT_MODE_FIFO_KHR,
+        .clipped = VK_TRUE,
+        .oldSwapchain = oldSwapchain,
+    };
+
+    outQueueFamilyIndices[0] = vkrt->core.indices.graphics;
+    outQueueFamilyIndices[1] = vkrt->core.indices.present;
+
+    if (vkrt->core.indices.graphics != vkrt->core.indices.present) {
+        createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+        createInfo.queueFamilyIndexCount = 2u;
+        createInfo.pQueueFamilyIndices = outQueueFamilyIndices;
+    } else {
+        createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    }
+
+    return createInfo;
+}
+
+static VKRT_Result createSwapChainHandle(
+    VKRT* vkrt,
+    VkBool32 useRenderPresentProfile,
+    const VkPresentModeKHR* presentModes,
+    uint32_t presentModeCount,
+    VkSwapchainCreateInfoKHR* createInfo,
+    SwapChainState* outState,
+    VkResult* outCreateVkResult
+) {
+    VkResult createResult = VK_ERROR_INITIALIZATION_FAILED;
+
+    if (!vkrt || !presentModes || !createInfo || !outState) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    for (uint32_t i = 0; i < presentModeCount; i++) {
+        outState->presentMode = presentModes[i];
+        createInfo->presentMode = presentModes[i];
+        createResult = vkCreateSwapchainKHR(vkrt->core.device, createInfo, NULL, &outState->swapChain);
+        if (createResult == VK_SUCCESS) {
+            LOG_TRACE(
+                "Swapchain present mode active. Profile: %s, actual: %s",
+                presentProfileName(useRenderPresentProfile),
+                presentModeName(presentModes[i])
+            );
+            if (outCreateVkResult) *outCreateVkResult = VK_SUCCESS;
+            return VKRT_SUCCESS;
+        }
+
+        LOG_ERROR(
+            "Failed to create swapchain with present mode %s (%d)",
+            presentModeName(presentModes[i]),
+            (int)createResult
+        );
+        outState->swapChain = VK_NULL_HANDLE;
+    }
+
+    if (outCreateVkResult) *outCreateVkResult = createResult;
+    return VKRT_ERROR_OPERATION_FAILED;
+}
+
+static VKRT_Result populateSwapChainImages(VKRT* vkrt, SwapChainState* outState, uint32_t imageCount) {
+    if (!vkrt || !outState) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    if (vkGetSwapchainImagesKHR(vkrt->core.device, outState->swapChain, &imageCount, NULL) != VK_SUCCESS || imageCount == 0u) {
+        destroySwapChainState(vkrt, outState);
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+
+    outState->swapChainImages = (VkImage*)malloc(imageCount * sizeof(VkImage));
+    if (!outState->swapChainImages) {
+        destroySwapChainState(vkrt, outState);
+        return VKRT_ERROR_OUT_OF_MEMORY;
+    }
+    outState->swapChainImageCount = imageCount;
+
+    if (vkGetSwapchainImagesKHR(vkrt->core.device, outState->swapChain, &imageCount, outState->swapChainImages) != VK_SUCCESS) {
+        destroySwapChainState(vkrt, outState);
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+
+    return VKRT_SUCCESS;
+}
+
+static VKRT_Result recreateSwapChainRuntimeResources(VKRT* vkrt, GPUImageState* previousImages, GPUImageState* nextImages) {
+    VkBool32 renderPhaseActive = VK_FALSE;
+    VKRT_Result result = VKRT_SUCCESS;
+
+    if (!vkrt || !previousImages || !nextImages) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    renderPhaseActive = VKRT_renderPhaseIsActive(vkrt->renderStatus.renderPhase);
+    result = createImageViews(vkrt);
+    if (result != VKRT_SUCCESS) return result;
+
+    result = resetRenderFinishedSemaphores(vkrt, 0, vkrt->runtime.swapChainImageCount);
+    if (result != VKRT_SUCCESS) return result;
+
+    if (!renderPhaseActive) {
+        result = createGPUImageState(vkrt, vkrt->runtime.swapChainExtent, nextImages);
+        if (result != VKRT_SUCCESS) return result;
+        applyGPUImageState(vkrt, nextImages);
+    }
+
+    result = updateAllDescriptorSets(vkrt);
+    if (result == VKRT_SUCCESS || renderPhaseActive) return result;
+
+    applyGPUImageState(vkrt, previousImages);
+    updateAllDescriptorSets(vkrt);
+    return result;
+}
+
+static void finalizeRecreatedSwapChain(
+    VKRT* vkrt,
+    SwapChainState* previousSwapChain,
+    GPUImageState* previousImages,
+    uint32_t preservedViewportX,
+    uint32_t preservedViewportY,
+    uint32_t preservedViewportWidth,
+    uint32_t preservedViewportHeight
+) {
+    VkBool32 renderPhaseActive = VK_FALSE;
+
+    if (!vkrt || !previousSwapChain || !previousImages) return;
+
+    renderPhaseActive = VKRT_renderPhaseIsActive(vkrt->renderStatus.renderPhase);
+    destroySwapChainState(vkrt, previousSwapChain);
+    if (!renderPhaseActive) destroyGPUImageState(vkrt, previousImages);
+
+    if (renderPhaseActive) {
+        VKRT_setRenderViewport(
+            vkrt,
+            preservedViewportX,
+            preservedViewportY,
+            preservedViewportWidth,
+            preservedViewportHeight
+        );
+    } else {
+        VKRT_setRenderViewport(vkrt, 0, 0, vkrt->runtime.swapChainExtent.width, vkrt->runtime.swapChainExtent.height);
+    }
+
+    vkrt->renderControl.timing.lastFrameTimestamp = 0u;
+    vkrt->renderControl.autoSPP.controlMs = 0.0f;
+    if (!renderPhaseActive) resetSceneData(vkrt);
+    vkrt->runtime.framebufferResized = VK_FALSE;
+}
+
+static VKRT_Result restorePreviousSwapChainState(
+    VKRT* vkrt,
+    SwapChainState* previousSwapChain,
+    GPUImageState* previousImages,
+    GPUImageState* nextImages,
+    VkExtent2D previousRenderExtent,
+    VkBool32 previousSwapChainRetired,
+    VKRT_Result result
+) {
+    VkBool32 renderPhaseActive = VK_FALSE;
+    SwapChainState failedSwapChain = {0};
+
+    if (!vkrt || !previousSwapChain || !previousImages || !nextImages) return result;
+
+    captureSwapChainState(vkrt, &failedSwapChain);
+    clearSwapChainBindings(vkrt);
+    destroySwapChainState(vkrt, &failedSwapChain);
+
+    vkrt->runtime.renderExtent = previousRenderExtent;
+    renderPhaseActive = VKRT_renderPhaseIsActive(vkrt->renderStatus.renderPhase);
+    if (!renderPhaseActive) {
+        applyGPUImageState(vkrt, previousImages);
+        updateAllDescriptorSets(vkrt);
+        destroyGPUImageState(vkrt, nextImages);
+    }
+
+    if (previousSwapChainRetired) {
+        destroySwapChainState(vkrt, previousSwapChain);
+        return result;
+    }
+
+    applySwapChainState(vkrt, previousSwapChain);
+    return result;
+}
+
+static VKRT_Result createSwapChainWithOld(VKRT* vkrt, VkSwapchainKHR oldSwapchain, VkResult* outCreateVkResult) {
+    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+    if (outCreateVkResult) *outCreateVkResult = VK_SUCCESS;
+
+    SwapChainSupportDetails supportDetails = {
+        .capabilities = {.currentTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR},
+    };
+    if (querySwapChainSupport(vkrt, &supportDetails) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+
+    VkSurfaceFormatKHR surfaceFormat = {0};
+    if (chooseSwapSurfaceFormat(&supportDetails, &surfaceFormat) != VKRT_SUCCESS) {
+        free(supportDetails.formats);
+        free(supportDetails.presentModes);
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+
+    VkBool32 useRenderPresentProfile = vkrtUsesRenderPresentProfile(vkrt);
+    VkPresentModeKHR presentModes[K_RENDER_PRESENT_MODE_COUNT] = {0};
+    uint32_t presentModeCount = collectPresentModeCandidates(
+        &supportDetails,
+        useRenderPresentProfile,
+        presentModes
+    );
+    VkExtent2D extent = chooseSwapExtent(vkrt, &supportDetails);
+    vkrtQueryDisplayMetrics(vkrt->runtime.window, &vkrt->runtime.displayWidth, &vkrt->runtime.displayHeight, &vkrt->runtime.displayRefreshHz);
+    logSelectedSwapChainFormat(vkrt, surfaceFormat, presentModes[0], useRenderPresentProfile);
 
     uint32_t imageCount = supportDetails.capabilities.minImageCount + 1;
     if (supportDetails.capabilities.maxImageCount && imageCount > supportDetails.capabilities.maxImageCount) {
@@ -309,81 +525,32 @@ static VKRT_Result createSwapChainWithOld(VKRT* vkrt, VkSwapchainKHR oldSwapchai
     nextState.swapChainImageFormat = surfaceFormat.format;
     nextState.swapChainExtent = extent;
 
-    VkSwapchainCreateInfoKHR swapChainCreateInfo = {0};
-    swapChainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-    swapChainCreateInfo.surface = vkrt->runtime.surface;
-    swapChainCreateInfo.minImageCount = imageCount;
-    swapChainCreateInfo.imageFormat = surfaceFormat.format;
-    swapChainCreateInfo.imageColorSpace = surfaceFormat.colorSpace;
-    swapChainCreateInfo.imageExtent = extent;
-    swapChainCreateInfo.imageArrayLayers = 1;
-    swapChainCreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-
-    uint32_t queueFamilyIndices[] = {vkrt->core.indices.graphics, vkrt->core.indices.present};
-
-    if (vkrt->core.indices.graphics != vkrt->core.indices.present) {
-        swapChainCreateInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-        swapChainCreateInfo.queueFamilyIndexCount = 2;
-        swapChainCreateInfo.pQueueFamilyIndices = queueFamilyIndices;
-    } else {
-        swapChainCreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        swapChainCreateInfo.queueFamilyIndexCount = 0;
-        swapChainCreateInfo.pQueueFamilyIndices = NULL;
-    }
-
-    swapChainCreateInfo.preTransform = supportDetails.capabilities.currentTransform;
-    swapChainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-    swapChainCreateInfo.clipped = VK_TRUE;
-    swapChainCreateInfo.oldSwapchain = oldSwapchain;
+    uint32_t queueFamilyIndices[2] = {0u, 0u};
+    VkSwapchainCreateInfoKHR swapChainCreateInfo = buildSwapChainCreateInfo(
+        vkrt,
+        &supportDetails,
+        surfaceFormat,
+        extent,
+        imageCount,
+        oldSwapchain,
+        queueFamilyIndices
+    );
 
     free(supportDetails.formats);
     free(supportDetails.presentModes);
 
-    VkResult createResult = VK_ERROR_INITIALIZATION_FAILED;
-    for (uint32_t i = 0; i < presentModeCount; i++) {
-        nextState.presentMode = presentModes[i];
-        swapChainCreateInfo.presentMode = presentModes[i];
-        createResult = vkCreateSwapchainKHR(vkrt->core.device, &swapChainCreateInfo, NULL, &nextState.swapChain);
-        if (createResult == VK_SUCCESS) {
-            LOG_TRACE(
-                "Swapchain present mode active. Profile: %s, actual: %s",
-                presentProfileName(useRenderPresentProfile),
-                presentModeName(presentModes[i])
-            );
-            break;
-        }
-
-        LOG_ERROR(
-            "Failed to create swapchain with present mode %s (%d)",
-            presentModeName(presentModes[i]),
-            (int)createResult
-        );
-        nextState.swapChain = VK_NULL_HANDLE;
-    }
-
-    if (createResult != VK_SUCCESS) {
-        if (outCreateVkResult) *outCreateVkResult = createResult;
+    if (createSwapChainHandle(
+            vkrt,
+            useRenderPresentProfile,
+            presentModes,
+            presentModeCount,
+            &swapChainCreateInfo,
+            &nextState,
+            outCreateVkResult
+        ) != VKRT_SUCCESS) {
         return VKRT_ERROR_OPERATION_FAILED;
     }
-
-    if (outCreateVkResult) *outCreateVkResult = VK_SUCCESS;
-
-    if (vkGetSwapchainImagesKHR(vkrt->core.device, nextState.swapChain, &imageCount, NULL) != VK_SUCCESS || imageCount == 0) {
-        destroySwapChainState(vkrt, &nextState);
-        return VKRT_ERROR_OPERATION_FAILED;
-    }
-
-    nextState.swapChainImages = (VkImage*)malloc(imageCount * sizeof(VkImage));
-    if (!nextState.swapChainImages) {
-        destroySwapChainState(vkrt, &nextState);
-        return VKRT_ERROR_OUT_OF_MEMORY;
-    }
-    nextState.swapChainImageCount = imageCount;
-
-    if (vkGetSwapchainImagesKHR(vkrt->core.device, nextState.swapChain, &imageCount, nextState.swapChainImages) != VK_SUCCESS) {
-        destroySwapChainState(vkrt, &nextState);
-        return VKRT_ERROR_OPERATION_FAILED;
-    }
+    if (populateSwapChainImages(vkrt, &nextState, imageCount) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
 
     applySwapChainState(vkrt, &nextState);
     if (!VKRT_renderPhaseIsActive(vkrt->renderStatus.renderPhase) ||
@@ -443,75 +610,30 @@ VKRT_Result recreateSwapChain(VKRT* vkrt) {
         previousSwapChainRetired = VK_TRUE;
     }
 
-    result = createImageViews(vkrt);
+    result = recreateSwapChainRuntimeResources(vkrt, &previousImages, &nextImages);
     if (result != VKRT_SUCCESS) goto restore_previous_state;
 
-    result = resetRenderFinishedSemaphores(vkrt, 0, vkrt->runtime.swapChainImageCount);
-    if (result != VKRT_SUCCESS) goto restore_previous_state;
-
-    if (!VKRT_renderPhaseIsActive(vkrt->renderStatus.renderPhase)) {
-        result = createGPUImageState(vkrt, vkrt->runtime.swapChainExtent, &nextImages);
-        if (result != VKRT_SUCCESS) goto restore_previous_state;
-        applyGPUImageState(vkrt, &nextImages);
-    }
-
-    result = updateAllDescriptorSets(vkrt);
-    if (result != VKRT_SUCCESS) {
-        if (!VKRT_renderPhaseIsActive(vkrt->renderStatus.renderPhase)) {
-            applyGPUImageState(vkrt, &previousImages);
-            updateAllDescriptorSets(vkrt);
-        }
-        goto restore_previous_state;
-    }
-
-    destroySwapChainState(vkrt, &previousSwapChain);
-    if (!VKRT_renderPhaseIsActive(vkrt->renderStatus.renderPhase)) {
-        destroyGPUImageState(vkrt, &previousImages);
-    }
-
-    if (VKRT_renderPhaseIsActive(vkrt->renderStatus.renderPhase)) {
-        VKRT_setRenderViewport(
-            vkrt,
-            preservedViewportX,
-            preservedViewportY,
-            preservedViewportWidth,
-            preservedViewportHeight
-        );
-    } else {
-        VKRT_setRenderViewport(vkrt, 0, 0, vkrt->runtime.swapChainExtent.width, vkrt->runtime.swapChainExtent.height);
-    }
-
-    vkrt->renderControl.timing.lastFrameTimestamp = 0;
-    vkrt->renderControl.autoSPP.controlMs = 0.0f;
-    if (!VKRT_renderPhaseIsActive(vkrt->renderStatus.renderPhase)) {
-        resetSceneData(vkrt);
-    }
-
-    vkrt->runtime.framebufferResized = VK_FALSE;
+    finalizeRecreatedSwapChain(
+        vkrt,
+        &previousSwapChain,
+        &previousImages,
+        preservedViewportX,
+        preservedViewportY,
+        preservedViewportWidth,
+        preservedViewportHeight
+    );
     return VKRT_SUCCESS;
 
 restore_previous_state:
-    {
-        SwapChainState failedSwapChain = {0};
-        captureSwapChainState(vkrt, &failedSwapChain);
-        clearSwapChainBindings(vkrt);
-        destroySwapChainState(vkrt, &failedSwapChain);
-    }
-
-    vkrt->runtime.renderExtent = previousRenderExtent;
-    if (!VKRT_renderPhaseIsActive(vkrt->renderStatus.renderPhase)) {
-        applyGPUImageState(vkrt, &previousImages);
-        updateAllDescriptorSets(vkrt);
-        destroyGPUImageState(vkrt, &nextImages);
-    }
-
-    if (previousSwapChainRetired) {
-        destroySwapChainState(vkrt, &previousSwapChain);
-        return result;
-    }
-
-    applySwapChainState(vkrt, &previousSwapChain);
-    return result;
+    return restorePreviousSwapChainState(
+        vkrt,
+        &previousSwapChain,
+        &previousImages,
+        &nextImages,
+        previousRenderExtent,
+        previousSwapChainRetired,
+        result
+    );
 }
 
 void cleanupSwapChain(VKRT* vkrt) {
@@ -528,8 +650,8 @@ void cleanupSwapChain(VKRT* vkrt) {
         vkrt->runtime.swapChain = VK_NULL_HANDLE;
     }
 
-    free(vkrt->runtime.swapChainImageViews);
-    free(vkrt->runtime.swapChainImages);
+    free((void*)vkrt->runtime.swapChainImageViews);
+    free((void*)vkrt->runtime.swapChainImages);
     vkrt->runtime.swapChainImageViews = NULL;
     vkrt->runtime.swapChainImages = NULL;
 }
@@ -562,7 +684,7 @@ VKRT_Result createImageViews(VKRT* vkrt) {
             for (size_t j = 0; j < i; j++) {
                 vkDestroyImageView(vkrt->core.device, vkrt->runtime.swapChainImageViews[j], NULL);
             }
-            free(vkrt->runtime.swapChainImageViews);
+            free((void*)vkrt->runtime.swapChainImageViews);
             vkrt->runtime.swapChainImageViews = NULL;
             return VKRT_ERROR_OPERATION_FAILED;
         }
@@ -575,7 +697,9 @@ VKRT_Result createImageViews(VKRT* vkrt) {
 VKRT_Result querySwapChainSupport(VKRT* vkrt, SwapChainSupportDetails* outSupportDetails) {
     if (!vkrt || !outSupportDetails) return VKRT_ERROR_INVALID_ARGUMENT;
 
-    SwapChainSupportDetails supportDetails = {0};
+    SwapChainSupportDetails supportDetails = {
+        .capabilities = {.currentTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR},
+    };
     if (vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vkrt->core.physicalDevice, vkrt->runtime.surface, &supportDetails.capabilities) != VK_SUCCESS) {
         LOG_ERROR("Failed to query surface capabilities");
         return VKRT_ERROR_OPERATION_FAILED;
@@ -647,7 +771,8 @@ VKRT_Result chooseSwapSurfaceFormat(const SwapChainSupportDetails* supportDetail
         VK_FORMAT_A8B8G8R8_UNORM_PACK32,
     };
 
-    for (uint32_t preferredIndex = 0; preferredIndex < VKRT_ARRAY_COUNT(preferredFormats); preferredIndex++) {
+    uint32_t preferredFormatCount = (uint32_t)(sizeof(preferredFormats) / sizeof(preferredFormats[0]));
+    for (uint32_t preferredIndex = 0; preferredIndex < preferredFormatCount; preferredIndex++) {
         VkFormat preferredFormat = preferredFormats[preferredIndex];
         for (uint32_t formatIndex = 0; formatIndex < supportDetails->formatCount; formatIndex++) {
             VkSurfaceFormatKHR candidate = supportDetails->formats[formatIndex];
@@ -695,45 +820,34 @@ VkPresentModeKHR chooseSwapPresentMode(
     VkBool32 useRenderPresentProfile
 ) {
     if (useRenderPresentProfile) {
-        return chooseRankedPresentMode(
-            supportDetails,
-            kRenderPresentModeRanking,
-            VKRT_ARRAY_COUNT(kRenderPresentModeRanking)
-        );
+        return chooseRankedPresentMode(supportDetails, kRenderPresentModeRanking, K_RENDER_PRESENT_MODE_COUNT);
     }
 
-    return chooseRankedPresentMode(
-        supportDetails,
-        kInteractivePresentModeRanking,
-        VKRT_ARRAY_COUNT(kInteractivePresentModeRanking)
-    );
+    return chooseRankedPresentMode(supportDetails, kInteractivePresentModeRanking, K_INTERACTIVE_PRESENT_MODE_COUNT);
 }
 
 VkExtent2D chooseSwapExtent(VKRT* vkrt, const SwapChainSupportDetails* supportDetails) {
     VkSurfaceCapabilitiesKHR capabilities = supportDetails->capabilities;
     if (capabilities.currentExtent.width != UINT32_MAX) {
         return capabilities.currentExtent;
-    } else {
-        int width, height;
-        glfwGetFramebufferSize(vkrt->runtime.window, &width, &height);
-
-        VkExtent2D actualExtent = {
-            (uint32_t)width,
-            (uint32_t)height
-        };
-
-        if (actualExtent.width < capabilities.minImageExtent.width) {
-            actualExtent.width = capabilities.minImageExtent.width;
-        } else if (actualExtent.width > capabilities.maxImageExtent.width) {
-            actualExtent.width = capabilities.maxImageExtent.width;
-        }
-
-        if (actualExtent.height < capabilities.minImageExtent.height) {
-            actualExtent.height = capabilities.minImageExtent.height;
-        } else if (actualExtent.height > capabilities.maxImageExtent.height) {
-            actualExtent.height = capabilities.maxImageExtent.height;
-        }
-
-        return actualExtent;
     }
+    int width;
+    int height;
+    glfwGetFramebufferSize(vkrt->runtime.window, &width, &height);
+
+    VkExtent2D actualExtent = {(uint32_t)width, (uint32_t)height};
+
+    if (actualExtent.width < capabilities.minImageExtent.width) {
+        actualExtent.width = capabilities.minImageExtent.width;
+    } else if (actualExtent.width > capabilities.maxImageExtent.width) {
+        actualExtent.width = capabilities.maxImageExtent.width;
+    }
+
+    if (actualExtent.height < capabilities.minImageExtent.height) {
+        actualExtent.height = capabilities.minImageExtent.height;
+    } else if (actualExtent.height > capabilities.maxImageExtent.height) {
+        actualExtent.height = capabilities.maxImageExtent.height;
+    }
+
+    return actualExtent;
 }

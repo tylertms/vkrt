@@ -2,8 +2,8 @@
 
 #include "dcimgui.h"
 
-void editorThemeApplyDefault(void) {
-    ImGuiStyle* style = ImGui_GetStyle();
+static void applyThemeMetrics(ImGuiStyle* style) {
+    if (!style) return;
     style->WindowRounding = 6.0f;
     style->ChildRounding = 4.0f;
     style->PopupRounding = 4.0f;
@@ -26,6 +26,10 @@ void editorThemeApplyDefault(void) {
     style->CellPadding = (ImVec2){6.0f, 3.0f};
     style->ScrollbarSize = 10.0f;
     style->GrabMinSize = 8.0f;
+}
+
+static void applyThemeColors(ImGuiStyle* style) {
+    if (!style) return;
 
     ImVec4* colors = style->Colors;
     const ImVec4 ink = (ImVec4){0.88f, 0.90f, 0.92f, 1.00f};
@@ -94,4 +98,10 @@ void editorThemeApplyDefault(void) {
     colors[ImGuiCol_NavWindowingHighlight] = accentHover;
     colors[ImGuiCol_NavWindowingDimBg] = (ImVec4){0.04f, 0.05f, 0.07f, 0.72f};
     colors[ImGuiCol_ModalWindowDimBg] = (ImVec4){0.02f, 0.03f, 0.04f, 0.72f};
+}
+
+void editorThemeApplyDefault(void) {
+    ImGuiStyle* style = ImGui_GetStyle();
+    applyThemeMetrics(style);
+    applyThemeColors(style);
 }
