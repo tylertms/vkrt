@@ -175,6 +175,37 @@ BSDFState makeBSDFState(Material material, float3 wo, uint frontFace) {
     return state;
 }
 
+
+static const float VKRT_DENOISER_SPECULAR_FOLLOW_ROUGHNESS = 0.02;
+static const float VKRT_DENOISER_LAYER_EPSILON = 1e-3;
+
+bool materialDenoiserShouldFollowSpecularHit(Material material, uint frontFace) {
+    float diffuseWeight = maxComponent(bsdfDiffuseColor(material)) * (1.0 - material.transmission);
+    float subsurfaceWeight = diffuseWeight * material.subsurface;
+    float sheenLayerWeight = maxComponent(bsdfSheenColor(material)) * (1.0 - material.transmission);
+    float clearcoatLayerWeight = frontFace != 0u ? material.clearcoat : 0.0;
+    bool hasVisibleBaseLayer =
+        diffuseWeight > VKRT_DENOISER_LAYER_EPSILON || subsurfaceWeight > VKRT_DENOISER_LAYER_EPSILON ||
+        sheenLayerWeight > VKRT_DENOISER_LAYER_EPSILON || clearcoatLayerWeight > VKRT_DENOISER_LAYER_EPSILON;
+    if (hasVisibleBaseLayer) {
+        return false;
+    }
+
+    if (material.transmission > VKRT_DENOISER_LAYER_EPSILON && dielectricIsIdentity(material)) {
+        return true;
+    }
+
+    bool hasNearDeltaSpecular = material.roughness <= VKRT_DENOISER_SPECULAR_FOLLOW_ROUGHNESS;
+    if (!hasNearDeltaSpecular) {
+        return false;
+    }
+
+    bool hasSpecularOnlyResponse = material.transmission > VKRT_DENOISER_LAYER_EPSILON ||
+        material.metallic >= 1.0 - VKRT_DENOISER_LAYER_EPSILON ||
+        maxComponent(bsdfDielectricSpecularF0(material)) > VKRT_DENOISER_LAYER_EPSILON;
+    return hasSpecularOnlyResponse;
+}
+
 float3 materialDenoiserAlbedo(Material material) {
     float nonMetal = 1.0 - material.metallic;
     float3 diffuseColor = bsdfDiffuseColor(material);

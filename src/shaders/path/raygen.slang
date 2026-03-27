@@ -62,6 +62,7 @@ void main() {
         float3 radiance = float3(0.0);
         float3 sampleAlbedo = float3(0.0);
         float3 sampleNormal = float3(0.0);
+        bool sampleFeaturesResolved = false;
         float3 throughput = float3(1.0);
         MediumState medium;
         medium.refractiveActive = false;
@@ -131,9 +132,10 @@ void main() {
             }
 
             applySurfaceTextures(material, payload.color, payload.texcoord0, payload.texcoord1);
-            if (depth == 0u) {
+            if (!sampleFeaturesResolved && !materialDenoiserShouldFollowSpecularHit(material, payload.frontFace)) {
                 sampleAlbedo = materialDenoiserAlbedo(material);
                 sampleNormal = shadingNormal;
+                sampleFeaturesResolved = true;
             }
 
             float3 wo = worldToLocal(-ray.Direction, basis);
