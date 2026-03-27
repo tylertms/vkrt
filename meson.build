@@ -135,7 +135,6 @@ project_includes = include_directories(
 external_includes = include_directories(
   'external/glfw3/include',
   'external/imgui/include',
-  'external/imgui/icons',
   'external/cglm/include',
   'external/cgltf/include',
   'external/cjson',

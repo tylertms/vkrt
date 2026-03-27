@@ -59,6 +59,22 @@ static inline ::ImVec4 ConvertToCPP_ImVec4(const cimgui::ImVec4& src)
     return dest;
 }
 
+static inline cimgui::ImTextureRef ConvertFromCPP_ImTextureRef(const ::ImTextureRef& src)
+{
+    cimgui::ImTextureRef dest;
+    dest._TexData = reinterpret_cast<cimgui::ImTextureData*>(src._TexData);
+    dest._TexID = src._TexID;
+    return dest;
+}
+
+static inline ::ImTextureRef ConvertToCPP_ImTextureRef(const cimgui::ImTextureRef& src)
+{
+    ::ImTextureRef dest;
+    dest._TexData = reinterpret_cast<::ImTextureData*>(src._TexData);
+    dest._TexID = src._TexID;
+    return dest;
+}
+
 static inline cimgui::ImColor ConvertFromCPP_ImColor(const ::ImColor& src)
 {
     cimgui::ImColor dest;
@@ -90,6 +106,22 @@ static inline ::ImVec1 ConvertToCPP_ImVec1(const cimgui::ImVec1& src)
 {
     ::ImVec1 dest;
     dest.x = src.x;
+    return dest;
+}
+
+static inline cimgui::ImVec2i ConvertFromCPP_ImVec2i(const ::ImVec2i& src)
+{
+    cimgui::ImVec2i dest;
+    dest.x = src.x;
+    dest.y = src.y;
+    return dest;
+}
+
+static inline ::ImVec2i ConvertToCPP_ImVec2i(const cimgui::ImVec2i& src)
+{
+    ::ImVec2i dest;
+    dest.x = src.x;
+    dest.y = src.y;
     return dest;
 }
 
@@ -155,24 +187,29 @@ static inline ::ImGuiListClipperRange ConvertToCPP_ImGuiListClipperRange(const c
 
 #ifndef IMGUI_DISABLE
 
-CIMGUI_API ImGuiID cimgui::cImHashData(const void* data, size_t data_size)
+CIMGUI_API ImGuiID     cimgui::cImHashData(const void* data, size_t data_size)
 {
     return ::ImHashData(data, data_size);
 }
 
-CIMGUI_API ImGuiID cimgui::cImHashDataEx(const void* data, size_t data_size, ImGuiID seed)
+CIMGUI_API ImGuiID     cimgui::cImHashDataEx(const void* data, size_t data_size, ImGuiID seed)
 {
     return ::ImHashData(data, data_size, seed);
 }
 
-CIMGUI_API ImGuiID cimgui::cImHashStr(const char* data)
+CIMGUI_API ImGuiID     cimgui::cImHashStr(const char* data)
 {
     return ::ImHashStr(data);
 }
 
-CIMGUI_API ImGuiID cimgui::cImHashStrEx(const char* data, size_t data_size, ImGuiID seed)
+CIMGUI_API ImGuiID     cimgui::cImHashStrEx(const char* data, size_t data_size, ImGuiID seed)
 {
     return ::ImHashStr(data, data_size, seed);
+}
+
+CIMGUI_API const char* cimgui::cImHashSkipUncontributingPrefix(const char* label)
+{
+    return ::ImHashSkipUncontributingPrefix(label);
 }
 
 CIMGUI_API ImU32 cimgui::cImAlphaBlendColors(ImU32 col_a, ImU32 col_b)
@@ -218,6 +255,11 @@ CIMGUI_API void        cimgui::cImStrncpy(char* dst, const char* src, size_t cou
 CIMGUI_API char*       cimgui::cImStrdup(const char* str)
 {
     return ::ImStrdup(str);
+}
+
+CIMGUI_API void*       cimgui::cImMemdup(const void* src, size_t size)
+{
+    return ::ImMemdup(src, size);
 }
 
 CIMGUI_API char*       cimgui::cImStrdupcpy(char* dst, size_t* p_dst_size, const char* str)
@@ -284,8 +326,9 @@ CIMGUI_API int         cimgui::cImFormatString(char* buf, size_t buf_size, const
 {
     va_list args;
     va_start(args, fmt);
-    return ::ImFormatStringV(buf, buf_size, fmt, args);
+    auto temp_result = ::ImFormatStringV(buf, buf_size, fmt, args);
     va_end(args);
+    return temp_result;
 }
 
 CIMGUI_API int         cimgui::cImFormatStringV(char* buf, size_t buf_size, const char* fmt, va_list args)
@@ -336,7 +379,7 @@ CIMGUI_API int         cimgui::cImParseFormatPrecision(const char* format, int d
     return ::ImParseFormatPrecision(format, default_value);
 }
 
-CIMGUI_API const char* cimgui::cImTextCharToUtf8(char out_buf[5], unsigned int c)
+CIMGUI_API int         cimgui::cImTextCharToUtf8(char out_buf[5], unsigned int c)
 {
     return ::ImTextCharToUtf8(out_buf, c);
 }
@@ -376,14 +419,54 @@ CIMGUI_API int         cimgui::cImTextCountUtf8BytesFromStr(const ImWchar* in_te
     return ::ImTextCountUtf8BytesFromStr(in_text, in_text_end);
 }
 
-CIMGUI_API const char* cimgui::cImTextFindPreviousUtf8Codepoint(const char* in_text_start, const char* in_text_curr)
+CIMGUI_API const char* cimgui::cImTextFindPreviousUtf8Codepoint(const char* in_text_start, const char* in_p)
 {
-    return ::ImTextFindPreviousUtf8Codepoint(in_text_start, in_text_curr);
+    return ::ImTextFindPreviousUtf8Codepoint(in_text_start, in_p);
+}
+
+CIMGUI_API const char* cimgui::cImTextFindValidUtf8CodepointEnd(const char* in_text_start, const char* in_text_end, const char* in_p)
+{
+    return ::ImTextFindValidUtf8CodepointEnd(in_text_start, in_text_end, in_p);
 }
 
 CIMGUI_API int         cimgui::cImTextCountLines(const char* in_text, const char* in_text_end)
 {
     return ::ImTextCountLines(in_text, in_text_end);
+}
+
+CIMGUI_API cimgui::ImVec2 cimgui::cImFontCalcTextSizeEx(cimgui::ImFont* font, float size, float max_width, float wrap_width, const char* text_begin, const char* text_end_display, const char* text_end, const char** out_remaining, cimgui::ImVec2* out_offset, ImDrawTextFlags flags)
+{
+    return ConvertFromCPP_ImVec2(::ImFontCalcTextSizeEx(reinterpret_cast<::ImFont*>(font), size, max_width, wrap_width, text_begin, text_end_display, text_end, out_remaining, reinterpret_cast<::ImVec2*>(out_offset), flags));
+}
+
+CIMGUI_API const char* cimgui::cImFontCalcWordWrapPositionEx(cimgui::ImFont* font, float size, const char* text, const char* text_end, float wrap_width, ImDrawTextFlags flags)
+{
+    return ::ImFontCalcWordWrapPositionEx(reinterpret_cast<::ImFont*>(font), size, text, text_end, wrap_width, flags);
+}
+
+CIMGUI_API const char* cimgui::cImTextCalcWordWrapNextLineStart(const char* text, const char* text_end, ImDrawTextFlags flags)
+{
+    return ::ImTextCalcWordWrapNextLineStart(text, text_end, flags);
+}
+
+CIMGUI_API void cimgui::cImTextInitClassifiers(void)
+{
+    ::ImTextInitClassifiers();
+}
+
+CIMGUI_API void cimgui::cImTextClassifierClear(ImU32* bits, unsigned int codepoint_min, unsigned int codepoint_end, cimgui::ImWcharClass char_class)
+{
+    ::ImTextClassifierClear(bits, codepoint_min, codepoint_end, static_cast<::ImWcharClass>(char_class));
+}
+
+CIMGUI_API void cimgui::cImTextClassifierSetCharClass(ImU32* bits, unsigned int codepoint_min, unsigned int codepoint_end, cimgui::ImWcharClass char_class, unsigned int c)
+{
+    ::ImTextClassifierSetCharClass(bits, codepoint_min, codepoint_end, static_cast<::ImWcharClass>(char_class), c);
+}
+
+CIMGUI_API void cimgui::cImTextClassifierSetCharClassFromStr(ImU32* bits, unsigned int codepoint_min, unsigned int codepoint_end, cimgui::ImWcharClass char_class, const char* s)
+{
+    ::ImTextClassifierSetCharClassFromStr(bits, codepoint_min, codepoint_end, static_cast<::ImWcharClass>(char_class), s);
 }
 
 #ifdef IMGUI_DISABLE_FILE_FUNCTIONS
@@ -596,6 +679,16 @@ CIMGUI_API cimgui::ImVec2 cimgui::cImFloorImVec2(cimgui::ImVec2 v)
     return ConvertFromCPP_ImVec2(::ImFloor(ConvertToCPP_ImVec2(v)));
 }
 
+CIMGUI_API float  cimgui::cImTrunc64(float f)
+{
+    return ::ImTrunc64(f);
+}
+
+CIMGUI_API float  cimgui::cImRound64(float f)
+{
+    return ::ImRound64(f);
+}
+
 CIMGUI_API int    cimgui::cImModPositive(int a, int b)
 {
     return ::ImModPositive(a, b);
@@ -796,11 +889,6 @@ CIMGUI_API void   cimgui::ImRect_ClipWithFull(cimgui::ImRect* self, cimgui::ImRe
     reinterpret_cast<::ImRect*>(self)->ClipWithFull(ConvertToCPP_ImRect(r));
 }
 
-CIMGUI_API void   cimgui::ImRect_Floor(cimgui::ImRect* self)
-{
-    reinterpret_cast<::ImRect*>(self)->Floor();
-}
-
 CIMGUI_API bool   cimgui::ImRect_IsInverted(const cimgui::ImRect* self)
 {
     return reinterpret_cast<const ::ImRect*>(self)->IsInverted();
@@ -866,6 +954,21 @@ CIMGUI_API void cimgui::ImBitVector_ClearBit(cimgui::ImBitVector* self, int n)
     reinterpret_cast<::ImBitVector*>(self)->ClearBit(n);
 }
 
+CIMGUI_API void cimgui::ImStableVector_ImFontBaked_32_clear(cimgui::ImStableVector_ImFontBaked_32* self)
+{
+    reinterpret_cast<ImStableVector<ImFontBaked, 32>*>(self)->clear();
+}
+
+CIMGUI_API void cimgui::ImStableVector_ImFontBaked_32_resize(cimgui::ImStableVector_ImFontBaked_32* self, int new_size)
+{
+    reinterpret_cast<ImStableVector<ImFontBaked, 32>*>(self)->resize(new_size);
+}
+
+CIMGUI_API void cimgui::ImStableVector_ImFontBaked_32_reserve(cimgui::ImStableVector_ImFontBaked_32* self, int new_cap)
+{
+    reinterpret_cast<ImStableVector<ImFontBaked, 32>*>(self)->reserve(new_cap);
+}
+
 CIMGUI_API void        cimgui::ImGuiTextIndex_clear(cimgui::ImGuiTextIndex* self)
 {
     reinterpret_cast<::ImGuiTextIndex*>(self)->clear();
@@ -926,77 +1029,87 @@ CIMGUI_API void cimgui::ImGuiInputTextDeactivatedState_ClearFreeMemory(cimgui::I
     reinterpret_cast<::ImGuiInputTextDeactivatedState*>(self)->ClearFreeMemory();
 }
 
-CIMGUI_API void cimgui::ImGuiInputTextState_ClearText(cimgui::ImGuiInputTextState* self)
+CIMGUI_API void  cimgui::ImGuiInputTextState_ClearText(cimgui::ImGuiInputTextState* self)
 {
     reinterpret_cast<::ImGuiInputTextState*>(self)->ClearText();
 }
 
-CIMGUI_API void cimgui::ImGuiInputTextState_ClearFreeMemory(cimgui::ImGuiInputTextState* self)
+CIMGUI_API void  cimgui::ImGuiInputTextState_ClearFreeMemory(cimgui::ImGuiInputTextState* self)
 {
     reinterpret_cast<::ImGuiInputTextState*>(self)->ClearFreeMemory();
 }
 
-CIMGUI_API void cimgui::ImGuiInputTextState_OnKeyPressed(cimgui::ImGuiInputTextState* self, int key)
+CIMGUI_API void  cimgui::ImGuiInputTextState_OnKeyPressed(cimgui::ImGuiInputTextState* self, int key)
 {
     reinterpret_cast<::ImGuiInputTextState*>(self)->OnKeyPressed(key);
 }
 
-CIMGUI_API void cimgui::ImGuiInputTextState_OnCharPressed(cimgui::ImGuiInputTextState* self, unsigned int c)
+CIMGUI_API void  cimgui::ImGuiInputTextState_OnCharPressed(cimgui::ImGuiInputTextState* self, unsigned int c)
 {
     reinterpret_cast<::ImGuiInputTextState*>(self)->OnCharPressed(c);
 }
 
-CIMGUI_API void cimgui::ImGuiInputTextState_CursorAnimReset(cimgui::ImGuiInputTextState* self)
+CIMGUI_API float cimgui::ImGuiInputTextState_GetPreferredOffsetX(const cimgui::ImGuiInputTextState* self)
+{
+    return reinterpret_cast<const ::ImGuiInputTextState*>(self)->GetPreferredOffsetX();
+}
+
+CIMGUI_API void  cimgui::ImGuiInputTextState_CursorAnimReset(cimgui::ImGuiInputTextState* self)
 {
     reinterpret_cast<::ImGuiInputTextState*>(self)->CursorAnimReset();
 }
 
-CIMGUI_API void cimgui::ImGuiInputTextState_CursorClamp(cimgui::ImGuiInputTextState* self)
+CIMGUI_API void  cimgui::ImGuiInputTextState_CursorClamp(cimgui::ImGuiInputTextState* self)
 {
     reinterpret_cast<::ImGuiInputTextState*>(self)->CursorClamp();
 }
 
-CIMGUI_API bool cimgui::ImGuiInputTextState_HasSelection(const cimgui::ImGuiInputTextState* self)
+CIMGUI_API bool  cimgui::ImGuiInputTextState_HasSelection(const cimgui::ImGuiInputTextState* self)
 {
     return reinterpret_cast<const ::ImGuiInputTextState*>(self)->HasSelection();
 }
 
-CIMGUI_API void cimgui::ImGuiInputTextState_ClearSelection(cimgui::ImGuiInputTextState* self)
+CIMGUI_API void  cimgui::ImGuiInputTextState_ClearSelection(cimgui::ImGuiInputTextState* self)
 {
     reinterpret_cast<::ImGuiInputTextState*>(self)->ClearSelection();
 }
 
-CIMGUI_API int  cimgui::ImGuiInputTextState_GetCursorPos(const cimgui::ImGuiInputTextState* self)
+CIMGUI_API int   cimgui::ImGuiInputTextState_GetCursorPos(const cimgui::ImGuiInputTextState* self)
 {
     return reinterpret_cast<const ::ImGuiInputTextState*>(self)->GetCursorPos();
 }
 
-CIMGUI_API int  cimgui::ImGuiInputTextState_GetSelectionStart(const cimgui::ImGuiInputTextState* self)
+CIMGUI_API int   cimgui::ImGuiInputTextState_GetSelectionStart(const cimgui::ImGuiInputTextState* self)
 {
     return reinterpret_cast<const ::ImGuiInputTextState*>(self)->GetSelectionStart();
 }
 
-CIMGUI_API int  cimgui::ImGuiInputTextState_GetSelectionEnd(const cimgui::ImGuiInputTextState* self)
+CIMGUI_API int   cimgui::ImGuiInputTextState_GetSelectionEnd(const cimgui::ImGuiInputTextState* self)
 {
     return reinterpret_cast<const ::ImGuiInputTextState*>(self)->GetSelectionEnd();
 }
 
-CIMGUI_API void cimgui::ImGuiInputTextState_SelectAll(cimgui::ImGuiInputTextState* self)
+CIMGUI_API void  cimgui::ImGuiInputTextState_SetSelection(cimgui::ImGuiInputTextState* self, int start, int end)
+{
+    reinterpret_cast<::ImGuiInputTextState*>(self)->SetSelection(start, end);
+}
+
+CIMGUI_API void  cimgui::ImGuiInputTextState_SelectAll(cimgui::ImGuiInputTextState* self)
 {
     reinterpret_cast<::ImGuiInputTextState*>(self)->SelectAll();
 }
 
-CIMGUI_API void cimgui::ImGuiInputTextState_ReloadUserBufAndSelectAll(cimgui::ImGuiInputTextState* self)
+CIMGUI_API void  cimgui::ImGuiInputTextState_ReloadUserBufAndSelectAll(cimgui::ImGuiInputTextState* self)
 {
     reinterpret_cast<::ImGuiInputTextState*>(self)->ReloadUserBufAndSelectAll();
 }
 
-CIMGUI_API void cimgui::ImGuiInputTextState_ReloadUserBufAndKeepSelection(cimgui::ImGuiInputTextState* self)
+CIMGUI_API void  cimgui::ImGuiInputTextState_ReloadUserBufAndKeepSelection(cimgui::ImGuiInputTextState* self)
 {
     reinterpret_cast<::ImGuiInputTextState*>(self)->ReloadUserBufAndKeepSelection();
 }
 
-CIMGUI_API void cimgui::ImGuiInputTextState_ReloadUserBufAndMoveToEnd(cimgui::ImGuiInputTextState* self)
+CIMGUI_API void  cimgui::ImGuiInputTextState_ReloadUserBufAndMoveToEnd(cimgui::ImGuiInputTextState* self)
 {
     reinterpret_cast<::ImGuiInputTextState*>(self)->ReloadUserBufAndMoveToEnd();
 }
@@ -1190,11 +1303,6 @@ CIMGUI_API cimgui::ImRect cimgui::ImGuiWindow_Rect(const cimgui::ImGuiWindow* se
     return ConvertFromCPP_ImRect(reinterpret_cast<const ::ImGuiWindow*>(self)->Rect());
 }
 
-CIMGUI_API float   cimgui::ImGuiWindow_CalcFontSize(const cimgui::ImGuiWindow* self)
-{
-    return reinterpret_cast<const ::ImGuiWindow*>(self)->CalcFontSize();
-}
-
 CIMGUI_API cimgui::ImRect cimgui::ImGuiWindow_TitleBarRect(const cimgui::ImGuiWindow* self)
 {
     return ConvertFromCPP_ImRect(reinterpret_cast<const ::ImGuiWindow*>(self)->TitleBarRect());
@@ -1218,6 +1326,11 @@ CIMGUI_API cimgui::ImGuiIO* cimgui::ImGui_GetIOImGuiContextPtr(cimgui::ImGuiCont
 CIMGUI_API cimgui::ImGuiPlatformIO* cimgui::ImGui_GetPlatformIOImGuiContextPtr(cimgui::ImGuiContext* ctx)
 {
     return reinterpret_cast<::cimgui::ImGuiPlatformIO*>(&::ImGui::GetPlatformIO(reinterpret_cast<::ImGuiContext*>(ctx)));
+}
+
+CIMGUI_API float            cimgui::ImGui_GetScale(void)
+{
+    return ::ImGui::GetScale();
 }
 
 CIMGUI_API cimgui::ImGuiWindow* cimgui::ImGui_GetCurrentWindowRead(void)
@@ -1258,6 +1371,11 @@ CIMGUI_API cimgui::ImVec2   cimgui::ImGui_CalcWindowNextAutoFitSize(cimgui::ImGu
 CIMGUI_API bool             cimgui::ImGui_IsWindowChildOf(cimgui::ImGuiWindow* window, cimgui::ImGuiWindow* potential_parent, bool popup_hierarchy, bool dock_hierarchy)
 {
     return ::ImGui::IsWindowChildOf(reinterpret_cast<::ImGuiWindow*>(window), reinterpret_cast<::ImGuiWindow*>(potential_parent), popup_hierarchy, dock_hierarchy);
+}
+
+CIMGUI_API bool             cimgui::ImGui_IsWindowInBeginStack(cimgui::ImGuiWindow* window)
+{
+    return ::ImGui::IsWindowInBeginStack(reinterpret_cast<::ImGuiWindow*>(window));
 }
 
 CIMGUI_API bool             cimgui::ImGui_IsWindowWithinBeginStackOf(cimgui::ImGuiWindow* window, cimgui::ImGuiWindow* potential_parent)
@@ -1370,9 +1488,49 @@ CIMGUI_API void cimgui::ImGui_SetNextWindowRefreshPolicy(ImGuiWindowRefreshFlags
     ::ImGui::SetNextWindowRefreshPolicy(flags);
 }
 
-CIMGUI_API void        cimgui::ImGui_SetCurrentFont(cimgui::ImFont* font)
+CIMGUI_API void        cimgui::ImGui_RegisterUserTexture(cimgui::ImTextureData* tex)
 {
-    ::ImGui::SetCurrentFont(reinterpret_cast<::ImFont*>(font));
+    ::ImGui::RegisterUserTexture(reinterpret_cast<::ImTextureData*>(tex));
+}
+
+CIMGUI_API void        cimgui::ImGui_UnregisterUserTexture(cimgui::ImTextureData* tex)
+{
+    ::ImGui::UnregisterUserTexture(reinterpret_cast<::ImTextureData*>(tex));
+}
+
+CIMGUI_API void        cimgui::ImGui_RegisterFontAtlas(cimgui::ImFontAtlas* atlas)
+{
+    ::ImGui::RegisterFontAtlas(reinterpret_cast<::ImFontAtlas*>(atlas));
+}
+
+CIMGUI_API void        cimgui::ImGui_UnregisterFontAtlas(cimgui::ImFontAtlas* atlas)
+{
+    ::ImGui::UnregisterFontAtlas(reinterpret_cast<::ImFontAtlas*>(atlas));
+}
+
+CIMGUI_API void        cimgui::ImGui_SetCurrentFont(cimgui::ImFont* font, float font_size_before_scaling, float font_size_after_scaling)
+{
+    ::ImGui::SetCurrentFont(reinterpret_cast<::ImFont*>(font), font_size_before_scaling, font_size_after_scaling);
+}
+
+CIMGUI_API void        cimgui::ImGui_UpdateCurrentFontSize(float restore_font_size_after_scaling)
+{
+    ::ImGui::UpdateCurrentFontSize(restore_font_size_after_scaling);
+}
+
+CIMGUI_API void        cimgui::ImGui_SetFontRasterizerDensity(float rasterizer_density)
+{
+    ::ImGui::SetFontRasterizerDensity(rasterizer_density);
+}
+
+CIMGUI_API float       cimgui::ImGui_GetFontRasterizerDensity(void)
+{
+    return ::ImGui::GetFontRasterizerDensity();
+}
+
+CIMGUI_API float       cimgui::ImGui_GetRoundedFontSize(float size)
+{
+    return ::ImGui::GetRoundedFontSize(size);
 }
 
 CIMGUI_API cimgui::ImFont* cimgui::ImGui_GetDefaultFont(void)
@@ -1383,6 +1541,11 @@ CIMGUI_API cimgui::ImFont* cimgui::ImGui_GetDefaultFont(void)
 CIMGUI_API void        cimgui::ImGui_PushPasswordFont(void)
 {
     ::ImGui::PushPasswordFont();
+}
+
+CIMGUI_API void        cimgui::ImGui_PopPasswordFont(void)
+{
+    ::ImGui::PopPasswordFont();
 }
 
 CIMGUI_API cimgui::ImDrawList* cimgui::ImGui_GetForegroundDrawListImGuiWindowPtr(cimgui::ImGuiWindow* window)
@@ -1403,6 +1566,26 @@ CIMGUI_API void cimgui::ImGui_Initialize(void)
 CIMGUI_API void cimgui::ImGui_Shutdown(void)
 {
     ::ImGui::Shutdown();
+}
+
+CIMGUI_API void    cimgui::ImGui_SetContextName(cimgui::ImGuiContext* ctx, const char* name)
+{
+    ::ImGui::SetContextName(reinterpret_cast<::ImGuiContext*>(ctx), name);
+}
+
+CIMGUI_API ImGuiID cimgui::ImGui_AddContextHook(cimgui::ImGuiContext* ctx, const cimgui::ImGuiContextHook* hook)
+{
+    return ::ImGui::AddContextHook(reinterpret_cast<::ImGuiContext*>(ctx), reinterpret_cast<const ::ImGuiContextHook*>(hook));
+}
+
+CIMGUI_API void    cimgui::ImGui_RemoveContextHook(cimgui::ImGuiContext* ctx, ImGuiID hook_to_remove)
+{
+    ::ImGui::RemoveContextHook(reinterpret_cast<::ImGuiContext*>(ctx), hook_to_remove);
+}
+
+CIMGUI_API void    cimgui::ImGui_CallContextHooks(cimgui::ImGuiContext* ctx, cimgui::ImGuiContextHookType type)
+{
+    ::ImGui::CallContextHooks(reinterpret_cast<::ImGuiContext*>(ctx), static_cast<::ImGuiContextHookType>(type));
 }
 
 CIMGUI_API void cimgui::ImGui_UpdateInputEvents(bool trickle_fast_inputs)
@@ -1430,6 +1613,11 @@ CIMGUI_API void cimgui::ImGui_StartMouseMovingWindowOrNode(cimgui::ImGuiWindow* 
     ::ImGui::StartMouseMovingWindowOrNode(reinterpret_cast<::ImGuiWindow*>(window), reinterpret_cast<::ImGuiDockNode*>(node), undock);
 }
 
+CIMGUI_API void cimgui::ImGui_StopMouseMovingWindow(void)
+{
+    ::ImGui::StopMouseMovingWindow();
+}
+
 CIMGUI_API void cimgui::ImGui_UpdateMouseMovingWindowNewFrame(void)
 {
     ::ImGui::UpdateMouseMovingWindowNewFrame();
@@ -1438,21 +1626,6 @@ CIMGUI_API void cimgui::ImGui_UpdateMouseMovingWindowNewFrame(void)
 CIMGUI_API void cimgui::ImGui_UpdateMouseMovingWindowEndFrame(void)
 {
     ::ImGui::UpdateMouseMovingWindowEndFrame();
-}
-
-CIMGUI_API ImGuiID cimgui::ImGui_AddContextHook(cimgui::ImGuiContext* context, const cimgui::ImGuiContextHook* hook)
-{
-    return ::ImGui::AddContextHook(reinterpret_cast<::ImGuiContext*>(context), reinterpret_cast<const ::ImGuiContextHook*>(hook));
-}
-
-CIMGUI_API void    cimgui::ImGui_RemoveContextHook(cimgui::ImGuiContext* context, ImGuiID hook_to_remove)
-{
-    ::ImGui::RemoveContextHook(reinterpret_cast<::ImGuiContext*>(context), hook_to_remove);
-}
-
-CIMGUI_API void    cimgui::ImGui_CallContextHooks(cimgui::ImGuiContext* context, cimgui::ImGuiContextHookType type)
-{
-    ::ImGui::CallContextHooks(reinterpret_cast<::ImGuiContext*>(context), static_cast<::ImGuiContextHookType>(type));
 }
 
 CIMGUI_API void                        cimgui::ImGui_TranslateWindowsInViewport(cimgui::ImGuiViewportP* viewport, cimgui::ImVec2 old_pos, cimgui::ImVec2 new_pos, cimgui::ImVec2 old_size, cimgui::ImVec2 new_size)
@@ -1595,11 +1768,6 @@ CIMGUI_API ImGuiItemStatusFlags cimgui::ImGui_GetItemStatusFlags(void)
     return ::ImGui::GetItemStatusFlags();
 }
 
-CIMGUI_API ImGuiItemFlags       cimgui::ImGui_GetItemFlags(void)
-{
-    return ::ImGui::GetItemFlags();
-}
-
 CIMGUI_API ImGuiID              cimgui::ImGui_GetActiveID(void)
 {
     return ::ImGui::GetActiveID();
@@ -1725,9 +1893,14 @@ CIMGUI_API void   cimgui::ImGui_PushMultiItemsWidths(int components, float width
     ::ImGui::PushMultiItemsWidths(components, width_full);
 }
 
-CIMGUI_API void   cimgui::ImGui_ShrinkWidths(cimgui::ImGuiShrinkWidthItem* items, int count, float width_excess)
+CIMGUI_API void   cimgui::ImGui_ShrinkWidths(cimgui::ImGuiShrinkWidthItem* items, int count, float width_excess, float width_min)
 {
-    ::ImGui::ShrinkWidths(reinterpret_cast<::ImGuiShrinkWidthItem*>(items), count, width_excess);
+    ::ImGui::ShrinkWidths(reinterpret_cast<::ImGuiShrinkWidthItem*>(items), count, width_excess, width_min);
+}
+
+CIMGUI_API void   cimgui::ImGui_CalcClipRectVisibleItemsY(cimgui::ImRect clip_rect, cimgui::ImVec2 pos, float items_height, int* out_visible_start, int* out_visible_end)
+{
+    ::ImGui::CalcClipRectVisibleItemsY(ConvertToCPP_ImRect(clip_rect), ConvertToCPP_ImVec2(pos), items_height, out_visible_start, out_visible_end);
 }
 
 CIMGUI_API const cimgui::ImGuiStyleVarInfo* cimgui::ImGui_GetStyleVarInfo(ImGuiStyleVar idx)
@@ -1780,47 +1953,47 @@ CIMGUI_API bool cimgui::ImGui_BeginChildEx(const char* name, ImGuiID id, cimgui:
     return ::ImGui::BeginChildEx(name, id, ConvertToCPP_ImVec2(size_arg), child_flags, window_flags);
 }
 
-CIMGUI_API bool         cimgui::ImGui_BeginPopupEx(ImGuiID id, ImGuiWindowFlags extra_window_flags)
+CIMGUI_API bool             cimgui::ImGui_BeginPopupEx(ImGuiID id, ImGuiWindowFlags extra_window_flags)
 {
     return ::ImGui::BeginPopupEx(id, extra_window_flags);
 }
 
-CIMGUI_API bool         cimgui::ImGui_BeginPopupMenuEx(ImGuiID id, const char* label, ImGuiWindowFlags extra_window_flags)
+CIMGUI_API bool             cimgui::ImGui_BeginPopupMenuEx(ImGuiID id, const char* label, ImGuiWindowFlags extra_window_flags)
 {
     return ::ImGui::BeginPopupMenuEx(id, label, extra_window_flags);
 }
 
-CIMGUI_API void         cimgui::ImGui_OpenPopupEx(ImGuiID id)
+CIMGUI_API void             cimgui::ImGui_OpenPopupEx(ImGuiID id)
 {
     ::ImGui::OpenPopupEx(id);
 }
 
-CIMGUI_API void         cimgui::ImGui_OpenPopupExEx(ImGuiID id, ImGuiPopupFlags popup_flags)
+CIMGUI_API void             cimgui::ImGui_OpenPopupExEx(ImGuiID id, ImGuiPopupFlags popup_flags)
 {
     ::ImGui::OpenPopupEx(id, popup_flags);
 }
 
-CIMGUI_API void         cimgui::ImGui_ClosePopupToLevel(int remaining, bool restore_focus_to_window_under_popup)
+CIMGUI_API void             cimgui::ImGui_ClosePopupToLevel(int remaining, bool restore_focus_to_window_under_popup)
 {
     ::ImGui::ClosePopupToLevel(remaining, restore_focus_to_window_under_popup);
 }
 
-CIMGUI_API void         cimgui::ImGui_ClosePopupsOverWindow(cimgui::ImGuiWindow* ref_window, bool restore_focus_to_window_under_popup)
+CIMGUI_API void             cimgui::ImGui_ClosePopupsOverWindow(cimgui::ImGuiWindow* ref_window, bool restore_focus_to_window_under_popup)
 {
     ::ImGui::ClosePopupsOverWindow(reinterpret_cast<::ImGuiWindow*>(ref_window), restore_focus_to_window_under_popup);
 }
 
-CIMGUI_API void         cimgui::ImGui_ClosePopupsExceptModals(void)
+CIMGUI_API void             cimgui::ImGui_ClosePopupsExceptModals(void)
 {
     ::ImGui::ClosePopupsExceptModals();
 }
 
-CIMGUI_API bool         cimgui::ImGui_IsPopupOpenID(ImGuiID id, ImGuiPopupFlags popup_flags)
+CIMGUI_API bool             cimgui::ImGui_IsPopupOpenID(ImGuiID id, ImGuiPopupFlags popup_flags)
 {
     return ::ImGui::IsPopupOpen(id, popup_flags);
 }
 
-CIMGUI_API cimgui::ImRect cimgui::ImGui_GetPopupAllowedExtentRect(cimgui::ImGuiWindow* window)
+CIMGUI_API cimgui::ImRect   cimgui::ImGui_GetPopupAllowedExtentRect(cimgui::ImGuiWindow* window)
 {
     return ConvertFromCPP_ImRect(::ImGui::GetPopupAllowedExtentRect(reinterpret_cast<::ImGuiWindow*>(window)));
 }
@@ -1840,14 +2013,19 @@ CIMGUI_API cimgui::ImGuiWindow* cimgui::ImGui_FindBlockingModal(cimgui::ImGuiWin
     return reinterpret_cast<::cimgui::ImGuiWindow*>(::ImGui::FindBlockingModal(reinterpret_cast<::ImGuiWindow*>(window)));
 }
 
-CIMGUI_API cimgui::ImVec2 cimgui::ImGui_FindBestWindowPosForPopup(cimgui::ImGuiWindow* window)
+CIMGUI_API cimgui::ImVec2   cimgui::ImGui_FindBestWindowPosForPopup(cimgui::ImGuiWindow* window)
 {
     return ConvertFromCPP_ImVec2(::ImGui::FindBestWindowPosForPopup(reinterpret_cast<::ImGuiWindow*>(window)));
 }
 
-CIMGUI_API cimgui::ImVec2 cimgui::ImGui_FindBestWindowPosForPopupEx(cimgui::ImVec2 ref_pos, cimgui::ImVec2 size, cimgui::ImGuiDir* last_dir, cimgui::ImRect r_outer, cimgui::ImRect r_avoid, cimgui::ImGuiPopupPositionPolicy policy)
+CIMGUI_API cimgui::ImVec2   cimgui::ImGui_FindBestWindowPosForPopupEx(cimgui::ImVec2 ref_pos, cimgui::ImVec2 size, cimgui::ImGuiDir* last_dir, cimgui::ImRect r_outer, cimgui::ImRect r_avoid, cimgui::ImGuiPopupPositionPolicy policy)
 {
     return ConvertFromCPP_ImVec2(::ImGui::FindBestWindowPosForPopupEx(ConvertToCPP_ImVec2(ref_pos), ConvertToCPP_ImVec2(size), reinterpret_cast<::ImGuiDir*>(last_dir), ConvertToCPP_ImRect(r_outer), ConvertToCPP_ImRect(r_avoid), static_cast<::ImGuiPopupPositionPolicy>(policy)));
+}
+
+CIMGUI_API ImGuiMouseButton cimgui::ImGui_GetMouseButtonFromPopupFlags(ImGuiPopupFlags flags)
+{
+    return ::ImGui::GetMouseButtonFromPopupFlags(flags);
 }
 
 CIMGUI_API bool cimgui::ImGui_BeginTooltipEx(ImGuiTooltipFlags tooltip_flags, ImGuiWindowFlags extra_window_flags)
@@ -2465,6 +2643,16 @@ CIMGUI_API bool cimgui::ImGui_BeginDragDropTargetCustom(cimgui::ImRect bb, ImGui
     return ::ImGui::BeginDragDropTargetCustom(ConvertToCPP_ImRect(bb), id);
 }
 
+CIMGUI_API bool cimgui::ImGui_BeginDragDropTargetViewport(cimgui::ImGuiViewport* viewport)
+{
+    return ::ImGui::BeginDragDropTargetViewport(reinterpret_cast<::ImGuiViewport*>(viewport));
+}
+
+CIMGUI_API bool cimgui::ImGui_BeginDragDropTargetViewportEx(cimgui::ImGuiViewport* viewport, const cimgui::ImRect* p_bb)
+{
+    return ::ImGui::BeginDragDropTargetViewport(reinterpret_cast<::ImGuiViewport*>(viewport), reinterpret_cast<const ::ImRect*>(p_bb));
+}
+
 CIMGUI_API void cimgui::ImGui_ClearDragDrop(void)
 {
     ::ImGui::ClearDragDrop();
@@ -2475,9 +2663,14 @@ CIMGUI_API bool cimgui::ImGui_IsDragDropPayloadBeingAccepted(void)
     return ::ImGui::IsDragDropPayloadBeingAccepted();
 }
 
-CIMGUI_API void cimgui::ImGui_RenderDragDropTargetRect(cimgui::ImRect bb, cimgui::ImRect item_clip_rect)
+CIMGUI_API void cimgui::ImGui_RenderDragDropTargetRectForItem(cimgui::ImRect bb)
 {
-    ::ImGui::RenderDragDropTargetRect(ConvertToCPP_ImRect(bb), ConvertToCPP_ImRect(item_clip_rect));
+    ::ImGui::RenderDragDropTargetRectForItem(ConvertToCPP_ImRect(bb));
+}
+
+CIMGUI_API void cimgui::ImGui_RenderDragDropTargetRectEx(cimgui::ImDrawList* draw_list, cimgui::ImRect bb)
+{
+    ::ImGui::RenderDragDropTargetRectEx(reinterpret_cast<::ImDrawList*>(draw_list), ConvertToCPP_ImRect(bb));
 }
 
 CIMGUI_API cimgui::ImGuiTypingSelectRequest* cimgui::ImGui_GetTypingSelectRequest(void)
@@ -2735,6 +2928,11 @@ CIMGUI_API ImGuiID                 cimgui::ImGui_TableGetInstanceID(cimgui::ImGu
     return ::ImGui::TableGetInstanceID(reinterpret_cast<::ImGuiTable*>(table), instance_no);
 }
 
+CIMGUI_API void                    cimgui::ImGui_TableFixDisplayOrder(cimgui::ImGuiTable* table)
+{
+    ::ImGui::TableFixDisplayOrder(reinterpret_cast<::ImGuiTable*>(table));
+}
+
 CIMGUI_API void                    cimgui::ImGui_TableSortSpecsSanitize(cimgui::ImGuiTable* table)
 {
     ::ImGui::TableSortSpecsSanitize(reinterpret_cast<::ImGuiTable*>(table));
@@ -2815,6 +3013,11 @@ CIMGUI_API void                    cimgui::ImGui_TableSetColumnWidthAutoAll(cimg
     ::ImGui::TableSetColumnWidthAutoAll(reinterpret_cast<::ImGuiTable*>(table));
 }
 
+CIMGUI_API void                    cimgui::ImGui_TableSetColumnDisplayOrder(cimgui::ImGuiTable* table, int column_n, int dst_order)
+{
+    ::ImGui::TableSetColumnDisplayOrder(reinterpret_cast<::ImGuiTable*>(table), column_n, dst_order);
+}
+
 CIMGUI_API void                    cimgui::ImGui_TableRemove(cimgui::ImGuiTable* table)
 {
     ::ImGui::TableRemove(reinterpret_cast<::ImGuiTable*>(table));
@@ -2873,6 +3076,16 @@ CIMGUI_API cimgui::ImGuiTableSettings* cimgui::ImGui_TableSettingsFindByID(ImGui
 CIMGUI_API cimgui::ImGuiTabBar* cimgui::ImGui_GetCurrentTabBar(void)
 {
     return reinterpret_cast<::cimgui::ImGuiTabBar*>(::ImGui::GetCurrentTabBar());
+}
+
+CIMGUI_API cimgui::ImGuiTabBar* cimgui::ImGui_TabBarFindByID(ImGuiID id)
+{
+    return reinterpret_cast<::cimgui::ImGuiTabBar*>(::ImGui::TabBarFindByID(id));
+}
+
+CIMGUI_API void          cimgui::ImGui_TabBarRemove(cimgui::ImGuiTabBar* tab_bar)
+{
+    ::ImGui::TabBarRemove(reinterpret_cast<::ImGuiTabBar*>(tab_bar));
 }
 
 CIMGUI_API bool          cimgui::ImGui_BeginTabBarEx(cimgui::ImGuiTabBar* tab_bar, cimgui::ImRect bb, ImGuiTabBarFlags flags)
@@ -3040,6 +3253,11 @@ CIMGUI_API void        cimgui::ImGui_RenderFrameBorderEx(cimgui::ImVec2 p_min, c
     ::ImGui::RenderFrameBorder(ConvertToCPP_ImVec2(p_min), ConvertToCPP_ImVec2(p_max), rounding);
 }
 
+CIMGUI_API void        cimgui::ImGui_RenderColorComponentMarker(cimgui::ImRect bb, ImU32 col, float rounding)
+{
+    ::ImGui::RenderColorComponentMarker(ConvertToCPP_ImRect(bb), col, rounding);
+}
+
 CIMGUI_API void        cimgui::ImGui_RenderColorRectWithAlphaCheckerboard(cimgui::ImDrawList* draw_list, cimgui::ImVec2 p_min, cimgui::ImVec2 p_max, ImU32 fill_col, float grid_step, cimgui::ImVec2 grid_off)
 {
     ::ImGui::RenderColorRectWithAlphaCheckerboard(reinterpret_cast<::ImDrawList*>(draw_list), ConvertToCPP_ImVec2(p_min), ConvertToCPP_ImVec2(p_max), fill_col, grid_step, ConvertToCPP_ImVec2(grid_off));
@@ -3119,9 +3337,9 @@ CIMGUI_API void        cimgui::ImGui_RenderArrowDockMenu(cimgui::ImDrawList* dra
     ::ImGui::RenderArrowDockMenu(reinterpret_cast<::ImDrawList*>(draw_list), ConvertToCPP_ImVec2(p_min), sz, col);
 }
 
-CIMGUI_API void        cimgui::ImGui_RenderRectFilledRangeH(cimgui::ImDrawList* draw_list, cimgui::ImRect rect, ImU32 col, float x_start_norm, float x_end_norm, float rounding)
+CIMGUI_API void        cimgui::ImGui_RenderRectFilledInRangeH(cimgui::ImDrawList* draw_list, cimgui::ImRect rect, ImU32 col, float fill_x0, float fill_x1, float rounding)
 {
-    ::ImGui::RenderRectFilledRangeH(reinterpret_cast<::ImDrawList*>(draw_list), ConvertToCPP_ImRect(rect), col, x_start_norm, x_end_norm, rounding);
+    ::ImGui::RenderRectFilledInRangeH(reinterpret_cast<::ImDrawList*>(draw_list), ConvertToCPP_ImRect(rect), col, fill_x0, fill_x1, rounding);
 }
 
 CIMGUI_API void        cimgui::ImGui_RenderRectFilledWithHole(cimgui::ImDrawList* draw_list, cimgui::ImRect outer, cimgui::ImRect inner, ImU32 col, float rounding)
@@ -3172,9 +3390,9 @@ CIMGUI_API bool cimgui::ImGui_ArrowButtonEx(const char* str_id, cimgui::ImGuiDir
     return ::ImGui::ArrowButtonEx(str_id, static_cast<::ImGuiDir>(dir), ConvertToCPP_ImVec2(size_arg), flags);
 }
 
-CIMGUI_API bool cimgui::ImGui_ImageButtonWithFlags(ImGuiID id, ImTextureID user_texture_id, cimgui::ImVec2 image_size, cimgui::ImVec2 uv0, cimgui::ImVec2 uv1, cimgui::ImVec4 bg_col, cimgui::ImVec4 tint_col, ImGuiButtonFlags flags)
+CIMGUI_API bool cimgui::ImGui_ImageButtonWithFlags(ImGuiID id, cimgui::ImTextureRef tex_ref, cimgui::ImVec2 image_size, cimgui::ImVec2 uv0, cimgui::ImVec2 uv1, cimgui::ImVec4 bg_col, cimgui::ImVec4 tint_col, ImGuiButtonFlags flags)
 {
-    return ::ImGui::ImageButtonEx(id, user_texture_id, ConvertToCPP_ImVec2(image_size), ConvertToCPP_ImVec2(uv0), ConvertToCPP_ImVec2(uv1), ConvertToCPP_ImVec4(bg_col), ConvertToCPP_ImVec4(tint_col), flags);
+    return ::ImGui::ImageButtonEx(id, ConvertToCPP_ImTextureRef(tex_ref), ConvertToCPP_ImVec2(image_size), ConvertToCPP_ImVec2(uv0), ConvertToCPP_ImVec2(uv1), ConvertToCPP_ImVec4(bg_col), ConvertToCPP_ImVec4(tint_col), flags);
 }
 
 CIMGUI_API void cimgui::ImGui_SeparatorEx(ImGuiSeparatorFlags flags)
@@ -3412,6 +3630,11 @@ CIMGUI_API void cimgui::ImGui_ColorPickerOptionsPopup(const float* ref_col, ImGu
     ::ImGui::ColorPickerOptionsPopup(ref_col, flags);
 }
 
+CIMGUI_API void cimgui::ImGui_SetNextItemColorMarker(ImU32 col)
+{
+    ::ImGui::SetNextItemColorMarker(col);
+}
+
 CIMGUI_API int cimgui::ImGui_PlotEx(cimgui::ImGuiPlotType plot_type, const char* label, float (*values_getter)(void* data, int idx), void* data, int values_count, int values_offset, const char* overlay_text, float scale_min, float scale_max, cimgui::ImVec2 size_arg)
 {
     return ::ImGui::PlotEx(static_cast<::ImGuiPlotType>(plot_type), label, values_getter, data, values_count, values_offset, overlay_text, scale_min, scale_max, ConvertToCPP_ImVec2(size_arg));
@@ -3487,198 +3710,228 @@ CIMGUI_API void cimgui::ImGui_EndErrorTooltip(void)
     ::ImGui::EndErrorTooltip();
 }
 
-CIMGUI_API void cimgui::ImGui_DebugAllocHook(cimgui::ImGuiDebugAllocInfo* info, int frame_count, void* ptr, size_t size)
+CIMGUI_API void  cimgui::ImGui_DebugAllocHook(cimgui::ImGuiDebugAllocInfo* info, int frame_count, void* ptr, size_t size)
 {
     ::ImGui::DebugAllocHook(reinterpret_cast<::ImGuiDebugAllocInfo*>(info), frame_count, ptr, size);
 }
 
-CIMGUI_API void cimgui::ImGui_DebugDrawCursorPos(void)
+CIMGUI_API void  cimgui::ImGui_DebugDrawCursorPos(void)
 {
     ::ImGui::DebugDrawCursorPos();
 }
 
-CIMGUI_API void cimgui::ImGui_DebugDrawCursorPosEx(ImU32 col)
+CIMGUI_API void  cimgui::ImGui_DebugDrawCursorPosEx(ImU32 col)
 {
     ::ImGui::DebugDrawCursorPos(col);
 }
 
-CIMGUI_API void cimgui::ImGui_DebugDrawLineExtents(void)
+CIMGUI_API void  cimgui::ImGui_DebugDrawLineExtents(void)
 {
     ::ImGui::DebugDrawLineExtents();
 }
 
-CIMGUI_API void cimgui::ImGui_DebugDrawLineExtentsEx(ImU32 col)
+CIMGUI_API void  cimgui::ImGui_DebugDrawLineExtentsEx(ImU32 col)
 {
     ::ImGui::DebugDrawLineExtents(col);
 }
 
-CIMGUI_API void cimgui::ImGui_DebugDrawItemRect(void)
+CIMGUI_API void  cimgui::ImGui_DebugDrawItemRect(void)
 {
     ::ImGui::DebugDrawItemRect();
 }
 
-CIMGUI_API void cimgui::ImGui_DebugDrawItemRectEx(ImU32 col)
+CIMGUI_API void  cimgui::ImGui_DebugDrawItemRectEx(ImU32 col)
 {
     ::ImGui::DebugDrawItemRect(col);
 }
 
-CIMGUI_API void cimgui::ImGui_DebugTextUnformattedWithLocateItem(const char* line_begin, const char* line_end)
+CIMGUI_API void  cimgui::ImGui_DebugTextUnformattedWithLocateItem(const char* line_begin, const char* line_end)
 {
     ::ImGui::DebugTextUnformattedWithLocateItem(line_begin, line_end);
 }
 
-CIMGUI_API void cimgui::ImGui_DebugLocateItem(ImGuiID target_id)
+CIMGUI_API void  cimgui::ImGui_DebugLocateItem(ImGuiID target_id)
 {
     ::ImGui::DebugLocateItem(target_id);
 }
 
-CIMGUI_API void cimgui::ImGui_DebugLocateItemOnHover(ImGuiID target_id)
+CIMGUI_API void  cimgui::ImGui_DebugLocateItemOnHover(ImGuiID target_id)
 {
     ::ImGui::DebugLocateItemOnHover(target_id);
 }
 
-CIMGUI_API void cimgui::ImGui_DebugLocateItemResolveWithLastItem(void)
+CIMGUI_API void  cimgui::ImGui_DebugLocateItemResolveWithLastItem(void)
 {
     ::ImGui::DebugLocateItemResolveWithLastItem();
 }
 
-CIMGUI_API void cimgui::ImGui_DebugBreakClearData(void)
+CIMGUI_API void  cimgui::ImGui_DebugBreakClearData(void)
 {
     ::ImGui::DebugBreakClearData();
 }
 
-CIMGUI_API bool cimgui::ImGui_DebugBreakButton(const char* label, const char* description_of_location)
+CIMGUI_API bool  cimgui::ImGui_DebugBreakButton(const char* label, const char* description_of_location)
 {
     return ::ImGui::DebugBreakButton(label, description_of_location);
 }
 
-CIMGUI_API void cimgui::ImGui_DebugBreakButtonTooltip(bool keyboard_only, const char* description_of_location)
+CIMGUI_API void  cimgui::ImGui_DebugBreakButtonTooltip(bool keyboard_only, const char* description_of_location)
 {
     ::ImGui::DebugBreakButtonTooltip(keyboard_only, description_of_location);
 }
 
-CIMGUI_API void cimgui::ImGui_ShowFontAtlas(cimgui::ImFontAtlas* atlas)
+CIMGUI_API void  cimgui::ImGui_ShowFontAtlas(cimgui::ImFontAtlas* atlas)
 {
     ::ImGui::ShowFontAtlas(reinterpret_cast<::ImFontAtlas*>(atlas));
 }
 
-CIMGUI_API void cimgui::ImGui_DebugHookIdInfo(ImGuiID id, ImGuiDataType data_type, const void* data_id, const void* data_id_end)
+CIMGUI_API ImU64 cimgui::ImGui_DebugTextureIDToU64(ImTextureID tex_id)
+{
+    return ::ImGui::DebugTextureIDToU64(tex_id);
+}
+
+CIMGUI_API void  cimgui::ImGui_DebugHookIdInfo(ImGuiID id, ImGuiDataType data_type, const void* data_id, const void* data_id_end)
 {
     ::ImGui::DebugHookIdInfo(id, data_type, data_id, data_id_end);
 }
 
-CIMGUI_API void cimgui::ImGui_DebugNodeColumns(cimgui::ImGuiOldColumns* columns)
+CIMGUI_API void  cimgui::ImGui_DebugNodeColumns(cimgui::ImGuiOldColumns* columns)
 {
     ::ImGui::DebugNodeColumns(reinterpret_cast<::ImGuiOldColumns*>(columns));
 }
 
-CIMGUI_API void cimgui::ImGui_DebugNodeDockNode(cimgui::ImGuiDockNode* node, const char* label)
+CIMGUI_API void  cimgui::ImGui_DebugNodeDockNode(cimgui::ImGuiDockNode* node, const char* label)
 {
     ::ImGui::DebugNodeDockNode(reinterpret_cast<::ImGuiDockNode*>(node), label);
 }
 
-CIMGUI_API void cimgui::ImGui_DebugNodeDrawList(cimgui::ImGuiWindow* window, cimgui::ImGuiViewportP* viewport, const cimgui::ImDrawList* draw_list, const char* label)
+CIMGUI_API void  cimgui::ImGui_DebugNodeDrawList(cimgui::ImGuiWindow* window, cimgui::ImGuiViewportP* viewport, const cimgui::ImDrawList* draw_list, const char* label)
 {
     ::ImGui::DebugNodeDrawList(reinterpret_cast<::ImGuiWindow*>(window), reinterpret_cast<::ImGuiViewportP*>(viewport), reinterpret_cast<const ::ImDrawList*>(draw_list), label);
 }
 
-CIMGUI_API void cimgui::ImGui_DebugNodeDrawCmdShowMeshAndBoundingBox(cimgui::ImDrawList* out_draw_list, const cimgui::ImDrawList* draw_list, const cimgui::ImDrawCmd* draw_cmd, bool show_mesh, bool show_aabb)
+CIMGUI_API void  cimgui::ImGui_DebugNodeDrawCmdShowMeshAndBoundingBox(cimgui::ImDrawList* out_draw_list, const cimgui::ImDrawList* draw_list, const cimgui::ImDrawCmd* draw_cmd, bool show_mesh, bool show_aabb)
 {
     ::ImGui::DebugNodeDrawCmdShowMeshAndBoundingBox(reinterpret_cast<::ImDrawList*>(out_draw_list), reinterpret_cast<const ::ImDrawList*>(draw_list), reinterpret_cast<const ::ImDrawCmd*>(draw_cmd), show_mesh, show_aabb);
 }
 
-CIMGUI_API void cimgui::ImGui_DebugNodeFont(cimgui::ImFont* font)
+CIMGUI_API void  cimgui::ImGui_DebugNodeFont(cimgui::ImFont* font)
 {
     ::ImGui::DebugNodeFont(reinterpret_cast<::ImFont*>(font));
 }
 
-CIMGUI_API void cimgui::ImGui_DebugNodeFontGlyph(cimgui::ImFont* font, const cimgui::ImFontGlyph* glyph)
+CIMGUI_API void  cimgui::ImGui_DebugNodeFontGlyphesForSrcMask(cimgui::ImFont* font, cimgui::ImFontBaked* baked, int src_mask)
+{
+    ::ImGui::DebugNodeFontGlyphesForSrcMask(reinterpret_cast<::ImFont*>(font), reinterpret_cast<::ImFontBaked*>(baked), src_mask);
+}
+
+CIMGUI_API void  cimgui::ImGui_DebugNodeFontGlyph(cimgui::ImFont* font, const cimgui::ImFontGlyph* glyph)
 {
     ::ImGui::DebugNodeFontGlyph(reinterpret_cast<::ImFont*>(font), reinterpret_cast<const ::ImFontGlyph*>(glyph));
 }
 
-CIMGUI_API void cimgui::ImGui_DebugNodeStorage(cimgui::ImGuiStorage* storage, const char* label)
+CIMGUI_API void  cimgui::ImGui_DebugNodeTexture(cimgui::ImTextureData* tex, int int_id)
+{
+    ::ImGui::DebugNodeTexture(reinterpret_cast<::ImTextureData*>(tex), int_id);
+}
+
+CIMGUI_API void  cimgui::ImGui_DebugNodeTextureEx(cimgui::ImTextureData* tex, int int_id, const cimgui::ImFontAtlasRect* highlight_rect)
+{
+    ::ImGui::DebugNodeTexture(reinterpret_cast<::ImTextureData*>(tex), int_id, reinterpret_cast<const ::ImFontAtlasRect*>(highlight_rect));
+}
+
+CIMGUI_API void  cimgui::ImGui_DebugNodeStorage(cimgui::ImGuiStorage* storage, const char* label)
 {
     ::ImGui::DebugNodeStorage(reinterpret_cast<::ImGuiStorage*>(storage), label);
 }
 
-CIMGUI_API void cimgui::ImGui_DebugNodeTabBar(cimgui::ImGuiTabBar* tab_bar, const char* label)
+CIMGUI_API void  cimgui::ImGui_DebugNodeTabBar(cimgui::ImGuiTabBar* tab_bar, const char* label)
 {
     ::ImGui::DebugNodeTabBar(reinterpret_cast<::ImGuiTabBar*>(tab_bar), label);
 }
 
-CIMGUI_API void cimgui::ImGui_DebugNodeTable(cimgui::ImGuiTable* table)
+CIMGUI_API void  cimgui::ImGui_DebugNodeTable(cimgui::ImGuiTable* table)
 {
     ::ImGui::DebugNodeTable(reinterpret_cast<::ImGuiTable*>(table));
 }
 
-CIMGUI_API void cimgui::ImGui_DebugNodeTableSettings(cimgui::ImGuiTableSettings* settings)
+CIMGUI_API void  cimgui::ImGui_DebugNodeTableSettings(cimgui::ImGuiTableSettings* settings)
 {
     ::ImGui::DebugNodeTableSettings(reinterpret_cast<::ImGuiTableSettings*>(settings));
 }
 
-CIMGUI_API void cimgui::ImGui_DebugNodeTypingSelectState(cimgui::ImGuiTypingSelectState* state)
+CIMGUI_API void  cimgui::ImGui_DebugNodeTypingSelectState(cimgui::ImGuiTypingSelectState* state)
 {
     ::ImGui::DebugNodeTypingSelectState(reinterpret_cast<::ImGuiTypingSelectState*>(state));
 }
 
-CIMGUI_API void cimgui::ImGui_DebugNodeMultiSelectState(cimgui::ImGuiMultiSelectState* state)
+CIMGUI_API void  cimgui::ImGui_DebugNodeMultiSelectState(cimgui::ImGuiMultiSelectState* state)
 {
     ::ImGui::DebugNodeMultiSelectState(reinterpret_cast<::ImGuiMultiSelectState*>(state));
 }
 
-CIMGUI_API void cimgui::ImGui_DebugNodeWindow(cimgui::ImGuiWindow* window, const char* label)
+CIMGUI_API void  cimgui::ImGui_DebugNodeWindow(cimgui::ImGuiWindow* window, const char* label)
 {
     ::ImGui::DebugNodeWindow(reinterpret_cast<::ImGuiWindow*>(window), label);
 }
 
-CIMGUI_API void cimgui::ImGui_DebugNodeWindowSettings(cimgui::ImGuiWindowSettings* settings)
+CIMGUI_API void  cimgui::ImGui_DebugNodeWindowSettings(cimgui::ImGuiWindowSettings* settings)
 {
     ::ImGui::DebugNodeWindowSettings(reinterpret_cast<::ImGuiWindowSettings*>(settings));
 }
 
-CIMGUI_API void cimgui::ImGui_DebugNodeWindowsList(cimgui::ImVector_ImGuiWindowPtr* windows, const char* label)
+CIMGUI_API void  cimgui::ImGui_DebugNodeWindowsList(cimgui::ImVector_ImGuiWindowPtr* windows, const char* label)
 {
     ::ImGui::DebugNodeWindowsList(reinterpret_cast<::ImVector<::ImGuiWindow*>*>(windows), label);
 }
 
-CIMGUI_API void cimgui::ImGui_DebugNodeWindowsListByBeginStackParent(cimgui::ImGuiWindow** windows, int windows_size, cimgui::ImGuiWindow* parent_in_begin_stack)
+CIMGUI_API void  cimgui::ImGui_DebugNodeWindowsListByBeginStackParent(cimgui::ImGuiWindow** windows, int windows_size, cimgui::ImGuiWindow* parent_in_begin_stack)
 {
     ::ImGui::DebugNodeWindowsListByBeginStackParent(reinterpret_cast<::ImGuiWindow**>(windows), windows_size, reinterpret_cast<::ImGuiWindow*>(parent_in_begin_stack));
 }
 
-CIMGUI_API void cimgui::ImGui_DebugNodeViewport(cimgui::ImGuiViewportP* viewport)
+CIMGUI_API void  cimgui::ImGui_DebugNodeViewport(cimgui::ImGuiViewportP* viewport)
 {
     ::ImGui::DebugNodeViewport(reinterpret_cast<::ImGuiViewportP*>(viewport));
 }
 
-CIMGUI_API void cimgui::ImGui_DebugNodePlatformMonitor(cimgui::ImGuiPlatformMonitor* monitor, const char* label, int idx)
+CIMGUI_API void  cimgui::ImGui_DebugNodePlatformMonitor(cimgui::ImGuiPlatformMonitor* monitor, const char* label, int idx)
 {
     ::ImGui::DebugNodePlatformMonitor(reinterpret_cast<::ImGuiPlatformMonitor*>(monitor), label, idx);
 }
 
-CIMGUI_API void cimgui::ImGui_DebugRenderKeyboardPreview(cimgui::ImDrawList* draw_list)
+CIMGUI_API void  cimgui::ImGui_DebugRenderKeyboardPreview(cimgui::ImDrawList* draw_list)
 {
     ::ImGui::DebugRenderKeyboardPreview(reinterpret_cast<::ImDrawList*>(draw_list));
 }
 
-CIMGUI_API void cimgui::ImGui_DebugRenderViewportThumbnail(cimgui::ImDrawList* draw_list, cimgui::ImGuiViewportP* viewport, cimgui::ImRect bb)
+CIMGUI_API void  cimgui::ImGui_DebugRenderViewportThumbnail(cimgui::ImDrawList* draw_list, cimgui::ImGuiViewportP* viewport, cimgui::ImRect bb)
 {
     ::ImGui::DebugRenderViewportThumbnail(reinterpret_cast<::ImDrawList*>(draw_list), reinterpret_cast<::ImGuiViewportP*>(viewport), ConvertToCPP_ImRect(bb));
 }
 
 #ifdef IMGUI_ENABLE_STB_TRUETYPE
 
-CIMGUI_API const cimgui::ImFontBuilderIO* cimgui::cImFontAtlasGetBuilderForStbTruetype(void)
+CIMGUI_API const cimgui::ImFontLoader* cimgui::cImFontAtlasGetFontLoaderForStbTruetype(void)
 {
-    return reinterpret_cast<const ::cimgui::ImFontBuilderIO*>(::ImFontAtlasGetBuilderForStbTruetype());
+    return reinterpret_cast<const ::cimgui::ImFontLoader*>(::ImFontAtlasGetFontLoaderForStbTruetype());
 }
 
 #endif // #ifdef IMGUI_ENABLE_STB_TRUETYPE
 
-CIMGUI_API void cimgui::cImFontAtlasUpdateSourcesPointers(cimgui::ImFontAtlas* atlas)
+CIMGUI_API int               cimgui::cImFontAtlasRectId_GetIndex(ImFontAtlasRectId id)
 {
-    ::ImFontAtlasUpdateSourcesPointers(reinterpret_cast<::ImFontAtlas*>(atlas));
+    return ::ImFontAtlasRectId_GetIndex(id);
+}
+
+CIMGUI_API unsigned int      cimgui::cImFontAtlasRectId_GetGeneration(ImFontAtlasRectId id)
+{
+    return ::ImFontAtlasRectId_GetGeneration(id);
+}
+
+CIMGUI_API ImFontAtlasRectId cimgui::cImFontAtlasRectId_Make(int index_idx, int gen_idx)
+{
+    return ::ImFontAtlasRectId_Make(index_idx, gen_idx);
 }
 
 CIMGUI_API void cimgui::cImFontAtlasBuildInit(cimgui::ImFontAtlas* atlas)
@@ -3686,45 +3939,284 @@ CIMGUI_API void cimgui::cImFontAtlasBuildInit(cimgui::ImFontAtlas* atlas)
     ::ImFontAtlasBuildInit(reinterpret_cast<::ImFontAtlas*>(atlas));
 }
 
-CIMGUI_API void cimgui::cImFontAtlasBuildSetupFont(cimgui::ImFontAtlas* atlas, cimgui::ImFont* font, cimgui::ImFontConfig* src, float ascent, float descent)
+CIMGUI_API void cimgui::cImFontAtlasBuildDestroy(cimgui::ImFontAtlas* atlas)
 {
-    ::ImFontAtlasBuildSetupFont(reinterpret_cast<::ImFontAtlas*>(atlas), reinterpret_cast<::ImFont*>(font), reinterpret_cast<::ImFontConfig*>(src), ascent, descent);
+    ::ImFontAtlasBuildDestroy(reinterpret_cast<::ImFontAtlas*>(atlas));
 }
 
-CIMGUI_API void cimgui::cImFontAtlasBuildPackCustomRects(cimgui::ImFontAtlas* atlas, void* stbrp_context_opaque)
+CIMGUI_API void cimgui::cImFontAtlasBuildMain(cimgui::ImFontAtlas* atlas)
 {
-    ::ImFontAtlasBuildPackCustomRects(reinterpret_cast<::ImFontAtlas*>(atlas), stbrp_context_opaque);
+    ::ImFontAtlasBuildMain(reinterpret_cast<::ImFontAtlas*>(atlas));
 }
 
-CIMGUI_API void cimgui::cImFontAtlasBuildFinish(cimgui::ImFontAtlas* atlas)
+CIMGUI_API void cimgui::cImFontAtlasBuildSetupFontLoader(cimgui::ImFontAtlas* atlas, const cimgui::ImFontLoader* font_loader)
 {
-    ::ImFontAtlasBuildFinish(reinterpret_cast<::ImFontAtlas*>(atlas));
+    ::ImFontAtlasBuildSetupFontLoader(reinterpret_cast<::ImFontAtlas*>(atlas), reinterpret_cast<const ::ImFontLoader*>(font_loader));
 }
 
-CIMGUI_API void cimgui::cImFontAtlasBuildRender8bppRectFromString(cimgui::ImFontAtlas* atlas, int x, int y, int w, int h, const char* in_str, char in_marker_char, unsigned char in_marker_pixel_value)
+CIMGUI_API void cimgui::cImFontAtlasBuildNotifySetFont(cimgui::ImFontAtlas* atlas, cimgui::ImFont* old_font, cimgui::ImFont* new_font)
 {
-    ::ImFontAtlasBuildRender8bppRectFromString(reinterpret_cast<::ImFontAtlas*>(atlas), x, y, w, h, in_str, in_marker_char, in_marker_pixel_value);
+    ::ImFontAtlasBuildNotifySetFont(reinterpret_cast<::ImFontAtlas*>(atlas), reinterpret_cast<::ImFont*>(old_font), reinterpret_cast<::ImFont*>(new_font));
 }
 
-CIMGUI_API void cimgui::cImFontAtlasBuildRender32bppRectFromString(cimgui::ImFontAtlas* atlas, int x, int y, int w, int h, const char* in_str, char in_marker_char, unsigned int in_marker_pixel_value)
+CIMGUI_API void cimgui::cImFontAtlasBuildUpdatePointers(cimgui::ImFontAtlas* atlas)
 {
-    ::ImFontAtlasBuildRender32bppRectFromString(reinterpret_cast<::ImFontAtlas*>(atlas), x, y, w, h, in_str, in_marker_char, in_marker_pixel_value);
+    ::ImFontAtlasBuildUpdatePointers(reinterpret_cast<::ImFontAtlas*>(atlas));
 }
 
-CIMGUI_API void cimgui::cImFontAtlasBuildMultiplyCalcLookupTable(unsigned char out_table[256], float in_multiply_factor)
+CIMGUI_API void cimgui::cImFontAtlasBuildRenderBitmapFromString(cimgui::ImFontAtlas* atlas, int x, int y, int w, int h, const char* in_str, char in_marker_char)
 {
-    ::ImFontAtlasBuildMultiplyCalcLookupTable(out_table, in_multiply_factor);
+    ::ImFontAtlasBuildRenderBitmapFromString(reinterpret_cast<::ImFontAtlas*>(atlas), x, y, w, h, in_str, in_marker_char);
 }
 
-CIMGUI_API void cimgui::cImFontAtlasBuildMultiplyRectAlpha8(const unsigned char table[256], unsigned char* pixels, int x, int y, int w, int h, int stride)
+CIMGUI_API void cimgui::cImFontAtlasBuildClear(cimgui::ImFontAtlas* atlas)
 {
-    ::ImFontAtlasBuildMultiplyRectAlpha8(table, pixels, x, y, w, h, stride);
+    ::ImFontAtlasBuildClear(reinterpret_cast<::ImFontAtlas*>(atlas));
 }
 
-CIMGUI_API void cimgui::cImFontAtlasBuildGetOversampleFactors(const cimgui::ImFontConfig* src, int* out_oversample_h, int* out_oversample_v)
+CIMGUI_API cimgui::ImTextureData* cimgui::cImFontAtlasTextureAdd(cimgui::ImFontAtlas* atlas, int w, int h)
 {
-    ::ImFontAtlasBuildGetOversampleFactors(reinterpret_cast<const ::ImFontConfig*>(src), out_oversample_h, out_oversample_v);
+    return reinterpret_cast<::cimgui::ImTextureData*>(::ImFontAtlasTextureAdd(reinterpret_cast<::ImFontAtlas*>(atlas), w, h));
 }
+
+CIMGUI_API void           cimgui::cImFontAtlasTextureMakeSpace(cimgui::ImFontAtlas* atlas)
+{
+    ::ImFontAtlasTextureMakeSpace(reinterpret_cast<::ImFontAtlas*>(atlas));
+}
+
+CIMGUI_API void           cimgui::cImFontAtlasTextureRepack(cimgui::ImFontAtlas* atlas, int w, int h)
+{
+    ::ImFontAtlasTextureRepack(reinterpret_cast<::ImFontAtlas*>(atlas), w, h);
+}
+
+CIMGUI_API void           cimgui::cImFontAtlasTextureGrow(cimgui::ImFontAtlas* atlas)
+{
+    ::ImFontAtlasTextureGrow(reinterpret_cast<::ImFontAtlas*>(atlas));
+}
+
+CIMGUI_API void           cimgui::cImFontAtlasTextureGrowEx(cimgui::ImFontAtlas* atlas, int old_w, int old_h)
+{
+    ::ImFontAtlasTextureGrow(reinterpret_cast<::ImFontAtlas*>(atlas), old_w, old_h);
+}
+
+CIMGUI_API void           cimgui::cImFontAtlasTextureCompact(cimgui::ImFontAtlas* atlas)
+{
+    ::ImFontAtlasTextureCompact(reinterpret_cast<::ImFontAtlas*>(atlas));
+}
+
+CIMGUI_API cimgui::ImVec2i cimgui::cImFontAtlasTextureGetSizeEstimate(cimgui::ImFontAtlas* atlas)
+{
+    return ConvertFromCPP_ImVec2i(::ImFontAtlasTextureGetSizeEstimate(reinterpret_cast<::ImFontAtlas*>(atlas)));
+}
+
+CIMGUI_API void cimgui::cImFontAtlasBuildSetupFontSpecialGlyphs(cimgui::ImFontAtlas* atlas, cimgui::ImFont* font, cimgui::ImFontConfig* src)
+{
+    ::ImFontAtlasBuildSetupFontSpecialGlyphs(reinterpret_cast<::ImFontAtlas*>(atlas), reinterpret_cast<::ImFont*>(font), reinterpret_cast<::ImFontConfig*>(src));
+}
+
+CIMGUI_API void cimgui::cImFontAtlasBuildLegacyPreloadAllGlyphRanges(cimgui::ImFontAtlas* atlas)
+{
+    ::ImFontAtlasBuildLegacyPreloadAllGlyphRanges(reinterpret_cast<::ImFontAtlas*>(atlas));
+}
+
+CIMGUI_API void cimgui::cImFontAtlasBuildGetOversampleFactors(cimgui::ImFontConfig* src, cimgui::ImFontBaked* baked, int* out_oversample_h, int* out_oversample_v)
+{
+    ::ImFontAtlasBuildGetOversampleFactors(reinterpret_cast<::ImFontConfig*>(src), reinterpret_cast<::ImFontBaked*>(baked), out_oversample_h, out_oversample_v);
+}
+
+CIMGUI_API void cimgui::cImFontAtlasBuildDiscardBakes(cimgui::ImFontAtlas* atlas, int unused_frames)
+{
+    ::ImFontAtlasBuildDiscardBakes(reinterpret_cast<::ImFontAtlas*>(atlas), unused_frames);
+}
+
+CIMGUI_API bool cimgui::cImFontAtlasFontSourceInit(cimgui::ImFontAtlas* atlas, cimgui::ImFontConfig* src)
+{
+    return ::ImFontAtlasFontSourceInit(reinterpret_cast<::ImFontAtlas*>(atlas), reinterpret_cast<::ImFontConfig*>(src));
+}
+
+CIMGUI_API void cimgui::cImFontAtlasFontSourceAddToFont(cimgui::ImFontAtlas* atlas, cimgui::ImFont* font, cimgui::ImFontConfig* src)
+{
+    ::ImFontAtlasFontSourceAddToFont(reinterpret_cast<::ImFontAtlas*>(atlas), reinterpret_cast<::ImFont*>(font), reinterpret_cast<::ImFontConfig*>(src));
+}
+
+CIMGUI_API void cimgui::cImFontAtlasFontDestroySourceData(cimgui::ImFontAtlas* atlas, cimgui::ImFontConfig* src)
+{
+    ::ImFontAtlasFontDestroySourceData(reinterpret_cast<::ImFontAtlas*>(atlas), reinterpret_cast<::ImFontConfig*>(src));
+}
+
+CIMGUI_API bool cimgui::cImFontAtlasFontInitOutput(cimgui::ImFontAtlas* atlas, cimgui::ImFont* font)
+{
+    return ::ImFontAtlasFontInitOutput(reinterpret_cast<::ImFontAtlas*>(atlas), reinterpret_cast<::ImFont*>(font));
+}
+
+CIMGUI_API void cimgui::cImFontAtlasFontDestroyOutput(cimgui::ImFontAtlas* atlas, cimgui::ImFont* font)
+{
+    ::ImFontAtlasFontDestroyOutput(reinterpret_cast<::ImFontAtlas*>(atlas), reinterpret_cast<::ImFont*>(font));
+}
+
+CIMGUI_API void cimgui::cImFontAtlasFontRebuildOutput(cimgui::ImFontAtlas* atlas, cimgui::ImFont* font)
+{
+    ::ImFontAtlasFontRebuildOutput(reinterpret_cast<::ImFontAtlas*>(atlas), reinterpret_cast<::ImFont*>(font));
+}
+
+CIMGUI_API void cimgui::cImFontAtlasFontDiscardBakes(cimgui::ImFontAtlas* atlas, cimgui::ImFont* font, int unused_frames)
+{
+    ::ImFontAtlasFontDiscardBakes(reinterpret_cast<::ImFontAtlas*>(atlas), reinterpret_cast<::ImFont*>(font), unused_frames);
+}
+
+CIMGUI_API ImGuiID      cimgui::cImFontAtlasBakedGetId(ImGuiID font_id, float baked_size, float rasterizer_density)
+{
+    return ::ImFontAtlasBakedGetId(font_id, baked_size, rasterizer_density);
+}
+
+CIMGUI_API cimgui::ImFontBaked* cimgui::cImFontAtlasBakedGetOrAdd(cimgui::ImFontAtlas* atlas, cimgui::ImFont* font, float font_size, float font_rasterizer_density)
+{
+    return reinterpret_cast<::cimgui::ImFontBaked*>(::ImFontAtlasBakedGetOrAdd(reinterpret_cast<::ImFontAtlas*>(atlas), reinterpret_cast<::ImFont*>(font), font_size, font_rasterizer_density));
+}
+
+CIMGUI_API cimgui::ImFontBaked* cimgui::cImFontAtlasBakedGetClosestMatch(cimgui::ImFontAtlas* atlas, cimgui::ImFont* font, float font_size, float font_rasterizer_density)
+{
+    return reinterpret_cast<::cimgui::ImFontBaked*>(::ImFontAtlasBakedGetClosestMatch(reinterpret_cast<::ImFontAtlas*>(atlas), reinterpret_cast<::ImFont*>(font), font_size, font_rasterizer_density));
+}
+
+CIMGUI_API cimgui::ImFontBaked* cimgui::cImFontAtlasBakedAdd(cimgui::ImFontAtlas* atlas, cimgui::ImFont* font, float font_size, float font_rasterizer_density, ImGuiID baked_id)
+{
+    return reinterpret_cast<::cimgui::ImFontBaked*>(::ImFontAtlasBakedAdd(reinterpret_cast<::ImFontAtlas*>(atlas), reinterpret_cast<::ImFont*>(font), font_size, font_rasterizer_density, baked_id));
+}
+
+CIMGUI_API void         cimgui::cImFontAtlasBakedDiscard(cimgui::ImFontAtlas* atlas, cimgui::ImFont* font, cimgui::ImFontBaked* baked)
+{
+    ::ImFontAtlasBakedDiscard(reinterpret_cast<::ImFontAtlas*>(atlas), reinterpret_cast<::ImFont*>(font), reinterpret_cast<::ImFontBaked*>(baked));
+}
+
+CIMGUI_API cimgui::ImFontGlyph* cimgui::cImFontAtlasBakedAddFontGlyph(cimgui::ImFontAtlas* atlas, cimgui::ImFontBaked* baked, cimgui::ImFontConfig* src, const cimgui::ImFontGlyph* in_glyph)
+{
+    return reinterpret_cast<::cimgui::ImFontGlyph*>(::ImFontAtlasBakedAddFontGlyph(reinterpret_cast<::ImFontAtlas*>(atlas), reinterpret_cast<::ImFontBaked*>(baked), reinterpret_cast<::ImFontConfig*>(src), reinterpret_cast<const ::ImFontGlyph*>(in_glyph)));
+}
+
+CIMGUI_API void         cimgui::cImFontAtlasBakedAddFontGlyphAdvancedX(cimgui::ImFontAtlas* atlas, cimgui::ImFontBaked* baked, cimgui::ImFontConfig* src, ImWchar codepoint, float advance_x)
+{
+    ::ImFontAtlasBakedAddFontGlyphAdvancedX(reinterpret_cast<::ImFontAtlas*>(atlas), reinterpret_cast<::ImFontBaked*>(baked), reinterpret_cast<::ImFontConfig*>(src), codepoint, advance_x);
+}
+
+CIMGUI_API void         cimgui::cImFontAtlasBakedDiscardFontGlyph(cimgui::ImFontAtlas* atlas, cimgui::ImFont* font, cimgui::ImFontBaked* baked, cimgui::ImFontGlyph* glyph)
+{
+    ::ImFontAtlasBakedDiscardFontGlyph(reinterpret_cast<::ImFontAtlas*>(atlas), reinterpret_cast<::ImFont*>(font), reinterpret_cast<::ImFontBaked*>(baked), reinterpret_cast<::ImFontGlyph*>(glyph));
+}
+
+CIMGUI_API void         cimgui::cImFontAtlasBakedSetFontGlyphBitmap(cimgui::ImFontAtlas* atlas, cimgui::ImFontBaked* baked, cimgui::ImFontConfig* src, cimgui::ImFontGlyph* glyph, cimgui::ImTextureRect* r, const unsigned char* src_pixels, cimgui::ImTextureFormat src_fmt, int src_pitch)
+{
+    ::ImFontAtlasBakedSetFontGlyphBitmap(reinterpret_cast<::ImFontAtlas*>(atlas), reinterpret_cast<::ImFontBaked*>(baked), reinterpret_cast<::ImFontConfig*>(src), reinterpret_cast<::ImFontGlyph*>(glyph), reinterpret_cast<::ImTextureRect*>(r), src_pixels, static_cast<::ImTextureFormat>(src_fmt), src_pitch);
+}
+
+CIMGUI_API void              cimgui::cImFontAtlasPackInit(cimgui::ImFontAtlas* atlas)
+{
+    ::ImFontAtlasPackInit(reinterpret_cast<::ImFontAtlas*>(atlas));
+}
+
+CIMGUI_API ImFontAtlasRectId cimgui::cImFontAtlasPackAddRect(cimgui::ImFontAtlas* atlas, int w, int h)
+{
+    return ::ImFontAtlasPackAddRect(reinterpret_cast<::ImFontAtlas*>(atlas), w, h);
+}
+
+CIMGUI_API ImFontAtlasRectId cimgui::cImFontAtlasPackAddRectEx(cimgui::ImFontAtlas* atlas, int w, int h, cimgui::ImFontAtlasRectEntry* overwrite_entry)
+{
+    return ::ImFontAtlasPackAddRect(reinterpret_cast<::ImFontAtlas*>(atlas), w, h, reinterpret_cast<::ImFontAtlasRectEntry*>(overwrite_entry));
+}
+
+CIMGUI_API cimgui::ImTextureRect* cimgui::cImFontAtlasPackGetRect(cimgui::ImFontAtlas* atlas, ImFontAtlasRectId id)
+{
+    return reinterpret_cast<::cimgui::ImTextureRect*>(::ImFontAtlasPackGetRect(reinterpret_cast<::ImFontAtlas*>(atlas), id));
+}
+
+CIMGUI_API cimgui::ImTextureRect* cimgui::cImFontAtlasPackGetRectSafe(cimgui::ImFontAtlas* atlas, ImFontAtlasRectId id)
+{
+    return reinterpret_cast<::cimgui::ImTextureRect*>(::ImFontAtlasPackGetRectSafe(reinterpret_cast<::ImFontAtlas*>(atlas), id));
+}
+
+CIMGUI_API void              cimgui::cImFontAtlasPackDiscardRect(cimgui::ImFontAtlas* atlas, ImFontAtlasRectId id)
+{
+    ::ImFontAtlasPackDiscardRect(reinterpret_cast<::ImFontAtlas*>(atlas), id);
+}
+
+CIMGUI_API void cimgui::cImFontAtlasUpdateNewFrame(cimgui::ImFontAtlas* atlas, int frame_count, bool renderer_has_textures)
+{
+    ::ImFontAtlasUpdateNewFrame(reinterpret_cast<::ImFontAtlas*>(atlas), frame_count, renderer_has_textures);
+}
+
+CIMGUI_API void cimgui::cImFontAtlasAddDrawListSharedData(cimgui::ImFontAtlas* atlas, cimgui::ImDrawListSharedData* data)
+{
+    ::ImFontAtlasAddDrawListSharedData(reinterpret_cast<::ImFontAtlas*>(atlas), reinterpret_cast<::ImDrawListSharedData*>(data));
+}
+
+CIMGUI_API void cimgui::cImFontAtlasRemoveDrawListSharedData(cimgui::ImFontAtlas* atlas, cimgui::ImDrawListSharedData* data)
+{
+    ::ImFontAtlasRemoveDrawListSharedData(reinterpret_cast<::ImFontAtlas*>(atlas), reinterpret_cast<::ImDrawListSharedData*>(data));
+}
+
+CIMGUI_API void cimgui::cImFontAtlasUpdateDrawListsTextures(cimgui::ImFontAtlas* atlas, cimgui::ImTextureRef old_tex, cimgui::ImTextureRef new_tex)
+{
+    ::ImFontAtlasUpdateDrawListsTextures(reinterpret_cast<::ImFontAtlas*>(atlas), ConvertToCPP_ImTextureRef(old_tex), ConvertToCPP_ImTextureRef(new_tex));
+}
+
+CIMGUI_API void cimgui::cImFontAtlasUpdateDrawListsSharedData(cimgui::ImFontAtlas* atlas)
+{
+    ::ImFontAtlasUpdateDrawListsSharedData(reinterpret_cast<::ImFontAtlas*>(atlas));
+}
+
+CIMGUI_API void cimgui::cImFontAtlasTextureBlockConvert(const unsigned char* src_pixels, cimgui::ImTextureFormat src_fmt, int src_pitch, unsigned char* dst_pixels, cimgui::ImTextureFormat dst_fmt, int dst_pitch, int w, int h)
+{
+    ::ImFontAtlasTextureBlockConvert(src_pixels, static_cast<::ImTextureFormat>(src_fmt), src_pitch, dst_pixels, static_cast<::ImTextureFormat>(dst_fmt), dst_pitch, w, h);
+}
+
+CIMGUI_API void cimgui::cImFontAtlasTextureBlockPostProcess(cimgui::ImFontAtlasPostProcessData* data)
+{
+    ::ImFontAtlasTextureBlockPostProcess(reinterpret_cast<::ImFontAtlasPostProcessData*>(data));
+}
+
+CIMGUI_API void cimgui::cImFontAtlasTextureBlockPostProcessMultiply(cimgui::ImFontAtlasPostProcessData* data, float multiply_factor)
+{
+    ::ImFontAtlasTextureBlockPostProcessMultiply(reinterpret_cast<::ImFontAtlasPostProcessData*>(data), multiply_factor);
+}
+
+CIMGUI_API void cimgui::cImFontAtlasTextureBlockFill(cimgui::ImTextureData* dst_tex, int dst_x, int dst_y, int w, int h, ImU32 col)
+{
+    ::ImFontAtlasTextureBlockFill(reinterpret_cast<::ImTextureData*>(dst_tex), dst_x, dst_y, w, h, col);
+}
+
+CIMGUI_API void cimgui::cImFontAtlasTextureBlockCopy(cimgui::ImTextureData* src_tex, int src_x, int src_y, cimgui::ImTextureData* dst_tex, int dst_x, int dst_y, int w, int h)
+{
+    ::ImFontAtlasTextureBlockCopy(reinterpret_cast<::ImTextureData*>(src_tex), src_x, src_y, reinterpret_cast<::ImTextureData*>(dst_tex), dst_x, dst_y, w, h);
+}
+
+CIMGUI_API void cimgui::cImFontAtlasTextureBlockQueueUpload(cimgui::ImFontAtlas* atlas, cimgui::ImTextureData* tex, int x, int y, int w, int h)
+{
+    ::ImFontAtlasTextureBlockQueueUpload(reinterpret_cast<::ImFontAtlas*>(atlas), reinterpret_cast<::ImTextureData*>(tex), x, y, w, h);
+}
+
+CIMGUI_API int         cimgui::cImTextureDataGetFormatBytesPerPixel(cimgui::ImTextureFormat format)
+{
+    return ::ImTextureDataGetFormatBytesPerPixel(static_cast<::ImTextureFormat>(format));
+}
+
+CIMGUI_API const char* cimgui::cImTextureDataGetStatusName(cimgui::ImTextureStatus status)
+{
+    return ::ImTextureDataGetStatusName(static_cast<::ImTextureStatus>(status));
+}
+
+CIMGUI_API const char* cimgui::cImTextureDataGetFormatName(cimgui::ImTextureFormat format)
+{
+    return ::ImTextureDataGetFormatName(static_cast<::ImTextureFormat>(format));
+}
+
+#ifndef IMGUI_DISABLE_DEBUG_TOOLS
+
+CIMGUI_API void cimgui::cImFontAtlasDebugLogTextureRequests(cimgui::ImFontAtlas* atlas)
+{
+    ::ImFontAtlasDebugLogTextureRequests(reinterpret_cast<::ImFontAtlas*>(atlas));
+}
+
+#endif // #ifndef IMGUI_DISABLE_DEBUG_TOOLS
 
 CIMGUI_API bool cimgui::cImFontAtlasGetMouseCursorTexData(cimgui::ImFontAtlas* atlas, ImGuiMouseCursor cursor_type, cimgui::ImVec2* out_offset, cimgui::ImVec2* out_size, cimgui::ImVec2 out_uv_border[2], cimgui::ImVec2 out_uv_fill[2])
 {
