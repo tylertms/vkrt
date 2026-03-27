@@ -232,24 +232,10 @@ static void drawSceneObjectTransformEditor(
     float scale[3] = {object->localScale[0], object->localScale[1], object->localScale[2]};
 
     bool transformChanged = false;
-    transformChanged |= ImGui_DragFloat3Ex(
-        "Translate",
-        position,
-        0.001f,
-        0.0f,
-        0.0f,
-        kTransformDragFloatFormat,
-        ImGuiSliderFlags_None
-    );
-    transformChanged |= ImGui_DragFloat3Ex(
-        "Rotate",
-        rotation,
-        0.05f,
-        0.0f,
-        0.0f,
-        kTransformDragFloatFormat,
-        ImGuiSliderFlags_None
-    );
+    transformChanged |=
+        ImGui_DragFloat3Ex("Translate", position, 0.001f, 0.0f, 0.0f, kTransformDragFloatFormat, ImGuiSliderFlags_None);
+    transformChanged |=
+        ImGui_DragFloat3Ex("Rotate", rotation, 0.05f, 0.0f, 0.0f, kTransformDragFloatFormat, ImGuiSliderFlags_None);
     transformChanged |= ImGui_DragFloat3Ex(
         "Scale",
         scale,
