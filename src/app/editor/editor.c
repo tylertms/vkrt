@@ -134,6 +134,21 @@ static bool overlayInfoMatches(const VKRT_OverlayInfo* a, const VKRT_OverlayInfo
             a->swapchainMinImageCount == b->swapchainMinImageCount) != 0;
 }
 
+static VkPipelineRenderingCreateInfoKHR makeOverlayPipelineRenderingCreateInfo(const VkFormat* colorAttachmentFormat) {
+    return (VkPipelineRenderingCreateInfoKHR){
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+        .colorAttachmentCount = 1,
+        .pColorAttachmentFormats = colorAttachmentFormat,
+    };
+}
+
+static ImGui_ImplVulkan_PipelineInfo makeOverlayPipelineInfo(const VkFormat* colorAttachmentFormat) {
+    return (ImGui_ImplVulkan_PipelineInfo){
+        .MSAASamples = VK_SAMPLE_COUNT_1_BIT,
+        .PipelineRenderingCreateInfo = makeOverlayPipelineRenderingCreateInfo(colorAttachmentFormat),
+    };
+}
+
 static void populateVulkanInitInfo(const VKRT_OverlayInfo* overlay, ImGui_ImplVulkan_InitInfo* outInitInfo) {
     if (!overlay || !outInitInfo) return;
 
@@ -149,22 +164,8 @@ static void populateVulkanInitInfo(const VKRT_OverlayInfo* overlay, ImGui_ImplVu
         .Allocator = VK_NULL_HANDLE,
         .MinImageCount = overlay->swapchainMinImageCount,
         .ImageCount = overlay->swapchainImageCount,
-        .PipelineInfoMain = {
-            .MSAASamples = VK_SAMPLE_COUNT_1_BIT,
-            .PipelineRenderingCreateInfo = {
-                .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
-                .colorAttachmentCount = 1,
-                .pColorAttachmentFormats = &overlay->colorAttachmentFormat,
-            },
-        },
-        .PipelineInfoForViewports = {
-            .MSAASamples = VK_SAMPLE_COUNT_1_BIT,
-            .PipelineRenderingCreateInfo = {
-                .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
-                .colorAttachmentCount = 1,
-                .pColorAttachmentFormats = &overlay->colorAttachmentFormat,
-            },
-        },
+        .PipelineInfoMain = makeOverlayPipelineInfo(&overlay->colorAttachmentFormat),
+        .PipelineInfoForViewports = makeOverlayPipelineInfo(&overlay->colorAttachmentFormat),
         .CheckVkResultFn = VK_NULL_HANDLE,
         .UseDynamicRendering = true,
     };
