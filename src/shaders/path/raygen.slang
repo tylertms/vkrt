@@ -1,19 +1,18 @@
-#include "../scene/resources.slang"
 #include "../bsdf/bsdf.slang"
+#include "../camera/ray.slang"
+#include "../camera/viewport.slang"
+#include "../film/tonemap.slang"
+#include "../geometry/packing.slang"
 #include "../light/direct.slang"
 #include "../light/environment.slang"
-#include "../sample/random.slang"
-#include "../camera/ray.slang"
-#include "../geometry/packing.slang"
 #include "../material/textures.slang"
-#include "../film/tonemap.slang"
-#include "../camera/viewport.slang"
+#include "../sample/random.slang"
+#include "../scene/resources.slang"
 #include "../trace/scene.slang"
 #include "../utility/debug.slang"
 #include "payload.slang"
 
-[shader("raygeneration")]
-void main() {
+[shader("raygeneration")] void main() {
     static const uint kSceneSerHintBits = 2u;
 
     int2 pixel = int2(DispatchRaysIndex().xy);
@@ -90,8 +89,7 @@ void main() {
 
         for (uint depth = 0u; depth < scene.rrMaxDepth; depth++) {
             Payload payload = Payload.make(rng);
-            uint sceneRayHint = (medium.refractiveActive ? 1u : 0u) |
-                (medium.absorptionActive ? 2u : 0u);
+            uint sceneRayHint = (medium.refractiveActive ? 1u : 0u) | (medium.absorptionActive ? 2u : 0u);
             traceSceneRay(payload, ray, depth, sceneRayHint, kSceneSerHintBits);
             rng = payload.rng;
 
@@ -136,7 +134,8 @@ void main() {
                 }
 
                 if (isTextureMapDebugMode(debugMode)) {
-                    frameRadiance = evaluateTextureMapDebug(sourceMaterial, payload.texcoord0, payload.texcoord1, debugMode);
+                    frameRadiance =
+                        evaluateTextureMapDebug(sourceMaterial, payload.texcoord0, payload.texcoord1, debugMode);
                     debugEarlyOut = true;
                     break;
                 }
@@ -162,14 +161,7 @@ void main() {
 
             float3 contribution = float3(0.0);
             if (!bsdfOnlyDebug && neeEnabled && currentVertexNeeAllowed) {
-                DirectLightResult directLight = sampleDirectLight(
-                    hitPoint,
-                    geometricNormal,
-                    basis,
-                    state,
-                    medium,
-                    rng
-                );
+                DirectLightResult directLight = sampleDirectLight(hitPoint, geometricNormal, basis, state, medium, rng);
                 contribution += directLight.radiance;
                 vertexNeeSupported = directLight.neeSupported;
             }
@@ -210,16 +202,12 @@ void main() {
                 sampledPathNeeAllowed = false;
             }
 
-            updateMediumStateFromTransmission(
-                material,
-                payload.frontFace,
-                sample.isTransmission,
-                medium
-            );
+            updateMediumStateFromTransmission(material, payload.frontFace, sample.isTransmission, medium);
             prevVertexNeeAllowed = sampledPathNeeAllowed;
 
             if (depth + 1u >= scene.rrMinDepth) {
-                float continueProbability = clamp(maxComponent(throughput), VKRT_RR_MIN_CONTINUE_PROB, VKRT_RR_MAX_CONTINUE_PROB);
+                float continueProbability =
+                    clamp(maxComponent(throughput), VKRT_RR_MIN_CONTINUE_PROB, VKRT_RR_MAX_CONTINUE_PROB);
                 if (rand(rng) > continueProbability) {
                     break;
                 }
@@ -304,12 +292,14 @@ void main() {
         float totalAlbedoWeight = previousAlbedoWeight + frameFeatureWeight;
         float totalNormalWeight = previousNormalWeight + frameFeatureWeight;
         float3 accumulated = (previous.xyz * previousWeight + frameRadiance * newWeight) / max(totalWeight, 1.0);
-        float3 accumulatedAlbedo = totalAlbedoWeight > 0.0
-            ? (previousAlbedo.xyz * previousAlbedoWeight + frameAlbedo * frameFeatureWeight) / totalAlbedoWeight
-            : float3(0.0);
-        float3 accumulatedNormal = totalNormalWeight > 0.0
-            ? (previousNormal.xyz * previousNormalWeight + frameNormal * frameFeatureWeight) / totalNormalWeight
-            : float3(0.0);
+        float3 accumulatedAlbedo =
+            totalAlbedoWeight > 0.0
+                ? (previousAlbedo.xyz * previousAlbedoWeight + frameAlbedo * frameFeatureWeight) / totalAlbedoWeight
+                : float3(0.0);
+        float3 accumulatedNormal =
+            totalNormalWeight > 0.0
+                ? (previousNormal.xyz * previousNormalWeight + frameNormal * frameFeatureWeight) / totalNormalWeight
+                : float3(0.0);
         float3 mapped = mapSceneColorToDisplay(accumulated);
 
         accumulationWriteImage[pixel] = float4(accumulated, totalWeight);

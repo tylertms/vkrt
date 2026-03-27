@@ -2,13 +2,13 @@
 #define VKRT_BSDF_MODEL_SLANG
 
 #include "base.slang"
-#include "lobes/lambertian.slang"
-#include "lobes/oren_nayar.slang"
-#include "lobes/subsurface.slang"
-#include "lobes/sheen.slang"
-#include "lobes/ggx.slang"
 #include "lobes/clearcoat.slang"
 #include "lobes/dielectric.slang"
+#include "lobes/ggx.slang"
+#include "lobes/lambertian.slang"
+#include "lobes/oren_nayar.slang"
+#include "lobes/sheen.slang"
+#include "lobes/subsurface.slang"
 
 // Layered Principled BSDF:
 // Sheen on top, then clearcoat, then the base dielectric/metal/substrate stack.
@@ -100,12 +100,13 @@ float transmissionStackAttenuation(float viewSheenAttenuation, float viewCoatAtt
 float materialTransmissionStackAttenuation(Material material, float3 wo) {
     return transmissionStackAttenuation(
         sheenDirectionalAttenuation(bsdfSheenColor(material), wo, material.sheenRoughness),
-        coatDirectionalAttenuation(material, wo));
+        coatDirectionalAttenuation(material, wo)
+    );
 }
 
 BSDFBranchWeights normalizeBranchWeights(BSDFBranchWeights weights) {
-    float totalWeight = weights.sheen + weights.coat + weights.metal +
-        weights.dielectric + weights.diffuse + weights.subsurface;
+    float totalWeight =
+        weights.sheen + weights.coat + weights.metal + weights.dielectric + weights.diffuse + weights.subsurface;
 
     if (totalWeight <= 0.0) {
         weights.diffuse = 1.0;
@@ -136,7 +137,8 @@ BSDFBranchWeights makeBSDFBranchWeights(Material material, float3 wo, uint front
     float diffuseColorWeight = max(bsdfLuminance(diffuseColor), 1e-3);
     float baseScatter = nonMetal * (1.0 - material.transmission);
     float transmissionWeight = material.transmission * max(bsdfLuminance(bsdfTransmissionColor(material)), 1e-3);
-    float dielectricSpecularWeight = nonMetal * max(bsdfDielectricSpecularF0Luminance(material) + transmissionWeight, 0.0);
+    float dielectricSpecularWeight =
+        nonMetal * max(bsdfDielectricSpecularF0Luminance(material) + transmissionWeight, 0.0);
     weights.sheen = bsdfLuminance(sheenColor);
 
     if (material.transmission > 0.0 && frontFace == 0u) {
@@ -156,10 +158,10 @@ BSDFBranchWeights makeBSDFBranchWeights(Material material, float3 wo, uint front
     weights.coat = viewSheenAttenuation * material.clearcoat * 0.25;
     weights.metal = viewSheenAttenuation * viewCoatAttenuation * material.metallic * baseColorWeight;
     weights.dielectric = viewSheenAttenuation * viewCoatAttenuation * dielectricSpecularWeight;
-    weights.diffuse = viewSheenAttenuation * viewCoatAttenuation * dielectricWeightAttenuation *
-        baseScatter * (1.0 - material.subsurface) * diffuseColorWeight;
-    weights.subsurface = viewSheenAttenuation * viewCoatAttenuation * dielectricWeightAttenuation *
-        baseScatter * material.subsurface * diffuseColorWeight;
+    weights.diffuse = viewSheenAttenuation * viewCoatAttenuation * dielectricWeightAttenuation * baseScatter *
+                      (1.0 - material.subsurface) * diffuseColorWeight;
+    weights.subsurface = viewSheenAttenuation * viewCoatAttenuation * dielectricWeightAttenuation * baseScatter *
+                         material.subsurface * diffuseColorWeight;
 
     return normalizeBranchWeights(weights);
 }
@@ -174,7 +176,6 @@ BSDFState makeBSDFState(Material material, float3 wo, uint frontFace) {
     state.sampleWeights = makeBSDFBranchWeights(material, wo, frontFace);
     return state;
 }
-
 
 static const float VKRT_DENOISER_SPECULAR_FOLLOW_ROUGHNESS = 0.02;
 static const float VKRT_DENOISER_LAYER_EPSILON = 1e-3;
@@ -201,8 +202,8 @@ bool materialDenoiserShouldFollowSpecularHit(Material material, uint frontFace) 
     }
 
     bool hasSpecularOnlyResponse = material.transmission > VKRT_DENOISER_LAYER_EPSILON ||
-        material.metallic >= 1.0 - VKRT_DENOISER_LAYER_EPSILON ||
-        maxComponent(bsdfDielectricSpecularF0(material)) > VKRT_DENOISER_LAYER_EPSILON;
+                                   material.metallic >= 1.0 - VKRT_DENOISER_LAYER_EPSILON ||
+                                   maxComponent(bsdfDielectricSpecularF0(material)) > VKRT_DENOISER_LAYER_EPSILON;
     return hasSpecularOnlyResponse;
 }
 
@@ -212,8 +213,8 @@ float3 materialDenoiserAlbedo(Material material) {
     float3 sheenColor = bsdfSheenColor(material);
     float3 dielectricF0 = bsdfDielectricSpecularF0(material);
     float3 metallicF0 = materialHasConductor(material)
-        ? fresnelConductor(1.0, max(material.eta, float3(1e-3)), max(material.k, float3(0.0)))
-        : saturate(material.baseColor);
+                          ? fresnelConductor(1.0, max(material.eta, float3(1e-3)), max(material.k, float3(0.0)))
+                          : saturate(material.baseColor);
 
     float diffuseWeight = nonMetal * (1.0 - material.transmission) * (1.0 - material.subsurface);
     float subsurfaceWeight = nonMetal * (1.0 - material.transmission) * material.subsurface;
@@ -222,19 +223,14 @@ float3 materialDenoiserAlbedo(Material material) {
     float metallicWeight = material.metallic;
     float sheenLayerWeight = maxComponent(sheenColor) * nonMetal * (1.0 - material.transmission);
 
-    float totalWeight = diffuseWeight + subsurfaceWeight + specularWeight +
-        transmissionWeight + metallicWeight + sheenLayerWeight;
+    float totalWeight =
+        diffuseWeight + subsurfaceWeight + specularWeight + transmissionWeight + metallicWeight + sheenLayerWeight;
     if (totalWeight <= 0.0) {
         return saturate(diffuseColor);
     }
 
-    float3 albedo =
-        diffuseColor * diffuseWeight +
-        diffuseColor * subsurfaceWeight +
-        dielectricF0 * specularWeight +
-        float3(1.0) * transmissionWeight +
-        metallicF0 * metallicWeight +
-        sheenColor * sheenLayerWeight;
+    float3 albedo = diffuseColor * diffuseWeight + diffuseColor * subsurfaceWeight + dielectricF0 * specularWeight +
+                    float3(1.0) * transmissionWeight + metallicF0 * metallicWeight + sheenColor * sheenLayerWeight;
     return saturate(albedo / totalWeight);
 }
 
@@ -284,10 +280,11 @@ BSDFEval evalReflectionStack(BSDFState state, float3 wi) {
         float3 diffuseColor = bsdfDiffuseColor(state.material);
 
         if (state.sampleWeights.diffuse > 0.0) {
-            float3 diffuseWeight = diffuseColor * ((1.0 - state.material.transmission) * (1.0 - state.material.subsurface));
+            float3 diffuseWeight =
+                diffuseColor * ((1.0 - state.material.transmission) * (1.0 - state.material.subsurface));
             BSDFEval diffuse = state.material.diffuseRoughness <= 0.0
-                ? evalLambertian(diffuseWeight, wi)
-                : evalOrenNayar(diffuseWeight, state.material.diffuseRoughness, state.wo, wi);
+                                 ? evalLambertian(diffuseWeight, wi)
+                                 : evalOrenNayar(diffuseWeight, state.material.diffuseRoughness, state.wo, wi);
             substrateValue += diffuse.value;
             eval.pdf += state.sampleWeights.diffuse * diffuse.pdf;
         }
@@ -298,7 +295,8 @@ BSDFEval evalReflectionStack(BSDFState state, float3 wi) {
                 subsurfaceColor * state.material.subsurface,
                 state.material.diffuseRoughness,
                 state.wo,
-                wi);
+                wi
+            );
             substrateValue += subsurface.value;
             eval.pdf += state.sampleWeights.subsurface * subsurface.pdf;
         }
@@ -306,8 +304,7 @@ BSDFEval evalReflectionStack(BSDFState state, float3 wi) {
 
     if (interiorInterface) {
         float nonMetal = 1.0 - state.material.metallic;
-        eval.value = state.material.metallic * metalValue +
-            nonMetal * dielectricValue;
+        eval.value = state.material.metallic * metalValue + nonMetal * dielectricValue;
         return eval;
     }
 
@@ -315,10 +312,9 @@ BSDFEval evalReflectionStack(BSDFState state, float3 wi) {
     float viewCoatAttenuation = coatDirectionalAttenuation(state.material, state.wo);
     float3 viewDielectricAttenuation = dielectricDirectionalAttenuation(state.material, state.wo);
     float nonMetal = 1.0 - state.material.metallic;
-    float3 baseValue = coatValue + reflectionStackAttenuation(state.material, viewCoatAttenuation, wi) * (
-        state.material.metallic * metalValue +
-        nonMetal * (dielectricValue + viewDielectricAttenuation * substrateValue)
-    );
+    float3 baseValue = coatValue + reflectionStackAttenuation(state.material, viewCoatAttenuation, wi) *
+                                       (state.material.metallic * metalValue +
+                                        nonMetal * (dielectricValue + viewDielectricAttenuation * substrateValue));
 
     eval.value = sheenValue + viewSheenAttenuation * baseValue;
 
@@ -336,8 +332,7 @@ BSDFEval evalBSDF(BSDFState state, float3 wi) {
         wi,
         state.frontFace,
         state.ggx,
-        useInteriorDielectricInterface(state) ? 1.0 :
-            materialTransmissionStackAttenuation(state.material, state.wo)
+        useInteriorDielectricInterface(state) ? 1.0 : materialTransmissionStackAttenuation(state.material, state.wo)
     );
 
     transmission.pdf *= state.sampleWeights.dielectric;
@@ -365,13 +360,7 @@ bool sampleBSDFDirection(BSDFState state, inout uint rng, out BSDFDirectionSampl
     selector -= state.sampleWeights.metal;
     if (selector < state.sampleWeights.dielectric) {
         DielectricSample dielectricSample;
-        if (!sampleDielectric(
-                state.material,
-                state.wo,
-                state.frontFace,
-                state.ggx,
-                rng,
-                dielectricSample)) {
+        if (!sampleDielectric(state.material, state.wo, state.frontFace, state.ggx, rng, dielectricSample)) {
             return false;
         }
 
@@ -382,9 +371,7 @@ bool sampleBSDFDirection(BSDFState state, inout uint rng, out BSDFDirectionSampl
 
     selector -= state.sampleWeights.dielectric;
     if (selector < state.sampleWeights.diffuse) {
-        sample.wi = state.material.diffuseRoughness <= 0.0
-            ? sampleLambertian(rng)
-            : sampleOrenNayar(rng);
+        sample.wi = state.material.diffuseRoughness <= 0.0 ? sampleLambertian(rng) : sampleOrenNayar(rng);
         return true;
     }
 

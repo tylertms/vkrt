@@ -1,8 +1,8 @@
 #ifndef VKRT_TRACE_SCENE_SLANG
 #define VKRT_TRACE_SCENE_SLANG
 
-#include "../scene/resources.slang"
 #include "../path/payload.slang"
+#include "../scene/resources.slang"
 
 static const uint kSceneRayMask = 0xffu;
 static const uint kSceneRayFlags = RAY_FLAG_NONE;

@@ -39,8 +39,7 @@ struct Payload {
         return payload;
     }
 
-    [mutating]
-    void setMiss() {
+    [mutating] void setMiss() {
         didHit = 0u;
         instanceIndex = VKRT_INVALID_INDEX;
         materialIndex = VKRT_INVALID_INDEX;
@@ -54,11 +53,18 @@ struct Payload {
         texcoord1 = float2(0.0);
     }
 
-    [mutating]
-    void setSurfaceHit(
-        uint hitInstanceIndex, uint hitMaterialIndex, uint hitFrontFace, float distance,
-        uint shadingNormal, uint geometricNormal, float4 hitTangent, float4 hitColor, float2 hitTexcoord0, float2 hitTexcoord1
-    ) {
+        [mutating] void setSurfaceHit(
+            uint hitInstanceIndex,
+            uint hitMaterialIndex,
+            uint hitFrontFace,
+            float distance,
+            uint shadingNormal,
+            uint geometricNormal,
+            float4 hitTangent,
+            float4 hitColor,
+            float2 hitTexcoord0,
+            float2 hitTexcoord1
+        ) {
         didHit = 1u;
         instanceIndex = hitInstanceIndex;
         materialIndex = hitMaterialIndex;

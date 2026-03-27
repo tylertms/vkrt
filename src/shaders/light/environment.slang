@@ -1,8 +1,8 @@
 #ifndef VKRT_LIGHT_ENVIRONMENT_SLANG
 #define VKRT_LIGHT_ENVIRONMENT_SLANG
 
-#include "../scene/resources.slang"
 #include "../bsdf/base.slang"
+#include "../scene/resources.slang"
 
 static const uint kEnvironmentSamplerRepeatUClampV = 1u;
 
@@ -19,11 +19,10 @@ float3 sampleEnvironmentRadiance(float3 worldDir) {
     }
 
     uint textureIndex = NonUniformResourceIndex(scene.environmentTextureIndex);
-    float3 radiance = sceneTextures[textureIndex].SampleLevel(
-        textureSamplers[kEnvironmentSamplerRepeatUClampV],
-        environmentLatLongUV(worldDir),
-        0.0
-    ).xyz;
+    float3 radiance =
+        sceneTextures[textureIndex]
+            .SampleLevel(textureSamplers[kEnvironmentSamplerRepeatUClampV], environmentLatLongUV(worldDir), 0.0)
+            .xyz;
     return radiance * scene.environmentLight.w;
 }
 

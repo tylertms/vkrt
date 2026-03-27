@@ -11,10 +11,8 @@ bool insideViewport(int2 pixel) {
     }
 
     int2 viewportMax = viewportOrigin + viewportSize;
-    return pixel.x >= viewportOrigin.x &&
-        pixel.y >= viewportOrigin.y &&
-        pixel.x < viewportMax.x &&
-        pixel.y < viewportMax.y;
+    return pixel.x >= viewportOrigin.x && pixel.y >= viewportOrigin.y && pixel.x < viewportMax.x &&
+           pixel.y < viewportMax.y;
 }
 
 #endif

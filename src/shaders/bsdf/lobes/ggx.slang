@@ -46,8 +46,7 @@ float ggxLambda(float3 w, float2 alpha) {
 
 float ggxDistribution(float3 m, float2 alpha) {
     if (m.z <= 0.0) return 0.0;
-    float c = (m.x * m.x) / (alpha.x * alpha.x) +
-        (m.y * m.y) / (alpha.y * alpha.y) + m.z * m.z;
+    float c = (m.x * m.x) / (alpha.x * alpha.x) + (m.y * m.y) / (alpha.y * alpha.y) + m.z * m.z;
     return 1.0 / (VKRT_PI * alpha.x * alpha.y * c * c);
 }
 
@@ -104,8 +103,8 @@ float ggxReflectionPdf(float3 wo, float3 m, GGXParams params) {
 
 float3 ggxConductorFresnel(Material material, float cosTheta) {
     return materialHasConductor(material)
-        ? fresnelConductor(cosTheta, max(material.eta, float3(1e-3)), max(material.k, float3(0.0)))
-        : fresnelSchlick(cosTheta, material.baseColor);
+             ? fresnelConductor(cosTheta, max(material.eta, float3(1e-3)), max(material.k, float3(0.0)))
+             : fresnelSchlick(cosTheta, material.baseColor);
 }
 
 BSDFEval evalGGXFromHalfVector(Material material, float3 wo, float3 wi, GGXParams params, float3 m, float woDotM) {

@@ -15,9 +15,7 @@ uint sharedMaskIndex(int2 pixel) {
     return (uint)(pixel.y * kSharedMaskSpan + pixel.x);
 }
 
-[shader("compute")]
-[numthreads(16, 16, 1)]
-void main(
+[shader("compute")][numthreads(16, 16, 1)] void main(
     uint3 dispatchThreadId : SV_DispatchThreadID,
     uint3 groupThreadId : SV_GroupThreadID,
     uint3 groupId : SV_GroupID

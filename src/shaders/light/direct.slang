@@ -6,10 +6,10 @@
 // Direct lighting / NEE: Pharr, Jakob, Humphreys, 2023 - https://www.pbr-book.org/4ed/Light_Transport_I_Surface_Reflection/A_Better_Path_Tracer
 // Alias method: Schwarz, 2011 - https://www.keithschwarz.com/darts-dice-coins/
 
+#include "../bsdf/bsdf.slang"
+#include "../sample/sampling.slang"
 #include "../scene/resources.slang"
 #include "../trace/shadow.slang"
-#include "../sample/sampling.slang"
-#include "../bsdf/bsdf.slang"
 
 struct LightSample {
     float3 position;
@@ -60,7 +60,13 @@ LightSample sampleLight(inout uint rng) {
     return ls;
 }
 
-float computeBSDFEmitterMISWeight(float bsdfPdf, float lightPdfArea, float3 geometricNormal, float3 rayDirection, float hitDistance) {
+float computeBSDFEmitterMISWeight(
+    float bsdfPdf,
+    float lightPdfArea,
+    float3 geometricNormal,
+    float3 rayDirection,
+    float hitDistance
+) {
     if (lightPdfArea <= 0.0) return 1.0;
     float distSq = hitDistance * hitDistance;
     if (distSq <= 0.0) return 1.0;

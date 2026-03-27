@@ -1,9 +1,9 @@
 #ifndef VKRT_BSDF_COMMON_SLANG
 #define VKRT_BSDF_COMMON_SLANG
 
-#include "types.slang"
-#include "../sample/random.slang"
 #include "../camera/ray.slang"
+#include "../sample/random.slang"
+#include "types.slang"
 
 // References:
 // Basis construction: Duff et al., 2017 - https://graphics.pixar.com/library/OrthonormalB/paper.pdf
@@ -108,11 +108,7 @@ float3 localToWorld(float3 localDir, ShadingBasis basis) {
 }
 
 float3 worldToLocal(float3 worldDir, ShadingBasis basis) {
-    return float3(
-        dot(worldDir, basis.tangent),
-        dot(worldDir, basis.bitangent),
-        dot(worldDir, basis.normal)
-    );
+    return float3(dot(worldDir, basis.tangent), dot(worldDir, basis.bitangent), dot(worldDir, basis.normal));
 }
 
 float3 bsdfDiffuseColor(Material material) {

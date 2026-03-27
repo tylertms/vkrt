@@ -256,8 +256,15 @@ static void drawContinueRenderControls(Session* session, const VKRT_RenderStatus
 
     if (renderContinueExtendsPastCurrentTarget(status)) {
         int additionalSamples = (int)session->editor.renderConfig.targetSamples;
-        if (ImGui_DragIntEx("Additional Samples", &additionalSamples, 1.0f, 0, INT_MAX, "%d", ImGuiSliderFlags_AlwaysClamp)
-        ) {
+        if (ImGui_DragIntEx(
+                "Additional Samples",
+                &additionalSamples,
+                1.0f,
+                0,
+                INT_MAX,
+                "%d",
+                ImGuiSliderFlags_AlwaysClamp
+            )) {
             if (additionalSamples < 0) additionalSamples = 0;
             session->editor.renderConfig.targetSamples = (uint32_t)additionalSamples;
         }

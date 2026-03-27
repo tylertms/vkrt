@@ -100,7 +100,7 @@ BSDFEval evalDielectricReflection(Material material, float3 wo, float3 wi, uint 
     float Dm = ggxDistribution(wm, params.alpha);
     float G = ggxMasking(wo, wi, params.alpha);
     eval.value = dielectricReflectionColor(material, woDotWm, fresnel) *
-        (Dm * G / max(4.0 * cosTheta(wo) * cosTheta(wi), GGX_EPSILON));
+                 (Dm * G / max(4.0 * cosTheta(wo) * cosTheta(wi), GGX_EPSILON));
     eval.pdf = reflectionProbability * ggxReflectionPdf(wo, wm, params);
     return eval;
 }
@@ -148,17 +148,22 @@ BSDFEval evalDielectricTransmission(
     float G = ggxMasking(wo, wi, params.alpha);
     float denom2 = denom * denom;
     float transportScale = 1.0 / max(etap * etap, GGX_EPSILON);
-    float transmissionTerm = abs((wiDotWm * woDotWm) /
-        max(absCosTheta(wi) * cosTheta(wo) * denom2, GGX_EPSILON));
+    float transmissionTerm = abs((wiDotWm * woDotWm) / max(absCosTheta(wi) * cosTheta(wo) * denom2, GGX_EPSILON));
     float dwmDwi = abs(wiDotWm) / max(denom2, GGX_EPSILON);
 
-    eval.value = coatAttenuation * transmissionColor *
-        ((1.0 - fresnel) * Dm * G * transmissionTerm * transportScale);
+    eval.value = coatAttenuation * transmissionColor * ((1.0 - fresnel) * Dm * G * transmissionTerm * transportScale);
     eval.pdf = transmissionProbability * ggxVisibleNormalPdf(wo, wm, params) * dwmDwi;
     return eval;
 }
 
-bool sampleDielectric(Material material, float3 wo, uint frontFace, GGXParams params, inout uint rng, out DielectricSample sample) {
+bool sampleDielectric(
+    Material material,
+    float3 wo,
+    uint frontFace,
+    GGXParams params,
+    inout uint rng,
+    out DielectricSample sample
+) {
     sample = DielectricSample();
     if (cosTheta(wo) <= 0.0) {
         return false;

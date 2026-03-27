@@ -1,10 +1,9 @@
-#include "../scene/resources.slang"
-#include "../geometry/surface.slang"
 #include "../geometry/packing.slang"
+#include "../geometry/surface.slang"
+#include "../scene/resources.slang"
 #include "payload.slang"
 
-[shader("closesthit")]
-void main(inout Payload payload, in BuiltInTriangleIntersectionAttributes attr) {
+[shader("closesthit")] void main(inout Payload payload, in BuiltInTriangleIntersectionAttributes attr) {
     uint instanceIndex = InstanceIndex();
     MeshInfo mesh = meshInfos[instanceIndex];
 

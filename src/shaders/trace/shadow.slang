@@ -17,16 +17,7 @@ ShadowRayResult traceShadowRay(float3 origin, float3 direction, float tMax, inou
     ray.TMin = VKRT_RAY_T_MIN;
     ray.TMax = tMax;
 
-    TraceRay(
-        topLevelAS,
-        RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH,
-        0xffu,
-        1u,
-        0u,
-        1u,
-        ray,
-        payload
-    );
+    TraceRay(topLevelAS, RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH, 0xffu, 1u, 0u, 1u, ray, payload);
 
     rng = payload.rng;
 

@@ -10,13 +10,9 @@ struct SelectionPayload {
         return payload;
     }
 
-    [mutating]
-    void setMiss() {
-        didHit = 0u;
-    }
+    [mutating] void setMiss() { didHit = 0u; }
 
-    [mutating]
-    void setHit() {
+        [mutating] void setHit() {
         didHit = 1u;
     }
 };

@@ -1,10 +1,9 @@
-#include "../scene/resources.slang"
-#include "../trace/select.slang"
 #include "../camera/ray.slang"
 #include "../camera/viewport.slang"
+#include "../scene/resources.slang"
+#include "../trace/select.slang"
 
-[shader("raygeneration")]
-void main() {
+[shader("raygeneration")] void main() {
     int2 pixel = int2(DispatchRaysIndex().xy);
     if (scene.selectionEnabled == 0u || !insideViewport(pixel)) {
         selectionMaskImage[pixel] = 0u;

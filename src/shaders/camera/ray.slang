@@ -25,7 +25,8 @@ RayDesc makePrimaryRay(int2 pixel, float2 jitter) {
         mul(scene.viewInverse, float4(0.0, 0.0, 0.0, 1.0)).xyz,
         normalize(mul(scene.viewInverse, float4(viewDir.xyz, 0.0)).xyz),
         VKRT_RAY_T_MIN,
-        VKRT_RAY_T_MAX);
+        VKRT_RAY_T_MAX
+    );
 }
 
 float3 safeNormalize(float3 value) {

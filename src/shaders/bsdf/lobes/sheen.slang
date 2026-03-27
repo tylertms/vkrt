@@ -61,7 +61,8 @@ float sheenDistributionValue(float3 localWi, SheenParams params) {
     }
 
     float axbz = params.transformA * localWi.x + params.transformB * localWi.z;
-    float lenSqr = axbz * axbz + (params.transformA * localWi.y) * (params.transformA * localWi.y) + localWi.z * localWi.z;
+    float lenSqr =
+        axbz * axbz + (params.transformA * localWi.y) * (params.transformA * localWi.y) + localWi.z * localWi.z;
     if (lenSqr <= SHEEN_EPSILON) {
         return 0.0;
     }

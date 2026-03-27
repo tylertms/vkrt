@@ -13,11 +13,7 @@ float srgbEncodeScalar(float value) {
 
 float3 encodeDisplayColor(float3 color) {
     color = saturate(color);
-    return float3(
-        srgbEncodeScalar(color.x),
-        srgbEncodeScalar(color.y),
-        srgbEncodeScalar(color.z)
-    );
+    return float3(srgbEncodeScalar(color.x), srgbEncodeScalar(color.y), srgbEncodeScalar(color.z));
 }
 
 float3 mapSceneColorToDisplay(float3 color) {

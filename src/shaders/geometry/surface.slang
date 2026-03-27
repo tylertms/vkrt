@@ -1,8 +1,8 @@
 #ifndef VKRT_GEOMETRY_SURFACE_SLANG
 #define VKRT_GEOMETRY_SURFACE_SLANG
 
-#include "../scene/resources.slang"
 #include "../camera/ray.slang"
+#include "../scene/resources.slang"
 
 // References:
 // Triangle normal interpolation: Pharr, Jakob, Humphreys, 2023 - https://www.pbr-book.org/4ed/Shapes/Triangle_Meshes
@@ -19,7 +19,13 @@ struct SurfaceHit {
     float2 texcoord1;
 };
 
-void loadTriangleVertices(MeshInfo mesh, uint primitiveIndex, out Vertex vertex0, out Vertex vertex1, out Vertex vertex2) {
+void loadTriangleVertices(
+    MeshInfo mesh,
+    uint primitiveIndex,
+    out Vertex vertex0,
+    out Vertex vertex1,
+    out Vertex vertex2
+) {
     uint triangleBase = mesh.indexBase + primitiveIndex * 3u;
     uint vertexBase = mesh.vertexBase;
 
@@ -81,8 +87,12 @@ SurfaceAlphaAttributes evaluateSurfaceAlphaAttributes(MeshInfo mesh, uint primit
 }
 
 SurfaceHit evaluateSurfaceHit(
-    MeshInfo mesh, uint primitiveIndex, float2 barycentrics, float3x4 objectToWorld,
-    float3x4 worldToObject, float3 worldRayDirection
+    MeshInfo mesh,
+    uint primitiveIndex,
+    float2 barycentrics,
+    float3x4 objectToWorld,
+    float3x4 worldToObject,
+    float3 worldRayDirection
 ) {
     Vertex vertex0, vertex1, vertex2;
     loadTriangleVertices(mesh, primitiveIndex, vertex0, vertex1, vertex2);
@@ -91,10 +101,7 @@ SurfaceHit evaluateSurfaceHit(
     float v = barycentrics.y;
     float w = 1.0 - u - v;
 
-    float3 objectNormal = safeNormalize(
-        vertex0.normal.xyz * w +
-        vertex1.normal.xyz * u +
-        vertex2.normal.xyz * v);
+    float3 objectNormal = safeNormalize(vertex0.normal.xyz * w + vertex1.normal.xyz * u + vertex2.normal.xyz * v);
 
     float4 objectTangent = vertex0.tangent * w + vertex1.tangent * u + vertex2.tangent * v;
     float handedness = objectTangent.w < 0.0 ? -1.0 : 1.0;
