@@ -124,11 +124,7 @@ static char* duplicatePathWithAppendedExtension(const char* path, const char* ex
     return combined;
 }
 
-int resolveRenderImagePath(
-    const char* requestedPath,
-    char** outResolvedPath,
-    RenderImageFormat* outFormat
-) {
+int resolveRenderImagePath(const char* requestedPath, char** outResolvedPath, RenderImageFormat* outFormat) {
     if (!requestedPath || !requestedPath[0] || !outResolvedPath || !outFormat) return 0;
     *outResolvedPath = NULL;
 
@@ -232,18 +228,18 @@ static int writeJPEGFile(const char* path, const uint8_t* rgba8, uint32_t width,
     unsigned char* encodedBytes = NULL;
     unsigned long encodedSize = 0ul;
     if (tjCompress2(
-        handle,
-        rgba8,
-        (int)width,
-        0,
-        (int)height,
-        TJPF_RGBA,
-        &encodedBytes,
-        &encodedSize,
-        TJSAMP_444,
-        kJPEGQuality,
-        TJFLAG_ACCURATEDCT
-    ) != 0) {
+            handle,
+            rgba8,
+            (int)width,
+            0,
+            (int)height,
+            TJPF_RGBA,
+            &encodedBytes,
+            &encodedSize,
+            TJSAMP_444,
+            kJPEGQuality,
+            TJFLAG_ACCURATEDCT
+        ) != 0) {
         LOG_ERROR("JPEG export failed for '%s' (%s)", path, tjGetErrorStr2(handle));
         tjDestroy(handle);
         return 0;
@@ -388,8 +384,7 @@ static void toneMapACES(const float* input, float* output) {
     if (!input || !output) return;
     for (uint32_t channel = 0; channel < 3u; channel++) {
         float color = input[channel];
-        output[channel] =
-            (color * ((2.51f * color) + 0.03f)) / ((color * ((2.43f * color) + 0.59f)) + 0.14f);
+        output[channel] = (color * ((2.51f * color) + 0.03f)) / ((color * ((2.43f * color) + 0.59f)) + 0.14f);
     }
 }
 
@@ -466,8 +461,7 @@ static int prepareRGBA32FBuffer(
             pixel[2] = fmaxf(pixel[2], 0.0f);
         }
         if (normalizeVectors) {
-            float lengthSquared =
-                (pixel[0] * pixel[0]) + (pixel[1] * pixel[1]) + (pixel[2] * pixel[2]);
+            float lengthSquared = (pixel[0] * pixel[0]) + (pixel[1] * pixel[1]) + (pixel[2] * pixel[2]);
             if (lengthSquared > 1e-20f) {
                 float invLength = 1.0f / sqrtf(lengthSquared);
                 pixel[0] *= invLength;
@@ -542,7 +536,8 @@ static int prepareDenoiseFeatureBuffers(
 
     *outAlbedo = NULL;
     *outNormal = NULL;
-    if (!request->albedoBuffer || !request->albedoBuffer->pixels || !request->normalBuffer || !request->normalBuffer->pixels) {
+    if (!request->albedoBuffer || !request->albedoBuffer->pixels || !request->normalBuffer ||
+        !request->normalBuffer->pixels) {
         return 0;
     }
 
@@ -609,10 +604,7 @@ cleanup:
     return succeeded;
 }
 
-static int prepareLinearRenderOutput(
-    const LinearRenderOutputRequest* request,
-    float** outLinearOutput
-) {
+static int prepareLinearRenderOutput(const LinearRenderOutputRequest* request, float** outLinearOutput) {
     if (outLinearOutput) *outLinearOutput = NULL;
     if (!request || !request->beautyBuffer || !request->beautyBuffer->pixels || request->width == 0u ||
         request->height == 0u || !request->settings || !request->sceneSettings || !outLinearOutput) {
@@ -631,8 +623,8 @@ static int prepareLinearRenderOutput(
     linearOutput = beauty;
     beauty = NULL;
 
-    int shouldDenoise = request->settings->denoiseEnabled != 0u &&
-                        request->sceneSettings->debugMode == VKRT_DEBUG_MODE_NONE;
+    int shouldDenoise =
+        request->settings->denoiseEnabled != 0u && request->sceneSettings->debugMode == VKRT_DEBUG_MODE_NONE;
 
     if (shouldDenoise && !vkrtOIDNAvailable()) {
         if (!request->allowRawFallback) {

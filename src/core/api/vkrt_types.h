@@ -1,12 +1,12 @@
 #pragma once
 
-#include <stddef.h>
-#include <stdint.h>
-
 #include "config.h"
 #include "constants.h"
 #include "formats.h"
 #include "types.h"
+
+#include <stddef.h>
+#include <stdint.h>
 
 enum {
     VKRT_DEVICE_NAME_LEN = 256,
@@ -201,8 +201,7 @@ static inline uint8_t VKRT_renderPhaseIsBusy(VKRT_RenderPhase phase) {
 }
 
 static inline uint8_t VKRT_renderPhaseIsComplete(VKRT_RenderPhase phase) {
-    return phase == VKRT_RENDER_PHASE_COMPLETE_RAW ||
-        phase == VKRT_RENDER_PHASE_COMPLETE_DENOISED;
+    return phase == VKRT_RENDER_PHASE_COMPLETE_RAW || phase == VKRT_RENDER_PHASE_COMPLETE_DENOISED;
 }
 
 static inline uint8_t VKRT_renderPhaseSamplingFinished(VKRT_RenderPhase phase) {
@@ -288,4 +287,4 @@ typedef struct VKRT_TextureSnapshot {
     char name[VKRT_NAME_LEN];
 } VKRT_TextureSnapshot;
 
-#define VKRT_ARRAY_COUNT(x) ((sizeof(x) / sizeof(0 [x])) / ((size_t)(!(sizeof(x) % sizeof(0 [x])))))
+#define VKRT_ARRAY_COUNT(x) (sizeof(x) / sizeof((x)[0]))

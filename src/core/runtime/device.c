@@ -16,38 +16,29 @@
 #include <string.h>
 #include <vulkan/vulkan_core.h>
 
-const char* requiredDeviceExtensions[NUM_REQ_EXTENSIONS] = {
-    VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-    VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
-    VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
-    VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
-    VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME
-};
+const char* requiredDeviceExtensions[NUM_REQ_EXTENSIONS] =
+    {VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+     VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
+     VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
+     VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
+     VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME};
 
-const char* optionalDeviceExtensions[NUM_OPT_EXTENSIONS] = {
-    VK_EXT_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME
-};
+const char* optionalDeviceExtensions[NUM_OPT_EXTENSIONS] = {VK_EXT_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME};
 
-const uint32_t requiredDeviceExtensionBits[NUM_REQ_EXTENSIONS] = {
-    DEVICE_EXTENSION_SWAPCHAIN_BIT,
-    DEVICE_EXTENSION_ACCELERATION_STRUCTURE_BIT,
-    DEVICE_EXTENSION_RAY_TRACING_PIPELINE_BIT,
-    DEVICE_EXTENSION_DEFERRED_HOST_OPERATIONS_BIT,
-    DEVICE_EXTENSION_BUFFER_DEVICE_ADDRESS_BIT
-};
+const uint32_t requiredDeviceExtensionBits[NUM_REQ_EXTENSIONS] =
+    {DEVICE_EXTENSION_SWAPCHAIN_BIT,
+     DEVICE_EXTENSION_ACCELERATION_STRUCTURE_BIT,
+     DEVICE_EXTENSION_RAY_TRACING_PIPELINE_BIT,
+     DEVICE_EXTENSION_DEFERRED_HOST_OPERATIONS_BIT,
+     DEVICE_EXTENSION_BUFFER_DEVICE_ADDRESS_BIT};
 
-const uint32_t optionalDeviceExtensionBits[NUM_OPT_EXTENSIONS] = {
-    DEVICE_EXTENSION_RAY_TRACING_INVOCATION_REORDER_BIT
-};
+const uint32_t optionalDeviceExtensionBits[NUM_OPT_EXTENSIONS] = {DEVICE_EXTENSION_RAY_TRACING_INVOCATION_REORDER_BIT};
 
-static const VkPhysicalDeviceType rankedDeviceTypes[4] = {VK_PHYSICAL_DEVICE_TYPE_CPU,
-                                                          VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU,
-                                                          VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU,
-                                                          VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU};
-
-enum {
-    K_RANKED_DEVICE_TYPE_COUNT = sizeof(rankedDeviceTypes) / sizeof(rankedDeviceTypes[0]),
-};
+static const VkPhysicalDeviceType rankedDeviceTypes[4] =
+    {VK_PHYSICAL_DEVICE_TYPE_CPU,
+     VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU,
+     VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU,
+     VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU};
 
 typedef struct DeviceFeatureChain {
     VkPhysicalDeviceBufferDeviceAddressFeatures deviceBufferDeviceAddressFeatures;
@@ -145,16 +136,16 @@ static void logDeviceExtensionSupport(const char* deviceName, const DeviceExtens
 
 static const char* queryPhysicalDeviceTypeName(VkPhysicalDeviceType deviceType) {
     switch (deviceType) {
-    case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
-        return "Discrete GPU";
-    case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
-        return "Integrated GPU";
-    case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:
-        return "Virtual GPU";
-    case VK_PHYSICAL_DEVICE_TYPE_CPU:
-        return "CPU";
-    default:
-        return "Unknown";
+        case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
+            return "Discrete GPU";
+        case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
+            return "Integrated GPU";
+        case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:
+            return "Virtual GPU";
+        case VK_PHYSICAL_DEVICE_TYPE_CPU:
+            return "CPU";
+        default:
+            return "Unknown";
     }
 }
 
@@ -222,30 +213,36 @@ static void initDeviceFeatureChain(DeviceFeatureChain* chain) {
     if (!chain) return;
 
     *chain = (DeviceFeatureChain){
-        .deviceBufferDeviceAddressFeatures = {
-            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_KHR,
-            .bufferDeviceAddress = VK_TRUE,
-        },
-        .deviceAccelerationStructureFeatures = {
-            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,
-            .accelerationStructure = VK_TRUE,
-        },
-        .deviceRayTracingPipelineFeatures = {
-            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR,
-            .rayTracingPipeline = VK_TRUE,
-        },
-        .deviceReorderFeatures = {
-            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_FEATURES_EXT,
-            .rayTracingInvocationReorder = VK_TRUE,
-        },
-        .deviceDescriptorIndexingFeatures = {
-            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES,
-            .shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
-        },
-        .deviceSynchronization2Features = {
-            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES,
-            .synchronization2 = VK_TRUE,
-        },
+        .deviceBufferDeviceAddressFeatures =
+            {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_KHR,
+                .bufferDeviceAddress = VK_TRUE,
+            },
+        .deviceAccelerationStructureFeatures =
+            {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,
+                .accelerationStructure = VK_TRUE,
+            },
+        .deviceRayTracingPipelineFeatures =
+            {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR,
+                .rayTracingPipeline = VK_TRUE,
+            },
+        .deviceReorderFeatures =
+            {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_FEATURES_EXT,
+                .rayTracingInvocationReorder = VK_TRUE,
+            },
+        .deviceDescriptorIndexingFeatures =
+            {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES,
+                .shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
+            },
+        .deviceSynchronization2Features =
+            {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES,
+                .synchronization2 = VK_TRUE,
+            },
         .deviceDynamicRenderingFeatures = {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
             .dynamicRendering = VK_TRUE,
@@ -295,7 +292,11 @@ static void querySupportedReorderFeatures(
     vkrt->core.serMaxShaderBindingTableRecordIndex = 0u;
 }
 
-static void logSERExtensionStatus(const VKRT* vkrt, DeviceExtensionSupport extensionSupport, VkBool32 reorderFeatureSupported) {
+static void logSERExtensionStatus(
+    const VKRT* vkrt,
+    DeviceExtensionSupport extensionSupport,
+    VkBool32 reorderFeatureSupported
+) {
     if (!vkrt) return;
 
     if (vkrt->runtime.disableSER &&
@@ -309,15 +310,15 @@ static void logSERExtensionStatus(const VKRT* vkrt, DeviceExtensionSupport exten
     if ((extensionSupport.availableMask & DEVICE_EXTENSION_RAY_TRACING_INVOCATION_REORDER_BIT) &&
         !reorderFeatureSupported) {
         LOG_INFO(
-            "    Optional extension %s was loaded but its feature is unsupported, so it was not enabled",
+            "    Optional extension %s was loaded but its feature is unsupported, so it was "
+            "not enabled",
             VK_EXT_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME
         );
     }
 
     if (extensionSupport.availableMask & DEVICE_EXTENSION_RAY_TRACING_INVOCATION_REORDER_BIT) {
         const char* reorderHintMode =
-            vkrt->core.serReorderingHintMode == VK_RAY_TRACING_INVOCATION_REORDER_MODE_REORDER_EXT ?
-                "reorder" : "none";
+            vkrt->core.serReorderingHintMode == VK_RAY_TRACING_INVOCATION_REORDER_MODE_REORDER_EXT ? "reorder" : "none";
         LOG_INFO(
             "    SER properties: hint mode=%s, max shader table record index=%u",
             reorderHintMode,
@@ -326,7 +327,11 @@ static void logSERExtensionStatus(const VKRT* vkrt, DeviceExtensionSupport exten
     }
 }
 
-static void logEnabledDeviceExtensions(const VKRT* vkrt, DeviceExtensionSupport extensionSupport, VkBool32 reorderFeatureSupported) {
+static void logEnabledDeviceExtensions(
+    const VKRT* vkrt,
+    DeviceExtensionSupport extensionSupport,
+    VkBool32 reorderFeatureSupported
+) {
     if (!vkrt) return;
 
     LOG_INFO("Enabling device extensions for %s:", vkrt->core.deviceName);
@@ -353,12 +358,15 @@ static void logEnabledDeviceExtensions(const VKRT* vkrt, DeviceExtensionSupport 
 }
 
 static VkBool32 isDevicePreferenceRequested(const VKRT_CreateInfo* createInfo) {
-    return createInfo &&
-           (createInfo->preferredDeviceIndex >= 0 ||
-            (createInfo->preferredDeviceName && createInfo->preferredDeviceName[0]));
+    return createInfo && (createInfo->preferredDeviceIndex >= 0 ||
+                          (createInfo->preferredDeviceName && createInfo->preferredDeviceName[0]));
 }
 
-static VKRT_Result enumeratePhysicalDevices(VkInstance instance, VkPhysicalDevice** outDevices, uint32_t* outDeviceCount) {
+static VKRT_Result enumeratePhysicalDevices(
+    VkInstance instance,
+    VkPhysicalDevice** outDevices,
+    uint32_t* outDeviceCount
+) {
     uint32_t deviceCount = 0u;
     VkPhysicalDevice* devices = NULL;
 
@@ -495,17 +503,16 @@ static int32_t scoreDeviceSuitability(VKRT* vkrt, DeviceExtensionSupport* outExt
         free((void*)supportDetails.presentModes);
     }
 
-    VkBool32 requiredFeatures = bufferDeviceAddressFeatures.bufferDeviceAddress &&
-                                accelerationStructureFeatures.accelerationStructure &&
-                                rayTracingPipelineFeatures.rayTracingPipeline &&
-                                dynamicRenderingFeatures.dynamicRendering &&
-                                synchronization2Features.synchronization2 &&
-                                descriptorIndexingFeatures.shaderSampledImageArrayNonUniformIndexing &&
-                                deviceProperties.limits.maxPerStageDescriptorSampledImages >= VKRT_MAX_BINDLESS_TEXTURES &&
-                                deviceProperties.limits.maxDescriptorSetSampledImages >= VKRT_MAX_BINDLESS_TEXTURES;
+    VkBool32 requiredFeatures =
+        bufferDeviceAddressFeatures.bufferDeviceAddress && accelerationStructureFeatures.accelerationStructure &&
+        rayTracingPipelineFeatures.rayTracingPipeline && dynamicRenderingFeatures.dynamicRendering &&
+        synchronization2Features.synchronization2 &&
+        descriptorIndexingFeatures.shaderSampledImageArrayNonUniformIndexing &&
+        deviceProperties.limits.maxPerStageDescriptorSampledImages >= VKRT_MAX_BINDLESS_TEXTURES &&
+        deviceProperties.limits.maxDescriptorSetSampledImages >= VKRT_MAX_BINDLESS_TEXTURES;
 
     if (queueFamilyComplete && requiredExtensionsSupported && swapChainAdequate && requiredFeatures) {
-        for (uint32_t i = 0; i < K_RANKED_DEVICE_TYPE_COUNT; i++) {
+        for (uint32_t i = 0; i < VKRT_ARRAY_COUNT(rankedDeviceTypes); i++) {
             if (deviceProperties.deviceType == rankedDeviceTypes[i]) {
                 return (int32_t)i;
             }
@@ -543,13 +550,11 @@ static VkBool32 deviceMatchesPreference(
     if (!properties) return VK_FALSE;
     if (!createInfo) return VK_TRUE;
 
-    if (createInfo->preferredDeviceIndex >= 0 &&
-        createInfo->preferredDeviceIndex != (int32_t)deviceIndex) {
+    if (createInfo->preferredDeviceIndex >= 0 && createInfo->preferredDeviceIndex != (int32_t)deviceIndex) {
         return VK_FALSE;
     }
 
-    if (createInfo->preferredDeviceName &&
-        createInfo->preferredDeviceName[0] &&
+    if (createInfo->preferredDeviceName && createInfo->preferredDeviceName[0] &&
         !stringContainsCaseInsensitive(properties->deviceName, createInfo->preferredDeviceName)) {
         return VK_FALSE;
     }
@@ -564,7 +569,8 @@ static void logRequestedDevicePreference(const VKRT_CreateInfo* createInfo) {
         return;
     }
 
-    if (createInfo->preferredDeviceIndex >= 0 && createInfo->preferredDeviceName && createInfo->preferredDeviceName[0]) {
+    if (createInfo->preferredDeviceIndex >= 0 && createInfo->preferredDeviceName &&
+        createInfo->preferredDeviceName[0]) {
         LOG_INFO(
             "Requested device: index %d, name contains \"%s\"",
             createInfo->preferredDeviceIndex,
@@ -589,8 +595,7 @@ static void formatDevicePreferenceText(const VKRT_CreateInfo* createInfo, char* 
         return;
     }
 
-    if (createInfo->preferredDeviceIndex >= 0 &&
-        createInfo->preferredDeviceName &&
+    if (createInfo->preferredDeviceIndex >= 0 && createInfo->preferredDeviceName &&
         createInfo->preferredDeviceName[0]) {
         snprintf(
             out,
@@ -696,8 +701,8 @@ VKRT_Result createLogicalDevice(VKRT* vkrt) {
     }
 
     if (!vkrt->runtime.disableSER &&
-            (extensionSupport.availableMask & DEVICE_EXTENSION_RAY_TRACING_INVOCATION_REORDER_BIT) &&
-            supportedReorderFeatures.rayTracingInvocationReorder) {
+        (extensionSupport.availableMask & DEVICE_EXTENSION_RAY_TRACING_INVOCATION_REORDER_BIT) &&
+        supportedReorderFeatures.rayTracingInvocationReorder) {
         enabledExtensions[enabledExtensionCount++] = optionalDeviceExtensions[0];
         extensionSupport.enabledMask |= DEVICE_EXTENSION_RAY_TRACING_INVOCATION_REORDER_BIT;
         featureChain.deviceRayTracingPipelineFeatures.pNext = &featureChain.deviceReorderFeatures;
@@ -740,11 +745,10 @@ VKRT_Result createLogicalDevice(VKRT* vkrt) {
 
 VKRT_Result createQueryPool(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
-    VkQueryPoolCreateInfo queryPoolCreateInfo = {
-        .sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
-        .queryType = VK_QUERY_TYPE_TIMESTAMP,
-        .queryCount = VKRT_MAX_FRAMES_IN_FLIGHT * 2
-    };
+    VkQueryPoolCreateInfo queryPoolCreateInfo =
+        {.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
+         .queryType = VK_QUERY_TYPE_TIMESTAMP,
+         .queryCount = VKRT_MAX_FRAMES_IN_FLIGHT * 2};
 
     if (vkCreateQueryPool(vkrt->core.device, &queryPoolCreateInfo, NULL, &vkrt->runtime.timestampPool) != VK_SUCCESS) {
         LOG_ERROR("Failed to create timestamp query pool");
@@ -765,7 +769,8 @@ QueueFamily findQueueFamilies(VKRT* vkrt) {
     uint32_t queueFamilyCount = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(vkrt->core.physicalDevice, &queueFamilyCount, NULL);
 
-    VkQueueFamilyProperties* queueFamilies = (VkQueueFamilyProperties*)malloc(queueFamilyCount * sizeof(VkQueueFamilyProperties));
+    VkQueueFamilyProperties* queueFamilies =
+        (VkQueueFamilyProperties*)malloc(queueFamilyCount * sizeof(VkQueueFamilyProperties));
     if (!queueFamilies) {
         return indices;
     }
@@ -811,7 +816,8 @@ VkBool32 extensionsSupported(VKRT* vkrt, VkPhysicalDevice device, DeviceExtensio
         return VK_FALSE;
     }
 
-    VkExtensionProperties* availableExtensions = (VkExtensionProperties*)malloc(extensionCount * sizeof(VkExtensionProperties));
+    VkExtensionProperties* availableExtensions =
+        (VkExtensionProperties*)malloc(extensionCount * sizeof(VkExtensionProperties));
     if (!availableExtensions) {
         if (outSupport) *outSupport = support;
         return VK_FALSE;
@@ -853,7 +859,12 @@ VkBool32 extensionsSupported(VKRT* vkrt, VkPhysicalDevice device, DeviceExtensio
     return support.missingRequiredMask == 0;
 }
 
-VKRT_Result findMemoryType(VKRT* vkrt, uint32_t typeFilter, VkMemoryPropertyFlags properties, uint32_t* outMemoryTypeIndex) {
+VKRT_Result findMemoryType(
+    VKRT* vkrt,
+    uint32_t typeFilter,
+    VkMemoryPropertyFlags properties,
+    uint32_t* outMemoryTypeIndex
+) {
     if (!vkrt || !outMemoryTypeIndex) return VKRT_ERROR_INVALID_ARGUMENT;
 
     VkPhysicalDeviceMemoryProperties memProperties;

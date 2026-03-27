@@ -1,9 +1,9 @@
 #pragma once
 
+#include "vkrt.h"
+
 #include <stddef.h>
 #include <stdint.h>
-
-#include "vkrt.h"
 
 typedef enum CLIMode {
     CLI_MODE_RUN = 0,

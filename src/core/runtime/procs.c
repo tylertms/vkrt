@@ -27,12 +27,16 @@ VKRT_Result loadDeviceProcs(VKRT* vkrt) {
 
     DeviceProcLoad requiredProcs[] = {
         {(PFN_vkVoidFunction*)&vkrt->core.procs.vkCreateRayTracingPipelinesKHR, "vkCreateRayTracingPipelinesKHR"},
-        {(PFN_vkVoidFunction*)&vkrt->core.procs.vkGetRayTracingShaderGroupHandlesKHR, "vkGetRayTracingShaderGroupHandlesKHR"},
+        {(PFN_vkVoidFunction*)&vkrt->core.procs.vkGetRayTracingShaderGroupHandlesKHR,
+         "vkGetRayTracingShaderGroupHandlesKHR"},
         {(PFN_vkVoidFunction*)&vkrt->core.procs.vkCreateAccelerationStructureKHR, "vkCreateAccelerationStructureKHR"},
         {(PFN_vkVoidFunction*)&vkrt->core.procs.vkDestroyAccelerationStructureKHR, "vkDestroyAccelerationStructureKHR"},
-        {(PFN_vkVoidFunction*)&vkrt->core.procs.vkGetAccelerationStructureBuildSizesKHR, "vkGetAccelerationStructureBuildSizesKHR"},
-        {(PFN_vkVoidFunction*)&vkrt->core.procs.vkGetAccelerationStructureDeviceAddressKHR, "vkGetAccelerationStructureDeviceAddressKHR"},
-        {(PFN_vkVoidFunction*)&vkrt->core.procs.vkCmdBuildAccelerationStructuresKHR, "vkCmdBuildAccelerationStructuresKHR"},
+        {(PFN_vkVoidFunction*)&vkrt->core.procs.vkGetAccelerationStructureBuildSizesKHR,
+         "vkGetAccelerationStructureBuildSizesKHR"},
+        {(PFN_vkVoidFunction*)&vkrt->core.procs.vkGetAccelerationStructureDeviceAddressKHR,
+         "vkGetAccelerationStructureDeviceAddressKHR"},
+        {(PFN_vkVoidFunction*)&vkrt->core.procs.vkCmdBuildAccelerationStructuresKHR,
+         "vkCmdBuildAccelerationStructuresKHR"},
         {(PFN_vkVoidFunction*)&vkrt->core.procs.vkGetBufferDeviceAddressKHR, "vkGetBufferDeviceAddressKHR"},
         {(PFN_vkVoidFunction*)&vkrt->core.procs.vkCmdTraceRaysKHR, "vkCmdTraceRaysKHR"},
     };

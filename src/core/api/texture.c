@@ -5,11 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-VKRT_Result VKRT_addTextureFromPixels(
-    VKRT* vkrt,
-    const VKRT_TextureUpload* upload,
-    uint32_t* outTextureIndex
-) {
+VKRT_Result VKRT_addTextureFromPixels(VKRT* vkrt, const VKRT_TextureUpload* upload, uint32_t* outTextureIndex) {
     if (outTextureIndex) *outTextureIndex = VKRT_INVALID_INDEX;
     if (!vkrt || !vkrtTextureUploadValid(upload)) {
         return VKRT_ERROR_INVALID_ARGUMENT;
@@ -49,12 +45,7 @@ VKRT_Result VKRT_addTexturesBatch(
     return vkrtSceneAddTexturesBatch(vkrt, uploads, uploadCount, outTextureIndices);
 }
 
-VKRT_Result VKRT_setMaterialTexture(
-    VKRT* vkrt,
-    uint32_t materialIndex,
-    uint32_t textureSlot,
-    uint32_t textureIndex
-) {
+VKRT_Result VKRT_setMaterialTexture(VKRT* vkrt, uint32_t materialIndex, uint32_t textureSlot, uint32_t textureIndex) {
     if (!vkrt || textureSlot >= VKRT_MATERIAL_TEXTURE_SLOT_COUNT) {
         return VKRT_ERROR_INVALID_ARGUMENT;
     }

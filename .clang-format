@@ -3,12 +3,13 @@ BasedOnStyle: LLVM
 IndentWidth: 4
 ContinuationIndentWidth: 4
 UseTab: Never
-ColumnLimit: 100
+ColumnLimit: 120
 
 BreakBeforeBraces: Attach
 PointerAlignment: Left
 ReferenceAlignment: Pointer
 DerivePointerAlignment: false
+BreakAfterReturnType: Automatic
 
 AllowShortFunctionsOnASingleLine: Empty
 AllowShortCaseLabelsOnASingleLine: false
@@ -20,15 +21,17 @@ BinPackArguments: false
 BinPackParameters: false
 AllowAllArgumentsOnNextLine: false
 AllowAllParametersOfDeclarationOnNextLine: false
-AlignAfterOpenBracket: true
+AlignAfterOpenBracket: BlockIndent
+BreakFunctionDefinitionParameters: false
 AlignOperands: AlignAfterOperator
 AlignEscapedNewlines: Left
-BreakBeforeBinaryOperators: NonAssignment
+BreakBeforeBinaryOperators: None
 IndentCaseLabels: true
 SpaceBeforeParens: ControlStatements
 SeparateDefinitionBlocks: Always
 AllowShortEnumsOnASingleLine: false
 PenaltyBreakBeforeFirstCallParameter: 1000000
+PenaltyReturnTypeOnItsOwnLine: 1000000
 PenaltyExcessCharacter: 1000000
 Cpp11BracedListStyle: true
 SpacesInParens: Never

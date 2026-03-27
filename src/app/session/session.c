@@ -1,16 +1,17 @@
 #include "session.h"
 
+#include "../../../external/cglm/include/types.h"
 #include "constants.h"
 #include "io.h"
 #include "vkrt.h"
 #include "vkrt_types.h"
 
-#include "../../../external/cglm/include/types.h"
 #include <affine-pre.h>
 #include <affine.h>
 #include <mat3.h>
 #include <mat4.h>
 #include <math.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -38,7 +39,12 @@ static void clearTextureRecord(SessionTextureRecord* record) {
     memset(record, 0, sizeof(*record));
 }
 
-static void buildLocalTransformMatrix(const vec3 position, const vec3 rotationDegrees, const vec3 scale, mat4 outMatrix) {
+static void buildLocalTransformMatrix(
+    const vec3 position,
+    const vec3 rotationDegrees,
+    const vec3 scale,
+    mat4 outMatrix
+) {
     if (!position || !rotationDegrees || !scale || !outMatrix) return;
 
     glm_mat4_identity(outMatrix);
@@ -86,10 +92,8 @@ static int ensureSceneObjectCapacity(Session* session, uint32_t additionalCount)
         nextCapacity *= 2u;
     }
 
-    SessionSceneObject* resized = (SessionSceneObject*)realloc(
-        session->editor.sceneObjects,
-        (size_t)nextCapacity * sizeof(*resized)
-    );
+    SessionSceneObject* resized =
+        (SessionSceneObject*)realloc(session->editor.sceneObjects, (size_t)nextCapacity * sizeof(*resized));
     if (!resized) return 0;
 
     session->editor.sceneObjects = resized;
@@ -114,10 +118,7 @@ static int ensureMeshImportBatchCapacity(Session* session, uint32_t additionalCo
         nextCapacity *= 2u;
     }
 
-    char** resized = (char**)realloc(
-        (void*)session->editor.meshImportPaths,
-        (size_t)nextCapacity * sizeof(*resized)
-    );
+    char** resized = (char**)realloc((void*)session->editor.meshImportPaths, (size_t)nextCapacity * sizeof(*resized));
     if (!resized) return 0;
 
     session->editor.meshImportPaths = resized;
@@ -142,10 +143,8 @@ static int ensureMeshRecordCapacity(Session* session, uint32_t additionalCount) 
         nextCapacity *= 2u;
     }
 
-    SessionMeshRecord* resized = (SessionMeshRecord*)realloc(
-        session->editor.meshRecords,
-        (size_t)nextCapacity * sizeof(*resized)
-    );
+    SessionMeshRecord* resized =
+        (SessionMeshRecord*)realloc(session->editor.meshRecords, (size_t)nextCapacity * sizeof(*resized));
     if (!resized) return 0;
 
     session->editor.meshRecords = resized;
@@ -170,10 +169,8 @@ static int ensureTextureRecordCapacity(Session* session, uint32_t additionalCoun
         nextCapacity *= 2u;
     }
 
-    SessionTextureRecord* resized = (SessionTextureRecord*)realloc(
-        session->editor.textureRecords,
-        (size_t)nextCapacity * sizeof(*resized)
-    );
+    SessionTextureRecord* resized =
+        (SessionTextureRecord*)realloc(session->editor.textureRecords, (size_t)nextCapacity * sizeof(*resized));
     if (!resized) return 0;
 
     session->editor.textureRecords = resized;
@@ -226,8 +223,10 @@ static void removeSceneObjectAt(Session* session, uint32_t objectIndex) {
 
     if (session->editor.selectedSceneObjectIndex == objectIndex) {
         session->editor.selectedSceneObjectIndex = VKRT_INVALID_INDEX;
-    } else if (session->editor.selectedSceneObjectIndex != VKRT_INVALID_INDEX &&
-               session->editor.selectedSceneObjectIndex > objectIndex) {
+    } else if (
+        session->editor.selectedSceneObjectIndex != VKRT_INVALID_INDEX &&
+        session->editor.selectedSceneObjectIndex > objectIndex
+    ) {
         session->editor.selectedSceneObjectIndex--;
     }
 }
@@ -711,11 +710,20 @@ int sessionAddSceneObject(Session* session, const SessionSceneObjectCreateInfo* 
     object->localScale[0] = 1.0f;
     object->localScale[1] = 1.0f;
     object->localScale[2] = 1.0f;
-    if (createInfo->localPosition) memcpy(object->localPosition, *createInfo->localPosition, sizeof(object->localPosition));
-    if (createInfo->localRotation) memcpy(object->localRotation, *createInfo->localRotation, sizeof(object->localRotation));
+    if (createInfo->localPosition) {
+        memcpy(object->localPosition, *createInfo->localPosition, sizeof(object->localPosition));
+    }
+    if (createInfo->localRotation) {
+        memcpy(object->localRotation, *createInfo->localRotation, sizeof(object->localRotation));
+    }
     if (createInfo->localScale) memcpy(object->localScale, *createInfo->localScale, sizeof(object->localScale));
     buildLocalTransformMatrix(object->localPosition, object->localRotation, object->localScale, object->localTransform);
-    snprintf(object->name, sizeof(object->name), "%s", (createInfo->name && createInfo->name[0]) ? createInfo->name : "Object");
+    snprintf(
+        object->name,
+        sizeof(object->name),
+        "%s",
+        (createInfo->name && createInfo->name[0]) ? createInfo->name : "Object"
+    );
     if (outObjectIndex) *outObjectIndex = objectIndex;
     return 1;
 }
@@ -754,7 +762,13 @@ int sessionSetSceneObjectMesh(Session* session, uint32_t objectIndex, uint32_t m
     return 1;
 }
 
-int sessionSetSceneObjectLocalTransform(Session* session, uint32_t objectIndex, vec3 position, vec3 rotation, vec3 scale) {
+int sessionSetSceneObjectLocalTransform(
+    Session* session,
+    uint32_t objectIndex,
+    vec3 position,
+    vec3 rotation,
+    vec3 scale
+) {
     if (!session || objectIndex >= session->editor.sceneObjectCount) return 0;
     if (!position || !rotation || !scale) return 0;
     SessionSceneObject* object = &session->editor.sceneObjects[objectIndex];
@@ -766,17 +780,29 @@ int sessionSetSceneObjectLocalTransform(Session* session, uint32_t objectIndex, 
 }
 
 int sessionSetSceneObjectLocalTransformMatrix(Session* session, uint32_t objectIndex, mat4 localTransform) {
-    if (!session || objectIndex >= session->editor.sceneObjectCount || !sceneObjectTransformMatrixValid(localTransform)) {
+    if (!session || objectIndex >= session->editor.sceneObjectCount ||
+        !sceneObjectTransformMatrixValid(localTransform)) {
         return 0;
     }
 
     SessionSceneObject* object = &session->editor.sceneObjects[objectIndex];
     memcpy(object->localTransform, localTransform, sizeof(object->localTransform));
-    decomposeImportedMeshTransform(object->localTransform, object->localPosition, object->localRotation, object->localScale);
+    decomposeImportedMeshTransform(
+        object->localTransform,
+        object->localPosition,
+        object->localRotation,
+        object->localScale
+    );
     return 1;
 }
 
-int sessionSetSceneObjectLocalTransformForMesh(Session* session, uint32_t meshIndex, vec3 position, vec3 rotation, vec3 scale) {
+int sessionSetSceneObjectLocalTransformForMesh(
+    Session* session,
+    uint32_t meshIndex,
+    vec3 position,
+    vec3 rotation,
+    vec3 scale
+) {
     uint32_t objectIndex = sessionFindSceneObjectForMesh(session, meshIndex);
     if (objectIndex == VKRT_INVALID_INDEX) return 0;
     return sessionSetSceneObjectLocalTransform(session, objectIndex, position, rotation, scale);

@@ -2,9 +2,9 @@
 
 #include "dcimgui.h"
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdbool.h>
 
 extern const float kInspectorControlSpacing;
 extern const float kInspectorSectionIndent;

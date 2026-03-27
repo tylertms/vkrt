@@ -1,3 +1,4 @@
+#include "../../../external/cglm/include/types.h"
 #include "constants.h"
 #include "numeric.h"
 #include "scene.h"
@@ -8,7 +9,6 @@
 #include "vkrt_internal.h"
 #include "vkrt_types.h"
 
-#include "../../../external/cglm/include/types.h"
 #include <mat3.h>
 #include <mat4.h>
 #include <math.h>
@@ -22,11 +22,16 @@ static float* accessMaterialTextureRotation(Material* material, uint32_t texture
     if (!material) return NULL;
 
     switch (textureSlot) {
-        case VKRT_MATERIAL_TEXTURE_SLOT_BASE_COLOR: return &material->textureRotations[0];
-        case VKRT_MATERIAL_TEXTURE_SLOT_METALLIC_ROUGHNESS: return &material->textureRotations[1];
-        case VKRT_MATERIAL_TEXTURE_SLOT_NORMAL: return &material->textureRotations[2];
-        case VKRT_MATERIAL_TEXTURE_SLOT_EMISSIVE: return &material->textureRotations[3];
-        default: return NULL;
+        case VKRT_MATERIAL_TEXTURE_SLOT_BASE_COLOR:
+            return &material->textureRotations[0];
+        case VKRT_MATERIAL_TEXTURE_SLOT_METALLIC_ROUGHNESS:
+            return &material->textureRotations[1];
+        case VKRT_MATERIAL_TEXTURE_SLOT_NORMAL:
+            return &material->textureRotations[2];
+        case VKRT_MATERIAL_TEXTURE_SLOT_EMISSIVE:
+            return &material->textureRotations[3];
+        default:
+            return NULL;
     }
 }
 
@@ -78,9 +83,9 @@ static void sanitizeMaterialTextureSlot(const VKRT* vkrt, uint32_t textureSlot, 
     int valid = 0;
     if (texture) {
         valid = state.expectedColorSpace == VKRT_TEXTURE_COLOR_SPACE_SRGB
-            ? (texture->colorSpace == VKRT_TEXTURE_COLOR_SPACE_SRGB ||
-                texture->colorSpace == VKRT_TEXTURE_COLOR_SPACE_LINEAR)
-            : texture->colorSpace == VKRT_TEXTURE_COLOR_SPACE_LINEAR;
+                  ? (texture->colorSpace == VKRT_TEXTURE_COLOR_SPACE_SRGB ||
+                     texture->colorSpace == VKRT_TEXTURE_COLOR_SPACE_LINEAR)
+                  : texture->colorSpace == VKRT_TEXTURE_COLOR_SPACE_LINEAR;
     }
     if (!valid) {
         *state.textureIndex = VKRT_INVALID_INDEX;
@@ -101,8 +106,7 @@ static void sanitizeMaterialTextureSlot(const VKRT* vkrt, uint32_t textureSlot, 
 
 static Material sanitizeMaterial(const VKRT* vkrt, Material material) {
     for (int componentIndex = 0; componentIndex < 3; componentIndex++) {
-        material.baseColor[componentIndex] =
-            vkrtFiniteClampf(material.baseColor[componentIndex], 0.0f, 0.0f, 1.0f);
+        material.baseColor[componentIndex] = vkrtFiniteClampf(material.baseColor[componentIndex], 0.0f, 0.0f, 1.0f);
         material.emissionColor[componentIndex] =
             vkrtFiniteClampf(material.emissionColor[componentIndex], 0.0f, 0.0f, INFINITY);
         material.sheenTintWeight[componentIndex] =
@@ -124,14 +128,14 @@ static Material sanitizeMaterial(const VKRT* vkrt, Material material) {
     material.transmission = vkrtFiniteClampf(material.transmission, 0.0f, 0.0f, 1.0f);
     material.subsurface = vkrtFiniteClampf(material.subsurface, 0.0f, 0.0f, 1.0f);
     material.sheenRoughness = vkrtFiniteClampf(material.sheenRoughness, 0.0f, 0.0f, 1.0f);
-    material.absorptionCoefficient = vkrtFiniteClampf(material.absorptionCoefficient, 0.0f, 0.0f, VKRT_MAX_ABSORPTION_COEFFICIENT);
+    material.absorptionCoefficient =
+        vkrtFiniteClampf(material.absorptionCoefficient, 0.0f, 0.0f, VKRT_MAX_ABSORPTION_COEFFICIENT);
     material.emissionLuminance = vkrtFiniteClampf(material.emissionLuminance, 0.0f, 0.0f, INFINITY);
     material.normalTextureScale = vkrtFiniteOrf(material.normalTextureScale, 1.0f);
     if (material.normalTextureScale < 0.0f) material.normalTextureScale = 0.0f;
     material.opacity = vkrtFiniteClampf(material.opacity, 1.0f, 0.0f, 1.0f);
     material.alphaCutoff = vkrtFiniteClampf(material.alphaCutoff, 0.5f, 0.0f, 1.0f);
-    if (material.alphaMode != VKRT_MATERIAL_ALPHA_MODE_MASK &&
-        material.alphaMode != VKRT_MATERIAL_ALPHA_MODE_BLEND) {
+    if (material.alphaMode != VKRT_MATERIAL_ALPHA_MODE_MASK && material.alphaMode != VKRT_MATERIAL_ALPHA_MODE_BLEND) {
         material.alphaMode = VKRT_MATERIAL_ALPHA_MODE_OPAQUE;
     }
     for (int componentIndex = 0; componentIndex < 3; componentIndex++) {
@@ -198,58 +202,38 @@ static int materialComponentEqual(const float* a, const float* b, size_t count) 
 static int materialsEqual(const Material* a, const Material* b) {
     if (!a || !b) return 0;
 
-    return materialComponentEqual(a->baseColor, b->baseColor, 3) &&
-        a->roughness == b->roughness &&
-        materialComponentEqual(a->emissionColor, b->emissionColor, 3) &&
-        a->emissionLuminance == b->emissionLuminance &&
-        materialComponentEqual(a->eta, b->eta, 3) &&
-        a->metallic == b->metallic &&
-        materialComponentEqual(a->k, b->k, 3) &&
-        a->anisotropic == b->anisotropic &&
-        a->specular == b->specular &&
-        a->specularTint == b->specularTint &&
-        materialComponentEqual(a->sheenTintWeight, b->sheenTintWeight, 4) &&
-        a->clearcoat == b->clearcoat &&
-        a->clearcoatGloss == b->clearcoatGloss &&
-        a->ior == b->ior &&
-        a->diffuseRoughness == b->diffuseRoughness &&
-        a->transmission == b->transmission &&
-        a->subsurface == b->subsurface &&
-        a->sheenRoughness == b->sheenRoughness &&
-        a->absorptionCoefficient == b->absorptionCoefficient &&
-        materialComponentEqual(a->attenuationColor, b->attenuationColor, 3) &&
-        a->normalTextureScale == b->normalTextureScale &&
-        a->baseColorTextureIndex == b->baseColorTextureIndex &&
-        a->metallicRoughnessTextureIndex == b->metallicRoughnessTextureIndex &&
-        a->normalTextureIndex == b->normalTextureIndex &&
-        a->emissiveTextureIndex == b->emissiveTextureIndex &&
-        a->baseColorTextureWrap == b->baseColorTextureWrap &&
-        a->metallicRoughnessTextureWrap == b->metallicRoughnessTextureWrap &&
-        a->normalTextureWrap == b->normalTextureWrap &&
-        a->emissiveTextureWrap == b->emissiveTextureWrap &&
-        a->opacity == b->opacity &&
-        a->alphaCutoff == b->alphaCutoff &&
-        a->alphaMode == b->alphaMode &&
-        a->textureTexcoordSets == b->textureTexcoordSets &&
-        materialComponentEqual(a->baseColorTextureTransform, b->baseColorTextureTransform, 4) &&
-        materialComponentEqual(a->metallicRoughnessTextureTransform, b->metallicRoughnessTextureTransform, 4) &&
-        materialComponentEqual(a->normalTextureTransform, b->normalTextureTransform, 4) &&
-        materialComponentEqual(a->emissiveTextureTransform, b->emissiveTextureTransform, 4) &&
-        materialComponentEqual(a->textureRotations, b->textureRotations, 4);
+    return materialComponentEqual(a->baseColor, b->baseColor, 3) && a->roughness == b->roughness &&
+           materialComponentEqual(a->emissionColor, b->emissionColor, 3) &&
+           a->emissionLuminance == b->emissionLuminance && materialComponentEqual(a->eta, b->eta, 3) &&
+           a->metallic == b->metallic && materialComponentEqual(a->k, b->k, 3) && a->anisotropic == b->anisotropic &&
+           a->specular == b->specular && a->specularTint == b->specularTint &&
+           materialComponentEqual(a->sheenTintWeight, b->sheenTintWeight, 4) && a->clearcoat == b->clearcoat &&
+           a->clearcoatGloss == b->clearcoatGloss && a->ior == b->ior && a->diffuseRoughness == b->diffuseRoughness &&
+           a->transmission == b->transmission && a->subsurface == b->subsurface &&
+           a->sheenRoughness == b->sheenRoughness && a->absorptionCoefficient == b->absorptionCoefficient &&
+           materialComponentEqual(a->attenuationColor, b->attenuationColor, 3) &&
+           a->normalTextureScale == b->normalTextureScale && a->baseColorTextureIndex == b->baseColorTextureIndex &&
+           a->metallicRoughnessTextureIndex == b->metallicRoughnessTextureIndex &&
+           a->normalTextureIndex == b->normalTextureIndex && a->emissiveTextureIndex == b->emissiveTextureIndex &&
+           a->baseColorTextureWrap == b->baseColorTextureWrap &&
+           a->metallicRoughnessTextureWrap == b->metallicRoughnessTextureWrap &&
+           a->normalTextureWrap == b->normalTextureWrap && a->emissiveTextureWrap == b->emissiveTextureWrap &&
+           a->opacity == b->opacity && a->alphaCutoff == b->alphaCutoff && a->alphaMode == b->alphaMode &&
+           a->textureTexcoordSets == b->textureTexcoordSets &&
+           materialComponentEqual(a->baseColorTextureTransform, b->baseColorTextureTransform, 4) &&
+           materialComponentEqual(a->metallicRoughnessTextureTransform, b->metallicRoughnessTextureTransform, 4) &&
+           materialComponentEqual(a->normalTextureTransform, b->normalTextureTransform, 4) &&
+           materialComponentEqual(a->emissiveTextureTransform, b->emissiveTextureTransform, 4) &&
+           materialComponentEqual(a->textureRotations, b->textureRotations, 4);
 }
 
 static int meshVectorFinite(const vec3 value) {
-    return value &&
-        isfinite(value[0]) &&
-        isfinite(value[1]) &&
-        isfinite(value[2]);
+    return value && isfinite(value[0]) && isfinite(value[1]) && isfinite(value[2]);
 }
 
 static int meshScaleValid(const vec3 scale) {
     if (!meshVectorFinite(scale)) return 0;
-    return fabsf(scale[0]) >= 1e-6f &&
-        fabsf(scale[1]) >= 1e-6f &&
-        fabsf(scale[2]) >= 1e-6f;
+    return fabsf(scale[0]) >= 1e-6f && fabsf(scale[1]) >= 1e-6f && fabsf(scale[2]) >= 1e-6f;
 }
 
 static int meshTransformMatrixValid(mat4 transform) {
@@ -291,10 +275,8 @@ static int meshOpacityValid(float opacity) {
 }
 
 static int selectionMaskUsesMesh(const VKRT* vkrt, uint32_t meshIndex) {
-    return vkrt &&
-        vkrt->sceneSettings.selectionEnabled &&
-        meshIndex < vkrt->core.meshCount &&
-        vkrt->sceneSettings.selectedMeshIndex == meshIndex;
+    return vkrt && vkrt->sceneSettings.selectionEnabled && meshIndex < vkrt->core.meshCount &&
+           vkrt->sceneSettings.selectedMeshIndex == meshIndex;
 }
 
 static int selectionMaskUsesMaterial(const VKRT* vkrt, uint32_t materialIndex) {
@@ -399,11 +381,7 @@ static uint32_t collectMaterialTextureIndices(const Material* material, uint32_t
     return count;
 }
 
-static VKRT_Result releaseTextureIndicesIfUnused(
-    VKRT* vkrt,
-    const uint32_t* textureIndices,
-    uint32_t textureCount
-) {
+static VKRT_Result releaseTextureIndicesIfUnused(VKRT* vkrt, const uint32_t* textureIndices, uint32_t textureCount) {
     VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
     if (stateReady != VKRT_SUCCESS) return stateReady;
 
@@ -452,14 +430,13 @@ VKRT_Result VKRT_addMaterial(VKRT* vkrt, const Material* material, const char* n
     if (defaultMaterialResult != VKRT_SUCCESS) return defaultMaterialResult;
 
     uint32_t materialIndex = vkrt->core.materialCount;
-    SceneMaterial* resized = (SceneMaterial*)realloc(
-        vkrt->core.materials,
-        (size_t)(materialIndex + 1u) * sizeof(SceneMaterial)
-    );
+    SceneMaterial* resized =
+        (SceneMaterial*)realloc(vkrt->core.materials, (size_t)(materialIndex + 1u) * sizeof(SceneMaterial));
     if (!resized) return VKRT_ERROR_OUT_OF_MEMORY;
 
     vkrt->core.materials = resized;
-    vkrt->core.materials[materialIndex].material = sanitizeMaterial(vkrt, material ? *material : VKRT_materialDefault());
+    vkrt->core.materials[materialIndex].material =
+        sanitizeMaterial(vkrt, material ? *material : VKRT_materialDefault());
     formatMaterialName(vkrt->core.materials[materialIndex].name, name, materialIndex);
     vkrt->core.materialCount = materialIndex + 1u;
     vkrtAdjustMaterialTextureUseCounts(vkrt, &vkrt->core.materials[materialIndex].material, 1);
@@ -600,9 +577,8 @@ VKRT_Result VKRT_setMeshMaterialIndex(VKRT* vkrt, uint32_t meshIndex, uint32_t m
 
     const Material* oldMaterial = vkrtGetSceneMaterialData(vkrt, info->materialIndex);
     const Material* newMaterial = vkrtGetSceneMaterialData(vkrt, materialIndex);
-    int affectsLighting =
-        (oldMaterial && oldMaterial->emissionLuminance > 0.0f) ||
-        (newMaterial && newMaterial->emissionLuminance > 0.0f);
+    int affectsLighting = (oldMaterial && oldMaterial->emissionLuminance > 0.0f) ||
+                          (newMaterial && newMaterial->emissionLuminance > 0.0f);
     info->materialIndex = materialIndex;
     mesh->hasMaterialAssignment = 1u;
     vkrtMarkSceneResourcesDirty(vkrt);
@@ -632,9 +608,8 @@ VKRT_Result VKRT_clearMeshMaterialAssignment(VKRT* vkrt, uint32_t meshIndex) {
 
     const Material* oldMaterial = vkrtGetSceneMaterialData(vkrt, info->materialIndex);
     const Material* defaultMaterial = vkrtGetSceneMaterialData(vkrt, 0u);
-    int affectsLighting =
-        (oldMaterial && oldMaterial->emissionLuminance > 0.0f) ||
-        (defaultMaterial && defaultMaterial->emissionLuminance > 0.0f);
+    int affectsLighting = (oldMaterial && oldMaterial->emissionLuminance > 0.0f) ||
+                          (defaultMaterial && defaultMaterial->emissionLuminance > 0.0f);
     info->materialIndex = 0u;
     mesh->hasMaterialAssignment = 0u;
     vkrtMarkSceneResourcesDirty(vkrt);

@@ -53,11 +53,11 @@ static VKRT_Result createImageWithMemory(
     memoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     memoryAllocateInfo.allocationSize = memoryRequirements.size;
     if (findMemoryType(
-        vkrt,
-        memoryRequirements.memoryTypeBits,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        &memoryAllocateInfo.memoryTypeIndex
-    ) != VKRT_SUCCESS) {
+            vkrt,
+            memoryRequirements.memoryTypeBits,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+            &memoryAllocateInfo.memoryTypeIndex
+        ) != VKRT_SUCCESS) {
         vkrtDestroyImageResources(vkrt, outImage, outView, outMemory);
         return VKRT_ERROR_OPERATION_FAILED;
     }
@@ -158,8 +158,8 @@ VKRT_Result vkrtCreateSampledTextureImageFromData(
     VkImageView* outView,
     VkDeviceMemory* outMemory
 ) {
-    if (!vkrt || !upload || !upload->pixels || upload->width == 0u || upload->height == 0u ||
-        !outImage || !outView || !outMemory || upload->byteSize == 0u) {
+    if (!vkrt || !upload || !upload->pixels || upload->width == 0u || upload->height == 0u || !outImage || !outView ||
+        !outMemory || upload->byteSize == 0u) {
         return VKRT_ERROR_INVALID_ARGUMENT;
     }
 
@@ -210,7 +210,12 @@ VKRT_Result vkrtCreateSampledTextureImageFromData(
         1,
         &copyRegion
     );
-    transitionImageLayout(commandBuffer, *outImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    transitionImageLayout(
+        commandBuffer,
+        *outImage,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    );
 
     result = endSingleTimeCommands(vkrt, commandBuffer);
     vkDestroyBuffer(vkrt->core.device, stagingBuffer, NULL);
@@ -399,14 +404,14 @@ VKRT_Result createGPUImageState(VKRT* vkrt, VkExtent2D extent, GPUImageState* ou
 
     for (uint32_t i = 0; i < slotCount; i++) {
         if (vkrtCreateDeviceImage(
-            vkrt,
-            extent,
-            slots[i].format,
-            slots[i].usage,
-            slots[i].image,
-            slots[i].view,
-            slots[i].memory
-        ) != VKRT_SUCCESS) {
+                vkrt,
+                extent,
+                slots[i].format,
+                slots[i].usage,
+                slots[i].image,
+                slots[i].view,
+                slots[i].memory
+            ) != VKRT_SUCCESS) {
             LOG_ERROR("Failed to create image, #%d", i);
             destroyGPUImageState(vkrt, outState);
             return VKRT_ERROR_OPERATION_FAILED;

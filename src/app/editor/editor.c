@@ -22,13 +22,13 @@
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
+#include "IBMPlexMono_Regular.h"
+#include "IconsFontAwesome6.h"
+#include "debug.h"
+#include "fa_solid_900.h"
+#include "numeric.h"
 #include "session.h"
 #include "theme.h"
-#include "debug.h"
-#include "numeric.h"
-#include "IBMPlexMono_Regular.h"
-#include "fa_solid_900.h"
-#include "IconsFontAwesome6.h"
 
 #include <float.h>
 #include <math.h>
@@ -45,6 +45,12 @@ static const float kPropertiesDockFraction = 0.28f;
 static const float kWorkspaceHostBorderOverlapPx = 1.0f;
 static const float kMinimumViewportExtentPx = 1.0f;
 static const uint32_t kViewportRectSnapTolerancePx = 1u;
+static const ImGuiDockNodeFlags kPanelDockFlags =
+    (ImGuiDockNodeFlags)(ImGuiDockNodeFlags_NoTabBar | ImGuiDockNodeFlags_NoWindowMenuButton |
+                         ImGuiDockNodeFlags_NoCloseButton);
+static const ImGuiDockNodeFlags kViewportDockFlags =
+    (ImGuiDockNodeFlags)(ImGuiDockNodeFlags_NoTabBar | ImGuiDockNodeFlags_NoUndocking |
+                         ImGuiDockNodeFlags_NoWindowMenuButton | ImGuiDockNodeFlags_NoCloseButton);
 
 typedef struct EditorUIState {
     float uiScale;
@@ -63,6 +69,11 @@ static EditorUIState* getEditorUIState(Session* session) {
 
 static ImGuiDockNodeFlags composeDockNodeFlags(ImGuiDockNodeFlags baseFlags, ImGuiDockNodeFlags extraFlags) {
     return (ImGuiDockNodeFlags)((int)baseFlags | (int)extraFlags);
+}
+
+static void initializeDockNodeFlags(ImGuiDockNode* dockNode, ImGuiDockNodeFlags extraFlags) {
+    if (!dockNode) return;
+    ImGuiDockNode_SetLocalFlags(dockNode, composeDockNodeFlags(dockNode->LocalFlags, extraFlags));
 }
 
 static uint32_t absDiffU32(uint32_t a, uint32_t b) {
@@ -95,14 +106,12 @@ static float queryEditorContentScale(GLFWwindow* window) {
 static bool overlayInfoMatches(const VKRT_OverlayInfo* a, const VKRT_OverlayInfo* b) {
     if (!a || !b) return false;
 
-    return (a->window == b->window && a->apiVersion == b->apiVersion && a->instance == b->instance
-            && a->physicalDevice == b->physicalDevice && a->device == b->device
-            && a->graphicsQueueFamily == b->graphicsQueueFamily
-            && a->graphicsQueue == b->graphicsQueue && a->descriptorPool == b->descriptorPool
-            && a->colorAttachmentFormat == b->colorAttachmentFormat
-            && a->swapchainImageCount == b->swapchainImageCount
-            && a->swapchainMinImageCount == b->swapchainMinImageCount)
-        != 0;
+    return (a->window == b->window && a->apiVersion == b->apiVersion && a->instance == b->instance &&
+            a->physicalDevice == b->physicalDevice && a->device == b->device &&
+            a->graphicsQueueFamily == b->graphicsQueueFamily && a->graphicsQueue == b->graphicsQueue &&
+            a->descriptorPool == b->descriptorPool && a->colorAttachmentFormat == b->colorAttachmentFormat &&
+            a->swapchainImageCount == b->swapchainImageCount &&
+            a->swapchainMinImageCount == b->swapchainMinImageCount) != 0;
 }
 
 static void populateVulkanInitInfo(const VKRT_OverlayInfo* overlay, ImGui_ImplVulkan_InitInfo* outInitInfo) {
@@ -243,14 +252,28 @@ static void rebuildEditorFonts(ImGuiIO* imguiIO, float uiScale) {
 
     ImFontConfig textConfig = makeDefaultFontConfig();
     textConfig.FontDataOwnedByAtlas = false;
-    ImFontAtlas_AddFontFromMemoryTTF(imguiIO->Fonts, (void*)IBMPlexMono_Regular, IBMPlexMono_Regular_len, kEditorBaseTextSizePx * uiScale, &textConfig, NULL);
+    ImFontAtlas_AddFontFromMemoryTTF(
+        imguiIO->Fonts,
+        (void*)IBMPlexMono_Regular,
+        IBMPlexMono_Regular_len,
+        kEditorBaseTextSizePx * uiScale,
+        &textConfig,
+        NULL
+    );
 
     ImFontConfig iconConfig = makeDefaultFontConfig();
     iconConfig.FontDataOwnedByAtlas = false;
     iconConfig.MergeMode = true;
     iconConfig.PixelSnapH = true;
     static const ImWchar iconRanges[] = {ICON_MIN_FA, ICON_MAX_FA, 0};
-    ImFontAtlas_AddFontFromMemoryTTF(imguiIO->Fonts, (void*)fa_solid_900, fa_solid_900_len, kEditorBaseIconSizePx * uiScale, &iconConfig, iconRanges);
+    ImFontAtlas_AddFontFromMemoryTTF(
+        imguiIO->Fonts,
+        (void*)fa_solid_900,
+        fa_solid_900_len,
+        kEditorBaseIconSizePx * uiScale,
+        &iconConfig,
+        iconRanges
+    );
 
     unsigned char* pixels = NULL;
     int width = 0;
@@ -463,9 +486,8 @@ static void applyInteractiveCameraInput(VKRT* vkrt, bool viewportHovered, ImGuiI
         .panDy = imguiIO->MouseDelta.y,
         .scroll = imguiIO->MouseWheel,
         .orbiting = viewportHovered && !imguiIO->KeyShift && ImGui_IsMouseDragging(ImGuiMouseButton_Middle, -1.0f),
-        .panning = viewportHovered &&
-            ((imguiIO->KeyShift && ImGui_IsMouseDragging(ImGuiMouseButton_Middle, -1.0f)) ||
-             ImGui_IsMouseDragging(ImGuiMouseButton_Right, -1.0f)),
+        .panning = viewportHovered && ((imguiIO->KeyShift && ImGui_IsMouseDragging(ImGuiMouseButton_Middle, -1.0f)) ||
+                                       ImGui_IsMouseDragging(ImGuiMouseButton_Right, -1.0f)),
         .captureMouse = !viewportHovered,
     };
     VKRT_Result result = VKRT_applyCameraInput(vkrt, &cameraInput);
@@ -474,7 +496,12 @@ static void applyInteractiveCameraInput(VKRT* vkrt, bool viewportHovered, ImGuiI
     }
 }
 
-static int applyRenderViewCameraInput(VKRT* vkrt, const VKRT_RuntimeSnapshot* runtime, bool viewportHovered, ImGuiIO* imguiIO) {
+static int applyRenderViewCameraInput(
+    VKRT* vkrt,
+    const VKRT_RuntimeSnapshot* runtime,
+    bool viewportHovered,
+    ImGuiIO* imguiIO
+) {
     float zoom = 1.0f;
     float panX = 0.0f;
     float panY = 0.0f;
@@ -544,40 +571,24 @@ static void initializeDockLayout(EditorUIState* state) {
     ImGuiID viewportDockID = 0;
 
     ImGui_DockBuilderSplitNode(dockspaceID, ImGuiDir_Left, kSceneDockFraction, &sceneDockID, &centerWorkspaceDockID);
-    ImGui_DockBuilderSplitNode(centerWorkspaceDockID, ImGuiDir_Right, kPropertiesDockFraction, &propertiesDockID, &viewportDockID);
+    ImGui_DockBuilderSplitNode(
+        centerWorkspaceDockID,
+        ImGuiDir_Right,
+        kPropertiesDockFraction,
+        &propertiesDockID,
+        &viewportDockID
+    );
 
     ImGui_DockBuilderDockWindow("Scene Browser", sceneDockID);
     ImGui_DockBuilderDockWindow("Properties", propertiesDockID);
     ImGui_DockBuilderDockWindow("Viewport###ViewWindow", viewportDockID);
 
     ImGuiDockNode* sceneDockNode = ImGui_DockBuilderGetNode(sceneDockID);
-    if (sceneDockNode) {
-        ImGuiDockNodeFlags localFlags =
-            composeDockNodeFlags(sceneDockNode->LocalFlags,
-                                 (ImGuiDockNodeFlags)(ImGuiDockNodeFlags_NoTabBar
-                                                      | ImGuiDockNodeFlags_NoWindowMenuButton
-                                                      | ImGuiDockNodeFlags_NoCloseButton));
-        ImGuiDockNode_SetLocalFlags(sceneDockNode, localFlags);
-    }
     ImGuiDockNode* propertiesDockNode = ImGui_DockBuilderGetNode(propertiesDockID);
-    if (propertiesDockNode) {
-        ImGuiDockNodeFlags localFlags =
-            composeDockNodeFlags(propertiesDockNode->LocalFlags,
-                                 (ImGuiDockNodeFlags)(ImGuiDockNodeFlags_NoTabBar
-                                                      | ImGuiDockNodeFlags_NoWindowMenuButton
-                                                      | ImGuiDockNodeFlags_NoCloseButton));
-        ImGuiDockNode_SetLocalFlags(propertiesDockNode, localFlags);
-    }
     ImGuiDockNode* viewportDockNode = ImGui_DockBuilderGetNode(viewportDockID);
-    if (viewportDockNode) {
-        ImGuiDockNodeFlags localFlags =
-            composeDockNodeFlags(viewportDockNode->LocalFlags,
-                                 (ImGuiDockNodeFlags)(ImGuiDockNodeFlags_NoTabBar
-                                                      | ImGuiDockNodeFlags_NoUndocking
-                                                      | ImGuiDockNodeFlags_NoWindowMenuButton
-                                                      | ImGuiDockNodeFlags_NoCloseButton));
-        ImGuiDockNode_SetLocalFlags(viewportDockNode, localFlags);
-    }
+    initializeDockNodeFlags(sceneDockNode, kPanelDockFlags);
+    initializeDockNodeFlags(propertiesDockNode, kPanelDockFlags);
+    initializeDockNodeFlags(viewportDockNode, kViewportDockFlags);
 
     ImGui_DockBuilderFinish(dockspaceID);
     state->dockLayoutInitialized = true;
@@ -595,10 +606,9 @@ static bool drawWorkspaceDockspace(EditorUIState* state) {
     ImGui_SetNextWindowSize(dockspaceSize, ImGuiCond_Always);
     ImGui_SetNextWindowViewport(mainViewport->ID);
 
-    ImGuiWindowFlags hostFlags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
-                                 ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-                                 ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus |
-                                 ImGuiWindowFlags_NoBackground;
+    ImGuiWindowFlags hostFlags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize |
+                                 ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBringToFrontOnFocus |
+                                 ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoBackground;
 
     ImGui_PushStyleVarImVec2(ImGuiStyleVar_WindowPadding, (ImVec2){0.0f, 0.0f});
     ImGui_PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
@@ -613,31 +623,25 @@ static bool drawWorkspaceDockspace(EditorUIState* state) {
     return true;
 }
 
-static bool drawViewportWindow(
-    VKRT* vkrt,
-    const VKRT_RenderStatusSnapshot* status,
-    VKRT_RuntimeSnapshot* runtime
-) {
+static bool drawViewportWindow(VKRT* vkrt, const VKRT_RenderStatusSnapshot* status, VKRT_RuntimeSnapshot* runtime) {
     if (!vkrt || !status || !runtime) return false;
 
     ImGuiWindowClass viewportWindowClass = {0};
-    viewportWindowClass.DockNodeFlagsOverrideSet =
-        composeDockNodeFlags(ImGuiDockNodeFlags_None,
-                             (ImGuiDockNodeFlags)(ImGuiDockNodeFlags_NoTabBar
-                                                  | ImGuiDockNodeFlags_NoUndocking
-                                                  | ImGuiDockNodeFlags_NoWindowMenuButton
-                                                  | ImGuiDockNodeFlags_NoCloseButton));
+    viewportWindowClass.DockNodeFlagsOverrideSet = composeDockNodeFlags(
+        ImGuiDockNodeFlags_None,
+        (ImGuiDockNodeFlags)(ImGuiDockNodeFlags_NoTabBar | ImGuiDockNodeFlags_NoUndocking |
+                             ImGuiDockNodeFlags_NoWindowMenuButton | ImGuiDockNodeFlags_NoCloseButton)
+    );
     ImGui_SetNextWindowClass(&viewportWindowClass);
 
     ImGui_PushStyleVarImVec2(ImGuiStyleVar_WindowPadding, (ImVec2){0.0f, 0.0f});
-    const char* viewportWindowLabel = VKRT_renderStatusIsActive(status)
-        ? "Render###ViewWindow"
-        : "Viewport###ViewWindow";
+    const char* viewportWindowLabel =
+        VKRT_renderStatusIsActive(status) ? "Render###ViewWindow" : "Viewport###ViewWindow";
     ImGui_Begin(
         viewportWindowLabel,
         NULL,
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar |
-        ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoBackground
+            ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoBackground
     );
 
     bool viewportHovered = ImGui_IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows);
@@ -732,8 +736,8 @@ static bool queryViewportClickPixel(const VKRT_RuntimeSnapshot* runtime, uint32_
     uint32_t viewportWidth = runtime->displayViewportRect[2];
     uint32_t viewportHeight = runtime->displayViewportRect[3];
     if (viewportWidth == 0 || viewportHeight == 0) return false;
-    if (mouseX < viewportX || mouseY < viewportY ||
-        mouseX >= viewportX + viewportWidth || mouseY >= viewportY + viewportHeight) {
+    if (mouseX < viewportX || mouseY < viewportY || mouseX >= viewportX + viewportWidth ||
+        mouseY >= viewportY + viewportHeight) {
         return false;
     }
 
@@ -920,21 +924,14 @@ void editorUIUpdate(VKRT* vkrt, Session* session) {
     bool hasStatus = VKRT_getRenderStatus(vkrt, &status) == VKRT_SUCCESS;
     VKRT_SceneSettingsSnapshot sceneSettings = {0};
     bool haveSceneSettings = VKRT_getSceneSettings(vkrt, &sceneSettings) == VKRT_SUCCESS;
-    bool canClearEnvironment =
-        (haveSceneSettings && sceneSettings.environmentTextureIndex != VKRT_INVALID_INDEX) != 0;
+    bool canClearEnvironment = (haveSceneSettings && sceneSettings.environmentTextureIndex != VKRT_INVALID_INDEX) != 0;
     const char* currentScenePath = sessionGetCurrentScenePath(session);
     VKRT_RuntimeSnapshot runtime = {0};
     bool hasRuntime = VKRT_getRuntimeSnapshot(vkrt, &runtime) == VKRT_SUCCESS;
     queueSelectedSceneObjectRemovalOnDelete(vkrt, session, (int)hasStatus ? &status : NULL);
-    applyMainMenuShortcuts(session,
-                           (int)hasStatus ? &status : NULL,
-                           currentScenePath,
-                           canClearEnvironment);
+    applyMainMenuShortcuts(session, (int)hasStatus ? &status : NULL, currentScenePath, canClearEnvironment);
 
-    drawMainMenuBar(session,
-                    (int)hasStatus ? &status : NULL,
-                    currentScenePath,
-                    canClearEnvironment);
+    drawMainMenuBar(session, (int)hasStatus ? &status : NULL, currentScenePath, canClearEnvironment);
     drawWorkspaceDockspace(state);
 
     bool viewportHovered = false;

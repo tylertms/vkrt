@@ -18,8 +18,7 @@ static inline void setIdentityMaterialTextureTransform(float4 outTransform) {
 }
 
 static inline int vkrtTextureColorSpaceValid(uint32_t colorSpace) {
-    return colorSpace == VKRT_TEXTURE_COLOR_SPACE_SRGB ||
-        colorSpace == VKRT_TEXTURE_COLOR_SPACE_LINEAR;
+    return colorSpace == VKRT_TEXTURE_COLOR_SPACE_SRGB || colorSpace == VKRT_TEXTURE_COLOR_SPACE_LINEAR;
 }
 
 static inline int vkrtTextureFormatValid(uint32_t format) {
@@ -38,11 +37,15 @@ static inline int vkrtTextureFormatCompatibleWithColorSpace(uint32_t format, uin
 
 static inline uint32_t vkrtTextureFormatBytesPerChannel(uint32_t format) {
     switch (format) {
-        case VKRT_TEXTURE_FORMAT_RGBA8_UNORM: return 1u;
+        case VKRT_TEXTURE_FORMAT_RGBA8_UNORM:
+            return 1u;
         case VKRT_TEXTURE_FORMAT_RGBA16_UNORM:
-        case VKRT_TEXTURE_FORMAT_RGBA16_SFLOAT: return 2u;
-        case VKRT_TEXTURE_FORMAT_RGBA32_SFLOAT: return 4u;
-        default: return 0u;
+        case VKRT_TEXTURE_FORMAT_RGBA16_SFLOAT:
+            return 2u;
+        case VKRT_TEXTURE_FORMAT_RGBA32_SFLOAT:
+            return 4u;
+        default:
+            return 0u;
     }
 }
 
@@ -74,11 +77,7 @@ VKRT_Result vkrtSceneAddTextureFromFile(
     uint32_t colorSpace,
     uint32_t* outTextureIndex
 );
-VKRT_Result vkrtSceneAddTextureFromPixels(
-    VKRT* vkrt,
-    const VKRT_TextureUpload* upload,
-    uint32_t* outTextureIndex
-);
+VKRT_Result vkrtSceneAddTextureFromPixels(VKRT* vkrt, const VKRT_TextureUpload* upload, uint32_t* outTextureIndex);
 VKRT_Result vkrtSceneAddTexturesBatch(
     VKRT* vkrt,
     const VKRT_TextureUpload* uploads,

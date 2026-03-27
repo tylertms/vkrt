@@ -92,15 +92,14 @@ static uint32_t defaultWrapMode(void) {
 }
 
 static int textureSlotExpectsColor(uint32_t textureSlot) {
-    return textureSlot == VKRT_MATERIAL_TEXTURE_SLOT_BASE_COLOR ||
-        textureSlot == VKRT_MATERIAL_TEXTURE_SLOT_EMISSIVE;
+    return textureSlot == VKRT_MATERIAL_TEXTURE_SLOT_BASE_COLOR || textureSlot == VKRT_MATERIAL_TEXTURE_SLOT_EMISSIVE;
 }
 
 static int textureCompatibleWithSlot(uint32_t textureSlot, const SceneTexture* texture) {
     if (!texture) return 0;
     if (textureSlotExpectsColor(textureSlot)) {
         return texture->colorSpace == VKRT_TEXTURE_COLOR_SPACE_SRGB ||
-            texture->colorSpace == VKRT_TEXTURE_COLOR_SPACE_LINEAR;
+               texture->colorSpace == VKRT_TEXTURE_COLOR_SPACE_LINEAR;
     }
     return texture->colorSpace == VKRT_TEXTURE_COLOR_SPACE_LINEAR;
 }
@@ -139,12 +138,7 @@ static void destroyCreatedTextureSamplers(VKRT* vkrt, uint32_t samplerCount) {
     }
 }
 
-static VKRT_Result createTextureSamplerVariant(
-    VKRT* vkrt,
-    uint32_t samplerIndex,
-    uint32_t wrapS,
-    uint32_t wrapT
-) {
+static VKRT_Result createTextureSamplerVariant(VKRT* vkrt, uint32_t samplerIndex, uint32_t wrapS, uint32_t wrapT) {
     static const uint32_t kWrapModes[3] = {
         VKRT_TEXTURE_WRAP_REPEAT,
         VKRT_TEXTURE_WRAP_CLAMP_TO_EDGE,
@@ -163,9 +157,10 @@ static VKRT_Result createTextureSamplerVariant(
     createInfo.maxAnisotropy = 1.0f;
     createInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
 
-    return vkCreateSampler(vkrt->core.device, &createInfo, NULL, &vkrt->core.textureSamplers[samplerIndex]) == VK_SUCCESS
-        ? VKRT_SUCCESS
-        : VKRT_ERROR_OPERATION_FAILED;
+    return vkCreateSampler(vkrt->core.device, &createInfo, NULL, &vkrt->core.textureSamplers[samplerIndex]) ==
+                   VK_SUCCESS
+             ? VKRT_SUCCESS
+             : VKRT_ERROR_OPERATION_FAILED;
 }
 
 static VKRT_Result ensureTextureSamplers(VKRT* vkrt) {
@@ -210,9 +205,8 @@ static int queryTextureVkFormat(uint32_t format, uint32_t colorSpace, VkFormat* 
 
     switch (format) {
         case VKRT_TEXTURE_FORMAT_RGBA8_UNORM:
-            *outFormat = colorSpace == VKRT_TEXTURE_COLOR_SPACE_SRGB
-                ? VK_FORMAT_R8G8B8A8_SRGB
-                : VK_FORMAT_R8G8B8A8_UNORM;
+            *outFormat =
+                colorSpace == VKRT_TEXTURE_COLOR_SPACE_SRGB ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
             return 1;
         case VKRT_TEXTURE_FORMAT_RGBA16_UNORM:
             if (colorSpace != VKRT_TEXTURE_COLOR_SPACE_LINEAR) return 0;
@@ -239,7 +233,11 @@ static int uploadSceneTexture(VKRT* vkrt, const TextureUploadDesc* upload, Scene
     size_t byteSize = 0u;
 
     if (!queryTextureVkFormat(upload->format, upload->colorSpace, &vkFormat)) {
-        LOG_ERROR("Unsupported texture upload format/color space combination (%u, %u)", upload->format, upload->colorSpace);
+        LOG_ERROR(
+            "Unsupported texture upload format/color space combination (%u, %u)",
+            upload->format,
+            upload->colorSpace
+        );
         return 0;
     }
     if (!vkrtTryComputeTextureByteSize(upload->width, upload->height, upload->format, &byteSize)) {
@@ -253,7 +251,13 @@ static int uploadSceneTexture(VKRT* vkrt, const TextureUploadDesc* upload, Scene
         .format = vkFormat,
         .byteSize = (VkDeviceSize)byteSize,
     };
-    if (vkrtCreateSampledTextureImageFromData(vkrt, &imageUpload, &outTexture->image, &outTexture->view, &outTexture->memory) != VKRT_SUCCESS) {
+    if (vkrtCreateSampledTextureImageFromData(
+            vkrt,
+            &imageUpload,
+            &outTexture->image,
+            &outTexture->view,
+            &outTexture->memory
+        ) != VKRT_SUCCESS) {
         return 0;
     }
 
@@ -276,10 +280,8 @@ static VKRT_Result rollbackAppendedTextures(VKRT* vkrt, uint32_t addedCount) {
         return VKRT_SUCCESS;
     }
 
-    SceneTexture* shrunk = (SceneTexture*)realloc(
-        vkrt->core.textures,
-        (size_t)vkrt->core.textureCount * sizeof(SceneTexture)
-    );
+    SceneTexture* shrunk =
+        (SceneTexture*)realloc(vkrt->core.textures, (size_t)vkrt->core.textureCount * sizeof(SceneTexture));
     if (shrunk) {
         vkrt->core.textures = shrunk;
     }
@@ -306,11 +308,7 @@ static VKRT_Result validateTextureUploads(const VKRT* vkrt, const VKRT_TextureUp
     return VKRT_SUCCESS;
 }
 
-static VKRT_Result appendSceneTexture(
-    VKRT* vkrt,
-    SceneTexture* texture,
-    uint32_t* outTextureIndex
-) {
+static VKRT_Result appendSceneTexture(VKRT* vkrt, SceneTexture* texture, uint32_t* outTextureIndex) {
     if (!vkrt || !texture) return VKRT_ERROR_INVALID_ARGUMENT;
     if (outTextureIndex) *outTextureIndex = VKRT_INVALID_INDEX;
     if (vkrt->core.textureCount >= VKRT_MAX_BINDLESS_TEXTURES) {
@@ -318,10 +316,8 @@ static VKRT_Result appendSceneTexture(
     }
 
     uint32_t textureIndex = vkrt->core.textureCount;
-    SceneTexture* resized = (SceneTexture*)realloc(
-        vkrt->core.textures,
-        (size_t)(textureIndex + 1u) * sizeof(SceneTexture)
-    );
+    SceneTexture* resized =
+        (SceneTexture*)realloc(vkrt->core.textures, (size_t)(textureIndex + 1u) * sizeof(SceneTexture));
     if (!resized) {
         destroySceneTextureResources(vkrt, texture);
         return VKRT_ERROR_OUT_OF_MEMORY;
@@ -401,11 +397,7 @@ void vkrtAdjustMaterialTextureUseCounts(VKRT* vkrt, const Material* material, in
     }
 }
 
-VKRT_Result vkrtSceneAddTextureFromPixels(
-    VKRT* vkrt,
-    const VKRT_TextureUpload* upload,
-    uint32_t* outTextureIndex
-) {
+VKRT_Result vkrtSceneAddTextureFromPixels(VKRT* vkrt, const VKRT_TextureUpload* upload, uint32_t* outTextureIndex) {
     if (outTextureIndex) *outTextureIndex = VKRT_INVALID_INDEX;
     VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
     if (stateReady != VKRT_SUCCESS) return stateReady;

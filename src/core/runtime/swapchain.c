@@ -18,46 +18,46 @@
 
 static const char* swapChainFormatName(VkFormat format) {
     switch (format) {
-    case VK_FORMAT_R16G16B16A16_SFLOAT:
-        return "VK_FORMAT_R16G16B16A16_SFLOAT";
-    case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
-        return "VK_FORMAT_A2B10G10R10_UNORM_PACK32";
-    case VK_FORMAT_A2R10G10B10_UNORM_PACK32:
-        return "VK_FORMAT_A2R10G10B10_UNORM_PACK32";
-    case VK_FORMAT_B8G8R8A8_UNORM:
-        return "VK_FORMAT_B8G8R8A8_UNORM";
-    case VK_FORMAT_R8G8B8A8_UNORM:
-        return "VK_FORMAT_R8G8B8A8_UNORM";
-    case VK_FORMAT_A8B8G8R8_UNORM_PACK32:
-        return "VK_FORMAT_A8B8G8R8_UNORM_PACK32";
-    default:
-        return "VK_FORMAT_OTHER";
+        case VK_FORMAT_R16G16B16A16_SFLOAT:
+            return "VK_FORMAT_R16G16B16A16_SFLOAT";
+        case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
+            return "VK_FORMAT_A2B10G10R10_UNORM_PACK32";
+        case VK_FORMAT_A2R10G10B10_UNORM_PACK32:
+            return "VK_FORMAT_A2R10G10B10_UNORM_PACK32";
+        case VK_FORMAT_B8G8R8A8_UNORM:
+            return "VK_FORMAT_B8G8R8A8_UNORM";
+        case VK_FORMAT_R8G8B8A8_UNORM:
+            return "VK_FORMAT_R8G8B8A8_UNORM";
+        case VK_FORMAT_A8B8G8R8_UNORM_PACK32:
+            return "VK_FORMAT_A8B8G8R8_UNORM_PACK32";
+        default:
+            return "VK_FORMAT_OTHER";
     }
 }
 
 static const char* swapChainColorSpaceName(VkColorSpaceKHR colorSpace) {
     switch (colorSpace) {
-    case VK_COLOR_SPACE_SRGB_NONLINEAR_KHR:
-        return "VK_COLOR_SPACE_SRGB_NONLINEAR_KHR";
-    case VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT:
-        return "VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT";
-    default:
-        return "VK_COLOR_SPACE_OTHER";
+        case VK_COLOR_SPACE_SRGB_NONLINEAR_KHR:
+            return "VK_COLOR_SPACE_SRGB_NONLINEAR_KHR";
+        case VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT:
+            return "VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT";
+        default:
+            return "VK_COLOR_SPACE_OTHER";
     }
 }
 
 static const char* presentModeName(VkPresentModeKHR presentMode) {
     switch (presentMode) {
-    case VK_PRESENT_MODE_IMMEDIATE_KHR:
-        return "immediate";
-    case VK_PRESENT_MODE_MAILBOX_KHR:
-        return "mailbox";
-    case VK_PRESENT_MODE_FIFO_KHR:
-        return "fifo";
-    case VK_PRESENT_MODE_FIFO_RELAXED_KHR:
-        return "fifo_relaxed";
-    default:
-        return "other";
+        case VK_PRESENT_MODE_IMMEDIATE_KHR:
+            return "immediate";
+        case VK_PRESENT_MODE_MAILBOX_KHR:
+            return "mailbox";
+        case VK_PRESENT_MODE_FIFO_KHR:
+            return "fifo";
+        case VK_PRESENT_MODE_FIFO_RELAXED_KHR:
+            return "fifo_relaxed";
+        default:
+            return "other";
     }
 }
 
@@ -72,11 +72,6 @@ static const VkPresentModeKHR kRenderPresentModeRanking[] = {
     VK_PRESENT_MODE_MAILBOX_KHR,
     VK_PRESENT_MODE_FIFO_RELAXED_KHR,
     VK_PRESENT_MODE_FIFO_KHR,
-};
-
-enum {
-    K_INTERACTIVE_PRESENT_MODE_COUNT = sizeof(kInteractivePresentModeRanking) / sizeof(kInteractivePresentModeRanking[0]),
-    K_RENDER_PRESENT_MODE_COUNT = sizeof(kRenderPresentModeRanking) / sizeof(kRenderPresentModeRanking[0]),
 };
 
 static const char* presentProfileName(VkBool32 useRenderPresentProfile) {
@@ -109,14 +104,14 @@ static int hasPresentMode(const SwapChainSupportDetails* supportDetails, VkPrese
 static uint32_t collectPresentModeCandidates(
     const SwapChainSupportDetails* supportDetails,
     VkBool32 useRenderPresentProfile,
-    VkPresentModeKHR outModes[K_RENDER_PRESENT_MODE_COUNT]
+    VkPresentModeKHR* outModes
 ) {
     if (!supportDetails || !outModes) return 0;
 
-    const VkPresentModeKHR* ranking = useRenderPresentProfile
-        ? kRenderPresentModeRanking
-        : kInteractivePresentModeRanking;
-    uint32_t rankingCount = useRenderPresentProfile ? K_RENDER_PRESENT_MODE_COUNT : K_INTERACTIVE_PRESENT_MODE_COUNT;
+    const VkPresentModeKHR* ranking =
+        useRenderPresentProfile ? kRenderPresentModeRanking : kInteractivePresentModeRanking;
+    uint32_t rankingCount = useRenderPresentProfile ? (uint32_t)VKRT_ARRAY_COUNT(kRenderPresentModeRanking)
+                                                    : (uint32_t)VKRT_ARRAY_COUNT(kInteractivePresentModeRanking);
     uint32_t writeCount = 0;
 
     for (uint32_t i = 0; i < rankingCount; i++) {
@@ -262,7 +257,12 @@ static void destroySwapChainState(VKRT* vkrt, SwapChainState* state) {
     *state = (SwapChainState){0};
 }
 
-static void logSelectedSwapChainFormat(VKRT* vkrt, VkSurfaceFormatKHR surfaceFormat, VkPresentModeKHR preferredPresentMode, VkBool32 useRenderPresentProfile) {
+static void logSelectedSwapChainFormat(
+    VKRT* vkrt,
+    VkSurfaceFormatKHR surfaceFormat,
+    VkPresentModeKHR preferredPresentMode,
+    VkBool32 useRenderPresentProfile
+) {
     if (!vkrt) return;
 
     if (!vkrt->runtime.swapChainFormatLogInitialized ||
@@ -368,7 +368,8 @@ static VKRT_Result createSwapChainHandle(
 static VKRT_Result populateSwapChainImages(VKRT* vkrt, SwapChainState* outState, uint32_t imageCount) {
     if (!vkrt || !outState) return VKRT_ERROR_INVALID_ARGUMENT;
 
-    if (vkGetSwapchainImagesKHR(vkrt->core.device, outState->swapChain, &imageCount, NULL) != VK_SUCCESS || imageCount == 0u) {
+    if (vkGetSwapchainImagesKHR(vkrt->core.device, outState->swapChain, &imageCount, NULL) != VK_SUCCESS ||
+        imageCount == 0u) {
         destroySwapChainState(vkrt, outState);
         return VKRT_ERROR_OPERATION_FAILED;
     }
@@ -380,7 +381,8 @@ static VKRT_Result populateSwapChainImages(VKRT* vkrt, SwapChainState* outState,
     }
     outState->swapChainImageCount = imageCount;
 
-    if (vkGetSwapchainImagesKHR(vkrt->core.device, outState->swapChain, &imageCount, outState->swapChainImages) != VK_SUCCESS) {
+    if (vkGetSwapchainImagesKHR(vkrt->core.device, outState->swapChain, &imageCount, outState->swapChainImages) !=
+        VK_SUCCESS) {
         destroySwapChainState(vkrt, outState);
         return VKRT_ERROR_OPERATION_FAILED;
     }
@@ -388,7 +390,11 @@ static VKRT_Result populateSwapChainImages(VKRT* vkrt, SwapChainState* outState,
     return VKRT_SUCCESS;
 }
 
-static VKRT_Result recreateSwapChainRuntimeResources(VKRT* vkrt, GPUImageState* previousImages, GPUImageState* nextImages) {
+static VKRT_Result recreateSwapChainRuntimeResources(
+    VKRT* vkrt,
+    GPUImageState* previousImages,
+    GPUImageState* nextImages
+) {
     VkBool32 renderPhaseActive = VK_FALSE;
     VKRT_Result result = VKRT_SUCCESS;
 
@@ -502,14 +508,15 @@ static VKRT_Result createSwapChainWithOld(VKRT* vkrt, VkSwapchainKHR oldSwapchai
     }
 
     VkBool32 useRenderPresentProfile = vkrtUsesRenderPresentProfile(vkrt);
-    VkPresentModeKHR presentModes[K_RENDER_PRESENT_MODE_COUNT] = {0};
-    uint32_t presentModeCount = collectPresentModeCandidates(
-        &supportDetails,
-        useRenderPresentProfile,
-        presentModes
-    );
+    VkPresentModeKHR presentModes[VKRT_ARRAY_COUNT(kRenderPresentModeRanking)] = {0};
+    uint32_t presentModeCount = collectPresentModeCandidates(&supportDetails, useRenderPresentProfile, presentModes);
     VkExtent2D extent = chooseSwapExtent(vkrt, &supportDetails);
-    vkrtQueryDisplayMetrics(vkrt->runtime.window, &vkrt->runtime.displayWidth, &vkrt->runtime.displayHeight, &vkrt->runtime.displayRefreshHz);
+    vkrtQueryDisplayMetrics(
+        vkrt->runtime.window,
+        &vkrt->runtime.displayWidth,
+        &vkrt->runtime.displayHeight,
+        &vkrt->runtime.displayRefreshHz
+    );
     logSelectedSwapChainFormat(vkrt, surfaceFormat, presentModes[0], useRenderPresentProfile);
 
     uint32_t imageCount = supportDetails.capabilities.minImageCount + 1;
@@ -553,8 +560,7 @@ static VKRT_Result createSwapChainWithOld(VKRT* vkrt, VkSwapchainKHR oldSwapchai
     if (populateSwapChainImages(vkrt, &nextState, imageCount) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
 
     applySwapChainState(vkrt, &nextState);
-    if (!VKRT_renderPhaseIsActive(vkrt->renderStatus.renderPhase) ||
-        vkrt->runtime.renderExtent.width == 0 ||
+    if (!VKRT_renderPhaseIsActive(vkrt->renderStatus.renderPhase) || vkrt->runtime.renderExtent.width == 0 ||
         vkrt->runtime.renderExtent.height == 0) {
         vkrt->runtime.renderExtent = extent;
     }
@@ -680,7 +686,8 @@ VKRT_Result createImageViews(VKRT* vkrt) {
         imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
         imageViewCreateInfo.subresourceRange.layerCount = 1;
 
-        if (vkCreateImageView(vkrt->core.device, &imageViewCreateInfo, NULL, &vkrt->runtime.swapChainImageViews[i]) != VK_SUCCESS) {
+        if (vkCreateImageView(vkrt->core.device, &imageViewCreateInfo, NULL, &vkrt->runtime.swapChainImageViews[i]) !=
+            VK_SUCCESS) {
             for (size_t j = 0; j < i; j++) {
                 vkDestroyImageView(vkrt->core.device, vkrt->runtime.swapChainImageViews[j], NULL);
             }
@@ -693,20 +700,24 @@ VKRT_Result createImageViews(VKRT* vkrt) {
     return VKRT_SUCCESS;
 }
 
-
 VKRT_Result querySwapChainSupport(VKRT* vkrt, SwapChainSupportDetails* outSupportDetails) {
     if (!vkrt || !outSupportDetails) return VKRT_ERROR_INVALID_ARGUMENT;
 
     SwapChainSupportDetails supportDetails = {
         .capabilities = {.currentTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR},
     };
-    if (vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vkrt->core.physicalDevice, vkrt->runtime.surface, &supportDetails.capabilities) != VK_SUCCESS) {
+    if (vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+            vkrt->core.physicalDevice,
+            vkrt->runtime.surface,
+            &supportDetails.capabilities
+        ) != VK_SUCCESS) {
         LOG_ERROR("Failed to query surface capabilities");
         return VKRT_ERROR_OPERATION_FAILED;
     }
 
     uint32_t formatCount = 0;
-    if (vkGetPhysicalDeviceSurfaceFormatsKHR(vkrt->core.physicalDevice, vkrt->runtime.surface, &formatCount, NULL) != VK_SUCCESS) {
+    if (vkGetPhysicalDeviceSurfaceFormatsKHR(vkrt->core.physicalDevice, vkrt->runtime.surface, &formatCount, NULL) !=
+        VK_SUCCESS) {
         LOG_ERROR("Failed to query surface formats");
         return VKRT_ERROR_OPERATION_FAILED;
     }
@@ -716,7 +727,12 @@ VKRT_Result querySwapChainSupport(VKRT* vkrt, SwapChainSupportDetails* outSuppor
         if (!supportDetails.formats) {
             return VKRT_ERROR_OPERATION_FAILED;
         }
-        if (vkGetPhysicalDeviceSurfaceFormatsKHR(vkrt->core.physicalDevice, vkrt->runtime.surface, &formatCount, supportDetails.formats) != VK_SUCCESS) {
+        if (vkGetPhysicalDeviceSurfaceFormatsKHR(
+                vkrt->core.physicalDevice,
+                vkrt->runtime.surface,
+                &formatCount,
+                supportDetails.formats
+            ) != VK_SUCCESS) {
             free(supportDetails.formats);
             LOG_ERROR("Failed to query surface formats");
             return VKRT_ERROR_OPERATION_FAILED;
@@ -725,7 +741,12 @@ VKRT_Result querySwapChainSupport(VKRT* vkrt, SwapChainSupportDetails* outSuppor
     }
 
     uint32_t presentModeCount = 0;
-    if (vkGetPhysicalDeviceSurfacePresentModesKHR(vkrt->core.physicalDevice, vkrt->runtime.surface, &presentModeCount, NULL) != VK_SUCCESS) {
+    if (vkGetPhysicalDeviceSurfacePresentModesKHR(
+            vkrt->core.physicalDevice,
+            vkrt->runtime.surface,
+            &presentModeCount,
+            NULL
+        ) != VK_SUCCESS) {
         free(supportDetails.formats);
         LOG_ERROR("Failed to query present modes");
         return VKRT_ERROR_OPERATION_FAILED;
@@ -755,7 +776,10 @@ VKRT_Result querySwapChainSupport(VKRT* vkrt, SwapChainSupportDetails* outSuppor
     return VKRT_SUCCESS;
 }
 
-VKRT_Result chooseSwapSurfaceFormat(const SwapChainSupportDetails* supportDetails, VkSurfaceFormatKHR* outSurfaceFormat) {
+VKRT_Result chooseSwapSurfaceFormat(
+    const SwapChainSupportDetails* supportDetails,
+    VkSurfaceFormatKHR* outSurfaceFormat
+) {
     if (!supportDetails || !outSurfaceFormat) return VKRT_ERROR_INVALID_ARGUMENT;
     if (supportDetails->formatCount == 0 || !supportDetails->formats) {
         LOG_ERROR("No swapchain surface formats are available");
@@ -776,8 +800,7 @@ VKRT_Result chooseSwapSurfaceFormat(const SwapChainSupportDetails* supportDetail
         VkFormat preferredFormat = preferredFormats[preferredIndex];
         for (uint32_t formatIndex = 0; formatIndex < supportDetails->formatCount; formatIndex++) {
             VkSurfaceFormatKHR candidate = supportDetails->formats[formatIndex];
-            if (candidate.format == preferredFormat &&
-                candidate.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+            if (candidate.format == preferredFormat && candidate.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
                 *outSurfaceFormat = candidate;
                 return VKRT_SUCCESS;
             }
@@ -789,7 +812,8 @@ VKRT_Result chooseSwapSurfaceFormat(const SwapChainSupportDetails* supportDetail
         if (candidate.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
             *outSurfaceFormat = candidate;
             LOG_INFO(
-                "Falling back to non-preferred swapchain format: %s (%d), color space: %s (%d)",
+                "Falling back to non-preferred swapchain format: %s (%d), color space: %s "
+                "(%d)",
                 swapChainFormatName(candidate.format),
                 (int)candidate.format,
                 swapChainColorSpaceName(candidate.colorSpace),
@@ -820,10 +844,18 @@ VkPresentModeKHR chooseSwapPresentMode(
     VkBool32 useRenderPresentProfile
 ) {
     if (useRenderPresentProfile) {
-        return chooseRankedPresentMode(supportDetails, kRenderPresentModeRanking, K_RENDER_PRESENT_MODE_COUNT);
+        return chooseRankedPresentMode(
+            supportDetails,
+            kRenderPresentModeRanking,
+            VKRT_ARRAY_COUNT(kRenderPresentModeRanking)
+        );
     }
 
-    return chooseRankedPresentMode(supportDetails, kInteractivePresentModeRanking, K_INTERACTIVE_PRESENT_MODE_COUNT);
+    return chooseRankedPresentMode(
+        supportDetails,
+        kInteractivePresentModeRanking,
+        VKRT_ARRAY_COUNT(kInteractivePresentModeRanking)
+    );
 }
 
 VkExtent2D chooseSwapExtent(VKRT* vkrt, const SwapChainSupportDetails* supportDetails) {

@@ -56,9 +56,7 @@ VKRT_Result VKRT_getOverlayInfo(const VKRT* vkrt, VKRT_OverlayInfo* outOverlayIn
     outOverlayInfo->instance = vkrt->core.instance;
     outOverlayInfo->physicalDevice = vkrt->core.physicalDevice;
     outOverlayInfo->device = vkrt->core.device;
-    outOverlayInfo->graphicsQueueFamily = vkrt->core.indices.graphics >= 0
-        ? (uint32_t)vkrt->core.indices.graphics
-        : 0u;
+    outOverlayInfo->graphicsQueueFamily = vkrt->core.indices.graphics >= 0 ? (uint32_t)vkrt->core.indices.graphics : 0u;
     outOverlayInfo->graphicsQueue = vkrt->core.graphicsQueue;
     outOverlayInfo->descriptorPool = vkrt->core.overlayDescriptorPool;
     outOverlayInfo->colorAttachmentFormat = vkrt->runtime.swapChainImageFormat;

@@ -15,17 +15,15 @@ static void updateFrameTimes(VKRT* vkrt) {
     if (vkrt->renderStatus.displayFrameTimeMs <= 0.0f) {
         vkrt->renderStatus.displayFrameTimeMs = vkrt->renderStatus.displayTimeMs;
     } else {
-        vkrt->renderStatus.displayFrameTimeMs =
-            (vkrt->renderStatus.displayFrameTimeMs * (1.0f - displaySmoothing))
-            + (vkrt->renderStatus.displayTimeMs * displaySmoothing);
+        vkrt->renderStatus.displayFrameTimeMs = (vkrt->renderStatus.displayFrameTimeMs * (1.0f - displaySmoothing)) +
+                                                (vkrt->renderStatus.displayTimeMs * displaySmoothing);
     }
 
     if (vkrt->renderStatus.displayRenderTimeMs <= 0.0f) {
         vkrt->renderStatus.displayRenderTimeMs = vkrt->renderStatus.renderTimeMs;
     } else {
-        vkrt->renderStatus.displayRenderTimeMs =
-            (vkrt->renderStatus.displayRenderTimeMs * (1.0f - displaySmoothing))
-            + (vkrt->renderStatus.renderTimeMs * displaySmoothing);
+        vkrt->renderStatus.displayRenderTimeMs = (vkrt->renderStatus.displayRenderTimeMs * (1.0f - displaySmoothing)) +
+                                                 (vkrt->renderStatus.renderTimeMs * displaySmoothing);
     }
 
     size_t sampleCount = (size_t)vkrt->renderStatus.accumulationFrame + 1u;
@@ -34,10 +32,11 @@ static void updateFrameTimes(VKRT* vkrt) {
 
     float weight = 1.0f / (float)sampleCount;
 
-    vkrt->renderStatus.averageFrametime = (vkrt->renderStatus.averageFrametime * (1.0f - weight))
-                                        + (vkrt->renderStatus.displayFrameTimeMs * weight);
+    vkrt->renderStatus.averageFrametime =
+        (vkrt->renderStatus.averageFrametime * (1.0f - weight)) + (vkrt->renderStatus.displayFrameTimeMs * weight);
     vkrt->renderStatus.framesPerSecond = (uint32_t)(1000.0f / vkrt->renderStatus.displayFrameTimeMs);
-    vkrt->renderStatus.frametimes[vkrt->renderControl.timing.frametimeStartIndex] = vkrt->renderStatus.displayFrameTimeMs;
+    vkrt->renderStatus.frametimes[vkrt->renderControl.timing.frametimeStartIndex] =
+        vkrt->renderStatus.displayFrameTimeMs;
     vkrt->renderControl.timing.frametimeStartIndex =
         (vkrt->renderControl.timing.frametimeStartIndex + 1) % frametimeCapacity;
 }
@@ -130,8 +129,8 @@ void updateAutoSPP(VKRT* vkrt) {
         vkrt->renderControl.autoSPP.controlMs = measuredMsPerSPP;
     } else {
         vkrt->renderControl.autoSPP.controlMs =
-            (vkrt->renderControl.autoSPP.controlMs * (1.0f - measurementSmoothing))
-            + (measuredMsPerSPP * measurementSmoothing);
+            (vkrt->renderControl.autoSPP.controlMs * (1.0f - measurementSmoothing)) +
+            (measuredMsPerSPP * measurementSmoothing);
     }
 
     float desired = (targetMs * budgetScale) / vkrt->renderControl.autoSPP.controlMs;

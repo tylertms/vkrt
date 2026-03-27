@@ -5,18 +5,17 @@
 #define GLFW_EXPOSE_NATIVE_WAYLAND
 #endif
 
+#include "debug.h"
 #include "editor.h"
 #include "editor_internal.h"
-#include "session.h"
-
-#include "debug.h"
 #include "io.h"
 #include "nfd.h"
 #include "nfd_glfw3.h"
+#include "session.h"
 
-#include <stdio.h>
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -30,7 +29,9 @@ typedef enum DialogKind {
     DIALOG_KIND_SAVE_RENDER,
 } DialogKind;
 
-enum { kDialogDefaultNameCapacity = 256 };
+enum {
+    kDialogDefaultNameCapacity = 256
+};
 
 typedef struct DialogRequest {
     DialogKind kind;
@@ -67,13 +68,20 @@ static DialogState* getDialogState(Session* session) {
 
 static const char* queryDialogKindLabel(DialogKind kind) {
     switch (kind) {
-        case DIALOG_KIND_OPEN_SCENE:            return "scene open";
-        case DIALOG_KIND_SAVE_SCENE:            return "scene save";
-        case DIALOG_KIND_IMPORT_MESH:           return "mesh import";
-        case DIALOG_KIND_IMPORT_TEXTURE:        return "texture import";
-        case DIALOG_KIND_IMPORT_ENVIRONMENT:    return "environment import";
-        case DIALOG_KIND_SAVE_RENDER:           return "render save";
-        default: return "unknown";
+        case DIALOG_KIND_OPEN_SCENE:
+            return "scene open";
+        case DIALOG_KIND_SAVE_SCENE:
+            return "scene save";
+        case DIALOG_KIND_IMPORT_MESH:
+            return "mesh import";
+        case DIALOG_KIND_IMPORT_TEXTURE:
+            return "texture import";
+        case DIALOG_KIND_IMPORT_ENVIRONMENT:
+            return "environment import";
+        case DIALOG_KIND_SAVE_RENDER:
+            return "render save";
+        default:
+            return "unknown";
     }
 }
 
@@ -94,12 +102,14 @@ static int prepareDialogRequest(
     DialogRequest request = {0};
     request.kind = kind;
     if (defaultPath && defaultPath[0]) {
-        if (snprintf(request.defaultPath, sizeof(request.defaultPath), "%s", defaultPath) >= (int)sizeof(request.defaultPath)) {
+        if (snprintf(request.defaultPath, sizeof(request.defaultPath), "%s", defaultPath) >=
+            (int)sizeof(request.defaultPath)) {
             return 0;
         }
     }
     if (defaultName && defaultName[0]) {
-        if (snprintf(request.defaultName, sizeof(request.defaultName), "%s", defaultName) >= (int)sizeof(request.defaultName)) {
+        if (snprintf(request.defaultName, sizeof(request.defaultName), "%s", defaultName) >=
+            (int)sizeof(request.defaultName)) {
             return 0;
         }
     }
@@ -294,9 +304,7 @@ void editorUIInitializeDialogs(Session* session, GLFWwindow* window) {
     state->window = window;
 
     int mutexResult = vkrtMutexInit(&state->mutex, VKRT_MUTEX_PLAIN);
-    int conditionResult = mutexResult == VKRT_THREAD_SUCCESS
-        ? vkrtCondInit(&state->condition)
-        : VKRT_THREAD_ERROR;
+    int conditionResult = mutexResult == VKRT_THREAD_SUCCESS ? vkrtCondInit(&state->condition) : VKRT_THREAD_ERROR;
     if (mutexResult != VKRT_THREAD_SUCCESS || conditionResult != VKRT_THREAD_SUCCESS) {
         if (mutexResult == VKRT_THREAD_SUCCESS) {
             vkrtMutexDestroy(&state->mutex);
@@ -382,12 +390,7 @@ static void applyDialogResponse(Session* session, const DialogRequest* request, 
                 sessionQueueMeshImport(session, selectedPath);
                 break;
             case DIALOG_KIND_IMPORT_TEXTURE:
-                sessionQueueTextureImport(
-                    session,
-                    request->materialIndex,
-                    request->textureSlot,
-                    selectedPath
-                );
+                sessionQueueTextureImport(session, request->materialIndex, request->textureSlot, selectedPath);
                 break;
             case DIALOG_KIND_IMPORT_ENVIRONMENT:
                 sessionQueueEnvironmentImport(session, selectedPath);
@@ -427,10 +430,7 @@ static int queueDialogRequest(DialogState* state, const DialogRequest* request) 
     if (!state || !request || !state->workerStarted) return 0;
 
     vkrtMutexLock(&state->mutex);
-    if (!state->workerAvailable ||
-        state->requestPending ||
-        state->requestActive ||
-        state->responsePending) {
+    if (!state->workerAvailable || state->requestPending || state->requestActive || state->responsePending) {
         vkrtMutexUnlock(&state->mutex);
         return 0;
     }

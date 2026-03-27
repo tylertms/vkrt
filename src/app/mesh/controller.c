@@ -131,9 +131,7 @@ static int removeSceneObjectHierarchy(VKRT* vkrt, Session* session, uint32_t obj
     if (!vkrt || !session || objectIndex >= sessionGetSceneObjectCount(session)) return 0;
 
     uint32_t objectCount = sessionGetSceneObjectCount(session);
-    uint32_t* meshIndices = objectCount > 0u
-        ? (uint32_t*)malloc((size_t)objectCount * sizeof(uint32_t))
-        : NULL;
+    uint32_t* meshIndices = objectCount > 0u ? (uint32_t*)malloc((size_t)objectCount * sizeof(uint32_t)) : NULL;
     if (objectCount > 0u && !meshIndices) {
         return 0;
     }
@@ -185,18 +183,13 @@ static void remapImportedMaterialTextures(Material* material, const uint32_t* te
     }
 }
 
-static int createImportedNodeObjects(
-    Session* session,
-    const MeshImportData* importData,
-    uint32_t* nodeObjectIndices
-) {
+static int createImportedNodeObjects(Session* session, const MeshImportData* importData, uint32_t* nodeObjectIndices) {
     if (!session || !importData || (importData->nodeCount > 0u && !nodeObjectIndices)) return 0;
 
     for (uint32_t nodeIndex = 0u; nodeIndex < importData->nodeCount; nodeIndex++) {
         const NodeImportEntry* node = &importData->nodes[nodeIndex];
-        uint32_t parentObjectIndex = node->parentIndex != VKRT_INVALID_INDEX
-            ? nodeObjectIndices[node->parentIndex]
-            : VKRT_INVALID_INDEX;
+        uint32_t parentObjectIndex =
+            node->parentIndex != VKRT_INVALID_INDEX ? nodeObjectIndices[node->parentIndex] : VKRT_INVALID_INDEX;
         vec3 position = {node->position[0], node->position[1], node->position[2]};
         vec3 rotation = {node->rotation[0], node->rotation[1], node->rotation[2]};
         vec3 scale = {node->scale[0], node->scale[1], node->scale[2]};
@@ -211,7 +204,8 @@ static int createImportedNodeObjects(
                     .localRotation = &rotation,
                     .localScale = &scale,
                 },
-                &nodeObjectIndices[nodeIndex])) {
+                &nodeObjectIndices[nodeIndex]
+            )) {
             return 0;
         }
 
@@ -238,11 +232,8 @@ static const char* queryImportedObjectName(
 ) {
     if (importData && importData->count == 1u && importName && importName[0]) return importName;
     if (entry && entry->name && entry->name[0]) return entry->name;
-    if (nodeIndex != VKRT_INVALID_INDEX &&
-        importData &&
-        nodeIndex < importData->nodeCount &&
-        importData->nodes[nodeIndex].name &&
-        importData->nodes[nodeIndex].name[0]) {
+    if (nodeIndex != VKRT_INVALID_INDEX && importData && nodeIndex < importData->nodeCount &&
+        importData->nodes[nodeIndex].name && importData->nodes[nodeIndex].name[0]) {
         return importData->nodes[nodeIndex].name;
     }
     return "Mesh";
@@ -264,16 +255,17 @@ static int attachImportedMeshesToSceneObjects(
         const MeshImportEntry* entry = &importData->entries[entryIndex];
         uint32_t meshIndex = meshIndexBase + entryIndex;
         uint32_t nodeIndex = entry->nodeIndex;
-        if (nodeIndex != VKRT_INVALID_INDEX &&
-            nodeIndex < importData->nodeCount &&
+        if (nodeIndex != VKRT_INVALID_INDEX && nodeIndex < importData->nodeCount &&
             importData->nodes[nodeIndex].meshEntryCount == 1u) {
             if (!sessionSetSceneObjectMesh(session, nodeObjectIndices[nodeIndex], meshIndex)) {
                 return 0;
             }
             if (importData->count == 1u && importName && importName[0]) {
                 sessionSetSceneObjectName(session, nodeObjectIndices[nodeIndex], importName);
-            } else if ((!importData->nodes[nodeIndex].name || !importData->nodes[nodeIndex].name[0]) &&
-                       entry->name && entry->name[0]) {
+            } else if (
+                (!importData->nodes[nodeIndex].name || !importData->nodes[nodeIndex].name[0]) && entry->name &&
+                entry->name[0]
+            ) {
                 sessionSetSceneObjectName(session, nodeObjectIndices[nodeIndex], entry->name);
             }
             continue;
@@ -295,7 +287,8 @@ static int attachImportedMeshesToSceneObjects(
                     .localRotation = &zero,
                     .localScale = &one,
                 },
-                NULL)) {
+                NULL
+            )) {
             return 0;
         }
     }
@@ -312,9 +305,8 @@ static int buildImportedSceneObjects(
 ) {
     if (!vkrt || !session || !importData) return 0;
 
-    uint32_t* nodeObjectIndices = importData->nodeCount > 0
-        ? (uint32_t*)malloc(importData->nodeCount * sizeof(uint32_t))
-        : NULL;
+    uint32_t* nodeObjectIndices =
+        importData->nodeCount > 0 ? (uint32_t*)malloc(importData->nodeCount * sizeof(uint32_t)) : NULL;
     if (importData->nodeCount > 0 && !nodeObjectIndices) {
         return 0;
     }
@@ -381,16 +373,13 @@ static int uploadImportedMeshGeometry(VKRT* vkrt, const MeshImportData* importDa
     return result == VKRT_SUCCESS;
 }
 
-static int uploadImportedTextures(
-    VKRT* vkrt,
-    const MeshImportData* importData,
-    uint32_t* importedTextureIndices
-) {
+static int uploadImportedTextures(VKRT* vkrt, const MeshImportData* importData, uint32_t* importedTextureIndices) {
     if (!vkrt || !importData) return 0;
     if (importData->textureCount == 0u) return 1;
     if (!importedTextureIndices) return 0;
 
-    VKRT_TextureUpload* textureUploads = (VKRT_TextureUpload*)calloc(importData->textureCount, sizeof(VKRT_TextureUpload));
+    VKRT_TextureUpload* textureUploads =
+        (VKRT_TextureUpload*)calloc(importData->textureCount, sizeof(VKRT_TextureUpload));
     if (!textureUploads) return 0;
 
     for (uint32_t textureIndex = 0u; textureIndex < importData->textureCount; textureIndex++) {
@@ -424,7 +413,8 @@ static int uploadImportedMaterials(
         const MaterialImportEntry* material = &importData->materials[materialIndex];
         Material remappedMaterial = material->material;
         remapImportedMaterialTextures(&remappedMaterial, importedTextureIndices, importData->textureCount);
-        if (VKRT_addMaterial(vkrt, &remappedMaterial, material->name, &importedMaterialIndices[materialIndex]) != VKRT_SUCCESS) {
+        if (VKRT_addMaterial(vkrt, &remappedMaterial, material->name, &importedMaterialIndices[materialIndex]) !=
+            VKRT_SUCCESS) {
             return 0;
         }
     }
@@ -509,8 +499,8 @@ static int queryImportBaselineCounts(
     *outObjectCountBeforeImport = sessionGetSceneObjectCount(session);
     *outTextureRecordCountBeforeImport = sessionGetTextureRecordCount(session);
     return VKRT_getMeshCount(vkrt, outMeshCountBeforeImport) == VKRT_SUCCESS &&
-        VKRT_getMaterialCount(vkrt, outMaterialCountBeforeImport) == VKRT_SUCCESS &&
-        VKRT_getTextureCount(vkrt, outTextureCountBeforeImport) == VKRT_SUCCESS;
+           VKRT_getMaterialCount(vkrt, outMaterialCountBeforeImport) == VKRT_SUCCESS &&
+           VKRT_getTextureCount(vkrt, outTextureCountBeforeImport) == VKRT_SUCCESS;
 }
 
 static void cleanupImportedIndexMaps(uint32_t* importedTextureIndices, uint32_t* importedMaterialIndices) {
@@ -534,7 +524,8 @@ static void rollbackFailedImport(
 
 static int verifyImportedMeshCount(VKRT* vkrt, uint32_t meshCountBeforeImport, const char* path) {
     uint32_t meshCountAfterImport = 0u;
-    if (VKRT_getMeshCount(vkrt, &meshCountAfterImport) != VKRT_SUCCESS || meshCountAfterImport <= meshCountBeforeImport) {
+    if (VKRT_getMeshCount(vkrt, &meshCountAfterImport) != VKRT_SUCCESS ||
+        meshCountAfterImport <= meshCountBeforeImport) {
         LOG_ERROR("Mesh import failed. File: %s", path);
         return 0;
     }
@@ -548,7 +539,13 @@ static int verifyImportedMeshCount(VKRT* vkrt, uint32_t meshCountBeforeImport, c
     return 1;
 }
 
-int meshControllerImportMesh(VKRT* vkrt, Session* session, const char* path, const char* importName, uint32_t* outMeshIndex) {
+int meshControllerImportMesh(
+    VKRT* vkrt,
+    Session* session,
+    const char* path,
+    const char* importName,
+    uint32_t* outMeshIndex
+) {
     if (outMeshIndex) *outMeshIndex = VKRT_INVALID_INDEX;
     if (!vkrt || !session || !path || !path[0]) return 0;
 

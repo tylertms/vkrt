@@ -71,11 +71,7 @@ static void releaseOIDNResources(
     }
 }
 
-static int createOIDNFilterContext(
-    OIDNDevice* outDevice,
-    OIDNFilter* outFilter,
-    const char** outErrorMessage
-) {
+static int createOIDNFilterContext(OIDNDevice* outDevice, OIDNFilter* outFilter, const char** outErrorMessage) {
     *outDevice = oidnNewDevice(OIDN_DEVICE_TYPE_CPU);
     if (!*outDevice) {
         setOIDNErrorMessage(outErrorMessage, "failed to create OIDN device");
@@ -134,14 +130,54 @@ static void configureOIDNFilterImages(
     const size_t pixelStride = sizeof(float) * 4u;
     const size_t rowStride = pixelStride * (size_t)input->width;
 
-    oidnSetFilterImage(filter, "color", colorBuffer, OIDN_FORMAT_FLOAT3, input->width, input->height, 0u, pixelStride, rowStride);
+    oidnSetFilterImage(
+        filter,
+        "color",
+        colorBuffer,
+        OIDN_FORMAT_FLOAT3,
+        input->width,
+        input->height,
+        0u,
+        pixelStride,
+        rowStride
+    );
     if (input->albedo) {
-        oidnSetFilterImage(filter, "albedo", albedoBuffer, OIDN_FORMAT_FLOAT3, input->width, input->height, 0u, pixelStride, rowStride);
+        oidnSetFilterImage(
+            filter,
+            "albedo",
+            albedoBuffer,
+            OIDN_FORMAT_FLOAT3,
+            input->width,
+            input->height,
+            0u,
+            pixelStride,
+            rowStride
+        );
     }
     if (input->normal) {
-        oidnSetFilterImage(filter, "normal", normalBuffer, OIDN_FORMAT_FLOAT3, input->width, input->height, 0u, pixelStride, rowStride);
+        oidnSetFilterImage(
+            filter,
+            "normal",
+            normalBuffer,
+            OIDN_FORMAT_FLOAT3,
+            input->width,
+            input->height,
+            0u,
+            pixelStride,
+            rowStride
+        );
     }
-    oidnSetFilterImage(filter, "output", outputBuffer, OIDN_FORMAT_FLOAT3, input->width, input->height, 0u, pixelStride, rowStride);
+    oidnSetFilterImage(
+        filter,
+        "output",
+        outputBuffer,
+        OIDN_FORMAT_FLOAT3,
+        input->width,
+        input->height,
+        0u,
+        pixelStride,
+        rowStride
+    );
     oidnSetFilterBool(filter, "hdr", true);
     oidnSetFilterBool(filter, "srgb", false);
     oidnSetFilterBool(filter, "cleanAux", input->cleanAux != 0);
@@ -209,13 +245,7 @@ int vkrtOIDNDenoise(const VKRT_OIDNFilterInput* input, float* output, const char
     }
 
     const size_t imageByteCount = (sizeof(float) * 4u * (size_t)input->width) * (size_t)input->height;
-    if (!createOIDNInputBuffers(
-            device,
-            input,
-            imageByteCount,
-            &buffers,
-            outErrorMessage
-        )) {
+    if (!createOIDNInputBuffers(device, input, imageByteCount, &buffers, outErrorMessage)) {
         goto cleanup;
     }
 

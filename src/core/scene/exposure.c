@@ -16,6 +16,7 @@ enum {
     K_AUTO_EXPOSURE_GRID_DIMENSION = 16u,
     K_AUTO_EXPOSURE_SAMPLE_COUNT = K_AUTO_EXPOSURE_GRID_DIMENSION * K_AUTO_EXPOSURE_GRID_DIMENSION,
 };
+
 static const float kAutoExposureKey = 0.18f;
 static const float kAutoExposureSmoothing = 0.18f;
 static const float kAutoExposureAdaptationStrength = 0.65f;
@@ -29,8 +30,7 @@ static float filterAutoExposureLuminance(float previousFiltered, float averageLu
     if (previousFiltered <= 0.0f) {
         return averageLuminance;
     }
-    return (previousFiltered * (1.0f - kAutoExposureSmoothing))
-         + (averageLuminance * kAutoExposureSmoothing);
+    return (previousFiltered * (1.0f - kAutoExposureSmoothing)) + (averageLuminance * kAutoExposureSmoothing);
 }
 
 static int computeAutoExposureTarget(float filteredLuminance, float* outExposure) {
@@ -88,7 +88,14 @@ VKRT_Result createAutoExposureReadbacks(VKRT* vkrt) {
             return result;
         }
 
-        if (vkMapMemory(vkrt->core.device, readback->buffer.memory, 0, readbackBytes, 0, (void**)&readback->mappedSamples) != VK_SUCCESS ||
+        if (vkMapMemory(
+                vkrt->core.device,
+                readback->buffer.memory,
+                0,
+                readbackBytes,
+                0,
+                (void**)&readback->mappedSamples
+            ) != VK_SUCCESS ||
             !readback->mappedSamples) {
             destroyAutoExposureReadbacks(vkrt);
             return VKRT_ERROR_OPERATION_FAILED;
@@ -120,7 +127,12 @@ void destroyAutoExposureReadbacks(VKRT* vkrt) {
     }
 }
 
-void recordAutoExposureReadback(VKRT* vkrt, VkCommandBuffer commandBuffer, VkImage accumulationImage, VkExtent2D renderExtent) {
+void recordAutoExposureReadback(
+    VKRT* vkrt,
+    VkCommandBuffer commandBuffer,
+    VkImage accumulationImage,
+    VkExtent2D renderExtent
+) {
     if (!vkrt || commandBuffer == VK_NULL_HANDLE || accumulationImage == VK_NULL_HANDLE) return;
     if (!vkrt->sceneSettings.autoExposureEnabled || vkrt->sceneSettings.debugMode != VKRT_DEBUG_MODE_NONE) return;
     if (renderExtent.width == 0u || renderExtent.height == 0u) return;
@@ -128,16 +140,19 @@ void recordAutoExposureReadback(VKRT* vkrt, VkCommandBuffer commandBuffer, VkIma
     VKRT_AutoExposureReadback* readback = &vkrt->renderControl.autoExposure.readbacks[vkrt->runtime.currentFrame];
     if (readback->buffer.buffer == VK_NULL_HANDLE) return;
 
-    transitionImageLayout(commandBuffer, accumulationImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+    transitionImageLayout(
+        commandBuffer,
+        accumulationImage,
+        VK_IMAGE_LAYOUT_GENERAL,
+        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+    );
 
     VkBufferImageCopy copyRegions[K_AUTO_EXPOSURE_SAMPLE_COUNT];
     uint32_t regionIndex = 0u;
     for (uint32_t y = 0; y < K_AUTO_EXPOSURE_GRID_DIMENSION; y++) {
         for (uint32_t x = 0; x < K_AUTO_EXPOSURE_GRID_DIMENSION; x++) {
-            uint32_t sampleX =
-                (((2u * x) + 1u) * renderExtent.width) / (2u * K_AUTO_EXPOSURE_GRID_DIMENSION);
-            uint32_t sampleY =
-                (((2u * y) + 1u) * renderExtent.height) / (2u * K_AUTO_EXPOSURE_GRID_DIMENSION);
+            uint32_t sampleX = (((2u * x) + 1u) * renderExtent.width) / (2u * K_AUTO_EXPOSURE_GRID_DIMENSION);
+            uint32_t sampleY = (((2u * y) + 1u) * renderExtent.height) / (2u * K_AUTO_EXPOSURE_GRID_DIMENSION);
             if (sampleX >= renderExtent.width) sampleX = renderExtent.width - 1u;
             if (sampleY >= renderExtent.height) sampleY = renderExtent.height - 1u;
 
@@ -145,12 +160,13 @@ void recordAutoExposureReadback(VKRT* vkrt, VkCommandBuffer commandBuffer, VkIma
                 .bufferOffset = (VkDeviceSize)regionIndex * 4u * sizeof(float),
                 .bufferRowLength = 0,
                 .bufferImageHeight = 0,
-                .imageSubresource = {
-                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                    .mipLevel = 0,
-                    .baseArrayLayer = 0,
-                    .layerCount = 1,
-                },
+                .imageSubresource =
+                    {
+                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                        .mipLevel = 0,
+                        .baseArrayLayer = 0,
+                        .layerCount = 1,
+                    },
                 .imageOffset = {(int32_t)sampleX, (int32_t)sampleY, 0},
                 .imageExtent = {1u, 1u, 1u},
             };
@@ -158,14 +174,21 @@ void recordAutoExposureReadback(VKRT* vkrt, VkCommandBuffer commandBuffer, VkIma
         }
     }
 
-    vkCmdCopyImageToBuffer(commandBuffer,
-                           accumulationImage,
-                           VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                           readback->buffer.buffer,
-                           K_AUTO_EXPOSURE_SAMPLE_COUNT,
-                           copyRegions);
+    vkCmdCopyImageToBuffer(
+        commandBuffer,
+        accumulationImage,
+        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        readback->buffer.buffer,
+        K_AUTO_EXPOSURE_SAMPLE_COUNT,
+        copyRegions
+    );
 
-    transitionImageLayout(commandBuffer, accumulationImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+    transitionImageLayout(
+        commandBuffer,
+        accumulationImage,
+        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        VK_IMAGE_LAYOUT_GENERAL
+    );
     readback->pending = 1u;
 }
 
@@ -185,10 +208,8 @@ void resolveAutoExposureReadback(VKRT* vkrt, uint32_t frameIndex) {
         return;
     }
 
-    vkrt->renderControl.autoExposure.filteredLuminance = filterAutoExposureLuminance(
-        vkrt->renderControl.autoExposure.filteredLuminance,
-        averageLuminance
-    );
+    vkrt->renderControl.autoExposure.filteredLuminance =
+        filterAutoExposureLuminance(vkrt->renderControl.autoExposure.filteredLuminance, averageLuminance);
     if (!isfinite(vkrt->renderControl.autoExposure.filteredLuminance) ||
         vkrt->renderControl.autoExposure.filteredLuminance <= 0.0f) {
         return;

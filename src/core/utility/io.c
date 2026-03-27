@@ -3,14 +3,14 @@
 #include "debug.h"
 #include "platform.h"
 
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdint.h>
 
 #ifdef _WIN32
-#include <windows.h>
 #include <direct.h>
+#include <windows.h>
 #elif defined(__APPLE__)
 #include <mach-o/dyld.h>
 #include <sys/stat.h>
@@ -31,8 +31,7 @@ static int joinPath(char* out, size_t outSize, const char* base, const char* val
 static int getExeDir(char* out, size_t outSize) {
 #ifdef _WIN32
     DWORD len = GetModuleFileNameA(NULL, out, (DWORD)outSize);
-    if (len == 0 || len == outSize)
-        return -1;
+    if (len == 0 || len == outSize) return -1;
 
     while (len && out[len] != '\\')
         --len;
@@ -189,9 +188,8 @@ static int joinPath(char* out, size_t outSize, const char* base, const char* val
     if (!out || outSize == 0 || !base || !base[0] || !value || !value[0]) return -1;
 
     size_t baseLength = strlen(base);
-    const char* separator = (baseLength > 0 && (base[baseLength - 1] == '/' || base[baseLength - 1] == '\\'))
-        ? ""
-        : "/";
+    const char* separator =
+        (baseLength > 0 && (base[baseLength - 1] == '/' || base[baseLength - 1] == '\\')) ? "" : "/";
     int written = snprintf(out, outSize, "%s%s%s", base, separator, value);
     return (written > 0 && (size_t)written < outSize) ? 0 : -1;
 }
@@ -247,8 +245,7 @@ int resolveExistingParentPath(const char* preferredPath, const char* fallbackPat
         return 0;
     }
 
-    if (fallbackPath && fallbackPath[0] &&
-        resolveExistingPath(fallbackPath, outPath, outPathSize) == 0) {
+    if (fallbackPath && fallbackPath[0] && resolveExistingPath(fallbackPath, outPath, outPathSize) == 0) {
         return 0;
     }
 

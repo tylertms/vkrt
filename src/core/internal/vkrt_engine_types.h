@@ -1,11 +1,10 @@
 #pragma once
 
-#include <stddef.h>
-
-#include <vulkan/vulkan.h>
-
-#include "vkrt_types.h"
 #include "platform.h"
+#include "vkrt_types.h"
+
+#include <stddef.h>
+#include <vulkan/vulkan.h>
 
 typedef struct AccelerationStructure {
     VkAccelerationStructureKHR structure;

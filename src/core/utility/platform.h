@@ -5,7 +5,7 @@
 #if defined(_WIN32)
 #if defined(_MSC_VER)
 #pragma warning(push)
-#pragma warning(disable: 4005)
+#pragma warning(disable : 4005)
 #endif
 #include <windows.h>
 #if defined(_MSC_VER)

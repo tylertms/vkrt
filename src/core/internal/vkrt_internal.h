@@ -1,8 +1,8 @@
 #pragma once
 
 #include "vkrt.h"
-#include "vkrt_overlay.h"
 #include "vkrt_engine_types.h"
+#include "vkrt_overlay.h"
 
 typedef struct VKRT_DeviceProcedures {
     PFN_vkCreateRayTracingPipelinesKHR vkCreateRayTracingPipelinesKHR;
@@ -268,7 +268,7 @@ typedef struct VKRT {
 
 static inline VkBool32 vkrtSerEnabled(const VKRT* vkrt) {
     return vkrt &&
-        (vkrt->core.deviceExtensionSupport.enabledMask & DEVICE_EXTENSION_RAY_TRACING_INVOCATION_REORDER_BIT) != 0;
+           (vkrt->core.deviceExtensionSupport.enabledMask & DEVICE_EXTENSION_RAY_TRACING_INVOCATION_REORDER_BIT) != 0;
 }
 
 static inline FrameSceneUpdate* vkrtCurrentFrameSceneUpdate(VKRT* vkrt) {

@@ -1,8 +1,8 @@
 #pragma once
 
-#include <vulkan/vulkan.h>
-
 #include "vkrt_types.h"
+
+#include <vulkan/vulkan.h>
 
 void vkrtClampViewportRect(VkExtent2D extent, uint32_t* x, uint32_t* y, uint32_t* width, uint32_t* height);
 void vkrtQueryRenderViewCropExtent(

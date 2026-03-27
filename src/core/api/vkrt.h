@@ -3,9 +3,9 @@
 extern "C" {
 #endif
 
-#include <stddef.h>
-
 #include "vkrt_types.h"
+
+#include <stddef.h>
 
 void VKRT_defaultCreateInfo(VKRT_CreateInfo* createInfo);
 VKRT_Result VKRT_create(VKRT** outVkrt);
@@ -24,7 +24,13 @@ VKRT_Result VKRT_endFrame(VKRT* vkrt);
 
 VKRT_Result VKRT_draw(VKRT* vkrt);
 
-VKRT_Result VKRT_uploadMeshData(VKRT* vkrt, const Vertex* vertices, size_t vertexCount, const uint32_t* indices, size_t indexCount);
+VKRT_Result VKRT_uploadMeshData(
+    VKRT* vkrt,
+    const Vertex* vertices,
+    size_t vertexCount,
+    const uint32_t* indices,
+    size_t indexCount
+);
 VKRT_Result VKRT_uploadMeshDataBatch(VKRT* vkrt, const VKRT_MeshUpload* uploads, size_t uploadCount);
 VKRT_Result VKRT_removeMesh(VKRT* vkrt, uint32_t meshIndex);
 VKRT_Result VKRT_applyCameraInput(VKRT* vkrt, const VKRT_CameraInput* input);
@@ -68,11 +74,7 @@ VKRT_Result VKRT_getMaterialCount(const VKRT* vkrt, uint32_t* outMaterialCount);
 VKRT_Result VKRT_getMaterialSnapshot(const VKRT* vkrt, uint32_t materialIndex, VKRT_MaterialSnapshot* outMaterial);
 VKRT_Result VKRT_getTextureCount(const VKRT* vkrt, uint32_t* outTextureCount);
 VKRT_Result VKRT_getTextureSnapshot(const VKRT* vkrt, uint32_t textureIndex, VKRT_TextureSnapshot* outTexture);
-VKRT_Result VKRT_addTextureFromPixels(
-    VKRT* vkrt,
-    const VKRT_TextureUpload* upload,
-    uint32_t* outTextureIndex
-);
+VKRT_Result VKRT_addTextureFromPixels(VKRT* vkrt, const VKRT_TextureUpload* upload, uint32_t* outTextureIndex);
 VKRT_Result VKRT_addTextureFromFile(
     VKRT* vkrt,
     const char* path,
@@ -87,12 +89,7 @@ VKRT_Result VKRT_addTexturesBatch(
     size_t uploadCount,
     uint32_t* outTextureIndices
 );
-VKRT_Result VKRT_setMaterialTexture(
-    VKRT* vkrt,
-    uint32_t materialIndex,
-    uint32_t textureSlot,
-    uint32_t textureIndex
-);
+VKRT_Result VKRT_setMaterialTexture(VKRT* vkrt, uint32_t materialIndex, uint32_t textureSlot, uint32_t textureIndex);
 VKRT_Result VKRT_addMaterial(VKRT* vkrt, const Material* material, const char* name, uint32_t* outMaterialIndex);
 VKRT_Result VKRT_removeMaterial(VKRT* vkrt, uint32_t materialIndex);
 VKRT_Result VKRT_setMaterialName(VKRT* vkrt, uint32_t materialIndex, const char* name);

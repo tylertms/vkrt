@@ -1,10 +1,10 @@
 #pragma once
 
-#include <stddef.h>
-#include <stdint.h>
-
 #include "constants.h"
 #include "formats.h"
+
+#include <stddef.h>
+#include <stdint.h>
 
 typedef struct VKRT_LoadedImage {
     void* pixels;

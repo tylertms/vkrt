@@ -20,16 +20,15 @@ static VKRT_Result appendPendingSceneTransfer(
     VkBuffer dstBuffer,
     VkDeviceSize size
 ) {
-    if (!vkrt || stagingBuffer == VK_NULL_HANDLE || stagingMemory == VK_NULL_HANDLE || dstBuffer == VK_NULL_HANDLE || size == 0) {
+    if (!vkrt || stagingBuffer == VK_NULL_HANDLE || stagingMemory == VK_NULL_HANDLE || dstBuffer == VK_NULL_HANDLE ||
+        size == 0) {
         return VKRT_ERROR_INVALID_ARGUMENT;
     }
 
     FrameSceneUpdate* update = vkrtCurrentFrameSceneUpdate(vkrt);
     uint32_t nextCount = update->sceneTransferCount + 1u;
-    PendingBufferCopy* resized = (PendingBufferCopy*)realloc(
-        update->sceneTransfers,
-        (size_t)nextCount * sizeof(PendingBufferCopy)
-    );
+    PendingBufferCopy* resized =
+        (PendingBufferCopy*)realloc(update->sceneTransfers, (size_t)nextCount * sizeof(PendingBufferCopy));
     if (!resized) {
         return VKRT_ERROR_OUT_OF_MEMORY;
     }
@@ -48,10 +47,7 @@ static VKRT_Result appendPendingSceneTransfer(
 VkDeviceAddress queryBufferDeviceAddress(VKRT* vkrt, VkBuffer buffer) {
     if (!vkrt || buffer == VK_NULL_HANDLE) return 0;
 
-    VkBufferDeviceAddressInfo addrInfo = {
-        .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
-        .buffer = buffer
-    };
+    VkBufferDeviceAddressInfo addrInfo = {.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, .buffer = buffer};
     return vkrt->core.procs.vkGetBufferDeviceAddressKHR(vkrt->core.device, &addrInfo);
 }
 

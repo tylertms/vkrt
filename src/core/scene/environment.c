@@ -22,8 +22,7 @@ static VKRT_Result replaceEnvironmentTexture(VKRT* vkrt, uint32_t nextTextureInd
     if (previousTextureIndex == nextTextureIndex) return VKRT_SUCCESS;
 
     vkrt->sceneSettings.environmentTextureIndex = VKRT_INVALID_INDEX;
-    if (previousTextureIndex != VKRT_INVALID_INDEX &&
-        previousTextureIndex < vkrt->core.textureCount &&
+    if (previousTextureIndex != VKRT_INVALID_INDEX && previousTextureIndex < vkrt->core.textureCount &&
         vkrtCountTextureUsers(vkrt, previousTextureIndex) == 0u) {
         VKRT_Result result = vkrtSceneRemoveTexture(vkrt, previousTextureIndex);
         if (result != VKRT_SUCCESS) {
@@ -44,13 +43,7 @@ VKRT_Result vkrtSceneSetEnvironmentTextureFromFile(VKRT* vkrt, const char* path)
     if (!path || !path[0]) return VKRT_ERROR_INVALID_ARGUMENT;
 
     uint32_t textureIndex = VKRT_INVALID_INDEX;
-    VKRT_Result result = vkrtSceneAddTextureFromFile(
-        vkrt,
-        path,
-        NULL,
-        VKRT_TEXTURE_COLOR_SPACE_LINEAR,
-        &textureIndex
-    );
+    VKRT_Result result = vkrtSceneAddTextureFromFile(vkrt, path, NULL, VKRT_TEXTURE_COLOR_SPACE_LINEAR, &textureIndex);
     if (result != VKRT_SUCCESS) return result;
 
     result = replaceEnvironmentTexture(vkrt, textureIndex);

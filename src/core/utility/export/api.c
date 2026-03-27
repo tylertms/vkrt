@@ -22,11 +22,19 @@ static void readbackCurrentRenderFeatureBuffers(VKRT* vkrt, RenderImageExportJob
 
     if (albedoImage != VK_NULL_HANDLE &&
         readbackImagePixels(vkrt, albedoImage, job->width, job->height, job->albedo.format, &job->albedo.pixels) != 0) {
-        LOG_INFO("Failed to read back albedo feature buffer for '%s'; denoising will fall back to beauty-only", label);
+        LOG_INFO(
+            "Failed to read back albedo feature buffer for '%s'; denoising will fall back to "
+            "beauty-only",
+            label
+        );
     }
     if (normalImage != VK_NULL_HANDLE &&
         readbackImagePixels(vkrt, normalImage, job->width, job->height, job->normal.format, &job->normal.pixels) != 0) {
-        LOG_INFO("Failed to read back normal feature buffer for '%s'; denoising will fall back to beauty-only", label);
+        LOG_INFO(
+            "Failed to read back normal feature buffer for '%s'; denoising will fall back to "
+            "beauty-only",
+            label
+        );
     }
 }
 
@@ -72,13 +80,8 @@ int denoiseCurrentRenderToViewport(VKRT* vkrt) {
         .denoiseEnabled = 1u,
     };
 
-    RenderImageExportJob* job = createRenderImageJob(
-        vkrt,
-        RENDER_IMAGE_JOB_TYPE_VIEWPORT_DENOISE,
-        width,
-        height,
-        &denoiseSettings
-    );
+    RenderImageExportJob* job =
+        createRenderImageJob(vkrt, RENDER_IMAGE_JOB_TYPE_VIEWPORT_DENOISE, width, height, &denoiseSettings);
     if (!job) {
         LOG_ERROR("Failed to allocate viewport denoise job");
         return -1;
@@ -155,9 +158,7 @@ void syncCompletedViewportDenoise(VKRT* vkrt) {
         return;
     }
 
-    if (succeeded &&
-        displayPixels &&
-        vkrtWaitForAllInFlightFrames(vkrt) == VKRT_SUCCESS &&
+    if (succeeded && displayPixels && vkrtWaitForAllInFlightFrames(vkrt) == VKRT_SUCCESS &&
         uploadImagePixels(vkrt, vkrt->core.outputImage, width, height, displayPixels, displayByteCount) == 0) {
         vkrt->renderStatus.renderPhase = VKRT_RENDER_PHASE_COMPLETE_DENOISED;
         LOG_INFO("Applied denoised render result to the viewport");
@@ -204,13 +205,7 @@ int saveCurrentRenderImageEx(VKRT* vkrt, const char* path, const VKRT_RenderExpo
         return -1;
     }
 
-    RenderImageExportJob* job = createRenderImageJob(
-        vkrt,
-        RENDER_IMAGE_JOB_TYPE_SAVE,
-        width,
-        height,
-        &exportSettings
-    );
+    RenderImageExportJob* job = createRenderImageJob(vkrt, RENDER_IMAGE_JOB_TYPE_SAVE, width, height, &exportSettings);
     if (!job) {
         free(resolvedPath);
         LOG_ERROR("Failed to allocate render image export job");

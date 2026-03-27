@@ -39,8 +39,7 @@ int channelNameMatches(const char* channelName, const char* componentName) {
     if (std::strcmp(channelName, componentName) == 0) return 1;
 
     const char* suffix = std::strrchr(channelName, '.');
-    return static_cast<int>((static_cast<int>(suffix != nullptr) != 0)
-                            && std::strcmp(suffix + 1, componentName) == 0);
+    return static_cast<int>((static_cast<int>(suffix != nullptr) != 0) && std::strcmp(suffix + 1, componentName) == 0);
 }
 
 int queryChannelIndex(const EXRHeader& header, const char* componentName) {
@@ -64,17 +63,18 @@ int queryLoadFormat(const EXRHeader& header) {
 int configureRequestedPixelTypes(EXRHeader* header, uint32_t format) {
     if ((header == nullptr) || (header->requested_pixel_types == nullptr)) return 0;
     for (int i = 0; i < header->num_channels; i++) {
-        header->requested_pixel_types[i] = format == VKRT_TEXTURE_FORMAT_RGBA16_SFLOAT
-            ? TINYEXR_PIXELTYPE_HALF
-            : TINYEXR_PIXELTYPE_FLOAT;
+        header->requested_pixel_types[i] =
+            format == VKRT_TEXTURE_FORMAT_RGBA16_SFLOAT ? TINYEXR_PIXELTYPE_HALF : TINYEXR_PIXELTYPE_FLOAT;
     }
     return 1;
 }
 
-int finalizeHalfImage(const EXRHeader& header,
-                      const EXRImage& image,
-                      const char* sourceLabel,
-                      VKRT_LoadedImage* outImage) {
+int finalizeHalfImage(
+    const EXRHeader& header,
+    const EXRImage& image,
+    const char* sourceLabel,
+    VKRT_LoadedImage* outImage
+) {
     const size_t pixelCount = static_cast<size_t>(image.width) * static_cast<size_t>(image.height);
     if (pixelCount > std::numeric_limits<size_t>::max() / 4u) {
         LOG_ERROR("EXR image dimensions overflow for %s", sourceLabel);
@@ -118,10 +118,12 @@ int finalizeHalfImage(const EXRHeader& header,
     return 1;
 }
 
-int finalizeFloatImage(const EXRHeader& header,
-                       const EXRImage& image,
-                       const char* sourceLabel,
-                       VKRT_LoadedImage* outImage) {
+int finalizeFloatImage(
+    const EXRHeader& header,
+    const EXRImage& image,
+    const char* sourceLabel,
+    VKRT_LoadedImage* outImage
+) {
     const size_t pixelCount = static_cast<size_t>(image.width) * static_cast<size_t>(image.height);
     if (pixelCount > std::numeric_limits<size_t>::max() / 4u) {
         LOG_ERROR("EXR image dimensions overflow for %s", sourceLabel);
@@ -166,11 +168,13 @@ int finalizeFloatImage(const EXRHeader& header,
 }
 
 template <typename ParseVersionFn, typename ParseHeaderFn, typename LoadImageFn>
-int loadEXRImageCommon(ParseVersionFn parseVersion,
-                       ParseHeaderFn parseHeader,
-                       LoadImageFn loadImage,
-                       const char* sourceLabel,
-                       VKRT_LoadedImage* outImage) {
+int loadEXRImageCommon(
+    ParseVersionFn parseVersion,
+    ParseHeaderFn parseHeader,
+    LoadImageFn loadImage,
+    const char* sourceLabel,
+    VKRT_LoadedImage* outImage
+) {
     if (!sourceLabel || !outImage) return 0;
 
     EXRVersion version;
@@ -277,7 +281,9 @@ int vkrtLoadEXRImageFromMemory(const void* data, size_t size, const char* source
     *outImage = VKRT_LoadedImage{};
 
     return loadEXRImageCommon(
-        [&](EXRVersion* version) { return ParseEXRVersionFromMemory(version, static_cast<const unsigned char*>(data), size); },
+        [&](EXRVersion* version) {
+            return ParseEXRVersionFromMemory(version, static_cast<const unsigned char*>(data), size);
+        },
         [&](EXRHeader* header, const EXRVersion* version, const char** error) {
             return ParseEXRHeaderFromMemory(header, version, static_cast<const unsigned char*>(data), size, error);
         },
@@ -290,8 +296,7 @@ int vkrtLoadEXRImageFromMemory(const void* data, size_t size, const char* source
 }
 
 int vkrtWriteEXRFromRGBA32F(const char* path, const float* rgba32f, uint32_t width, uint32_t height) {
-    if ((path == nullptr) || (path[0] == 0) || (rgba32f == nullptr) || width == 0u
-        || height == 0u) {
+    if ((path == nullptr) || (path[0] == 0) || (rgba32f == nullptr) || width == 0u || height == 0u) {
         return 0;
     }
     if (width > static_cast<uint32_t>(std::numeric_limits<int>::max()) ||
@@ -301,8 +306,7 @@ int vkrtWriteEXRFromRGBA32F(const char* path, const float* rgba32f, uint32_t wid
     }
 
     const char* error = nullptr;
-    int const result =
-        SaveEXR(rgba32f, static_cast<int>(width), static_cast<int>(height), 4, 0, path, &error);
+    int const result = SaveEXR(rgba32f, static_cast<int>(width), static_cast<int>(height), 4, 0, path, &error);
     if (result != TINYEXR_SUCCESS) {
         LOG_ERROR("EXR export failed for '%s' (%s)", path, error ? error : "unknown error");
         freeTinyEXRError(error);

@@ -85,7 +85,13 @@ VKRT_Result VKRT_beginFrame(VKRT* vkrt) {
     vkrt->runtime.frameTraced = VK_FALSE;
     vkrt->runtime.frameSelectionTraced = VK_FALSE;
 
-    VkResult fenceResult = vkWaitForFences(vkrt->core.device, 1, &vkrt->runtime.inFlightFences[vkrt->runtime.currentFrame], VK_TRUE, UINT64_MAX);
+    VkResult fenceResult = vkWaitForFences(
+        vkrt->core.device,
+        1,
+        &vkrt->runtime.inFlightFences[vkrt->runtime.currentFrame],
+        VK_TRUE,
+        UINT64_MAX
+    );
     if (fenceResult == VK_ERROR_DEVICE_LOST) {
         LOG_ERROR("Device lost while waiting for fence");
         return VKRT_ERROR_DEVICE_LOST;
@@ -164,7 +170,8 @@ static int sceneUpdateRequiresFullFrameSync(const SceneUpdateState* state) {
 
 static int sceneUpdateRequiresDescriptorReset(const SceneUpdateState* state) {
     if (!state) return 0;
-    return state->materialDirty || state->textureDirty || state->sceneDirty || state->selectionDirty || state->lightDirty;
+    return state->materialDirty || state->textureDirty || state->sceneDirty || state->selectionDirty ||
+           state->lightDirty;
 }
 
 static VKRT_Result synchronizeSceneUpdate(VKRT* vkrt, const SceneUpdateState* state) {
@@ -261,10 +268,8 @@ VKRT_Result VKRT_updateScene(VKRT* vkrt) {
 VKRT_Result VKRT_trace(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
     if (!vkrt->runtime.frameAcquired && !vkrt->runtime.frameOffscreen) return VKRT_SUCCESS;
-    VKRT_Result result = vkrtConvertVkResult(vkResetCommandBuffer(
-        vkrt->runtime.commandBuffers[vkrt->runtime.currentFrame],
-        0
-    ));
+    VKRT_Result result =
+        vkrtConvertVkResult(vkResetCommandBuffer(vkrt->runtime.commandBuffers[vkrt->runtime.currentFrame], 0));
     if (result != VKRT_SUCCESS) {
         return result;
     }
@@ -291,21 +296,16 @@ VKRT_Result VKRT_trace(VKRT* vkrt) {
     submitInfo.signalSemaphoreCount = vkrt->runtime.frameOffscreen ? 0u : 1u;
     submitInfo.pSignalSemaphores = vkrt->runtime.frameOffscreen ? NULL : signalSemaphores;
 
-    result = vkrtConvertVkResult(vkResetFences(
-        vkrt->core.device,
-        1,
-        &vkrt->runtime.inFlightFences[vkrt->runtime.currentFrame]
-    ));
+    result = vkrtConvertVkResult(
+        vkResetFences(vkrt->core.device, 1, &vkrt->runtime.inFlightFences[vkrt->runtime.currentFrame])
+    );
     if (result != VKRT_SUCCESS) {
         return result;
     }
 
-    result = vkrtConvertVkResult(vkQueueSubmit(
-        vkrt->core.graphicsQueue,
-        1,
-        &submitInfo,
-        vkrt->runtime.inFlightFences[vkrt->runtime.currentFrame]
-    ));
+    result = vkrtConvertVkResult(
+        vkQueueSubmit(vkrt->core.graphicsQueue, 1, &submitInfo, vkrt->runtime.inFlightFences[vkrt->runtime.currentFrame])
+    );
     if (result != VKRT_SUCCESS) {
         LOG_ERROR("Failed to submit draw queue");
         return result;
@@ -374,8 +374,7 @@ VKRT_Result VKRT_endFrame(VKRT* vkrt) {
     if (vkrt->runtime.framePresented) {
         uint32_t frameIndex = queryCurrentFrameIndex(vkrt);
         uint32_t renderedSPP = queryRenderedSamplesPerPixel(vkrt);
-        VkBool32 traceContributed = vkrt->core.descriptorSetReady[frameIndex] &&
-                                    !vkrt->core.accumulationNeedsReset &&
+        VkBool32 traceContributed = vkrt->core.descriptorSetReady[frameIndex] && !vkrt->core.accumulationNeedsReset &&
                                     vkrt->runtime.frameTraced &&
                                     !VKRT_renderPhaseSamplingFinished(vkrt->renderStatus.renderPhase);
 
@@ -390,8 +389,7 @@ VKRT_Result VKRT_endFrame(VKRT* vkrt) {
             vkrt->core.accumulationReadIndex = nextReadIndex;
         }
 
-        if (VKRT_renderPhaseIsSampling(vkrt->renderStatus.renderPhase) &&
-            vkrt->renderStatus.renderTargetSamples > 0 &&
+        if (VKRT_renderPhaseIsSampling(vkrt->renderStatus.renderPhase) && vkrt->renderStatus.renderTargetSamples > 0 &&
             vkrt->renderStatus.totalSamples >= vkrt->renderStatus.renderTargetSamples) {
             VKRT_stopRenderSampling(vkrt);
         }

@@ -9,13 +9,8 @@
 #include <stdint.h>
 
 static int meshUploadValid(const VKRT_MeshUpload* upload) {
-    return upload &&
-        upload->vertices &&
-        upload->indices &&
-        upload->vertexCount > 0u &&
-        upload->indexCount > 0u &&
-        upload->vertexCount <= (size_t)VKRT_INVALID_INDEX &&
-        upload->indexCount <= (size_t)VKRT_INVALID_INDEX;
+    return upload && upload->vertices && upload->indices && upload->vertexCount > 0u && upload->indexCount > 0u &&
+           upload->vertexCount <= (size_t)VKRT_INVALID_INDEX && upload->indexCount <= (size_t)VKRT_INVALID_INDEX;
 }
 
 VKRT_Result VKRT_uploadMeshData(

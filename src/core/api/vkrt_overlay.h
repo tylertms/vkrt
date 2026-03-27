@@ -1,9 +1,9 @@
 #pragma once
 
-#include <vulkan/vulkan.h>
-#include <GLFW/glfw3.h>
-
 #include "vkrt_types.h"
+
+#include <GLFW/glfw3.h>
+#include <vulkan/vulkan.h>
 
 typedef struct VKRT_AppHooks {
     void (*init)(struct VKRT* vkrt, void* userData);

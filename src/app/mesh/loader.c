@@ -1,5 +1,6 @@
 #include "loader.h"
 
+#include "cgltf.h"
 #include "constants.h"
 #include "debug.h"
 #include "image.h"
@@ -8,18 +9,16 @@
 #include "vkrt.h"
 #include "vkrt_types.h"
 
-#include <stdint.h>
-#include <mat4.h>
-#include <types.h>
-#include <vec3.h>
-#include "cgltf.h"
-
 #include <limits.h>
+#include <mat4.h>
 #include <math.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <types.h>
+#include <vec3.h>
 
 enum {
     K_GENERATED_MESH_NAME_CAPACITY = 256
@@ -174,10 +173,8 @@ static int ensureImportEntryCapacity(MeshImportData* importData, uint32_t additi
         nextCapacity *= 2u;
     }
 
-    MeshImportEntry* resized = (MeshImportEntry*)realloc(
-        importData->entries,
-        (size_t)nextCapacity * sizeof(MeshImportEntry)
-    );
+    MeshImportEntry* resized =
+        (MeshImportEntry*)realloc(importData->entries, (size_t)nextCapacity * sizeof(MeshImportEntry));
     if (!resized) return -1;
 
     importData->entries = resized;
@@ -202,10 +199,8 @@ static int ensureImportTextureCapacity(MeshImportData* importData, uint32_t addi
         nextCapacity *= 2u;
     }
 
-    TextureImportEntry* resized = (TextureImportEntry*)realloc(
-        importData->textures,
-        (size_t)nextCapacity * sizeof(TextureImportEntry)
-    );
+    TextureImportEntry* resized =
+        (TextureImportEntry*)realloc(importData->textures, (size_t)nextCapacity * sizeof(TextureImportEntry));
     if (!resized) return -1;
 
     importData->textures = resized;
@@ -230,10 +225,8 @@ static int ensureImportNodeCapacity(MeshImportData* importData, uint32_t additio
         nextCapacity *= 2u;
     }
 
-    NodeImportEntry* resized = (NodeImportEntry*)realloc(
-        importData->nodes,
-        (size_t)nextCapacity * sizeof(NodeImportEntry)
-    );
+    NodeImportEntry* resized =
+        (NodeImportEntry*)realloc(importData->nodes, (size_t)nextCapacity * sizeof(NodeImportEntry));
     if (!resized) return -1;
 
     importData->nodes = resized;
@@ -278,9 +271,7 @@ static int textureReferenceEqual(
     const cgltf_image* image,
     uint32_t colorSpace
 ) {
-    return reference &&
-        reference->image == image &&
-        reference->colorSpace == colorSpace;
+    return reference && reference->image == image && reference->colorSpace == colorSpace;
 }
 
 static int appendImportedTextureReference(
@@ -326,35 +317,35 @@ static int collectImportedTextureReferences(
     for (cgltf_size materialIndex = 0; materialIndex < data->materials_count; materialIndex++) {
         const cgltf_material* material = &data->materials[materialIndex];
         if (!appendImportedTextureReference(
-            references,
-            outReferenceCount,
-            &material->pbr_metallic_roughness.base_color_texture,
-            VKRT_TEXTURE_COLOR_SPACE_SRGB
-        )) {
+                references,
+                outReferenceCount,
+                &material->pbr_metallic_roughness.base_color_texture,
+                VKRT_TEXTURE_COLOR_SPACE_SRGB
+            )) {
             return 0;
         }
         if (!appendImportedTextureReference(
-            references,
-            outReferenceCount,
-            &material->pbr_metallic_roughness.metallic_roughness_texture,
-            VKRT_TEXTURE_COLOR_SPACE_LINEAR
-        )) {
+                references,
+                outReferenceCount,
+                &material->pbr_metallic_roughness.metallic_roughness_texture,
+                VKRT_TEXTURE_COLOR_SPACE_LINEAR
+            )) {
             return 0;
         }
         if (!appendImportedTextureReference(
-            references,
-            outReferenceCount,
-            &material->normal_texture,
-            VKRT_TEXTURE_COLOR_SPACE_LINEAR
-        )) {
+                references,
+                outReferenceCount,
+                &material->normal_texture,
+                VKRT_TEXTURE_COLOR_SPACE_LINEAR
+            )) {
             return 0;
         }
         if (!appendImportedTextureReference(
-            references,
-            outReferenceCount,
-            &material->emissive_texture,
-            VKRT_TEXTURE_COLOR_SPACE_SRGB
-        )) {
+                references,
+                outReferenceCount,
+                &material->emissive_texture,
+                VKRT_TEXTURE_COLOR_SPACE_SRGB
+            )) {
             return 0;
         }
     }
@@ -398,8 +389,7 @@ static void setMaterialTextureTexcoordSet(Material* material, uint32_t textureSl
 
     uint32_t shift = materialTextureTexcoordSetShift(textureSlot);
     uint32_t mask = 0xffu << shift;
-    material->textureTexcoordSets =
-        (material->textureTexcoordSets & ~mask) | ((texcoordSet & 0xffu) << shift);
+    material->textureTexcoordSets = (material->textureTexcoordSets & ~mask) | ((texcoordSet & 0xffu) << shift);
 }
 
 static uint32_t queryTextureViewTexcoordSet(const cgltf_texture_view* textureView) {
@@ -428,11 +418,7 @@ static void copyTextureTransform(float4 outTransform, float* outRotation, const 
     }
 }
 
-static int resolveTextureImagePath(
-    const char* resolvedPath,
-    const cgltf_image* image,
-    char outPath[VKRT_PATH_MAX]
-) {
+static int resolveTextureImagePath(const char* resolvedPath, const cgltf_image* image, char outPath[VKRT_PATH_MAX]) {
     if (!resolvedPath || !image || !image->uri || !image->uri[0] || !outPath) return 0;
     if (strstr(image->uri, "data:") == image->uri) return 0;
 
@@ -450,7 +436,8 @@ static int resolveTextureImagePath(
     if (!copyParentDirectory(resolvedPath, sceneDirectory)) return 0;
 
     char combinedPath[VKRT_PATH_MAX];
-    if (snprintf(combinedPath, sizeof(combinedPath), "%s/%s", sceneDirectory, decodedUri) >= (int)sizeof(combinedPath)) {
+    if (snprintf(combinedPath, sizeof(combinedPath), "%s/%s", sceneDirectory, decodedUri) >=
+        (int)sizeof(combinedPath)) {
         return 0;
     }
 
@@ -474,9 +461,7 @@ static int decodeTextureImage(
         return vkrtLoadImageFromFile(imagePath, colorSpace, outImage);
     }
 
-    if (image->buffer_view &&
-        image->buffer_view->buffer &&
-        image->buffer_view->buffer->data &&
+    if (image->buffer_view && image->buffer_view->buffer && image->buffer_view->buffer->data &&
         image->buffer_view->size <= image->buffer_view->buffer->size &&
         image->buffer_view->offset <= image->buffer_view->buffer->size - image->buffer_view->size) {
         const uint8_t* bytes = (const uint8_t*)image->buffer_view->buffer->data + image->buffer_view->offset;
@@ -535,12 +520,12 @@ static int decodeTextureReferenceRange(void* userData) {
     for (uint32_t i = context->startIndex; i < context->endIndex; i++) {
         const ImportedTextureReference* reference = &context->references[i];
         if (!buildImportedTextureEntry(
-            context->resolvedPath,
-            reference->image,
-            reference->texture,
-            reference->colorSpace,
-            &context->outputs[i]
-        )) {
+                context->resolvedPath,
+                reference->image,
+                reference->texture,
+                reference->colorSpace,
+                &context->outputs[i]
+            )) {
             context->failed = 1;
             return -1;
         }
@@ -575,7 +560,8 @@ static void storeDecodedTextureReferences(
     uint32_t* outCachedColorSpaces,
     uint32_t* outCachedTextureIndices
 ) {
-    if (!references || !decodedTextures || !importData || !outCachedImages || !outCachedColorSpaces || !outCachedTextureIndices) {
+    if (!references || !decodedTextures || !importData || !outCachedImages || !outCachedColorSpaces ||
+        !outCachedTextureIndices) {
         return;
     }
 
@@ -612,7 +598,8 @@ static int decodeImportedTextureReferences(
     uint32_t* outCachedColorSpaces,
     uint32_t* outCachedTextureIndices
 ) {
-    if (!importData || !resolvedPath || !references || !outCachedImages || !outCachedColorSpaces || !outCachedTextureIndices) {
+    if (!importData || !resolvedPath || !references || !outCachedImages || !outCachedColorSpaces ||
+        !outCachedTextureIndices) {
         return 0;
     }
     if (referenceCount == 0u) return 1;
@@ -620,9 +607,8 @@ static int decodeImportedTextureReferences(
     TextureImportEntry* decodedTextures = (TextureImportEntry*)calloc(referenceCount, sizeof(*decodedTextures));
     if (!decodedTextures) return 0;
 
-    uint32_t threadCount = referenceCount < kMeshImportTextureDecodeThreadCount
-        ? referenceCount
-        : kMeshImportTextureDecodeThreadCount;
+    uint32_t threadCount =
+        referenceCount < kMeshImportTextureDecodeThreadCount ? referenceCount : kMeshImportTextureDecodeThreadCount;
     TextureDecodeThreadContext* contexts = (TextureDecodeThreadContext*)calloc(threadCount, sizeof(*contexts));
     VKRT_Thread* threads = (VKRT_Thread*)calloc(threadCount, sizeof(*threads));
     if (!contexts || !threads) {
@@ -648,7 +634,8 @@ static int decodeImportedTextureReferences(
             .failed = 0,
         };
 
-        if (vkrtThreadCreate(&threads[threadIndex], decodeTextureReferenceRange, &contexts[threadIndex]) != VKRT_THREAD_SUCCESS) {
+        if (vkrtThreadCreate(&threads[threadIndex], decodeTextureReferenceRange, &contexts[threadIndex]) !=
+            VKRT_THREAD_SUCCESS) {
             failed = 1;
             launchedThreads = threadIndex;
             break;
@@ -658,7 +645,8 @@ static int decodeImportedTextureReferences(
 
     for (uint32_t threadIndex = 0; threadIndex < launchedThreads; threadIndex++) {
         int threadResult = 0;
-        if (vkrtThreadJoin(threads[threadIndex], &threadResult) != VKRT_THREAD_SUCCESS || threadResult != 0 || contexts[threadIndex].failed) {
+        if (vkrtThreadJoin(threads[threadIndex], &threadResult) != VKRT_THREAD_SUCCESS || threadResult != 0 ||
+            contexts[threadIndex].failed) {
             failed = 1;
         }
     }
@@ -693,7 +681,8 @@ static int findCachedImportedTextureIndex(
     uint32_t* outTextureIndex
 ) {
     if (outTextureIndex) *outTextureIndex = VKRT_INVALID_INDEX;
-    if (!image || !textureCache || !textureCache->images || !textureCache->colorSpaces || !textureCache->textureIndices) {
+    if (!image || !textureCache || !textureCache->images || !textureCache->colorSpaces ||
+        !textureCache->textureIndices) {
         return 0;
     }
 
@@ -713,7 +702,8 @@ static int cacheImportedTextureIndex(
     uint32_t textureIndex,
     MaterialTextureCache* textureCache
 ) {
-    if (!image || !textureCache || !textureCache->images || !textureCache->colorSpaces || !textureCache->textureIndices) {
+    if (!image || !textureCache || !textureCache->images || !textureCache->colorSpaces ||
+        !textureCache->textureIndices) {
         return 0;
     }
 
@@ -733,8 +723,7 @@ static int registerImportedTexture(
     uint32_t* outTextureIndex
 ) {
     if (outTextureIndex) *outTextureIndex = VKRT_INVALID_INDEX;
-    if (!importData || !textureView || !textureView->texture || !textureView->texture->image ||
-        !textureCache) {
+    if (!importData || !textureView || !textureView->texture || !textureView->texture->image || !textureCache) {
         return 0;
     }
     if (textureViewUsesUnsupportedTransform(textureView)) {
@@ -742,12 +731,7 @@ static int registerImportedTexture(
     }
 
     const cgltf_image* image = textureView->texture->image;
-    if (findCachedImportedTextureIndex(
-            image,
-            colorSpace,
-            textureCache,
-            outTextureIndex
-        )) {
+    if (findCachedImportedTextureIndex(image, colorSpace, textureCache, outTextureIndex)) {
         return 1;
     }
 
@@ -761,12 +745,7 @@ static int registerImportedTexture(
     }
 
     uint32_t textureIndex = importData->textureCount - 1u;
-    cacheImportedTextureIndex(
-        image,
-        colorSpace,
-        textureIndex,
-        textureCache
-    );
+    cacheImportedTextureIndex(image, colorSpace, textureIndex, textureCache);
 
     if (outTextureIndex) *outTextureIndex = textureIndex;
     return 1;
@@ -795,8 +774,8 @@ static int allocateMaterialDecodeScratch(
     uint32_t** outCachedTextureIndices,
     uint32_t* outMaxTextureRefs
 ) {
-    if (!outMaterials || !outReferences || !outCachedImages ||
-        !outCachedColorSpaces || !outCachedTextureIndices || !outMaxTextureRefs) {
+    if (!outMaterials || !outReferences || !outCachedImages || !outCachedColorSpaces || !outCachedTextureIndices ||
+        !outMaxTextureRefs) {
         return 0;
     }
 
@@ -862,12 +841,7 @@ static int appendImportedMaterial(
     char generatedName[VKRT_NAME_LEN];
     makeGeneratedMaterialName(generatedName, sizeof(generatedName), sourceMaterial, materialIndex);
 
-    materials[materialIndex].material = buildMaterial(
-        sourceMaterial,
-        resolvedPath,
-        importData,
-        textureCache
-    );
+    materials[materialIndex].material = buildMaterial(sourceMaterial, resolvedPath, importData, textureCache);
     materials[materialIndex].name = stringDuplicate(generatedName);
     return materials[materialIndex].name ? 0 : -1;
 }
@@ -931,14 +905,8 @@ static int populateImportMaterials(const cgltf_data* data, MeshImportData* impor
 
     for (cgltf_size materialIndex = 0; materialIndex < data->materials_count; materialIndex++) {
         const cgltf_material* sourceMaterial = &data->materials[materialIndex];
-        if (appendImportedMaterial(
-                materials,
-                materialIndex,
-                sourceMaterial,
-                resolvedPath,
-                importData,
-                &textureCache
-            ) != 0) {
+        if (appendImportedMaterial(materials, materialIndex, sourceMaterial, resolvedPath, importData, &textureCache) !=
+            0) {
             releaseImportedMaterials(materials, materialIndex + 1u);
             freeMaterialDecodeScratch(materials, references, cachedImages, cachedColorSpaces, cachedTextureIndices);
             return -1;
@@ -1037,10 +1005,10 @@ static void applyBasicExtendedMaterialProperties(Material* material, const cgltf
         material->attenuationColor[0] = sourceMaterial->volume.attenuation_color[0];
         material->attenuationColor[1] = sourceMaterial->volume.attenuation_color[1];
         material->attenuationColor[2] = sourceMaterial->volume.attenuation_color[2];
-        material->absorptionCoefficient = sourceMaterial->volume.attenuation_distance > 0.0f &&
-            isfinite(sourceMaterial->volume.attenuation_distance)
-            ? 1.0f / sourceMaterial->volume.attenuation_distance
-            : 0.0f;
+        material->absorptionCoefficient =
+            sourceMaterial->volume.attenuation_distance > 0.0f && isfinite(sourceMaterial->volume.attenuation_distance)
+                ? 1.0f / sourceMaterial->volume.attenuation_distance
+                : 0.0f;
     }
     if (sourceMaterial->has_clearcoat) {
         material->clearcoat = sourceMaterial->clearcoat.clearcoat_factor;
@@ -1051,11 +1019,10 @@ static void applyBasicExtendedMaterialProperties(Material* material, const cgltf
 static void applySheenMaterialProperties(Material* material, const cgltf_material* sourceMaterial) {
     if (!material || !sourceMaterial || !sourceMaterial->has_sheen) return;
 
-    vec3 sheenColor = {
-        sourceMaterial->sheen.sheen_color_factor[0],
-        sourceMaterial->sheen.sheen_color_factor[1],
-        sourceMaterial->sheen.sheen_color_factor[2]
-    };
+    vec3 sheenColor =
+        {sourceMaterial->sheen.sheen_color_factor[0],
+         sourceMaterial->sheen.sheen_color_factor[1],
+         sourceMaterial->sheen.sheen_color_factor[2]};
     float sheenWeight = max3(sheenColor[0], sheenColor[1], sheenColor[2]);
     if (sheenWeight > 0.0f) {
         material->sheenTintWeight[0] = sheenColor[0] / sheenWeight;
@@ -1074,9 +1041,8 @@ static void applySheenMaterialProperties(Material* material, const cgltf_materia
 static void applyEmissiveMaterialProperties(Material* material, const cgltf_material* sourceMaterial) {
     if (!material || !sourceMaterial) return;
 
-    float emissiveScale = sourceMaterial->has_emissive_strength
-        ? sourceMaterial->emissive_strength.emissive_strength
-        : 1.0f;
+    float emissiveScale =
+        sourceMaterial->has_emissive_strength ? sourceMaterial->emissive_strength.emissive_strength : 1.0f;
     vec3 emissive = {
         sourceMaterial->emissive_factor[0] * emissiveScale,
         sourceMaterial->emissive_factor[1] * emissiveScale,
@@ -1104,8 +1070,7 @@ static const cgltf_accessor* findAttributeAccessor(
     if (!primitive) return NULL;
 
     for (cgltf_size i = 0; i < primitive->attributes_count; i++) {
-        if (primitive->attributes[i].type == type &&
-            primitive->attributes[i].index >= 0 &&
+        if (primitive->attributes[i].type == type && primitive->attributes[i].index >= 0 &&
             (cgltf_size)primitive->attributes[i].index == attributeIndex) {
             return primitive->attributes[i].data;
         }
@@ -1185,7 +1150,8 @@ static int validatePrimitiveAllocationFootprint(size_t vertexCount, size_t index
 
     if (totalBytes > kMeshImportMaxPrimitiveBytes) {
         LOG_ERROR(
-            "glTF mesh import rejected a primitive requiring %zu bytes of host staging (limit: %zu)",
+            "glTF mesh import rejected a primitive requiring %zu bytes of host staging "
+            "(limit: %zu)",
             totalBytes,
             kMeshImportMaxPrimitiveBytes
         );
@@ -1208,29 +1174,29 @@ static int materialUsesUnsupportedTextureTransforms(const cgltf_material* materi
     if (!material) return 0;
 
     return textureViewUsesUnsupportedTransform(&material->pbr_metallic_roughness.base_color_texture) ||
-        textureViewUsesUnsupportedTransform(&material->pbr_metallic_roughness.metallic_roughness_texture) ||
-        textureViewUsesUnsupportedTransform(&material->normal_texture) ||
-        textureViewUsesUnsupportedTransform(&material->emissive_texture);
+           textureViewUsesUnsupportedTransform(&material->pbr_metallic_roughness.metallic_roughness_texture) ||
+           textureViewUsesUnsupportedTransform(&material->normal_texture) ||
+           textureViewUsesUnsupportedTransform(&material->emissive_texture);
 }
 
 static int materialUsesUnsupportedTextures(const cgltf_material* material) {
     if (!material) return 0;
 
     return materialUsesTextureView(&material->occlusion_texture) ||
-        materialUsesTextureView(&material->clearcoat.clearcoat_texture) ||
-        materialUsesTextureView(&material->clearcoat.clearcoat_roughness_texture) ||
-        materialUsesTextureView(&material->clearcoat.clearcoat_normal_texture) ||
-        materialUsesTextureView(&material->specular.specular_texture) ||
-        materialUsesTextureView(&material->specular.specular_color_texture) ||
-        materialUsesTextureView(&material->transmission.transmission_texture) ||
-        materialUsesTextureView(&material->volume.thickness_texture) ||
-        materialUsesTextureView(&material->sheen.sheen_color_texture) ||
-        materialUsesTextureView(&material->sheen.sheen_roughness_texture) ||
-        materialUsesTextureView(&material->iridescence.iridescence_texture) ||
-        materialUsesTextureView(&material->iridescence.iridescence_thickness_texture) ||
-        materialUsesTextureView(&material->diffuse_transmission.diffuse_transmission_texture) ||
-        materialUsesTextureView(&material->diffuse_transmission.diffuse_transmission_color_texture) ||
-        materialUsesTextureView(&material->anisotropy.anisotropy_texture);
+           materialUsesTextureView(&material->clearcoat.clearcoat_texture) ||
+           materialUsesTextureView(&material->clearcoat.clearcoat_roughness_texture) ||
+           materialUsesTextureView(&material->clearcoat.clearcoat_normal_texture) ||
+           materialUsesTextureView(&material->specular.specular_texture) ||
+           materialUsesTextureView(&material->specular.specular_color_texture) ||
+           materialUsesTextureView(&material->transmission.transmission_texture) ||
+           materialUsesTextureView(&material->volume.thickness_texture) ||
+           materialUsesTextureView(&material->sheen.sheen_color_texture) ||
+           materialUsesTextureView(&material->sheen.sheen_roughness_texture) ||
+           materialUsesTextureView(&material->iridescence.iridescence_texture) ||
+           materialUsesTextureView(&material->iridescence.iridescence_thickness_texture) ||
+           materialUsesTextureView(&material->diffuse_transmission.diffuse_transmission_texture) ||
+           materialUsesTextureView(&material->diffuse_transmission.diffuse_transmission_color_texture) ||
+           materialUsesTextureView(&material->anisotropy.anisotropy_texture);
 }
 
 static int materialUsesUnsupportedVolume(const cgltf_material* material) {
@@ -1241,13 +1207,9 @@ static int materialUsesUnsupportedVolume(const cgltf_material* material) {
 static int materialUsesUnsupportedModels(const cgltf_material* material) {
     if (!material) return 0;
 
-    return material->has_pbr_specular_glossiness ||
-        materialUsesUnsupportedVolume(material) ||
-        material->has_iridescence ||
-        material->has_diffuse_transmission ||
-        material->has_anisotropy ||
-        material->has_dispersion ||
-        material->unlit;
+    return material->has_pbr_specular_glossiness || materialUsesUnsupportedVolume(material) ||
+           material->has_iridescence || material->has_diffuse_transmission || material->has_anisotropy ||
+           material->has_dispersion || material->unlit;
 }
 
 static void collectIgnoredImportFeatures(const cgltf_data* data, MeshImportFeatureReport* outReport) {
@@ -1312,14 +1274,18 @@ static void logIgnoredImportFeatures(const char* resolvedPath, const cgltf_data*
     if (report.unsupportedTextureTransforms) {
         appendIgnoredFeature(ignoredFeatures, sizeof(ignoredFeatures), "texture transforms using texcoord sets above 1");
     }
-    if (report.advancedMaterials) appendIgnoredFeature(ignoredFeatures, sizeof(ignoredFeatures), "advanced material models");
+    if (report.advancedMaterials) {
+        appendIgnoredFeature(ignoredFeatures, sizeof(ignoredFeatures), "advanced material models");
+    }
     if (report.skinning) appendIgnoredFeature(ignoredFeatures, sizeof(ignoredFeatures), "skinning data");
     if (report.morphTargets) appendIgnoredFeature(ignoredFeatures, sizeof(ignoredFeatures), "morph targets");
     if (report.cameras) appendIgnoredFeature(ignoredFeatures, sizeof(ignoredFeatures), "cameras");
     if (report.lights) appendIgnoredFeature(ignoredFeatures, sizeof(ignoredFeatures), "lights");
     if (report.animations) appendIgnoredFeature(ignoredFeatures, sizeof(ignoredFeatures), "animations");
     if (report.gpuInstancing) appendIgnoredFeature(ignoredFeatures, sizeof(ignoredFeatures), "GPU instancing");
-    if (report.dracoCompression) appendIgnoredFeature(ignoredFeatures, sizeof(ignoredFeatures), "Draco-compressed primitives");
+    if (report.dracoCompression) {
+        appendIgnoredFeature(ignoredFeatures, sizeof(ignoredFeatures), "Draco-compressed primitives");
+    }
 
     if (ignoredFeatures[0]) {
         LOG_INFO("glTF mesh import ignored %s in '%s'", ignoredFeatures, resolvedPath);
@@ -1359,7 +1325,12 @@ static int loadTriangleIndices(size_t vertexCount, const uint32_t* indices, size
     return 1;
 }
 
-static float triangleNormalAlignment(const Vertex* vertices, size_t vertexCount, const uint32_t* indices, size_t indexOffset) {
+static float triangleNormalAlignment(
+    const Vertex* vertices,
+    size_t vertexCount,
+    const uint32_t* indices,
+    size_t indexOffset
+) {
     uint32_t triangle[3];
     if (!loadTriangleIndices(vertexCount, indices, indexOffset, triangle)) {
         return 0.0f;
@@ -1384,9 +1355,12 @@ static float triangleNormalAlignment(const Vertex* vertices, size_t vertexCount,
     }
 
     vec3 averagedNormal = GLM_VEC3_ZERO_INIT;
-    averagedNormal[0] = vertices[triangle[0]].normal[0] + vertices[triangle[1]].normal[0] + vertices[triangle[2]].normal[0];
-    averagedNormal[1] = vertices[triangle[0]].normal[1] + vertices[triangle[1]].normal[1] + vertices[triangle[2]].normal[1];
-    averagedNormal[2] = vertices[triangle[0]].normal[2] + vertices[triangle[1]].normal[2] + vertices[triangle[2]].normal[2];
+    averagedNormal[0] =
+        vertices[triangle[0]].normal[0] + vertices[triangle[1]].normal[0] + vertices[triangle[2]].normal[0];
+    averagedNormal[1] =
+        vertices[triangle[0]].normal[1] + vertices[triangle[1]].normal[1] + vertices[triangle[2]].normal[1];
+    averagedNormal[2] =
+        vertices[triangle[0]].normal[2] + vertices[triangle[1]].normal[2] + vertices[triangle[2]].normal[2];
     if (glm_vec3_norm2(averagedNormal) <= 1e-12f) {
         return 0.0f;
     }
@@ -1394,7 +1368,12 @@ static float triangleNormalAlignment(const Vertex* vertices, size_t vertexCount,
     return glm_vec3_dot(faceNormal, averagedNormal);
 }
 
-static int orthonormalizeTangentFrame(const float normal[3], const float tangentIn[3], float handedness, float outTangent[4]) {
+static int orthonormalizeTangentFrame(
+    const float normal[3],
+    const float tangentIn[3],
+    float handedness,
+    float outTangent[4]
+) {
     vec3 normalVector = {normal[0], normal[1], normal[2]};
     vec3 tangent = {tangentIn[0], tangentIn[1], tangentIn[2]};
     if (glm_vec3_norm2(normalVector) <= 1e-12f || glm_vec3_norm2(tangent) <= 1e-12f) {
@@ -1457,11 +1436,11 @@ static void finalizeTangents(Vertex* vertices, size_t vertexCount) {
     for (size_t vertexIndex = 0; vertexIndex < vertexCount; vertexIndex++) {
         float handedness = vertices[vertexIndex].tangent[3] < 0.0f ? -1.0f : 1.0f;
         if (!orthonormalizeTangentFrame(
-            vertices[vertexIndex].normal,
-            vertices[vertexIndex].tangent,
-            handedness,
-            vertices[vertexIndex].tangent
-        )) {
+                vertices[vertexIndex].normal,
+                vertices[vertexIndex].tangent,
+                handedness,
+                vertices[vertexIndex].tangent
+            )) {
             buildFallbackTangent(vertices[vertexIndex].normal, vertices[vertexIndex].tangent);
         }
     }
@@ -1491,24 +1470,21 @@ static Material buildMaterial(
 
     uint32_t normalTextureIndex = VKRT_INVALID_INDEX;
     if (registerImportedTexture(
-        importData,
-        resolvedPath,
-        &sourceMaterial->normal_texture,
-        VKRT_TEXTURE_COLOR_SPACE_LINEAR,
-        textureCache,
-        &normalTextureIndex
-    )) {
+            importData,
+            resolvedPath,
+            &sourceMaterial->normal_texture,
+            VKRT_TEXTURE_COLOR_SPACE_LINEAR,
+            textureCache,
+            &normalTextureIndex
+        )) {
         material.normalTextureIndex = normalTextureIndex;
-        material.normalTextureScale = sourceMaterial->normal_texture.scale > 0.0f
-            ? sourceMaterial->normal_texture.scale
-            : 1.0f;
+        material.normalTextureScale =
+            sourceMaterial->normal_texture.scale > 0.0f ? sourceMaterial->normal_texture.scale : 1.0f;
         material.normalTextureWrap = packTextureWrapModes(
-            sourceMaterial->normal_texture.texture->sampler
-                ? sourceMaterial->normal_texture.texture->sampler->wrap_s
-                : cgltf_wrap_mode_repeat,
-            sourceMaterial->normal_texture.texture->sampler
-                ? sourceMaterial->normal_texture.texture->sampler->wrap_t
-                : cgltf_wrap_mode_repeat
+            sourceMaterial->normal_texture.texture->sampler ? sourceMaterial->normal_texture.texture->sampler->wrap_s
+                                                            : cgltf_wrap_mode_repeat,
+            sourceMaterial->normal_texture.texture->sampler ? sourceMaterial->normal_texture.texture->sampler->wrap_t
+                                                            : cgltf_wrap_mode_repeat
         );
         setMaterialTextureTexcoordSet(
             &material,
@@ -1524,13 +1500,13 @@ static Material buildMaterial(
 
     uint32_t emissiveTextureIndex = VKRT_INVALID_INDEX;
     if (registerImportedTexture(
-        importData,
-        resolvedPath,
-        &sourceMaterial->emissive_texture,
-        VKRT_TEXTURE_COLOR_SPACE_SRGB,
-        textureCache,
-        &emissiveTextureIndex
-    )) {
+            importData,
+            resolvedPath,
+            &sourceMaterial->emissive_texture,
+            VKRT_TEXTURE_COLOR_SPACE_SRGB,
+            textureCache,
+            &emissiveTextureIndex
+        )) {
         material.emissiveTextureIndex = emissiveTextureIndex;
         material.emissiveTextureWrap = packTextureWrapModes(
             sourceMaterial->emissive_texture.texture->sampler
@@ -1709,12 +1685,7 @@ static void accumulateTriangleTangents(
     glm_vec3_add(tangent2[thirdIndex], tdir, tangent2[thirdIndex]);
 }
 
-static void finalizeGeneratedTangent(
-    Vertex* vertices,
-    vec3* tangent1,
-    vec3* tangent2,
-    size_t vertexIndex
-) {
+static void finalizeGeneratedTangent(Vertex* vertices, vec3* tangent1, vec3* tangent2, size_t vertexIndex) {
     vec3 tangent;
     glm_vec3_copy(tangent1[vertexIndex], tangent);
     vec3 normal;
@@ -1728,12 +1699,7 @@ static void finalizeGeneratedTangent(
     vec3 crossValue = GLM_VEC3_ZERO_INIT;
     glm_vec3_cross(normal, tangent, crossValue);
     float handedness = glm_vec3_dot(crossValue, tangent2[vertexIndex]) < 0.0f ? -1.0f : 1.0f;
-    if (!orthonormalizeTangentFrame(
-            vertices[vertexIndex].normal,
-            tangent,
-            handedness,
-            vertices[vertexIndex].tangent
-        )) {
+    if (!orthonormalizeTangentFrame(vertices[vertexIndex].normal, tangent, handedness, vertices[vertexIndex].tangent)) {
         buildFallbackTangent(vertices[vertexIndex].normal, vertices[vertexIndex].tangent);
     }
 }
@@ -1744,8 +1710,7 @@ static void generateTangents(
     const uint32_t* indices,
     size_t indexCount,
     const float* texcoords
-)
-{
+) {
     if (!vertices || !indices || !texcoords || vertexCount == 0 || indexCount < 3) {
         return;
     }
@@ -1773,11 +1738,7 @@ static void generateTangents(
     free(tangent2);
 }
 
-static void applyImportedNormal(
-    Vertex* vertex,
-    const cgltf_accessor* normalAccessor,
-    cgltf_size vertexIndex
-) {
+static void applyImportedNormal(Vertex* vertex, const cgltf_accessor* normalAccessor, cgltf_size vertexIndex) {
     float normal[3] = {0.0f, 0.0f, 1.0f};
     if (!normalAccessor || !cgltf_accessor_read_float(normalAccessor, vertexIndex, normal, 3)) {
         return;
@@ -1787,11 +1748,7 @@ static void applyImportedNormal(
     copyFloat3ToFloat4(vertex->normal, engineNormal, 0.0f);
 }
 
-static void applyImportedTangent(
-    Vertex* vertex,
-    const cgltf_accessor* tangentAccessor,
-    cgltf_size vertexIndex
-) {
+static void applyImportedTangent(Vertex* vertex, const cgltf_accessor* tangentAccessor, cgltf_size vertexIndex) {
     float tangent[4] = {0.0f, 0.0f, 0.0f, 1.0f};
     if (!tangentAccessor || !cgltf_accessor_read_float(tangentAccessor, vertexIndex, tangent, 4)) {
         return;
@@ -1803,11 +1760,7 @@ static void applyImportedTangent(
     vertex->tangent[3] = tangent[3];
 }
 
-static int readVertexColor(
-    const cgltf_accessor* colorAccessor,
-    cgltf_size vertexIndex,
-    float outColor[4]
-) {
+static int readVertexColor(const cgltf_accessor* colorAccessor, cgltf_size vertexIndex, float outColor[4]) {
     outColor[0] = 1.0f;
     outColor[1] = 1.0f;
     outColor[2] = 1.0f;
@@ -1819,21 +1772,13 @@ static int readVertexColor(
     return cgltf_accessor_read_float(colorAccessor, vertexIndex, outColor, colorComponentCount);
 }
 
-static int readVertexTexcoord(
-    const cgltf_accessor* texcoordAccessor,
-    cgltf_size vertexIndex,
-    float outTexcoord[2]
-) {
+static int readVertexTexcoord(const cgltf_accessor* texcoordAccessor, cgltf_size vertexIndex, float outTexcoord[2]) {
     outTexcoord[0] = 0.0f;
     outTexcoord[1] = 0.0f;
     return !texcoordAccessor || cgltf_accessor_read_float(texcoordAccessor, vertexIndex, outTexcoord, 2);
 }
 
-static int fillPrimitiveVertex(
-    MeshImportEntry* entry,
-    size_t vertexIndex,
-    const PrimitiveBuildInputs* inputs
-) {
+static int fillPrimitiveVertex(MeshImportEntry* entry, size_t vertexIndex, const PrimitiveBuildInputs* inputs) {
     float position[3] = {0.0f, 0.0f, 0.0f};
     float color[4];
     float texcoord0[2];
@@ -1883,9 +1828,8 @@ static int fillPrimitiveVertices(
         }
 
         if (!texcoords) continue;
-        const float* tangentTexcoords = tangentTexcoordSet == 1u
-            ? entry->vertices[vertexIndex].texcoord1
-            : entry->vertices[vertexIndex].texcoord0;
+        const float* tangentTexcoords =
+            tangentTexcoordSet == 1u ? entry->vertices[vertexIndex].texcoord1 : entry->vertices[vertexIndex].texcoord0;
         texcoords[(vertexIndex * 2u) + 0u] = tangentTexcoords[0];
         texcoords[(vertexIndex * 2u) + 1u] = tangentTexcoords[1];
     }
@@ -1893,10 +1837,7 @@ static int fillPrimitiveVertices(
     return 1;
 }
 
-static int fillPrimitiveIndices(
-    MeshImportEntry* entry,
-    const cgltf_primitive* primitive
-) {
+static int fillPrimitiveIndices(MeshImportEntry* entry, const cgltf_primitive* primitive) {
     if (primitive->indices) {
         for (size_t indexOffset = 0; indexOffset < entry->indexCount; indexOffset++) {
             cgltf_size indexValue = cgltf_accessor_read_index(primitive->indices, (cgltf_size)indexOffset);
@@ -1977,9 +1918,7 @@ static int buildPrimitiveEntry(
 
     MeshImportEntry entry = {0};
     entry.vertexCount = (size_t)inputs.positionAccessor->count;
-    entry.indexCount = primitive->indices
-        ? (size_t)primitive->indices->count
-        : (size_t)inputs.positionAccessor->count;
+    entry.indexCount = primitive->indices ? (size_t)primitive->indices->count : (size_t)inputs.positionAccessor->count;
     entry.materialIndex = primitive->material ? (uint32_t)(primitive->material - data->materials) : VKRT_INVALID_INDEX;
     entry.renderBackfaces = primitive->material && primitive->material->double_sided ? 1u : 0u;
     const cgltf_material* sourceMaterial = primitive->material;
@@ -1987,10 +1926,13 @@ static int buildPrimitiveEntry(
         inputs.tangentTexcoordSet = queryTextureViewTexcoordSet(&sourceMaterial->normal_texture);
         if (inputs.tangentTexcoordSet > 1u) inputs.tangentTexcoordSet = 0u;
     }
-    const cgltf_accessor* tangentTexcoordAccessor = inputs.tangentTexcoordSet == 1u
-        ? inputs.texcoordAccessor1
-        : inputs.texcoordAccessor0;
-    if (!validatePrimitiveAllocationFootprint(entry.vertexCount, entry.indexCount, !inputs.useImportedTangents && tangentTexcoordAccessor)) {
+    const cgltf_accessor* tangentTexcoordAccessor =
+        inputs.tangentTexcoordSet == 1u ? inputs.texcoordAccessor1 : inputs.texcoordAccessor0;
+    if (!validatePrimitiveAllocationFootprint(
+            entry.vertexCount,
+            entry.indexCount,
+            !inputs.useImportedTangents && tangentTexcoordAccessor
+        )) {
         return -1;
     }
 
@@ -2127,10 +2069,7 @@ static int parseGLTFFile(const char* resolvedPath, cgltf_options* options, cgltf
     return 0;
 }
 
-static int collectRootNodeEntries(
-    const cgltf_data* data,
-    MeshImportData* importData
-) {
+static int collectRootNodeEntries(const cgltf_data* data, MeshImportData* importData) {
     if (data->scene && data->scene->nodes_count > 0) {
         const cgltf_node* const* sceneRootNodes = (const cgltf_node* const*)data->scene->nodes;
         return collectNodeEntries(data, sceneRootNodes, data->scene->nodes_count, importData);
@@ -2153,8 +2092,19 @@ static int collectRootNodeEntries(
 }
 
 static void logMeshImportProgress(const char* resolvedPath, const cgltf_data* data, const MeshImportData* importData) {
-    LOG_TRACE("glTF parsed. File: %s, Nodes: %zu, Meshes: %zu, Materials: %zu", resolvedPath, data->nodes_count, data->meshes_count, data->materials_count);
-    LOG_TRACE("glTF materials extracted. File: %s, Materials: %u, Textures: %u", resolvedPath, importData->materialCount, importData->textureCount);
+    LOG_TRACE(
+        "glTF parsed. File: %s, Nodes: %zu, Meshes: %zu, Materials: %zu",
+        resolvedPath,
+        data->nodes_count,
+        data->meshes_count,
+        data->materials_count
+    );
+    LOG_TRACE(
+        "glTF materials extracted. File: %s, Materials: %u, Textures: %u",
+        resolvedPath,
+        importData->materialCount,
+        importData->textureCount
+    );
     LOG_TRACE("glTF geometry extracted. File: %s, Meshes: %u", resolvedPath, importData->count);
     LOG_TRACE(
         "glTF import decode complete. File: %s, Meshes: %u, Materials: %u, Textures: %u",

@@ -172,8 +172,7 @@ static void drawMeshInfoHeader(VKRT* vkrt, const VKRT_MeshSnapshot* mesh) {
     char geometryText[K_SCENE_STAT_TEXT_CAPACITY];
     char sourceText[K_SCENE_SOURCE_TEXT_CAPACITY];
     VKRT_MaterialSnapshot material = {0};
-    uint8_t hasEditableMaterial = mesh->hasMaterialAssignment &&
-                                  mesh->materialIndex != 0u &&
+    uint8_t hasEditableMaterial = mesh->hasMaterialAssignment && mesh->materialIndex != 0u &&
                                   VKRT_getMaterialSnapshot(vkrt, mesh->materialIndex, &material) == VKRT_SUCCESS;
     snprintf(countText, sizeof(countText), "%u verts / %u tris", mesh->info.vertexCount, triangleCount);
     formatByteSize(vertexBytes + indexBytes, sizeText, sizeof(sizeText));
@@ -220,7 +219,12 @@ static void drawMeshInfoHeader(VKRT* vkrt, const VKRT_MeshSnapshot* mesh) {
     inspectorUnindentSection();
 }
 
-static void drawSceneObjectTransformEditor(VKRT* vkrt, Session* session, uint32_t objectIndex, const SessionSceneObject* object) {
+static void drawSceneObjectTransformEditor(
+    VKRT* vkrt,
+    Session* session,
+    uint32_t objectIndex,
+    const SessionSceneObject* object
+) {
     if (!vkrt || !session || !object) return;
     float position[3] = {object->localPosition[0], object->localPosition[1], object->localPosition[2]};
     float rotation[3] = {object->localRotation[0], object->localRotation[1], object->localRotation[2]};
@@ -229,7 +233,8 @@ static void drawSceneObjectTransformEditor(VKRT* vkrt, Session* session, uint32_
     bool transformChanged = false;
     transformChanged |= ImGui_DragFloat3Ex("Translate", position, 0.001f, 0.0f, 0.0f, "%.3f", ImGuiSliderFlags_None);
     transformChanged |= ImGui_DragFloat3Ex("Rotate", rotation, 0.05f, 0.0f, 0.0f, "%.2f", ImGuiSliderFlags_None);
-    transformChanged |= ImGui_DragFloat3Ex("Scale", scale, 0.001f, 0.001f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    transformChanged |=
+        ImGui_DragFloat3Ex("Scale", scale, 0.001f, 0.001f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
 
     if (transformChanged) {
         for (int axis = 0; axis < 3; axis++) {
@@ -265,12 +270,7 @@ static void formatMaterialLabel(
     snprintf(out + prefixLength, available, "%.*s", nameLimit, materialName);
 }
 
-static void formatMaterialAssignmentPreviewLabel(
-    VKRT* vkrt,
-    const VKRT_MeshSnapshot* mesh,
-    char* out,
-    size_t outSize
-) {
+static void formatMaterialAssignmentPreviewLabel(VKRT* vkrt, const VKRT_MeshSnapshot* mesh, char* out, size_t outSize) {
     if (!vkrt || !mesh || !out || outSize == 0) return;
 
     if (!mesh->hasMaterialAssignment || mesh->materialIndex == 0u) {
@@ -409,14 +409,20 @@ static void applyMeshMaterialAssignment(VKRT* vkrt, uint32_t meshIndex, int curr
     if (!vkrt) return;
 
     VKRT_Result result = currentMaterialIndex == 0
-        ? VKRT_clearMeshMaterialAssignment(vkrt, meshIndex)
-        : VKRT_setMeshMaterialIndex(vkrt, meshIndex, (uint32_t)currentMaterialIndex);
+                           ? VKRT_clearMeshMaterialAssignment(vkrt, meshIndex)
+                           : VKRT_setMeshMaterialIndex(vkrt, meshIndex, (uint32_t)currentMaterialIndex);
     if (result != VKRT_SUCCESS) {
         LOG_ERROR("Updating mesh material assignment failed (%d)", (int)result);
     }
 }
 
-static void drawCreateMaterialButton(VKRT* vkrt, uint32_t meshIndex, const VKRT_MeshSnapshot* mesh, float buttonWidth, float frameHeight) {
+static void drawCreateMaterialButton(
+    VKRT* vkrt,
+    uint32_t meshIndex,
+    const VKRT_MeshSnapshot* mesh,
+    float buttonWidth,
+    float frameHeight
+) {
     if (!vkrt || !mesh) return;
 
     if (ImGui_ButtonEx(ICON_FA_PLUS, (ImVec2){buttonWidth, frameHeight})) {
@@ -523,12 +529,7 @@ static const char* queryTextureSlotLabel(uint32_t textureSlot) {
     }
 }
 
-static void formatTextureAssignmentLabel(
-    VKRT* vkrt,
-    uint32_t textureIndex,
-    char* out,
-    size_t outSize
-) {
+static void formatTextureAssignmentLabel(VKRT* vkrt, uint32_t textureIndex, char* out, size_t outSize) {
     if (!out || outSize == 0) return;
 
     if (textureIndex == VKRT_INVALID_INDEX) {
@@ -562,20 +563,24 @@ static void drawMaterialTextureSlotEditor(
     int hasTexture = textureIndex != VKRT_INVALID_INDEX;
     const char* actionLabel = hasTexture ? "Clear" : "Upload";
     if (!ImGui_BeginTableEx(
-        "##texture_slot_value",
-        2,
-        ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings,
-        (ImVec2){-1.0f, 0.0f},
-        0.0f
-    )) {
+            "##texture_slot_value",
+            2,
+            ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings,
+            (ImVec2){-1.0f, 0.0f},
+            0.0f
+        )) {
         return;
     }
 
     ImGui_PushStyleVarImVec2(ImGuiStyleVar_FramePadding, kTextureActionButtonPadding);
-    float actionButtonWidth =
-        ImGui_CalcTextSize(actionLabel).x + (kTextureActionButtonPadding.x * 2.0f);
+    float actionButtonWidth = ImGui_CalcTextSize(actionLabel).x + (kTextureActionButtonPadding.x * 2.0f);
     ImGui_TableSetupColumnEx("Value", ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_NoHide, 0.0f, 0);
-    ImGui_TableSetupColumnEx("Action", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoHide, actionButtonWidth, 0);
+    ImGui_TableSetupColumnEx(
+        "Action",
+        ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoHide,
+        actionButtonWidth,
+        0
+    );
 
     ImGui_TableNextRow();
     ImGui_TableSetColumnIndex(0);
@@ -604,7 +609,12 @@ static void drawMaterialTextureSlotEditor(
     ImGui_EndTable();
 }
 
-static void drawMaterialTexturesEditor(VKRT* vkrt, Session* session, uint32_t materialIndex, const VKRT_MaterialSnapshot* materialSnapshot) {
+static void drawMaterialTexturesEditor(
+    VKRT* vkrt,
+    Session* session,
+    uint32_t materialIndex,
+    const VKRT_MaterialSnapshot* materialSnapshot
+) {
     if (!vkrt || !session || !materialSnapshot) return;
 
     if (!inspectorBeginCollapsingHeaderSection("Textures", ImGuiTreeNodeFlags_None)) {
@@ -666,10 +676,20 @@ static void drawSurfaceMaterialSection(Material* material, bool* materialChanged
     if (!beginMaterialSection("Surface", ImGuiTreeNodeFlags_DefaultOpen)) return;
 
     *materialChanged |= ImGui_ColorEdit3("Base Color", material->baseColor, ImGuiColorEditFlags_Float);
-    *materialChanged |= ImGui_SliderFloatEx("Metallic", &material->metallic, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-    *materialChanged |= ImGui_SliderFloatEx("Roughness", &material->roughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-    *materialChanged |= ImGui_SliderFloatEx("Diffuse Roughness", &material->diffuseRoughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-    *materialChanged |= ImGui_SliderFloatEx("Subsurface", &material->subsurface, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    *materialChanged |=
+        ImGui_SliderFloatEx("Metallic", &material->metallic, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    *materialChanged |=
+        ImGui_SliderFloatEx("Roughness", &material->roughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    *materialChanged |= ImGui_SliderFloatEx(
+        "Diffuse Roughness",
+        &material->diffuseRoughness,
+        0.0f,
+        1.0f,
+        "%.3f",
+        ImGuiSliderFlags_AlwaysClamp
+    );
+    *materialChanged |=
+        ImGui_SliderFloatEx("Subsurface", &material->subsurface, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
 
     const char* alphaModes[] = {"Opaque", "Mask", "Blend"};
     int alphaMode = (int)material->alphaMode;
@@ -679,10 +699,18 @@ static void drawSurfaceMaterialSection(Material* material, bool* materialChanged
         *materialChanged = true;
     }
     if (material->alphaMode != VKRT_MATERIAL_ALPHA_MODE_OPAQUE) {
-        *materialChanged |= ImGui_SliderFloatEx("Opacity", &material->opacity, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        *materialChanged |=
+            ImGui_SliderFloatEx("Opacity", &material->opacity, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     }
     if (material->alphaMode == VKRT_MATERIAL_ALPHA_MODE_MASK) {
-        *materialChanged |= ImGui_SliderFloatEx("Alpha Cutoff", &material->alphaCutoff, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        *materialChanged |= ImGui_SliderFloatEx(
+            "Alpha Cutoff",
+            &material->alphaCutoff,
+            0.0f,
+            1.0f,
+            "%.3f",
+            ImGuiSliderFlags_AlwaysClamp
+        );
     }
     endMaterialSection();
 }
@@ -691,10 +719,14 @@ static void drawSpecularMaterialSection(Material* material, bool* materialChange
     if (!material || !materialChanged) return;
     if (!beginMaterialSection("Specular", ImGuiTreeNodeFlags_DefaultOpen)) return;
 
-    *materialChanged |= ImGui_DragFloatEx("IOR", &material->ior, 0.01f, 1.0f, 4.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-    *materialChanged |= ImGui_SliderFloatEx("Weight", &material->specular, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-    *materialChanged |= ImGui_SliderFloatEx("Tint", &material->specularTint, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-    *materialChanged |= ImGui_SliderFloatEx("Anisotropic", &material->anisotropic, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    *materialChanged |=
+        ImGui_DragFloatEx("IOR", &material->ior, 0.01f, 1.0f, 4.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    *materialChanged |=
+        ImGui_SliderFloatEx("Weight", &material->specular, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    *materialChanged |=
+        ImGui_SliderFloatEx("Tint", &material->specularTint, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    *materialChanged |=
+        ImGui_SliderFloatEx("Anisotropic", &material->anisotropic, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     endMaterialSection();
 }
 
@@ -702,7 +734,8 @@ static void drawTransmissionMaterialSection(Material* material, bool* materialCh
     if (!material || !materialChanged) return;
     if (!beginMaterialSection("Transmission", ImGuiTreeNodeFlags_DefaultOpen)) return;
 
-    *materialChanged |= ImGui_SliderFloatEx("Weight", &material->transmission, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    *materialChanged |=
+        ImGui_SliderFloatEx("Weight", &material->transmission, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     *materialChanged |= ImGui_ColorEdit3("Attenuation Color", material->attenuationColor, ImGuiColorEditFlags_Float);
     *materialChanged |= ImGui_DragFloatEx(
         "Absorption",
@@ -720,11 +753,33 @@ static void drawCoatingMaterialSection(Material* material, bool* materialChanged
     if (!material || !materialChanged) return;
     if (!beginMaterialSection("Coating", ImGuiTreeNodeFlags_DefaultOpen)) return;
 
-    *materialChanged |= ImGui_SliderFloatEx("Clearcoat", &material->clearcoat, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-    *materialChanged |= ImGui_SliderFloatEx("Clearcoat Gloss", &material->clearcoatGloss, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-    *materialChanged |= ImGui_SliderFloatEx("Sheen Weight", &material->sheenTintWeight[3], 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    *materialChanged |=
+        ImGui_SliderFloatEx("Clearcoat", &material->clearcoat, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    *materialChanged |= ImGui_SliderFloatEx(
+        "Clearcoat Gloss",
+        &material->clearcoatGloss,
+        0.0f,
+        1.0f,
+        "%.3f",
+        ImGuiSliderFlags_AlwaysClamp
+    );
+    *materialChanged |= ImGui_SliderFloatEx(
+        "Sheen Weight",
+        &material->sheenTintWeight[3],
+        0.0f,
+        1.0f,
+        "%.3f",
+        ImGuiSliderFlags_AlwaysClamp
+    );
     *materialChanged |= ImGui_ColorEdit3("Sheen Tint", material->sheenTintWeight, ImGuiColorEditFlags_Float);
-    *materialChanged |= ImGui_SliderFloatEx("Sheen Roughness", &material->sheenRoughness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    *materialChanged |= ImGui_SliderFloatEx(
+        "Sheen Roughness",
+        &material->sheenRoughness,
+        0.0f,
+        1.0f,
+        "%.3f",
+        ImGuiSliderFlags_AlwaysClamp
+    );
     endMaterialSection();
 }
 
@@ -732,7 +787,15 @@ static void drawEmissionMaterialSection(Material* material, bool* materialChange
     if (!material || !materialChanged) return;
     if (!beginMaterialSection("Emission", ImGuiTreeNodeFlags_DefaultOpen)) return;
 
-    *materialChanged |= ImGui_DragFloatEx("Luminance", &material->emissionLuminance, 0.1f, 0.0f, 1000000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    *materialChanged |= ImGui_DragFloatEx(
+        "Luminance",
+        &material->emissionLuminance,
+        0.1f,
+        0.0f,
+        1000000.0f,
+        "%.3f",
+        ImGuiSliderFlags_AlwaysClamp
+    );
     *materialChanged |= ImGui_ColorEdit3("Color", material->emissionColor, ImGuiColorEditFlags_Float);
     endMaterialSection();
 }
@@ -741,8 +804,10 @@ static void drawAdvancedMaterialSection(Material* material, bool* materialChange
     if (!material || !materialChanged) return;
     if (!beginMaterialSection("Advanced", ImGuiTreeNodeFlags_None)) return;
 
-    *materialChanged |= ImGui_DragFloat3Ex("Conductor Eta", material->eta, 0.01f, 0.0f, 10.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-    *materialChanged |= ImGui_DragFloat3Ex("Conductor K", material->k, 0.01f, 0.0f, 10.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    *materialChanged |=
+        ImGui_DragFloat3Ex("Conductor Eta", material->eta, 0.01f, 0.0f, 10.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    *materialChanged |=
+        ImGui_DragFloat3Ex("Conductor K", material->k, 0.01f, 0.0f, 10.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     endMaterialSection();
 }
 
@@ -806,8 +871,7 @@ static void drawSelectedSceneObjectEditor(VKRT* vkrt, Session* session, uint32_t
 
     uint32_t meshIndex = object->meshIndex;
     VKRT_MeshSnapshot mesh = {0};
-    int hasMesh = meshIndex != VKRT_INVALID_INDEX &&
-        VKRT_getMeshSnapshot(vkrt, meshIndex, &mesh) == VKRT_SUCCESS;
+    int hasMesh = meshIndex != VKRT_INVALID_INDEX && VKRT_getMeshSnapshot(vkrt, meshIndex, &mesh) == VKRT_SUCCESS;
     if (hasMesh) {
         drawMeshInfoHeader(vkrt, &mesh);
     }
@@ -860,9 +924,7 @@ static void drawSelectedSceneObjectEditor(VKRT* vkrt, Session* session, uint32_t
     if (inspectorPaddedButton(ICON_FA_TRASH " Remove Object")) {
         sessionQueueSceneObjectRemoval(session, objectIndex);
     }
-    tooltipOnHover(hasMesh
-        ? "Remove this object and its children."
-        : "Remove this group and its children.");
+    tooltipOnHover(hasMesh ? "Remove this object and its children." : "Remove this group and its children.");
 
     ImGui_EndDisabled();
 
@@ -880,7 +942,12 @@ typedef struct SceneBrowserNode {
     int depth;
 } SceneBrowserNode;
 
-static int collectChildSceneObjects(Session* session, uint32_t parentIndex, uint32_t* children, uint32_t childCapacity) {
+static int collectChildSceneObjects(
+    Session* session,
+    uint32_t parentIndex,
+    uint32_t* children,
+    uint32_t childCapacity
+) {
     if (!session || !children) return 0;
 
     uint32_t objectCount = sessionGetSceneObjectCount(session);
@@ -959,13 +1026,24 @@ static void drawSceneBrowserNode(
 
     const char* label = object->name[0] ? object->name : "(unnamed)";
     bool isSelected = *selectedObjectIndex == node->objectIndex;
-    if (drawSceneBrowserEntry(node->objectIndex, label, object->meshIndex == VKRT_INVALID_INDEX, isSelected, node->depth)) {
+    if (drawSceneBrowserEntry(
+            node->objectIndex,
+            label,
+            object->meshIndex == VKRT_INVALID_INDEX,
+            isSelected,
+            node->depth
+        )) {
         *selectedObjectIndex = queryNextSelectedObjectIndex(node->objectIndex, isSelected);
         updateSelectedSceneObject(vkrt, session, *selectedObjectIndex);
     }
 }
 
-static void drawSceneObjectBrowserTree(VKRT* vkrt, Session* session, uint32_t rootObjectIndex, uint32_t selectedObjectIndex) {
+static void drawSceneObjectBrowserTree(
+    VKRT* vkrt,
+    Session* session,
+    uint32_t rootObjectIndex,
+    uint32_t selectedObjectIndex
+) {
     if (!vkrt || !session) return;
 
     uint32_t objectCount = 0u;

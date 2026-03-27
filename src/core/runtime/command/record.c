@@ -142,7 +142,6 @@ static void recordSceneUpdateCommands(VKRT* vkrt, VkCommandBuffer commandBuffer)
         hasTransferWrites = VK_TRUE;
     }
 
-
     if (hasTransferWrites) {
         recordMemoryAccessBarrier(
             commandBuffer,
@@ -251,19 +250,16 @@ static void initializeRecordCommandContext(
 
     context->renderModeActive = VKRT_renderPhaseIsActive(vkrt->renderStatus.renderPhase);
     context->descriptorReady = vkrt->core.descriptorSetReady[vkrt->runtime.currentFrame];
-    context->shouldTrace = context->descriptorReady &&
-        !VKRT_renderPhaseSamplingFinished(vkrt->renderStatus.renderPhase);
+    context->shouldTrace =
+        context->descriptorReady && !VKRT_renderPhaseSamplingFinished(vkrt->renderStatus.renderPhase);
 
-    VkBool32 selectionOverlayEnabled = !context->renderModeActive &&
-        vkrt->sceneSettings.selectionEnabled != 0u;
-    context->shouldSelectionTrace = context->shouldTrace &&
-        selectionOverlayEnabled &&
-        vkrt->core.selectionTopLevelAccelerationStructure.structure != VK_NULL_HANDLE &&
-        vkrt->core.selectionMaskDirty &&
-        vkrt->core.selectionRayTracingPipeline != VK_NULL_HANDLE;
-    context->shouldSelectionPost = context->shouldTrace &&
-        selectionOverlayEnabled &&
-        vkrt->core.computePipeline != VK_NULL_HANDLE;
+    VkBool32 selectionOverlayEnabled = !context->renderModeActive && vkrt->sceneSettings.selectionEnabled != 0u;
+    context->shouldSelectionTrace = context->shouldTrace && selectionOverlayEnabled &&
+                                    vkrt->core.selectionTopLevelAccelerationStructure.structure != VK_NULL_HANDLE &&
+                                    vkrt->core.selectionMaskDirty &&
+                                    vkrt->core.selectionRayTracingPipeline != VK_NULL_HANDLE;
+    context->shouldSelectionPost =
+        context->shouldTrace && selectionOverlayEnabled && vkrt->core.computePipeline != VK_NULL_HANDLE;
 }
 
 static VKRT_Result beginRecordCommandContext(RecordCommandContext* context) {
@@ -602,7 +598,12 @@ static void initializePresentBlit(const RecordCommandContext* context, VkImageBl
     blit->dstSubresource = (VkImageSubresourceLayers){VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
 }
 
-static void configureAspectFitBlit(const ViewportRect* viewport, uint32_t srcWidth, uint32_t srcHeight, VkImageBlit* blit) {
+static void configureAspectFitBlit(
+    const ViewportRect* viewport,
+    uint32_t srcWidth,
+    uint32_t srcHeight,
+    VkImageBlit* blit
+) {
     if (!viewport || !blit || srcHeight == 0u || viewport->height == 0u) return;
 
     float srcAspect = (float)srcWidth / (float)srcHeight;
@@ -680,7 +681,8 @@ static void configureRenderModeBlit(const RecordCommandContext* context, VkImage
     blit->srcOffsets[1] = (VkOffset3D){srcX + (int32_t)srcWidth, srcY + (int32_t)srcHeight, 1};
     if (fillViewport) {
         blit->dstOffsets[0] = (VkOffset3D){(int32_t)viewport.x, (int32_t)viewport.y, 0};
-        blit->dstOffsets[1] = (VkOffset3D){(int32_t)(viewport.x + viewport.width), (int32_t)(viewport.y + viewport.height), 1};
+        blit->dstOffsets[1] =
+            (VkOffset3D){(int32_t)(viewport.x + viewport.width), (int32_t)(viewport.y + viewport.height), 1};
         return;
     }
 
@@ -704,7 +706,8 @@ static void recordPresentBlitPass(const RecordCommandContext* context) {
         configureRenderModeBlit(context, &blit);
     } else {
         blit.dstOffsets[0] = (VkOffset3D){0, 0, 0};
-        blit.dstOffsets[1] = (VkOffset3D){(int32_t)context->swapchainExtent.width, (int32_t)context->swapchainExtent.height, 1};
+        blit.dstOffsets[1] =
+            (VkOffset3D){(int32_t)context->swapchainExtent.width, (int32_t)context->swapchainExtent.height, 1};
     }
 
     vkCmdBlitImage(
@@ -748,11 +751,7 @@ static void recordOverlayPass(const RecordCommandContext* context) {
         renderingInfo.pColorAttachments = &colorAttachment;
 
         vkCmdBeginRendering(context->commandBuffer, &renderingInfo);
-        context->vkrt->appHooks.drawOverlay(
-            context->vkrt,
-            context->commandBuffer,
-            context->vkrt->appHooks.userData
-        );
+        context->vkrt->appHooks.drawOverlay(context->vkrt, context->commandBuffer, context->vkrt->appHooks.userData);
         vkCmdEndRendering(context->commandBuffer);
         transitionImageLayout(
             context->commandBuffer,

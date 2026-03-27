@@ -1,9 +1,9 @@
 #pragma once
 
-#include <stdint.h>
-
 #include "constants.h"
 #include "vkrt_types.h"
+
+#include <stdint.h>
 
 typedef enum SessionRenderCommand {
     SESSION_RENDER_COMMAND_NONE = 0,
@@ -177,9 +177,21 @@ uint32_t sessionFindSceneObjectForMesh(const Session* session, uint32_t meshInde
 void sessionSelectSceneObjectForMesh(Session* session, uint32_t meshIndex);
 int sessionSetSceneObjectName(Session* session, uint32_t objectIndex, const char* name);
 int sessionSetSceneObjectMesh(Session* session, uint32_t objectIndex, uint32_t meshIndex);
-int sessionSetSceneObjectLocalTransform(Session* session, uint32_t objectIndex, vec3 position, vec3 rotation, vec3 scale);
+int sessionSetSceneObjectLocalTransform(
+    Session* session,
+    uint32_t objectIndex,
+    vec3 position,
+    vec3 rotation,
+    vec3 scale
+);
 int sessionSetSceneObjectLocalTransformMatrix(Session* session, uint32_t objectIndex, mat4 localTransform);
-int sessionSetSceneObjectLocalTransformForMesh(Session* session, uint32_t meshIndex, vec3 position, vec3 rotation, vec3 scale);
+int sessionSetSceneObjectLocalTransformForMesh(
+    Session* session,
+    uint32_t meshIndex,
+    vec3 position,
+    vec3 rotation,
+    vec3 scale
+);
 void sessionRemoveSceneObjectSubtree(Session* session, uint32_t objectIndex);
 void sessionRemoveMeshReferencesNoPrune(Session* session, uint32_t meshIndex);
 void sessionRemoveMeshReferences(Session* session, uint32_t meshIndex);

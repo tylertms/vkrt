@@ -74,24 +74,24 @@ static void writeTimelineUniform(SceneData* sceneData, const VKRT_SceneSettingsS
 static VKRT_Result createSceneFrameUniformBuffers(VKRT* vkrt, VkDeviceSize uniformBufferSize) {
     for (uint32_t frameIndex = 0; frameIndex < VKRT_MAX_FRAMES_IN_FLIGHT; frameIndex++) {
         if (createBuffer(
-            vkrt,
-            uniformBufferSize,
-            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            &vkrt->core.sceneDataBuffers[frameIndex],
-            &vkrt->core.sceneDataMemories[frameIndex]
-        ) != VKRT_SUCCESS) {
+                vkrt,
+                uniformBufferSize,
+                VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                &vkrt->core.sceneDataBuffers[frameIndex],
+                &vkrt->core.sceneDataMemories[frameIndex]
+            ) != VKRT_SUCCESS) {
             return VKRT_ERROR_OPERATION_FAILED;
         }
 
         if (vkMapMemory(
-            vkrt->core.device,
-            vkrt->core.sceneDataMemories[frameIndex],
-            0,
-            uniformBufferSize,
-            0,
-            (void**)&vkrt->core.sceneFrameData[frameIndex]
-        ) != VK_SUCCESS ||
+                vkrt->core.device,
+                vkrt->core.sceneDataMemories[frameIndex],
+                0,
+                uniformBufferSize,
+                0,
+                (void**)&vkrt->core.sceneFrameData[frameIndex]
+            ) != VK_SUCCESS ||
             !vkrt->core.sceneFrameData[frameIndex]) {
             return VKRT_ERROR_OPERATION_FAILED;
         }
@@ -105,18 +105,24 @@ static VKRT_Result createSceneFrameUniformBuffers(VKRT* vkrt, VkDeviceSize unifo
 static VKRT_Result createSelectionState(VKRT* vkrt) {
     VkDeviceSize selectionSize = sizeof(Selection);
     if (createBuffer(
-        vkrt,
-        selectionSize,
-        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        &vkrt->core.selection.buffer,
-        &vkrt->core.selection.memory
-    ) != VKRT_SUCCESS) {
+            vkrt,
+            selectionSize,
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            &vkrt->core.selection.buffer,
+            &vkrt->core.selection.memory
+        ) != VKRT_SUCCESS) {
         return VKRT_ERROR_OPERATION_FAILED;
     }
 
-    if (vkMapMemory(vkrt->core.device, vkrt->core.selection.memory, 0, selectionSize, 0, (void**)&vkrt->core.selectionData) !=
-            VK_SUCCESS ||
+    if (vkMapMemory(
+            vkrt->core.device,
+            vkrt->core.selection.memory,
+            0,
+            selectionSize,
+            0,
+            (void**)&vkrt->core.selectionData
+        ) != VK_SUCCESS ||
         !vkrt->core.selectionData) {
         return VKRT_ERROR_OPERATION_FAILED;
     }
@@ -252,8 +258,10 @@ VKRT_Result createSceneUniform(VKRT* vkrt) {
     }
     if (createSelectionState(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
 
-    uint32_t initialWidth = vkrt->runtime.swapChainExtent.width ? vkrt->runtime.swapChainExtent.width : VKRT_DEFAULT_WIDTH;
-    uint32_t initialHeight = vkrt->runtime.swapChainExtent.height ? vkrt->runtime.swapChainExtent.height : VKRT_DEFAULT_HEIGHT;
+    uint32_t initialWidth =
+        vkrt->runtime.swapChainExtent.width ? vkrt->runtime.swapChainExtent.width : VKRT_DEFAULT_WIDTH;
+    uint32_t initialHeight =
+        vkrt->runtime.swapChainExtent.height ? vkrt->runtime.swapChainExtent.height : VKRT_DEFAULT_HEIGHT;
     initializeDefaultSceneSettings(vkrt, initialWidth, initialHeight);
 
     syncCameraMatrices(vkrt);
@@ -269,8 +277,8 @@ void resetSceneData(VKRT* vkrt) {
     resetAutoExposureForSceneChange(vkrt);
     vkrt->core.sceneData->frameNumber = 0;
     vkrt->renderStatus.renderPhase = VKRT_renderPhaseIsActive(vkrt->renderStatus.renderPhase)
-        ? VKRT_RENDER_PHASE_SAMPLING
-        : VKRT_RENDER_PHASE_INACTIVE;
+                                       ? VKRT_RENDER_PHASE_SAMPLING
+                                       : VKRT_RENDER_PHASE_INACTIVE;
     vkrt->renderStatus.accumulationFrame = 0;
     vkrt->renderStatus.totalSamples = 0;
     vkrt->renderStatus.averageFrametime = 0.0f;

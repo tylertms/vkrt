@@ -104,12 +104,7 @@ static int parseUnsignedValue(
     return 1;
 }
 
-static int parseDeviceIndexValue(
-    const char* text,
-    int32_t* outValue,
-    char* error,
-    size_t errorSize
-) {
+static int parseDeviceIndexValue(const char* text, int32_t* outValue, char* error, size_t errorSize) {
     if (!text || !outValue || !error || errorSize == 0) return 0;
 
     errno = 0;
@@ -213,7 +208,8 @@ static int parseBenchmarkArgument(
     }
     if (optionMatches(arg, "--benchmark-samples")) {
         const char* value = requireOptionValue(argc, argv, index, "--benchmark-samples", error, errorSize);
-        return value && parseUnsignedValue(value, &options->benchmark.targetSamples, "--benchmark-samples", error, errorSize);
+        return value &&
+               parseUnsignedValue(value, &options->benchmark.targetSamples, "--benchmark-samples", error, errorSize);
     }
     return -1;
 }
@@ -319,7 +315,8 @@ void CLIPrintVersion(void) {
     printf(" vkrt       %s\n", VKRT_VERSION);
     printf("===================================\n");
 
-    printf(" Vulkan     %d.%d.%d\n",
+    printf(
+        " Vulkan     %d.%d.%d\n",
         VK_API_VERSION_MAJOR(runtimeVersion),
         VK_API_VERSION_MINOR(runtimeVersion),
         VK_API_VERSION_PATCH(runtimeVersion)
@@ -333,7 +330,6 @@ void CLIPrintVersion(void) {
     printf("===================================\n");
     printf(" https://github.com/tylertms/vkrt\n");
     printf("===================================\n");
-
 }
 
 void CLIPrintHelp(void) {
@@ -350,7 +346,10 @@ void CLIPrintHelp(void) {
     printf("  --device-name <text>      Force a Vulkan device if its name contains this text\n");
     printf("  --empty-scene             Skip loading the default starter scene\n");
     printf("  --benchmark               Run the default benchmark with presentation enabled\n");
-    printf("  --benchmark-headless      Run the default benchmark offscreen with no window or presentation\n");
+    printf(
+        "  --benchmark-headless      Run the default benchmark offscreen with no window or "
+        "presentation\n"
+    );
     printf("  --benchmark-width <px>    Override benchmark render width (default: 3840)\n");
     printf("  --benchmark-height <px>   Override benchmark render height (default: 2160)\n");
     printf("  --benchmark-samples <n>   Override benchmark target samples (default: 16384)\n");

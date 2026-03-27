@@ -9,7 +9,13 @@
 #include <util.h>
 #include <vec3.h>
 
-static void queryCameraBasis(const float* position, const float* target, vec3 viewDirection, vec3 right, vec3 upVector) {
+static void queryCameraBasis(
+    const float* position,
+    const float* target,
+    vec3 viewDirection,
+    vec3 right,
+    vec3 upVector
+) {
     viewDirection[0] = target[0] - position[0];
     viewDirection[1] = target[1] - position[1];
     viewDirection[2] = target[2] - position[2];
@@ -46,14 +52,20 @@ static void applyPanInput(
     }
 }
 
-static void applyOrbitInput(const VKRT_CameraInput* input, const vec3 viewDirection, float distance, float* position, const float* target) {
+static void applyOrbitInput(
+    const VKRT_CameraInput* input,
+    const vec3 viewDirection,
+    float distance,
+    float* position,
+    const float* target
+) {
     const float orbitSpeed = 0.004f;
     const float piOverTwo = 1.5707963267948966f;
     const float epsilon = 0.001f;
     float yaw = atan2f(viewDirection[1], viewDirection[0]) - (input->orbitDx * orbitSpeed);
     float pitch =
-        atan2f(viewDirection[2], sqrtf((viewDirection[0] * viewDirection[0]) + (viewDirection[1] * viewDirection[1])))
-        - (input->orbitDy * orbitSpeed);
+        atan2f(viewDirection[2], sqrtf((viewDirection[0] * viewDirection[0]) + (viewDirection[1] * viewDirection[1]))) -
+        (input->orbitDy * orbitSpeed);
     float cosinePitch = 0.0f;
     vec3 forward = GLM_VEC3_ZERO_INIT;
 

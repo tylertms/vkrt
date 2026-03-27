@@ -58,8 +58,8 @@ static void updateRenderTimer(const VKRT_RenderStatusSnapshot* status, SessionRe
         timer->completedSeconds = 0.0f;
     }
 
-    if (renderModeActive && renderModeFinished && timer->completedSeconds <= 0.0f &&
-        timer->startTimeUs > 0 && nowUs >= timer->startTimeUs) {
+    if (renderModeActive && renderModeFinished && timer->completedSeconds <= 0.0f && timer->startTimeUs > 0 &&
+        nowUs >= timer->startTimeUs) {
         timer->completedSeconds = (float)(nowUs - timer->startTimeUs) / kMicrosecondsPerSecond;
     }
 
@@ -94,13 +94,18 @@ void inspectorPrepareRenderState(VKRT* vkrt, Session* session) {
 static void drawIdleOutputControls(Session* session) {
     if (!session) return;
 
-    int outputSize[2] = {
-        (int)session->editor.renderConfig.width,
-        (int)session->editor.renderConfig.height
-    };
+    int outputSize[2] = {(int)session->editor.renderConfig.width, (int)session->editor.renderConfig.height};
     int targetSamples = (int)session->editor.renderConfig.targetSamples;
 
-    if (ImGui_DragInt2Ex("Output Size", outputSize, 1.0f, kRenderOutputDimensionMin, kRenderOutputDimensionMax, "%d", ImGuiSliderFlags_AlwaysClamp)) {
+    if (ImGui_DragInt2Ex(
+            "Output Size",
+            outputSize,
+            1.0f,
+            kRenderOutputDimensionMin,
+            kRenderOutputDimensionMax,
+            "%d",
+            ImGuiSliderFlags_AlwaysClamp
+        )) {
         session->editor.renderConfig.width = clampRenderDimension(outputSize[0]);
         session->editor.renderConfig.height = clampRenderDimension(outputSize[1]);
     }
@@ -171,7 +176,12 @@ static float queryRenderProgressFraction(const VKRT_RenderStatusSnapshot* status
     return progress;
 }
 
-static void formatRenderProgressOverlay(const VKRT_RenderStatusSnapshot* status, char* out, size_t outSize, uint64_t* outShownSamples) {
+static void formatRenderProgressOverlay(
+    const VKRT_RenderStatusSnapshot* status,
+    char* out,
+    size_t outSize,
+    uint64_t* outShownSamples
+) {
     uint64_t shownSamples = 0u;
 
     if (!status || !out || outSize == 0u) return;

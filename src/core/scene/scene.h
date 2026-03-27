@@ -16,7 +16,12 @@ void updateAutoSPP(VKRT* vkrt);
 VKRT_Result createAutoExposureReadbacks(VKRT* vkrt);
 void destroyAutoExposureReadbacks(VKRT* vkrt);
 void resolveAutoExposureReadback(VKRT* vkrt, uint32_t frameIndex);
-void recordAutoExposureReadback(VKRT* vkrt, VkCommandBuffer commandBuffer, VkImage accumulationImage, VkExtent2D renderExtent);
+void recordAutoExposureReadback(
+    VKRT* vkrt,
+    VkCommandBuffer commandBuffer,
+    VkImage accumulationImage,
+    VkExtent2D renderExtent
+);
 void buildMeshTransformMatrix(const vec3 position, const vec3 rotationDegrees, const vec3 scale, mat4 outMatrix);
 void buildImportedMeshNodeTransformMatrix(mat4 worldTransform, mat4 outEngineTransform);
 void decomposeImportedMeshNodeTransform(mat4 worldTransform, vec3 outPosition, vec3 outRotation, vec3 outScale);

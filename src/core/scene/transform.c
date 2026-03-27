@@ -1,8 +1,8 @@
+#include "../../../external/cglm/include/types.h"
 #include "scene.h"
 #include "vkrt_engine_types.h"
 #include "vulkan/vulkan_core.h"
 
-#include "../../../external/cglm/include/types.h"
 #include <affine-pre.h>
 #include <affine.h>
 #include <mat4.h>
@@ -88,11 +88,14 @@ static void buildImportedMeshBasisTransform(mat4 outTransform) {
     glm_rotate(outTransform, glm_rad(kImportedMeshBasisRotationDegrees[2]), (vec3){0.0f, 0.0f, 1.0f});
     glm_rotate(outTransform, glm_rad(kImportedMeshBasisRotationDegrees[1]), (vec3){0.0f, 1.0f, 0.0f});
     glm_rotate(outTransform, glm_rad(kImportedMeshBasisRotationDegrees[0]), (vec3){1.0f, 0.0f, 0.0f});
-    glm_scale(outTransform, (vec3){
-        kImportedMeshBasisScale[0],
-        kImportedMeshBasisScale[1],
-        kImportedMeshBasisScale[2],
-    });
+    glm_scale(
+        outTransform,
+        (vec3){
+            kImportedMeshBasisScale[0],
+            kImportedMeshBasisScale[1],
+            kImportedMeshBasisScale[2],
+        }
+    );
 }
 
 void buildImportedMeshNodeTransformMatrix(mat4 worldTransform, mat4 outEngineTransform) {
@@ -115,11 +118,13 @@ void decomposeImportedMeshNodeTransform(mat4 worldTransform, vec3 outPosition, v
     decomposeImportedMeshTransform(engineTransform, outPosition, outRotation, outScale);
 }
 
-static void assignSignedScaleCandidate(mat4 normalizedRotationMatrix,
-                                       const vec3 absoluteScale,
-                                       int flippedAxis,
-                                       mat4 outRotationMatrix,
-                                       vec3 outScale) {
+static void assignSignedScaleCandidate(
+    mat4 normalizedRotationMatrix,
+    const vec3 absoluteScale,
+    int flippedAxis,
+    mat4 outRotationMatrix,
+    vec3 outScale
+) {
     if (!normalizedRotationMatrix || !absoluteScale || !outRotationMatrix || !outScale) return;
 
     glm_mat4_copy(normalizedRotationMatrix, outRotationMatrix);

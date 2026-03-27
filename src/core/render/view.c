@@ -35,7 +35,6 @@ void vkrtClampViewportRect(VkExtent2D extent, uint32_t* x, uint32_t* y, uint32_t
     if (*y >= extent.height) *y = extent.height - 1;
     if (*x + *width > extent.width) *width = extent.width - *x;
     if (*y + *height > extent.height) *height = extent.height - *y;
-
 }
 
 void vkrtQueryRenderViewCropExtent(
@@ -53,9 +52,8 @@ void vkrtQueryRenderViewCropExtent(
     float renderHeight = (float)renderExtent.height;
     float clampedZoom = vkrtClampf(zoom, VKRT_RENDER_VIEW_ZOOM_MIN, VKRT_RENDER_VIEW_ZOOM_MAX);
 
-    VkBool32 fillViewport = (clampedZoom > (VKRT_RENDER_VIEW_ZOOM_MIN + 0.0001f)) &&
-                            viewportExtent.width > 0 &&
-                            viewportExtent.height > 0;
+    VkBool32 fillViewport =
+        (clampedZoom > (VKRT_RENDER_VIEW_ZOOM_MIN + 0.0001f)) && viewportExtent.width > 0 && viewportExtent.height > 0;
 
     uint32_t cropWidth = renderExtent.width;
     uint32_t cropHeight = renderExtent.height;

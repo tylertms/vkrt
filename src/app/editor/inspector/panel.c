@@ -55,9 +55,8 @@ static uint32_t queryInspectorPropertiesTabCount(void) {
 
 static void applyInspectorDockWindowClass(void) {
     ImGuiWindowClass windowClass = {0};
-    windowClass.DockNodeFlagsOverrideSet = ImGuiDockNodeFlags_NoCloseButton |
-                                           ImGuiDockNodeFlags_NoWindowMenuButton |
-                                           ImGuiDockNodeFlags_NoTabBar;
+    windowClass.DockNodeFlagsOverrideSet =
+        ImGuiDockNodeFlags_NoCloseButton | ImGuiDockNodeFlags_NoWindowMenuButton | ImGuiDockNodeFlags_NoTabBar;
     ImGui_SetNextWindowClass(&windowClass);
 }
 
@@ -70,11 +69,9 @@ static bool beginInspectorDockWindow(const char* title) {
 static bool drawInspectorTabButton(const char* label, bool selected, ImVec2 size) {
     if (!label) return false;
 
-    const ImVec4* baseColor =
-        ImGui_GetStyleColorVec4((int)selected ? ImGuiCol_TabActive : ImGuiCol_Tab);
+    const ImVec4* baseColor = ImGui_GetStyleColorVec4((int)selected ? ImGuiCol_TabActive : ImGuiCol_Tab);
     const ImVec4* hoveredColor = ImGui_GetStyleColorVec4(ImGuiCol_TabHovered);
-    const ImVec4* activeColor =
-        ImGui_GetStyleColorVec4((int)selected ? ImGuiCol_TabActive : ImGuiCol_TabHovered);
+    const ImVec4* activeColor = ImGui_GetStyleColorVec4((int)selected ? ImGuiCol_TabActive : ImGuiCol_TabHovered);
 
     ImGui_PushStyleColorImVec4(ImGuiCol_Button, *baseColor);
     ImGui_PushStyleColorImVec4(ImGuiCol_ButtonHovered, *hoveredColor);
@@ -112,11 +109,7 @@ static void drawPropertiesPanelSelector(Session* session) {
     for (uint32_t i = 0; i < tabCount; i++) {
         const InspectorPropertiesTab* tab = &kInspectorPropertiesTabs[i];
         if (i > 0) ImGui_SameLine();
-        if (drawInspectorTabButton(
-            tab->label,
-            activeTab->index == tab->index,
-            (ImVec2){buttonWidth, 0.0f}
-        )) {
+        if (drawInspectorTabButton(tab->label, activeTab->index == tab->index, (ImVec2){buttonWidth, 0.0f})) {
             session->editor.propertiesPanelIndex = tab->index;
             activeTab = tab;
         }
@@ -130,11 +123,11 @@ static void drawSceneWindowContent(VKRT* vkrt, Session* session) {
     ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing});
     ImGui_SeparatorText(ICON_FA_CUBES " Scene");
     if (ImGui_BeginChild(
-        "##scene_browser_list",
-        (ImVec2){0.0f, 0.0f},
-        ImGuiChildFlags_Borders | ImGuiChildFlags_AlwaysUseWindowPadding,
-        ImGuiWindowFlags_None
-    )) {
+            "##scene_browser_list",
+            (ImVec2){0.0f, 0.0f},
+            ImGuiChildFlags_Borders | ImGuiChildFlags_AlwaysUseWindowPadding,
+            ImGuiWindowFlags_None
+        )) {
         inspectorDrawSceneBrowserSection(vkrt, session);
     }
     ImGui_EndChild();

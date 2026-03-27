@@ -66,9 +66,25 @@ static void drawCameraPoseSection(VKRT* vkrt, bool renderModeActive) {
             logCameraInspectorFailure("Querying camera pose failed", poseResult);
         } else {
             bool changed = false;
-            changed |= ImGui_DragFloat3Ex("Position", position, kCameraPoseDragSpeed, 0.0f, 0.0f, "%.3f", ImGuiSliderFlags_None);
-            changed |= ImGui_DragFloat3Ex("Target", target, kCameraPoseDragSpeed, 0.0f, 0.0f, "%.3f", ImGuiSliderFlags_None);
-            bool fovChanged = ImGui_SliderFloatEx("FOV", &fov, kCameraFovMinDeg, kCameraFovMaxDeg, "%.1f deg", ImGuiSliderFlags_AlwaysClamp);
+            changed |= ImGui_DragFloat3Ex(
+                "Position",
+                position,
+                kCameraPoseDragSpeed,
+                0.0f,
+                0.0f,
+                "%.3f",
+                ImGuiSliderFlags_None
+            );
+            changed |=
+                ImGui_DragFloat3Ex("Target", target, kCameraPoseDragSpeed, 0.0f, 0.0f, "%.3f", ImGuiSliderFlags_None);
+            bool fovChanged = ImGui_SliderFloatEx(
+                "FOV",
+                &fov,
+                kCameraFovMinDeg,
+                kCameraFovMaxDeg,
+                "%.1f deg",
+                ImGuiSliderFlags_AlwaysClamp
+            );
 
             if (changed || fovChanged) {
                 float viewDir[3];
@@ -78,7 +94,10 @@ static void drawCameraPoseSection(VKRT* vkrt, bool renderModeActive) {
                     target[1] = position[1];
                     target[2] = position[2];
                 }
-                logCameraInspectorFailure("Updating camera pose failed", VKRT_cameraSetPose(vkrt, position, target, upVector, fov));
+                logCameraInspectorFailure(
+                    "Updating camera pose failed",
+                    VKRT_cameraSetPose(vkrt, position, target, upVector, fov)
+                );
             }
         }
 
@@ -95,25 +114,37 @@ static void drawCameraShadingSection(VKRT* vkrt, VKRT_SceneSettingsSnapshot* set
 
         const char* toneMappingLabels[] = {"None", "ACES"};
         int toneMappingMode = (int)settings->toneMappingMode;
-        if (ImGui_ComboCharEx("Tone Mapping", &toneMappingMode, toneMappingLabels, VKRT_TONE_MAPPING_MODE_COUNT, VKRT_TONE_MAPPING_MODE_COUNT)) {
-            logCameraInspectorFailure("Updating tone mapping mode failed", VKRT_setToneMappingMode(vkrt, (VKRT_ToneMappingMode)toneMappingMode));
+        if (ImGui_ComboCharEx(
+                "Tone Mapping",
+                &toneMappingMode,
+                toneMappingLabels,
+                VKRT_TONE_MAPPING_MODE_COUNT,
+                VKRT_TONE_MAPPING_MODE_COUNT
+            )) {
+            logCameraInspectorFailure(
+                "Updating tone mapping mode failed",
+                VKRT_setToneMappingMode(vkrt, (VKRT_ToneMappingMode)toneMappingMode)
+            );
         }
 
         bool autoExposureEnabled = settings->autoExposureEnabled != 0;
         if (ImGui_Checkbox("Auto Exposure", &autoExposureEnabled)) {
-            logCameraInspectorFailure("Updating auto exposure failed", VKRT_setAutoExposureEnabled(vkrt, boolToFlag(autoExposureEnabled)));
+            logCameraInspectorFailure(
+                "Updating auto exposure failed",
+                VKRT_setAutoExposureEnabled(vkrt, boolToFlag(autoExposureEnabled))
+            );
         }
         if (!autoExposureEnabled) {
             float exposure = settings->exposure;
             if (ImGui_DragFloatEx(
-                "Exposure",
-                &exposure,
-                0.01f,
-                kExposureMin,
-                kExposureMax,
-                "%.3f",
-                ImGuiSliderFlags_AlwaysClamp
-            )) {
+                    "Exposure",
+                    &exposure,
+                    0.01f,
+                    kExposureMin,
+                    kExposureMax,
+                    "%.3f",
+                    ImGuiSliderFlags_AlwaysClamp
+                )) {
                 VKRT_Result result = VKRT_setExposure(vkrt, exposure);
                 logCameraInspectorFailure("Updating exposure failed", result);
                 if (result == VKRT_SUCCESS) {
@@ -181,7 +212,15 @@ static void drawCameraEnvironmentSection(
         ImGui_BeginDisabled(renderModeActive);
 
         float environmentStrength = settings->environmentStrength;
-        if (ImGui_DragFloatEx("Strength", &environmentStrength, 0.01f, 0.0f, kEnvironmentStrengthMax, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+        if (ImGui_DragFloatEx(
+                "Strength",
+                &environmentStrength,
+                0.01f,
+                0.0f,
+                kEnvironmentStrengthMax,
+                "%.3f",
+                ImGuiSliderFlags_AlwaysClamp
+            )) {
             VKRT_Result result = VKRT_setEnvironmentLight(vkrt, settings->environmentColor, environmentStrength);
             logCameraInspectorFailure("Updating environment strength failed", result);
             if (result == VKRT_SUCCESS) {
@@ -195,7 +234,10 @@ static void drawCameraEnvironmentSection(
             settings->environmentColor[2],
         };
         if (ImGui_ColorEdit3("Color", environmentColor, ImGuiColorEditFlags_Float)) {
-            logCameraInspectorFailure("Updating environment color failed", VKRT_setEnvironmentLight(vkrt, environmentColor, settings->environmentStrength));
+            logCameraInspectorFailure(
+                "Updating environment color failed",
+                VKRT_setEnvironmentLight(vkrt, environmentColor, settings->environmentStrength)
+            );
         }
 
         drawEnvironmentTextureSummary(vkrt, settings);
@@ -212,15 +254,28 @@ static void drawCameraDebugSection(VKRT* vkrt, const VKRT_SceneSettingsSnapshot*
         inspectorIndentSection();
         ImGui_BeginDisabled(renderModeActive);
 
-        const char* debugModeLabels[] = {
-            "None", "Normals", "Depth", "Bounce Count",
-            "NEE Only", "BSDF Only", "Selection Mask",
-            "Base Color Map", "Metallic Map", "Roughness Map",
-            "Normal Map", "Emissive Map"
-        };
+        const char* debugModeLabels[] =
+            {"None",
+             "Normals",
+             "Depth",
+             "Bounce Count",
+             "NEE Only",
+             "BSDF Only",
+             "Selection Mask",
+             "Base Color Map",
+             "Metallic Map",
+             "Roughness Map",
+             "Normal Map",
+             "Emissive Map"};
         int debugModeValue = (int)settings->debugMode;
         if (debugModeValue < 0 || debugModeValue >= (int)VKRT_DEBUG_MODE_COUNT) debugModeValue = 0;
-        if (ImGui_ComboCharEx("View Mode", &debugModeValue, debugModeLabels, VKRT_DEBUG_MODE_COUNT, VKRT_DEBUG_MODE_COUNT)) {
+        if (ImGui_ComboCharEx(
+                "View Mode",
+                &debugModeValue,
+                debugModeLabels,
+                VKRT_DEBUG_MODE_COUNT,
+                VKRT_DEBUG_MODE_COUNT
+            )) {
             logCameraInspectorFailure("Updating debug mode failed", VKRT_setDebugMode(vkrt, (uint32_t)debugModeValue));
         }
 
@@ -240,7 +295,10 @@ static void drawAutoSPPControls(VKRT* vkrt, bool autoSPP, const VKRT_SceneSettin
     if (autoSPP) {
         int targetFPS = (int)settings->autoSPPTargetFPS;
         if (ImGui_DragIntEx("Target FPS", &targetFPS, 0.5f, 30, 360, "%d", ImGuiSliderFlags_AlwaysClamp)) {
-            logCameraInspectorFailure("Updating auto SPP target FPS failed", VKRT_setAutoSPPTargetFPS(vkrt, (uint32_t)targetFPS));
+            logCameraInspectorFailure(
+                "Updating auto SPP target FPS failed",
+                VKRT_setAutoSPPTargetFPS(vkrt, (uint32_t)targetFPS)
+            );
         }
         return;
     }
@@ -254,7 +312,15 @@ static void drawAutoSPPControls(VKRT* vkrt, bool autoSPP, const VKRT_SceneSettin
 static void drawPathDepthControls(VKRT* vkrt, VKRT_SceneSettingsSnapshot* settings) {
     int minBounces = (int)settings->rrMinDepth;
     int maxBounces = (int)settings->rrMaxDepth;
-    if (ImGui_DragIntEx("Min Bounces", &minBounces, 0.25f, kPathDepthMin, kPathDepthMax, "%d", ImGuiSliderFlags_AlwaysClamp)) {
+    if (ImGui_DragIntEx(
+            "Min Bounces",
+            &minBounces,
+            0.25f,
+            kPathDepthMin,
+            kPathDepthMax,
+            "%d",
+            ImGuiSliderFlags_AlwaysClamp
+        )) {
         VKRT_Result result = VKRT_setPathDepth(vkrt, (uint32_t)minBounces, settings->rrMaxDepth);
         logCameraInspectorFailure("Updating minimum path depth failed", result);
         if (result == VKRT_SUCCESS) {
@@ -264,7 +330,15 @@ static void drawPathDepthControls(VKRT* vkrt, VKRT_SceneSettingsSnapshot* settin
     }
 
     maxBounces = (int)settings->rrMaxDepth;
-    if (ImGui_DragIntEx("Max Bounces", &maxBounces, 0.25f, kPathDepthMin + 1, kPathDepthMax, "%d", ImGuiSliderFlags_AlwaysClamp)) {
+    if (ImGui_DragIntEx(
+            "Max Bounces",
+            &maxBounces,
+            0.25f,
+            kPathDepthMin + 1,
+            kPathDepthMax,
+            "%d",
+            ImGuiSliderFlags_AlwaysClamp
+        )) {
         VKRT_Result result = VKRT_setPathDepth(vkrt, settings->rrMinDepth, (uint32_t)maxBounces);
         logCameraInspectorFailure("Updating maximum path depth failed", result);
         if (result == VKRT_SUCCESS) {
@@ -298,8 +372,7 @@ void inspectorDrawCameraTab(VKRT* vkrt, Session* session) {
 
     VKRT_SceneSettingsSnapshot settings = {0};
     VKRT_RenderStatusSnapshot status = {0};
-    if (VKRT_getSceneSettings(vkrt, &settings) != VKRT_SUCCESS ||
-        VKRT_getRenderStatus(vkrt, &status) != VKRT_SUCCESS) {
+    if (VKRT_getSceneSettings(vkrt, &settings) != VKRT_SUCCESS || VKRT_getRenderStatus(vkrt, &status) != VKRT_SUCCESS) {
         return;
     }
 

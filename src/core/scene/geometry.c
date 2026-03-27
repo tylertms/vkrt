@@ -23,17 +23,13 @@ static const uint64_t kGeometryFingerprintSeed = 1469598103934665603ull;
 static const uint64_t kGeometryFingerprintPrime = 1099511628211ull;
 
 static VkBufferUsageFlags verticesUsage(void) {
-    return VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
-           VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT |
-           VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR |
-           VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+    return VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT |
+           VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 }
 
 static VkBufferUsageFlags indicesUsage(void) {
-    return VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
-           VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT |
-           VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR |
-           VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+    return VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT |
+           VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 }
 
 typedef struct GeometryBufferState {
@@ -79,7 +75,8 @@ VKRT_Result vkrtSceneBuildMeshInfoBuffer(VKRT* vkrt, Buffer* outBuffer) {
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
         &outBuffer->buffer,
         &outBuffer->memory,
-        &outBuffer->deviceAddress);
+        &outBuffer->deviceAddress
+    );
     free(meshInfos);
     return result;
 }
@@ -135,7 +132,6 @@ static void markSceneMutation(VKRT* vkrt) {
 }
 
 static void shrinkMeshList(VKRT* vkrt, uint32_t meshCount) {
-
     if (meshCount == 0) {
         free(vkrt->core.meshes);
         vkrt->core.meshes = NULL;
@@ -272,7 +268,8 @@ static void restoreMeshState(
     const Mesh* meshes,
     uint32_t meshCount,
     uint32_t selectedMeshIndex,
-    uint32_t selectionEnabled) {
+    uint32_t selectionEnabled
+) {
     if (!vkrt) return;
 
     if (meshCount > 0 && meshes && vkrt->core.meshes) {
@@ -283,11 +280,7 @@ static void restoreMeshState(
     vkrt->sceneSettings.selectionEnabled = selectionEnabled;
 }
 
-static void destroyOwnerAccelerationStructures(
-    VKRT* vkrt,
-    GeometryOwnerState* ownerStates,
-    uint32_t ownerCount
-) {
+static void destroyOwnerAccelerationStructures(VKRT* vkrt, GeometryOwnerState* ownerStates, uint32_t ownerCount) {
     if (!vkrt || !ownerStates) return;
 
     for (uint32_t i = 0; i < ownerCount; i++) {
@@ -404,11 +397,7 @@ static void syncDuplicateGeometryOwners(VKRT* vkrt) {
     }
 }
 
-static void restorePreviousGeometryState(
-    VKRT* vkrt,
-    const GeometryBufferState* previousState,
-    const Mesh* meshBackup
-) {
+static void restorePreviousGeometryState(VKRT* vkrt, const GeometryBufferState* previousState, const Mesh* meshBackup) {
     vkrt->core.vertexData = previousState->vertexData;
     vkrt->core.indexData = previousState->indexData;
     vkrt->core.geometryLayout = previousState->layout;
@@ -499,8 +488,9 @@ static void remapGeometrySourcesAfterRemoval(VKRT* vkrt, uint32_t meshIndex, int
 static void updateSelectionAfterMeshRemoval(VKRT* vkrt, uint32_t meshIndex) {
     if (vkrt->sceneSettings.selectedMeshIndex == meshIndex) {
         vkrt->sceneSettings.selectedMeshIndex = VKRT_INVALID_INDEX;
-    } else if (vkrt->sceneSettings.selectedMeshIndex != VKRT_INVALID_INDEX &&
-               vkrt->sceneSettings.selectedMeshIndex > meshIndex) {
+    } else if (
+        vkrt->sceneSettings.selectedMeshIndex != VKRT_INVALID_INDEX && vkrt->sceneSettings.selectedMeshIndex > meshIndex
+    ) {
         vkrt->sceneSettings.selectedMeshIndex--;
     }
     vkrt->sceneSettings.selectionEnabled = vkrt->sceneSettings.selectedMeshIndex != VKRT_INVALID_INDEX;
@@ -510,7 +500,8 @@ static VKRT_Result createGeometryBuffers(
     VKRT* vkrt,
     uint32_t vertexCapacity,
     uint32_t indexCapacity,
-    GeometryBufferState* outState) {
+    GeometryBufferState* outState
+) {
     if (!vkrt || !outState) return VKRT_ERROR_INVALID_ARGUMENT;
 
     *outState = (GeometryBufferState){0};
@@ -549,7 +540,8 @@ static VKRT_Result createGeometryBuffers(
             VK_BUFFER_USAGE_TRANSFER_DST_BIT | indicesUsage(),
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
             &outState->indexData.buffer,
-            &outState->indexData.memory);
+            &outState->indexData.memory
+        );
         if (result != VKRT_SUCCESS) {
             destroyGeometryBufferState(vkrt, outState);
             return result;
@@ -584,24 +576,16 @@ static VKRT_Result rebuildGeometryLayout(VKRT* vkrt) {
     uint32_t requiredVertexCapacity = 0;
     uint32_t requiredIndexCapacity = 0;
     uint32_t ownerCount = 0;
-    VKRT_Result result = collectGeometryRequirements(
-        vkrt,
-        &requiredVertexCapacity,
-        &requiredIndexCapacity,
-        &ownerCount
-    );
+    VKRT_Result result =
+        collectGeometryRequirements(vkrt, &requiredVertexCapacity, &requiredIndexCapacity, &ownerCount);
     if (result != VKRT_SUCCESS) return result;
 
     GeometryBufferState newState = {0};
-    result = createGeometryBuffers(
-        vkrt,
-        requiredVertexCapacity,
-        requiredIndexCapacity,
-        &newState
-    );
+    result = createGeometryBuffers(vkrt, requiredVertexCapacity, requiredIndexCapacity, &newState);
     if (result != VKRT_SUCCESS) return result;
 
-    GeometryOwnerState* ownerStates = (GeometryOwnerState*)calloc(ownerCount > 0 ? ownerCount : 1u, sizeof(GeometryOwnerState));
+    GeometryOwnerState* ownerStates =
+        (GeometryOwnerState*)calloc(ownerCount > 0 ? ownerCount : 1u, sizeof(GeometryOwnerState));
     if (!ownerStates) {
         destroyGeometryBufferState(vkrt, &newState);
         return VKRT_ERROR_OPERATION_FAILED;
@@ -688,18 +672,20 @@ VKRT_Result vkrtScenePreparePendingGeometryUploads(VKRT* vkrt) {
         upload->meshIndex = i;
         upload->indexOffset = vertexBytes;
         if (createBuffer(
-            vkrt,
-            stagingSize,
-            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            &upload->stagingBuffer,
-            &upload->stagingMemory) != VKRT_SUCCESS) {
+                vkrt,
+                stagingSize,
+                VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                &upload->stagingBuffer,
+                &upload->stagingMemory
+            ) != VKRT_SUCCESS) {
             update->geometryUploadCount = writeIndex + 1u;
             return VKRT_ERROR_OPERATION_FAILED;
         }
 
         void* mapped = NULL;
-        if (vkMapMemory(vkrt->core.device, upload->stagingMemory, 0, stagingSize, 0, &mapped) != VK_SUCCESS || !mapped) {
+        if (vkMapMemory(vkrt->core.device, upload->stagingMemory, 0, stagingSize, 0, &mapped) != VK_SUCCESS ||
+            !mapped) {
             update->geometryUploadCount = writeIndex + 1u;
             return VKRT_ERROR_OPERATION_FAILED;
         }
@@ -774,12 +760,8 @@ VKRT_Result vkrtSceneUploadMeshDataBatch(VKRT* vkrt, const VKRT_MeshUpload* uplo
         Mesh* mesh = &vkrt->core.meshes[meshIndex];
         initializeMeshDefaults(mesh, upload->vertexCount, upload->indexCount);
 
-        uint64_t fingerprint = geometryFingerprint(
-            upload->vertices,
-            upload->vertexCount,
-            upload->indices,
-            upload->indexCount
-        );
+        uint64_t fingerprint =
+            geometryFingerprint(upload->vertices, upload->vertexCount, upload->indices, upload->indexCount);
         uint32_t duplicateIndex = findDuplicateGeometrySource(
             vkrt,
             meshIndex,

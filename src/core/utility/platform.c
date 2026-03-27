@@ -1,5 +1,6 @@
-#include "debug.h"
 #include "platform.h"
+
+#include "debug.h"
 
 #include <pthread.h>
 #include <stddef.h>
@@ -85,9 +86,7 @@ void vkrtCondDestroy(VKRT_Cond* condition) {
 
 int vkrtCondWait(VKRT_Cond* condition, VKRT_Mutex* mutex) {
     if (!condition || !mutex) return VKRT_THREAD_ERROR;
-    return SleepConditionVariableCS(condition, mutex, INFINITE)
-        ? VKRT_THREAD_SUCCESS
-        : VKRT_THREAD_ERROR;
+    return SleepConditionVariableCS(condition, mutex, INFINITE) ? VKRT_THREAD_SUCCESS : VKRT_THREAD_ERROR;
 }
 
 int vkrtCondSignal(VKRT_Cond* condition) {

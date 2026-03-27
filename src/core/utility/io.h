@@ -1,8 +1,8 @@
 #pragma once
 
-#include <stddef.h>
-
 #include "platform.h"
+
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {

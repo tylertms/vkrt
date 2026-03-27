@@ -33,13 +33,13 @@ int readbackImagePixels(
     int result = -1;
 
     if (createBuffer(
-        vkrt,
-        (VkDeviceSize)readbackBytes,
-        VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        &stagingBuffer,
-        &stagingMemory
-    ) != VKRT_SUCCESS) {
+            vkrt,
+            (VkDeviceSize)readbackBytes,
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            &stagingBuffer,
+            &stagingMemory
+        ) != VKRT_SUCCESS) {
         return -1;
     }
 
@@ -108,17 +108,18 @@ int uploadImagePixels(
     int result = -1;
 
     if (createBuffer(
-        vkrt,
-        (VkDeviceSize)byteCount,
-        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        &stagingBuffer,
-        &stagingMemory
-    ) != VKRT_SUCCESS) {
+            vkrt,
+            (VkDeviceSize)byteCount,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            &stagingBuffer,
+            &stagingMemory
+        ) != VKRT_SUCCESS) {
         return -1;
     }
 
-    if (vkMapMemory(vkrt->core.device, stagingMemory, 0, (VkDeviceSize)byteCount, 0, &mapped) != VK_SUCCESS || !mapped) {
+    if (vkMapMemory(vkrt->core.device, stagingMemory, 0, (VkDeviceSize)byteCount, 0, &mapped) != VK_SUCCESS ||
+        !mapped) {
         LOG_ERROR("Failed to map viewport upload staging buffer");
         goto cleanup;
     }

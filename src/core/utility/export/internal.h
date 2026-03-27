@@ -1,9 +1,9 @@
 #pragma once
 
+#include "vkrt_internal.h"
+
 #include <stddef.h>
 #include <stdint.h>
-
-#include "vkrt_internal.h"
 
 typedef enum RenderImageFormat {
     RENDER_IMAGE_FORMAT_PNG = 0,
@@ -41,11 +41,7 @@ typedef struct RenderImageExportJob {
     RenderImageBuffer normal;
 } RenderImageExportJob;
 
-int resolveRenderImagePath(
-    const char* requestedPath,
-    char** outResolvedPath,
-    RenderImageFormat* outFormat
-);
+int resolveRenderImagePath(const char* requestedPath, char** outResolvedPath, RenderImageFormat* outFormat);
 int queryRenderImageBufferByteCount(
     uint32_t width,
     uint32_t height,
@@ -71,11 +67,4 @@ int readbackImagePixels(
     RenderImageBufferFormat format,
     void** outPixels
 );
-int uploadImagePixels(
-    VKRT* vkrt,
-    VkImage image,
-    uint32_t width,
-    uint32_t height,
-    const void* pixels,
-    size_t byteCount
-);
+int uploadImagePixels(VKRT* vkrt, VkImage image, uint32_t width, uint32_t height, const void* pixels, size_t byteCount);

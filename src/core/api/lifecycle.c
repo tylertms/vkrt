@@ -125,7 +125,11 @@ static void cleanupRayTracingResources(VKRT* vkrt) {
     if (!vkrt || vkrt->core.device == VK_NULL_HANDLE) return;
 
     destroyBufferAndMemory(vkrt, &vkrt->core.shaderBindingTableBuffer, &vkrt->core.shaderBindingTableMemory);
-    destroyBufferAndMemory(vkrt, &vkrt->core.selectionShaderBindingTableBuffer, &vkrt->core.selectionShaderBindingTableMemory);
+    destroyBufferAndMemory(
+        vkrt,
+        &vkrt->core.selectionShaderBindingTableBuffer,
+        &vkrt->core.selectionShaderBindingTableMemory
+    );
 }
 
 static void cleanupSceneAndAccelerationResources(VKRT* vkrt) {
@@ -139,7 +143,11 @@ static void cleanupSceneAndAccelerationResources(VKRT* vkrt) {
     destroyBufferAndMemory(vkrt, &vkrt->core.sceneMeshData.buffer, &vkrt->core.sceneMeshData.memory);
     destroyBufferAndMemory(vkrt, &vkrt->core.sceneMaterialData.buffer, &vkrt->core.sceneMaterialData.memory);
     destroyBufferAndMemory(vkrt, &vkrt->core.sceneEmissiveMeshData.buffer, &vkrt->core.sceneEmissiveMeshData.memory);
-    destroyBufferAndMemory(vkrt, &vkrt->core.sceneEmissiveTriangleData.buffer, &vkrt->core.sceneEmissiveTriangleData.memory);
+    destroyBufferAndMemory(
+        vkrt,
+        &vkrt->core.sceneEmissiveTriangleData.buffer,
+        &vkrt->core.sceneEmissiveTriangleData.memory
+    );
     destroyBufferAndMemory(vkrt, &vkrt->core.sceneMeshAliasQ.buffer, &vkrt->core.sceneMeshAliasQ.memory);
     destroyBufferAndMemory(vkrt, &vkrt->core.sceneMeshAliasIdx.buffer, &vkrt->core.sceneMeshAliasIdx.memory);
     destroyBufferAndMemory(vkrt, &vkrt->core.sceneTriAliasQ.buffer, &vkrt->core.sceneTriAliasQ.memory);
@@ -334,7 +342,9 @@ static void configureDisplayMetricsAndExtent(
     uint32_t width = createInfo->startFullscreen ? displayWidth : createInfo->width;
     uint32_t height = createInfo->startFullscreen ? displayHeight : createInfo->height;
     if (width == 0) width = createInfo->startMaximized ? displayWidth : defaultWindowExtentFromDisplay(displayWidth);
-    if (height == 0) height = createInfo->startMaximized ? displayHeight : defaultWindowExtentFromDisplay(displayHeight);
+    if (height == 0) {
+        height = createInfo->startMaximized ? displayHeight : defaultWindowExtentFromDisplay(displayHeight);
+    }
     if (width == 0) width = VKRT_DEFAULT_WIDTH;
     if (height == 0) height = VKRT_DEFAULT_HEIGHT;
 

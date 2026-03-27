@@ -74,7 +74,13 @@ static void drawSystemSummary(const VKRT_RuntimeSnapshot* runtime, const VKRT_Sy
     char driverText[K_OVERVIEW_DRIVER_TEXT_CAPACITY];
     char viewportText[K_OVERVIEW_TIME_TEXT_CAPACITY];
     formatDriverVersionText(system->vendorID, system->driverVersion, driverText, sizeof(driverText));
-    snprintf(viewportText, sizeof(viewportText), "%ux%u", runtime->displayViewportRect[2], runtime->displayViewportRect[3]);
+    snprintf(
+        viewportText,
+        sizeof(viewportText),
+        "%ux%u",
+        runtime->displayViewportRect[2],
+        runtime->displayViewportRect[3]
+    );
 
     if (beginCompactTable("##monitor_system")) {
         inspectorKeyValueRow("GPU", system->deviceName);
@@ -91,10 +97,8 @@ void inspectorDrawSceneOverviewSection(VKRT* vkrt) {
     VKRT_RenderStatusSnapshot status = {0};
     VKRT_RuntimeSnapshot runtime = {0};
     VKRT_SystemInfo system = {0};
-    if (VKRT_getSceneSettings(vkrt, &settings) != VKRT_SUCCESS ||
-        VKRT_getRenderStatus(vkrt, &status) != VKRT_SUCCESS ||
-        VKRT_getRuntimeSnapshot(vkrt, &runtime) != VKRT_SUCCESS ||
-        VKRT_getSystemInfo(vkrt, &system) != VKRT_SUCCESS) {
+    if (VKRT_getSceneSettings(vkrt, &settings) != VKRT_SUCCESS || VKRT_getRenderStatus(vkrt, &status) != VKRT_SUCCESS ||
+        VKRT_getRuntimeSnapshot(vkrt, &runtime) != VKRT_SUCCESS || VKRT_getSystemInfo(vkrt, &system) != VKRT_SUCCESS) {
         return;
     }
 

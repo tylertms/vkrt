@@ -39,11 +39,6 @@ typedef struct RayTracingShaderModules {
     VkShaderModule shadowMiss;
 } RayTracingShaderModules;
 
-enum {
-    K_RAY_TRACING_STAGE_COUNT = 7u,
-    K_RAY_TRACING_GROUP_COUNT = 5u,
-};
-
 static VKRT_Result createRayTracingPipelineLayout(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
     if (vkrt->core.pipelineLayout != VK_NULL_HANDLE) return VKRT_SUCCESS;
@@ -54,7 +49,8 @@ static VKRT_Result createRayTracingPipelineLayout(VKRT* vkrt) {
     pipelineLayoutInfo.pSetLayouts = &vkrt->core.descriptorSetLayout;
     pipelineLayoutInfo.pushConstantRangeCount = 0;
 
-    if (vkCreatePipelineLayout(vkrt->core.device, &pipelineLayoutInfo, NULL, &vkrt->core.pipelineLayout) != VK_SUCCESS) {
+    if (vkCreatePipelineLayout(vkrt->core.device, &pipelineLayoutInfo, NULL, &vkrt->core.pipelineLayout) !=
+        VK_SUCCESS) {
         LOG_ERROR("Failed to create pipeline layout");
         return VKRT_ERROR_PIPELINE_CREATION_FAILED;
     }
@@ -87,7 +83,9 @@ static void destroyRayTracingShaderModules(VKRT* vkrt, RayTracingShaderModules* 
     if (modules->closestHit != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, modules->closestHit, NULL);
     if (modules->anyHit != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, modules->anyHit, NULL);
     if (modules->miss != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, modules->miss, NULL);
-    if (modules->shadowClosestHit != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, modules->shadowClosestHit, NULL);
+    if (modules->shadowClosestHit != VK_NULL_HANDLE) {
+        vkDestroyShaderModule(vkrt->core.device, modules->shadowClosestHit, NULL);
+    }
     if (modules->shadowAnyHit != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, modules->shadowAnyHit, NULL);
     if (modules->shadowMiss != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, modules->shadowMiss, NULL);
     *modules = (RayTracingShaderModules){0};
@@ -100,12 +98,20 @@ static VKRT_Result createRayTracingShaderModules(
 ) {
     *outModules = (RayTracingShaderModules){0};
     if (createShaderModule(vkrt, variant->rayGenData, variant->rayGenSize, &outModules->rayGen) != VKRT_SUCCESS ||
-        createShaderModule(vkrt, variant->closestHitData, variant->closestHitSize, &outModules->closestHit) != VKRT_SUCCESS ||
+        createShaderModule(vkrt, variant->closestHitData, variant->closestHitSize, &outModules->closestHit) !=
+            VKRT_SUCCESS ||
         createShaderModule(vkrt, variant->anyHitData, variant->anyHitSize, &outModules->anyHit) != VKRT_SUCCESS ||
         createShaderModule(vkrt, variant->missData, variant->missSize, &outModules->miss) != VKRT_SUCCESS ||
-        createShaderModule(vkrt, variant->shadowClosestHitData, variant->shadowClosestHitSize, &outModules->shadowClosestHit) != VKRT_SUCCESS ||
-        createShaderModule(vkrt, variant->shadowAnyHitData, variant->shadowAnyHitSize, &outModules->shadowAnyHit) != VKRT_SUCCESS ||
-        createShaderModule(vkrt, variant->shadowMissData, variant->shadowMissSize, &outModules->shadowMiss) != VKRT_SUCCESS) {
+        createShaderModule(
+            vkrt,
+            variant->shadowClosestHitData,
+            variant->shadowClosestHitSize,
+            &outModules->shadowClosestHit
+        ) != VKRT_SUCCESS ||
+        createShaderModule(vkrt, variant->shadowAnyHitData, variant->shadowAnyHitSize, &outModules->shadowAnyHit) !=
+            VKRT_SUCCESS ||
+        createShaderModule(vkrt, variant->shadowMissData, variant->shadowMissSize, &outModules->shadowMiss) !=
+            VKRT_SUCCESS) {
         destroyRayTracingShaderModules(vkrt, outModules);
         return VKRT_ERROR_SHADER_COMPILATION_FAILED;
     }
@@ -113,10 +119,7 @@ static VKRT_Result createRayTracingShaderModules(
     return VKRT_SUCCESS;
 }
 
-static VkPipelineShaderStageCreateInfo makePipelineShaderStageInfo(
-    VkShaderStageFlagBits stage,
-    VkShaderModule module
-) {
+static VkPipelineShaderStageCreateInfo makePipelineShaderStageInfo(VkShaderStageFlagBits stage, VkShaderModule module) {
     return (VkPipelineShaderStageCreateInfo){
         .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
         .stage = stage,
@@ -191,7 +194,15 @@ VKRT_Result createRayTracingPipeline(VKRT* vkrt) {
     pipelineCreateInfo.maxPipelineRayRecursionDepth = 1;
     pipelineCreateInfo.layout = vkrt->core.pipelineLayout;
 
-    if (vkrt->core.procs.vkCreateRayTracingPipelinesKHR(vkrt->core.device, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &pipelineCreateInfo, NULL, &vkrt->core.rayTracingPipeline) != VK_SUCCESS) {
+    if (vkrt->core.procs.vkCreateRayTracingPipelinesKHR(
+            vkrt->core.device,
+            VK_NULL_HANDLE,
+            VK_NULL_HANDLE,
+            1,
+            &pipelineCreateInfo,
+            NULL,
+            &vkrt->core.rayTracingPipeline
+        ) != VK_SUCCESS) {
         LOG_ERROR("Failed to create ray tracing pipeline");
         destroyRayTracingShaderModules(vkrt, &modules);
         return VKRT_ERROR_OPERATION_FAILED;
@@ -200,10 +211,11 @@ VKRT_Result createRayTracingPipeline(VKRT* vkrt) {
     destroyRayTracingShaderModules(vkrt, &modules);
 
     LOG_INFO(
-        "Ray tracing pipeline created. Variant: %s, Shader Stages: %u, Shader Groups: %u, in %.3f ms",
+        "Ray tracing pipeline created. Variant: %s, Shader Stages: %u, Shader Groups: %u, in "
+        "%.3f ms",
         useSerShaders ? "SER" : "default",
-        K_RAY_TRACING_STAGE_COUNT,
-        K_RAY_TRACING_GROUP_COUNT,
+        (uint32_t)VKRT_ARRAY_COUNT(shaderStages),
+        (uint32_t)VKRT_ARRAY_COUNT(shaderGroups),
         (double)(getMicroseconds() - startTime) / 1e3
     );
     return VKRT_SUCCESS;
@@ -228,19 +240,43 @@ VKRT_Result createSelectionRayTracingPipeline(VKRT* vkrt) {
     }
 
     VkPipelineShaderStageCreateInfo shaderStages[] = {
-        {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .stage = VK_SHADER_STAGE_RAYGEN_BIT_KHR, .module = rayGenModule, .pName = "main"},
-        {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .stage = VK_SHADER_STAGE_MISS_BIT_KHR, .module = missModule, .pName = "main"},
-        {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .stage = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, .module = closestHitModule, .pName = "main"},
-        {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .stage = VK_SHADER_STAGE_ANY_HIT_BIT_KHR, .module = anyHitModule, .pName = "main"},
+        {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+         .stage = VK_SHADER_STAGE_RAYGEN_BIT_KHR,
+         .module = rayGenModule,
+         .pName = "main"},
+        {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+         .stage = VK_SHADER_STAGE_MISS_BIT_KHR,
+         .module = missModule,
+         .pName = "main"},
+        {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+         .stage = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
+         .module = closestHitModule,
+         .pName = "main"},
+        {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+         .stage = VK_SHADER_STAGE_ANY_HIT_BIT_KHR,
+         .module = anyHitModule,
+         .pName = "main"},
     };
 
     VkRayTracingShaderGroupCreateInfoKHR shaderGroups[3] = {
-        {.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR, .type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
-         .generalShader = 0, .closestHitShader = VK_SHADER_UNUSED_KHR, .anyHitShader = VK_SHADER_UNUSED_KHR, .intersectionShader = VK_SHADER_UNUSED_KHR},
-        {.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR, .type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
-         .generalShader = 1, .closestHitShader = VK_SHADER_UNUSED_KHR, .anyHitShader = VK_SHADER_UNUSED_KHR, .intersectionShader = VK_SHADER_UNUSED_KHR},
-        {.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR, .type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR,
-         .generalShader = VK_SHADER_UNUSED_KHR, .closestHitShader = 2, .anyHitShader = 3, .intersectionShader = VK_SHADER_UNUSED_KHR},
+        {.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
+         .type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
+         .generalShader = 0,
+         .closestHitShader = VK_SHADER_UNUSED_KHR,
+         .anyHitShader = VK_SHADER_UNUSED_KHR,
+         .intersectionShader = VK_SHADER_UNUSED_KHR},
+        {.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
+         .type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
+         .generalShader = 1,
+         .closestHitShader = VK_SHADER_UNUSED_KHR,
+         .anyHitShader = VK_SHADER_UNUSED_KHR,
+         .intersectionShader = VK_SHADER_UNUSED_KHR},
+        {.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
+         .type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR,
+         .generalShader = VK_SHADER_UNUSED_KHR,
+         .closestHitShader = 2,
+         .anyHitShader = 3,
+         .intersectionShader = VK_SHADER_UNUSED_KHR},
     };
 
     VkRayTracingPipelineCreateInfoKHR pipelineCreateInfo = {0};
@@ -253,23 +289,20 @@ VKRT_Result createSelectionRayTracingPipeline(VKRT* vkrt) {
     pipelineCreateInfo.layout = vkrt->core.pipelineLayout;
 
     if (vkrt->core.procs.vkCreateRayTracingPipelinesKHR(
-        vkrt->core.device,
-        VK_NULL_HANDLE,
-        VK_NULL_HANDLE,
-        1,
-        &pipelineCreateInfo,
-        NULL,
-        &vkrt->core.selectionRayTracingPipeline
-    ) != VK_SUCCESS) {
+            vkrt->core.device,
+            VK_NULL_HANDLE,
+            VK_NULL_HANDLE,
+            1,
+            &pipelineCreateInfo,
+            NULL,
+            &vkrt->core.selectionRayTracingPipeline
+        ) != VK_SUCCESS) {
         LOG_ERROR("Failed to create selection ray tracing pipeline");
         goto cleanup;
     }
 
     result = VKRT_SUCCESS;
-    LOG_INFO(
-        "Selection ray tracing pipeline created in %.3f ms",
-        (double)(getMicroseconds() - startTime) / 1e3
-    );
+    LOG_INFO("Selection ray tracing pipeline created in %.3f ms", (double)(getMicroseconds() - startTime) / 1e3);
 
 cleanup:
     if (rayGenModule != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, rayGenModule, NULL);
@@ -296,7 +329,8 @@ VKRT_Result createComputePipeline(VKRT* vkrt) {
     createInfo.stage = stageInfo;
     createInfo.layout = vkrt->core.pipelineLayout;
 
-    if (vkCreateComputePipelines(vkrt->core.device, VK_NULL_HANDLE, 1, &createInfo, NULL, &vkrt->core.computePipeline) != VK_SUCCESS) {
+    if (vkCreateComputePipelines(vkrt->core.device, VK_NULL_HANDLE, 1, &createInfo, NULL, &vkrt->core.computePipeline) !=
+        VK_SUCCESS) {
         LOG_ERROR("Failed to create compute pipeline");
         vkDestroyShaderModule(vkrt->core.device, compModule, NULL);
         return VKRT_ERROR_OPERATION_FAILED;
@@ -304,10 +338,7 @@ VKRT_Result createComputePipeline(VKRT* vkrt) {
 
     vkDestroyShaderModule(vkrt->core.device, compModule, NULL);
 
-    LOG_INFO(
-        "Compute pipeline created in %.3f ms",
-        (double)(getMicroseconds() - startTime) / 1e3
-    );
+    LOG_INFO("Compute pipeline created in %.3f ms", (double)(getMicroseconds() - startTime) / 1e3);
     return VKRT_SUCCESS;
 }
 
@@ -347,11 +378,8 @@ VKRT_Result createSyncObjects(VKRT* vkrt) {
         createdFenceCount++;
     }
 
-    if (resetRenderFinishedSemaphores(
-        vkrt,
-        vkrt->runtime.swapChainImageCount,
-        vkrt->runtime.swapChainImageCount
-    ) != VKRT_SUCCESS) {
+    if (resetRenderFinishedSemaphores(vkrt, vkrt->runtime.swapChainImageCount, vkrt->runtime.swapChainImageCount) !=
+        VKRT_SUCCESS) {
         goto create_sync_objects_failed;
     }
 

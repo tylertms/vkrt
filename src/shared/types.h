@@ -4,8 +4,9 @@
 #include "constants.h"
 
 #ifndef VKRT_SHADER
-#include <stdint.h>
 #include "cglm.h"
+
+#include <stdint.h>
 
 typedef vec4 float4;
 typedef vec3 float3;

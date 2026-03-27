@@ -89,8 +89,7 @@ static int beginBenchmarkTiming(VKRT* vkrt, BenchmarkState* state, uint64_t tota
 
     if (!vkrt || !state || state->timingStarted) return 1;
     warmupSamplesReached = totalSamples >= state->warmupSamples;
-    warmupTimeReached = state->renderStartTimeUs > 0u &&
-                        nowUs >= state->renderStartTimeUs &&
+    warmupTimeReached = state->renderStartTimeUs > 0u && nowUs >= state->renderStartTimeUs &&
                         nowUs - state->renderStartTimeUs >= kBenchmarkWarmupTimeUs;
     if (!warmupSamplesReached || !warmupTimeReached) return 1;
     if (!lockBenchmarkSampling(vkrt, &state->lockedSamplesPerFrame)) return 0;
@@ -106,7 +105,12 @@ static uint64_t queryMeasuredSamples(const BenchmarkState* state, uint64_t total
     return totalSamples - state->measurementSamplesStart;
 }
 
-static void printBenchmarkResult(const BenchmarkState* state, const CLIBenchmarkOptions* options, uint64_t nowUs, uint64_t measuredSamples) {
+static void printBenchmarkResult(
+    const BenchmarkState* state,
+    const CLIBenchmarkOptions* options,
+    uint64_t nowUs,
+    uint64_t measuredSamples
+) {
     double elapsedSeconds = 0.0;
     double normalizedSeconds = 0.0;
     double samplesPerSecond = 0.0;
@@ -115,16 +119,14 @@ static void printBenchmarkResult(const BenchmarkState* state, const CLIBenchmark
     if (state && nowUs >= state->startTimeUs) {
         elapsedSeconds = (double)(nowUs - state->startTimeUs) / 1000000.0;
     }
-    normalizedSeconds = normalizeBenchmarkSeconds(
-        elapsedSeconds,
-        measuredSamples,
-        options ? options->targetSamples : 0u
-    );
+    normalizedSeconds =
+        normalizeBenchmarkSeconds(elapsedSeconds, measuredSamples, options ? options->targetSamples : 0u);
     samplesPerSecond = elapsedSeconds > 0.0 ? (double)measuredSamples / elapsedSeconds : 0.0;
     millisecondsPerSample = measuredSamples > 0u ? (elapsedSeconds * 1000.0) / (double)measuredSamples : 0.0;
 
     printf(
-        "Benchmark complete: %.3f s, %.2f samples/s, %.3f ms/sample, %u spp/frame, actual %llu samples\n",
+        "Benchmark complete: %.3f s, %.2f samples/s, %.3f ms/sample, %u spp/frame, actual %llu "
+        "samples\n",
         normalizedSeconds,
         samplesPerSecond,
         millisecondsPerSample,
@@ -207,7 +209,11 @@ static BenchmarkStepResult finishBenchmarkIfTargetReached(
     return BENCHMARK_STEP_CONTINUE;
 }
 
-static BenchmarkStepResult runBenchmarkIteration(VKRT* vkrt, const CLIBenchmarkOptions* options, BenchmarkState* state) {
+static BenchmarkStepResult runBenchmarkIteration(
+    VKRT* vkrt,
+    const CLIBenchmarkOptions* options,
+    BenchmarkState* state
+) {
     VKRT_RenderStatusSnapshot status = {0};
     uint64_t nowUs = 0u;
 

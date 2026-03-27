@@ -87,14 +87,14 @@ bool inspectorPaddedButton(const char* label) {
 void formatDriverVersionText(uint32_t vendorID, uint32_t driverVersion, char* out, size_t outSize) {
     if (!out || outSize == 0) return;
 
-    if (vendorID == 0x10DEu) { // NVIDIA
+    if (vendorID == 0x10DEu) {  // NVIDIA
         uint32_t major = (driverVersion >> 22u) & 0x3ffu;
         uint32_t minor = (driverVersion >> 14u) & 0xffu;
         snprintf(out, outSize, "%u.%02u", major, minor);
         return;
     }
 
-    if (vendorID == 0x8086u) { // INTEL
+    if (vendorID == 0x8086u) {  // INTEL
         uint32_t major = driverVersion >> 14u;
         uint32_t minor = driverVersion & 0x3fffu;
         if (major > 0 && minor > 0) {
@@ -103,7 +103,10 @@ void formatDriverVersionText(uint32_t vendorID, uint32_t driverVersion, char* ou
         }
     }
 
-    snprintf(out, outSize, "%u.%u.%u", // AMD / UNKNOWN
+    snprintf(
+        out,
+        outSize,
+        "%u.%u.%u",  // AMD / UNKNOWN
         VK_API_VERSION_MAJOR(driverVersion),
         VK_API_VERSION_MINOR(driverVersion),
         VK_API_VERSION_PATCH(driverVersion)
@@ -204,7 +207,9 @@ void formatTime(float seconds, char* out, size_t outSize) {
     formatTimeUnitValue(remainder, firstUnit + 1, &secondUnit, &secondValue, &ignoredRemainder);
 
     if (secondUnit >= 0) {
-        snprintf(out, outSize,
+        snprintf(
+            out,
+            outSize,
             "%llu%s %llu%s",
             (unsigned long long)firstValue,
             unitLabels[firstUnit],

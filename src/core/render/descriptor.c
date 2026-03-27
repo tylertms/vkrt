@@ -10,16 +10,8 @@
 #include <stdint.h>
 #include <vulkan/vulkan_core.h>
 
-enum {
-    K_ACCELERATION_STRUCTURE_DESCRIPTOR_COUNT = 2u,
-    K_IMAGE_DESCRIPTOR_COUNT = 8u,
-    K_BUFFER_DESCRIPTOR_COUNT = 12u,
-    K_RENDER_DESCRIPTOR_BINDING_COUNT = 24u,
-};
-
 static VkBool32 textureDescriptorsReady(const VKRT* vkrt) {
-    if (!vkrt ||
-        vkrt->core.textureFallbackView == VK_NULL_HANDLE ||
+    if (!vkrt || vkrt->core.textureFallbackView == VK_NULL_HANDLE ||
         vkrt->core.textureCount > VKRT_MAX_BINDLESS_TEXTURES) {
         return VK_FALSE;
     }
@@ -44,8 +36,7 @@ static VkBool32 descriptorResourcesReadyForFrame(VKRT* vkrt, uint32_t frameIndex
         return VK_FALSE;
     }
 
-    return vkrt->core.sceneDataBuffers[frameIndex] != VK_NULL_HANDLE &&
-           vkrt->core.outputImageView != VK_NULL_HANDLE &&
+    return vkrt->core.sceneDataBuffers[frameIndex] != VK_NULL_HANDLE && vkrt->core.outputImageView != VK_NULL_HANDLE &&
            vkrt->core.selectionMaskImageView != VK_NULL_HANDLE &&
            vkrt->core.accumulationImageViews[vkrt->core.accumulationReadIndex] != VK_NULL_HANDLE &&
            vkrt->core.accumulationImageViews[vkrt->core.accumulationWriteIndex] != VK_NULL_HANDLE &&
@@ -53,17 +44,14 @@ static VkBool32 descriptorResourcesReadyForFrame(VKRT* vkrt, uint32_t frameIndex
            vkrt->core.albedoImageViews[vkrt->core.accumulationWriteIndex] != VK_NULL_HANDLE &&
            vkrt->core.normalImageViews[vkrt->core.accumulationReadIndex] != VK_NULL_HANDLE &&
            vkrt->core.normalImageViews[vkrt->core.accumulationWriteIndex] != VK_NULL_HANDLE &&
-           vkrt->core.vertexData.buffer != VK_NULL_HANDLE &&
-           vkrt->core.indexData.buffer != VK_NULL_HANDLE &&
-           vkrt->core.selection.buffer != VK_NULL_HANDLE &&
-           vkrt->core.sceneMeshData.buffer != VK_NULL_HANDLE &&
+           vkrt->core.vertexData.buffer != VK_NULL_HANDLE && vkrt->core.indexData.buffer != VK_NULL_HANDLE &&
+           vkrt->core.selection.buffer != VK_NULL_HANDLE && vkrt->core.sceneMeshData.buffer != VK_NULL_HANDLE &&
            vkrt->core.sceneMaterialData.buffer != VK_NULL_HANDLE &&
            vkrt->core.sceneEmissiveMeshData.buffer != VK_NULL_HANDLE &&
            vkrt->core.sceneEmissiveTriangleData.buffer != VK_NULL_HANDLE &&
            vkrt->core.sceneMeshAliasQ.buffer != VK_NULL_HANDLE &&
            vkrt->core.sceneMeshAliasIdx.buffer != VK_NULL_HANDLE &&
-           vkrt->core.sceneTriAliasQ.buffer != VK_NULL_HANDLE &&
-           vkrt->core.sceneTriAliasIdx.buffer != VK_NULL_HANDLE &&
+           vkrt->core.sceneTriAliasQ.buffer != VK_NULL_HANDLE && vkrt->core.sceneTriAliasIdx.buffer != VK_NULL_HANDLE &&
            textureDescriptorsReady(vkrt);
 }
 
@@ -128,19 +116,19 @@ typedef struct BufferDescriptorBinding {
 } BufferDescriptorBinding;
 
 typedef struct AccelerationStructureWriteState {
-    VkAccelerationStructureKHR structures[K_ACCELERATION_STRUCTURE_DESCRIPTOR_COUNT];
-    VkWriteDescriptorSetAccelerationStructureKHR infos[K_ACCELERATION_STRUCTURE_DESCRIPTOR_COUNT];
-    VkWriteDescriptorSet writes[K_ACCELERATION_STRUCTURE_DESCRIPTOR_COUNT];
+    VkAccelerationStructureKHR structures[2];
+    VkWriteDescriptorSetAccelerationStructureKHR infos[2];
+    VkWriteDescriptorSet writes[2];
 } AccelerationStructureWriteState;
 
 typedef struct ImageDescriptorWriteState {
-    VkDescriptorImageInfo infos[K_IMAGE_DESCRIPTOR_COUNT];
-    VkWriteDescriptorSet writes[K_IMAGE_DESCRIPTOR_COUNT];
+    VkDescriptorImageInfo infos[8];
+    VkWriteDescriptorSet writes[8];
 } ImageDescriptorWriteState;
 
 typedef struct BufferDescriptorWriteState {
-    VkDescriptorBufferInfo infos[K_BUFFER_DESCRIPTOR_COUNT];
-    VkWriteDescriptorSet writes[K_BUFFER_DESCRIPTOR_COUNT];
+    VkDescriptorBufferInfo infos[12];
+    VkWriteDescriptorSet writes[12];
 } BufferDescriptorWriteState;
 
 typedef struct TextureDescriptorWriteState {
@@ -149,6 +137,20 @@ typedef struct TextureDescriptorWriteState {
     VkWriteDescriptorSet samplerWrite;
     VkWriteDescriptorSet textureWrite;
 } TextureDescriptorWriteState;
+
+static VkDescriptorSetLayoutBinding makeDescriptorSetLayoutBinding(
+    uint32_t binding,
+    VkDescriptorType descriptorType,
+    uint32_t descriptorCount,
+    VkShaderStageFlags stageFlags
+) {
+    VkDescriptorSetLayoutBinding layoutBinding = {0};
+    layoutBinding.binding = binding;
+    layoutBinding.descriptorType = descriptorType;
+    layoutBinding.descriptorCount = descriptorCount;
+    layoutBinding.stageFlags = stageFlags;
+    return layoutBinding;
+}
 
 static void initializeAccelerationStructureWrites(
     VkDescriptorSet descriptorSet,
@@ -189,28 +191,23 @@ static void appendBufferDescriptorWrites(
 
     for (uint32_t i = 0; i < bindingCount; i++) {
         state->infos[i] = makeBufferInfo(bindings[i].buffer, bindings[i].range);
-        state->writes[i] = makeDescriptorWrite(
-            descriptorSet,
-            bindings[i].binding,
-            bindings[i].descriptorType,
-            1
-        );
+        state->writes[i] = makeDescriptorWrite(descriptorSet, bindings[i].binding, bindings[i].descriptorType, 1);
         state->writes[i].pBufferInfo = &state->infos[i];
     }
 }
 
-static void initializeTextureDescriptorWrites(VKRT* vkrt, VkDescriptorSet descriptorSet, TextureDescriptorWriteState* state) {
+static void initializeTextureDescriptorWrites(
+    VKRT* vkrt,
+    VkDescriptorSet descriptorSet,
+    TextureDescriptorWriteState* state
+) {
     if (!vkrt || !state) return;
 
     for (uint32_t i = 0; i < VKRT_TEXTURE_SAMPLER_VARIANT_COUNT; i++) {
         state->samplerInfos[i].sampler = vkrt->core.textureSamplers[i];
     }
-    state->samplerWrite = makeDescriptorWrite(
-        descriptorSet,
-        22u,
-        VK_DESCRIPTOR_TYPE_SAMPLER,
-        VKRT_TEXTURE_SAMPLER_VARIANT_COUNT
-    );
+    state->samplerWrite =
+        makeDescriptorWrite(descriptorSet, 22u, VK_DESCRIPTOR_TYPE_SAMPLER, VKRT_TEXTURE_SAMPLER_VARIANT_COUNT);
     state->samplerWrite.pImageInfo = state->samplerInfos;
 
     for (uint32_t i = 0; i < VKRT_MAX_BINDLESS_TEXTURES; i++) {
@@ -220,12 +217,8 @@ static void initializeTextureDescriptorWrites(VKRT* vkrt, VkDescriptorSet descri
     for (uint32_t i = 0; i < vkrt->core.textureCount; i++) {
         state->textureBindings[i].imageView = vkrt->core.textures[i].view;
     }
-    state->textureWrite = makeDescriptorWrite(
-        descriptorSet,
-        23u,
-        VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-        VKRT_MAX_BINDLESS_TEXTURES
-    );
+    state->textureWrite =
+        makeDescriptorWrite(descriptorSet, 23u, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, VKRT_MAX_BINDLESS_TEXTURES);
     state->textureWrite.pImageInfo = state->textureBindings;
 }
 
@@ -288,15 +281,17 @@ static VKRT_Result updateDescriptorSetForFrame(VKRT* vkrt, uint32_t frameIndex) 
     TextureDescriptorWriteState textureState = {0};
     initializeTextureDescriptorWrites(vkrt, descriptorSet, &textureState);
 
-    VkWriteDescriptorSet writeDescriptorSets[K_RENDER_DESCRIPTOR_BINDING_COUNT] = {0};
+    VkWriteDescriptorSet writeDescriptorSets
+        [VKRT_ARRAY_COUNT(accelerationState.writes) + VKRT_ARRAY_COUNT(imageState.writes) +
+         VKRT_ARRAY_COUNT(bufferState.writes) + 2u] = {0};
     uint32_t writeCount = 0u;
-    for (uint32_t i = 0; i < K_ACCELERATION_STRUCTURE_DESCRIPTOR_COUNT; i++) {
+    for (uint32_t i = 0; i < VKRT_ARRAY_COUNT(accelerationState.writes); i++) {
         writeDescriptorSets[writeCount++] = accelerationState.writes[i];
     }
-    for (uint32_t i = 0; i < K_IMAGE_DESCRIPTOR_COUNT; i++) {
+    for (uint32_t i = 0; i < VKRT_ARRAY_COUNT(imageState.writes); i++) {
         writeDescriptorSets[writeCount++] = imageState.writes[i];
     }
-    for (uint32_t i = 0; i < K_BUFFER_DESCRIPTOR_COUNT; i++) {
+    for (uint32_t i = 0; i < VKRT_ARRAY_COUNT(bufferState.writes); i++) {
         writeDescriptorSets[writeCount++] = bufferState.writes[i];
     }
     writeDescriptorSets[writeCount++] = textureState.samplerWrite;
@@ -310,47 +305,46 @@ static VKRT_Result updateDescriptorSetForFrame(VKRT* vkrt, uint32_t frameIndex) 
 VKRT_Result createDescriptorSetLayout(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
 
-    VkShaderStageFlags rtAll = VK_SHADER_STAGE_RAYGEN_BIT_KHR |
-        VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
-        VK_SHADER_STAGE_ANY_HIT_BIT_KHR |
-        VK_SHADER_STAGE_MISS_BIT_KHR;
+    VkShaderStageFlags rtAll = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
+                               VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR;
     VkShaderStageFlags rgen = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
     VkShaderStageFlags rhit = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR;
     VkShaderStageFlags comp = VK_SHADER_STAGE_COMPUTE_BIT;
 
     VkDescriptorSetLayoutBinding bindings[] = {
-        {.binding = 0,  .descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, .descriptorCount = 1, .stageFlags = rgen},
-        {.binding = 1,  .descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, .descriptorCount = 1, .stageFlags = rgen},
-        {.binding = 2,  .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,              .descriptorCount = 1, .stageFlags = rgen},
-        {.binding = 3,  .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,              .descriptorCount = 1, .stageFlags = rgen},
-        {.binding = 4,  .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,              .descriptorCount = 1, .stageFlags = rgen | comp},
-        {.binding = 5,  .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,              .descriptorCount = 1, .stageFlags = rgen | comp},
-        {.binding = 6,  .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,              .descriptorCount = 1, .stageFlags = rgen},
-        {.binding = 7,  .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,              .descriptorCount = 1, .stageFlags = rgen},
-        {.binding = 8,  .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,              .descriptorCount = 1, .stageFlags = rgen},
-        {.binding = 9,  .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,              .descriptorCount = 1, .stageFlags = rgen},
-        {.binding = 10, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rhit},
-        {.binding = 11, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rhit},
-        {.binding = 12, .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,             .descriptorCount = 1, .stageFlags = rtAll | comp},
-        {.binding = 13, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rgen},
-        {.binding = 14, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rgen | rhit},
-        {.binding = 15, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rgen | rhit},
-        {.binding = 16, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rgen},
-        {.binding = 17, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rgen},
-        {.binding = 18, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rgen},
-        {.binding = 19, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rgen},
-        {.binding = 20, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rgen},
-        {.binding = 21, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, .stageFlags = rgen},
-        {.binding = 22, .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,                    .descriptorCount = VKRT_TEXTURE_SAMPLER_VARIANT_COUNT, .stageFlags = rtAll},
-        {.binding = 23, .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,              .descriptorCount = VKRT_MAX_BINDLESS_TEXTURES, .stageFlags = rtAll},
+        makeDescriptorSetLayoutBinding(0u, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1u, rgen),
+        makeDescriptorSetLayoutBinding(1u, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1u, rgen),
+        makeDescriptorSetLayoutBinding(2u, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1u, rgen),
+        makeDescriptorSetLayoutBinding(3u, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1u, rgen),
+        makeDescriptorSetLayoutBinding(4u, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1u, rgen | comp),
+        makeDescriptorSetLayoutBinding(5u, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1u, rgen | comp),
+        makeDescriptorSetLayoutBinding(6u, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1u, rgen),
+        makeDescriptorSetLayoutBinding(7u, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1u, rgen),
+        makeDescriptorSetLayoutBinding(8u, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1u, rgen),
+        makeDescriptorSetLayoutBinding(9u, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1u, rgen),
+        makeDescriptorSetLayoutBinding(10u, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1u, rhit),
+        makeDescriptorSetLayoutBinding(11u, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1u, rhit),
+        makeDescriptorSetLayoutBinding(12u, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1u, rtAll | comp),
+        makeDescriptorSetLayoutBinding(13u, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1u, rgen),
+        makeDescriptorSetLayoutBinding(14u, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1u, rgen | rhit),
+        makeDescriptorSetLayoutBinding(15u, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1u, rgen | rhit),
+        makeDescriptorSetLayoutBinding(16u, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1u, rgen),
+        makeDescriptorSetLayoutBinding(17u, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1u, rgen),
+        makeDescriptorSetLayoutBinding(18u, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1u, rgen),
+        makeDescriptorSetLayoutBinding(19u, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1u, rgen),
+        makeDescriptorSetLayoutBinding(20u, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1u, rgen),
+        makeDescriptorSetLayoutBinding(21u, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1u, rgen),
+        makeDescriptorSetLayoutBinding(22u, VK_DESCRIPTOR_TYPE_SAMPLER, VKRT_TEXTURE_SAMPLER_VARIANT_COUNT, rtAll),
+        makeDescriptorSetLayoutBinding(23u, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, VKRT_MAX_BINDLESS_TEXTURES, rtAll),
     };
 
     VkDescriptorSetLayoutCreateInfo createInfo = {0};
     createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    createInfo.bindingCount = (uint32_t)(sizeof(bindings) / sizeof(bindings[0]));
+    createInfo.bindingCount = (uint32_t)VKRT_ARRAY_COUNT(bindings);
     createInfo.pBindings = bindings;
 
-    if (vkCreateDescriptorSetLayout(vkrt->core.device, &createInfo, NULL, &vkrt->core.descriptorSetLayout) != VK_SUCCESS) {
+    if (vkCreateDescriptorSetLayout(vkrt->core.device, &createInfo, NULL, &vkrt->core.descriptorSetLayout) !=
+        VK_SUCCESS) {
         LOG_ERROR("Failed to create descriptor set layout");
         return VKRT_ERROR_OPERATION_FAILED;
     }

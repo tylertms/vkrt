@@ -1,5 +1,6 @@
 #include "lighting.h"
 
+#include "../../../external/cglm/include/types.h"
 #include "buffer.h"
 #include "constants.h"
 #include "debug.h"
@@ -10,7 +11,6 @@
 #include "vkrt_types.h"
 #include "vulkan/vulkan_core.h"
 
-#include "../../../external/cglm/include/types.h"
 #include <limits.h>
 #include <math.h>
 #include <stddef.h>
@@ -70,12 +70,12 @@ static int materialEligibleForDirectLightSampling(const MeshInfo* meshInfo, cons
 }
 
 static void transformPosition(const VkTransformMatrixKHR* transform, const vec4 position, vec3 outWorld) {
-    outWorld[0] = (transform->matrix[0][0] * position[0]) + (transform->matrix[0][1] * position[1])
-                + (transform->matrix[0][2] * position[2]) + transform->matrix[0][3];
-    outWorld[1] = (transform->matrix[1][0] * position[0]) + (transform->matrix[1][1] * position[1])
-                + (transform->matrix[1][2] * position[2]) + transform->matrix[1][3];
-    outWorld[2] = (transform->matrix[2][0] * position[0]) + (transform->matrix[2][1] * position[1])
-                + (transform->matrix[2][2] * position[2]) + transform->matrix[2][3];
+    outWorld[0] = (transform->matrix[0][0] * position[0]) + (transform->matrix[0][1] * position[1]) +
+                  (transform->matrix[0][2] * position[2]) + transform->matrix[0][3];
+    outWorld[1] = (transform->matrix[1][0] * position[0]) + (transform->matrix[1][1] * position[1]) +
+                  (transform->matrix[1][2] * position[2]) + transform->matrix[1][3];
+    outWorld[2] = (transform->matrix[2][0] * position[0]) + (transform->matrix[2][1] * position[1]) +
+                  (transform->matrix[2][2] * position[2]) + transform->matrix[2][3];
 }
 
 static void destroyLightBufferState(VKRT* vkrt, LightBufferState* state) {
@@ -189,7 +189,10 @@ static VKRT_Result countEmissiveLights(const VKRT* vkrt, EmissiveLightCounts* co
     for (uint32_t meshIndex = 0; meshIndex < meshCount; meshIndex++) {
         const Mesh* mesh = &vkrt->core.meshes[meshIndex];
         const Material* material = vkrtGetSceneMaterialData(vkrt, mesh->info.materialIndex);
-        if (!material || !materialEligibleForDirectLightSampling(&mesh->info, material) || materialEmissionWeight(material) <= 0.0f) continue;
+        if (!material || !materialEligibleForDirectLightSampling(&mesh->info, material) ||
+            materialEmissionWeight(material) <= 0.0f) {
+            continue;
+        }
         uint32_t triangleCount = mesh->info.indexCount / 3u;
         if (triangleCount == 0) continue;
         emissiveMeshCount64++;
@@ -219,8 +222,7 @@ static VKRT_Result allocateLightBuildScratch(const EmissiveLightCounts* counts, 
     uint32_t allocTriangleCount = counts->emissiveTriangleCount > 0u ? counts->emissiveTriangleCount : 1u;
     if (!canAllocateArray(allocMeshCount, sizeof(EmissiveMesh)) ||
         !canAllocateArray(allocTriangleCount, sizeof(EmissiveTriangle)) ||
-        !canAllocateArray(allocMeshCount, sizeof(float)) ||
-        !canAllocateArray(allocTriangleCount, sizeof(float)) ||
+        !canAllocateArray(allocMeshCount, sizeof(float)) || !canAllocateArray(allocTriangleCount, sizeof(float)) ||
         !canAllocateArray(allocMeshCount, sizeof(uint32_t)) ||
         !canAllocateArray(allocTriangleCount, sizeof(uint32_t))) {
         LOG_ERROR("Emissive light staging allocation exceeds host address space limits");
@@ -369,7 +371,8 @@ static VKRT_Result appendEmissiveMesh(
             scratch->triPmfScratch,
             validTriangleCount,
             &scratch->triAliasQ[triangleOffset],
-            &scratch->triAliasIdx[triangleOffset])) {
+            &scratch->triAliasIdx[triangleOffset]
+        )) {
         LOG_ERROR("Failed to build emissive triangle alias table");
         return VKRT_ERROR_OPERATION_FAILED;
     }
@@ -423,11 +426,9 @@ static VKRT_Result finalizeMeshSelectionWeights(VKRT* vkrt, LightBuildScratch* s
         vkrt->core.meshes[scratch->sourceMeshIndices[meshIndex]].info.lightPdfArea =
             pmf * scratch->emissiveMeshes[meshIndex].invTotalArea;
     }
-    if (!buildAliasTable(
-            scratch->triPmfScratch,
-            scratch->emissiveMeshCount,
-            scratch->meshAliasQ,
-            scratch->meshAliasIdx)) {
+    if (
+        !buildAliasTable(scratch->triPmfScratch, scratch->emissiveMeshCount, scratch->meshAliasQ, scratch->meshAliasIdx)
+    ) {
         LOG_ERROR("Failed to build emissive mesh alias table");
         return VKRT_ERROR_OPERATION_FAILED;
     }
@@ -461,13 +462,33 @@ static VKRT_Result uploadScratchLightBuffers(
     if (result != VKRT_SUCCESS) return result;
     nextState->sceneEmissiveTriangleData.count = scratch->emissiveTriangleCount;
 
-    result = uploadLightBuffer(vkrt, scratch->meshAliasQ, (VkDeviceSize)uploadMeshCount * sizeof(float), &nextState->sceneMeshAliasQ);
+    result = uploadLightBuffer(
+        vkrt,
+        scratch->meshAliasQ,
+        (VkDeviceSize)uploadMeshCount * sizeof(float),
+        &nextState->sceneMeshAliasQ
+    );
     if (result != VKRT_SUCCESS) return result;
-    result = uploadLightBuffer(vkrt, scratch->meshAliasIdx, (VkDeviceSize)uploadMeshCount * sizeof(uint32_t), &nextState->sceneMeshAliasIdx);
+    result = uploadLightBuffer(
+        vkrt,
+        scratch->meshAliasIdx,
+        (VkDeviceSize)uploadMeshCount * sizeof(uint32_t),
+        &nextState->sceneMeshAliasIdx
+    );
     if (result != VKRT_SUCCESS) return result;
-    result = uploadLightBuffer(vkrt, scratch->triAliasQ, (VkDeviceSize)uploadTriangleCount * sizeof(float), &nextState->sceneTriAliasQ);
+    result = uploadLightBuffer(
+        vkrt,
+        scratch->triAliasQ,
+        (VkDeviceSize)uploadTriangleCount * sizeof(float),
+        &nextState->sceneTriAliasQ
+    );
     if (result != VKRT_SUCCESS) return result;
-    result = uploadLightBuffer(vkrt, scratch->triAliasIdx, (VkDeviceSize)uploadTriangleCount * sizeof(uint32_t), &nextState->sceneTriAliasIdx);
+    result = uploadLightBuffer(
+        vkrt,
+        scratch->triAliasIdx,
+        (VkDeviceSize)uploadTriangleCount * sizeof(uint32_t),
+        &nextState->sceneTriAliasIdx
+    );
     if (result != VKRT_SUCCESS) return result;
 
     nextState->emissiveMeshCount = scratch->emissiveMeshCount;

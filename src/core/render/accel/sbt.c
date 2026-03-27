@@ -76,11 +76,7 @@ static VKRT_Result createShaderBindingTableStageBuffer(
     }
 
     for (uint32_t groupIndex = 0; groupIndex < groupCount; groupIndex++) {
-        memcpy(
-            ((uint8_t*)mapped) + (groupIndex * stride),
-            handles + (groupIndex * handleSize),
-            handleSize
-        );
+        memcpy(((uint8_t*)mapped) + (groupIndex * stride), handles + (groupIndex * handleSize), handleSize);
     }
     vkUnmapMemory(vkrt->core.device, *outStageMemory);
     free(handles);
@@ -226,7 +222,15 @@ static VKRT_Result createShaderBindingTableForPipeline(
         return VKRT_ERROR_OPERATION_FAILED;
     }
     destroyShaderBindingTableStageResources(vkrt, stageBuffer, stageMemory);
-    buildShaderBindingTableRegions(vkrt, *output.buffer, stride, raygenGroupCount, missGroupCount, hitGroupCount, output.tables);
+    buildShaderBindingTableRegions(
+        vkrt,
+        *output.buffer,
+        stride,
+        raygenGroupCount,
+        missGroupCount,
+        hitGroupCount,
+        output.tables
+    );
 
     return VKRT_SUCCESS;
 }

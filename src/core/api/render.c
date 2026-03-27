@@ -63,10 +63,8 @@ static void finishRenderSampling(VKRT* vkrt) {
 
     VkBool32 usedRenderPresentProfile = vkrtUsesRenderPresentProfile(vkrt);
 
-    if (vkrt->renderStatus.renderDenoiseEnabled &&
-        vkrtOIDNAvailable() &&
-        vkrt->sceneSettings.debugMode == VKRT_DEBUG_MODE_NONE &&
-        beginViewportDenoiseTransfer(vkrt) == VKRT_SUCCESS) {
+    if (vkrt->renderStatus.renderDenoiseEnabled && vkrtOIDNAvailable() &&
+        vkrt->sceneSettings.debugMode == VKRT_DEBUG_MODE_NONE && beginViewportDenoiseTransfer(vkrt) == VKRT_SUCCESS) {
         vkrtRefreshPresentModeIfNeeded(vkrt, usedRenderPresentProfile);
         return;
     }
@@ -80,16 +78,12 @@ VKRT_Result VKRT_denoiseRenderToViewport(VKRT* vkrt) {
         !VKRT_renderPhaseSamplingFinished(vkrt->renderStatus.renderPhase)) {
         return VKRT_ERROR_OPERATION_FAILED;
     }
-    return beginViewportDenoiseTransfer(vkrt) == VKRT_SUCCESS
-        ? VKRT_SUCCESS
-        : VKRT_ERROR_OPERATION_FAILED;
+    return beginViewportDenoiseTransfer(vkrt) == VKRT_SUCCESS ? VKRT_SUCCESS : VKRT_ERROR_OPERATION_FAILED;
 }
 
 VKRT_Result VKRT_saveRenderImageEx(VKRT* vkrt, const char* path, const VKRT_RenderExportSettings* settings) {
     if (!vkrt || !path || !path[0]) return VKRT_ERROR_INVALID_ARGUMENT;
-    return saveCurrentRenderImageEx(vkrt, path, settings) == 0
-        ? VKRT_SUCCESS
-        : VKRT_ERROR_OPERATION_FAILED;
+    return saveCurrentRenderImageEx(vkrt, path, settings) == 0 ? VKRT_SUCCESS : VKRT_ERROR_OPERATION_FAILED;
 }
 
 VKRT_Result VKRT_saveRenderImage(VKRT* vkrt, const char* path) {
@@ -138,10 +132,7 @@ static VkExtent2D queryEffectiveDisplayViewportExtent(const VKRT* vkrt) {
 }
 
 static int vector3Finite(const vec3 value) {
-    return value &&
-        isfinite(value[0]) &&
-        isfinite(value[1]) &&
-        isfinite(value[2]);
+    return value && isfinite(value[0]) && isfinite(value[1]) && isfinite(value[2]);
 }
 
 static int cameraPoseValid(const Camera* camera) {
@@ -233,8 +224,7 @@ static void resetRenderSessionState(VKRT* vkrt, VkBool32 resetViewTransform) {
 static VKRT_Result updateRenderExtent(VKRT* vkrt, VkExtent2D extent) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
 
-    if (vkrt->runtime.renderExtent.width == extent.width &&
-        vkrt->runtime.renderExtent.height == extent.height) {
+    if (vkrt->runtime.renderExtent.width == extent.width && vkrt->runtime.renderExtent.height == extent.height) {
         return VKRT_SUCCESS;
     }
 
@@ -309,10 +299,8 @@ VKRT_Result VKRT_setRenderViewport(VKRT* vkrt, uint32_t x, uint32_t y, uint32_t 
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
 
     vkrtClampViewportRect(vkrt->runtime.swapChainExtent, &x, &y, &width, &height);
-    if (vkrt->runtime.displayViewportRect[0] == x &&
-        vkrt->runtime.displayViewportRect[1] == y &&
-        vkrt->runtime.displayViewportRect[2] == width &&
-        vkrt->runtime.displayViewportRect[3] == height) {
+    if (vkrt->runtime.displayViewportRect[0] == x && vkrt->runtime.displayViewportRect[1] == y &&
+        vkrt->runtime.displayViewportRect[2] == width && vkrt->runtime.displayViewportRect[3] == height) {
         if (VKRT_renderPhaseIsActive(vkrt->renderStatus.renderPhase)) return VKRT_SUCCESS;
         applySceneViewport(vkrt, x, y, width, height);
         return VKRT_SUCCESS;
@@ -374,8 +362,7 @@ VKRT_Result VKRT_setRenderViewState(VKRT* vkrt, float zoom, float panX, float pa
     VkExtent2D viewportExtent = queryEffectiveDisplayViewportExtent(vkrt);
     vkrtClampRenderViewPanOffset(renderExtent, viewportExtent, zoom, &panX, &panY);
 
-    if (vkrt->renderControl.view.zoom == zoom &&
-        vkrt->renderControl.view.panX == panX &&
+    if (vkrt->renderControl.view.zoom == zoom && vkrt->renderControl.view.panX == panX &&
         vkrt->renderControl.view.panY == panY) {
         return VKRT_SUCCESS;
     }
@@ -392,11 +379,8 @@ static int cameraVectorsEqual(const vec3 left, const vec3 right) {
 
 static int cameraEqual(const Camera* left, const Camera* right) {
     if (!left || !right) return 0;
-    return cameraVectorsEqual(left->pos, right->pos) &&
-           cameraVectorsEqual(left->target, right->target) &&
-           cameraVectorsEqual(left->up, right->up) &&
-           left->vfov == right->vfov &&
-           left->nearZ == right->nearZ &&
+    return cameraVectorsEqual(left->pos, right->pos) && cameraVectorsEqual(left->target, right->target) &&
+           cameraVectorsEqual(left->up, right->up) && left->vfov == right->vfov && left->nearZ == right->nearZ &&
            left->farZ == right->farZ;
 }
 

@@ -87,7 +87,9 @@ static ImageCodec queryImageCodecFromMimeType(const char* mimeType) {
     if (!mimeType || !mimeType[0]) return IMAGE_CODEC_UNKNOWN;
     if (mimeTypeStartsWith(mimeType, "image/png")) return IMAGE_CODEC_PNG;
     if (mimeTypeStartsWith(mimeType, "image/jpeg")) return IMAGE_CODEC_JPEG;
-    if (mimeTypeStartsWith(mimeType, "image/exr") || mimeTypeStartsWith(mimeType, "image/x-exr")) return IMAGE_CODEC_EXR;
+    if (mimeTypeStartsWith(mimeType, "image/exr") || mimeTypeStartsWith(mimeType, "image/x-exr")) {
+        return IMAGE_CODEC_EXR;
+    }
     return IMAGE_CODEC_UNKNOWN;
 }
 
@@ -147,9 +149,7 @@ static int decodePNGImage(
     }
 
     int decodeAsRGBA16 = header.bit_depth == 16u;
-    uint32_t format = decodeAsRGBA16
-        ? VKRT_TEXTURE_FORMAT_RGBA16_UNORM
-        : VKRT_TEXTURE_FORMAT_RGBA8_UNORM;
+    uint32_t format = decodeAsRGBA16 ? VKRT_TEXTURE_FORMAT_RGBA16_UNORM : VKRT_TEXTURE_FORMAT_RGBA8_UNORM;
     int decodeFormat = decodeAsRGBA16 ? SPNG_FMT_RGBA16 : SPNG_FMT_RGBA8;
     size_t rgbaByteCount = 0u;
     error = spng_decoded_image_size(context, decodeFormat, &rgbaByteCount);
@@ -160,12 +160,8 @@ static int decodePNGImage(
     }
 
     size_t expectedByteCount = 0u;
-    if (!vkrtTryComputeImageByteCount(
-        header.width,
-        header.height,
-        decodeAsRGBA16 ? 8u : 4u,
-        &expectedByteCount
-    ) || rgbaByteCount != expectedByteCount) {
+    if (!vkrtTryComputeImageByteCount(header.width, header.height, decodeAsRGBA16 ? 8u : 4u, &expectedByteCount) ||
+        rgbaByteCount != expectedByteCount) {
         LOG_ERROR("PNG image dimensions overflow for %s", sourceLabel);
         spng_ctx_free(context);
         return 0;
@@ -218,14 +214,14 @@ static int decodeJPEGImage(
     int subsampling = 0;
     int colorspace = 0;
     if (tjDecompressHeader3(
-        handle,
-        (const unsigned char*)data,
-        (unsigned long)size,
-        &width,
-        &height,
-        &subsampling,
-        &colorspace
-    ) != 0) {
+            handle,
+            (const unsigned char*)data,
+            (unsigned long)size,
+            &width,
+            &height,
+            &subsampling,
+            &colorspace
+        ) != 0) {
         LOG_ERROR("JPEG header decode from %s failed (%s)", sourceLabel, tjGetErrorStr2(handle));
         tjDestroy(handle);
         return 0;
@@ -255,16 +251,16 @@ static int decodeJPEGImage(
     }
 
     if (tjDecompress2(
-        handle,
-        (const unsigned char*)data,
-        (unsigned long)size,
-        pixels,
-        width,
-        0,
-        height,
-        TJPF_RGBA,
-        TJFLAG_ACCURATEDCT
-    ) != 0) {
+            handle,
+            (const unsigned char*)data,
+            (unsigned long)size,
+            pixels,
+            width,
+            0,
+            height,
+            TJPF_RGBA,
+            TJFLAG_ACCURATEDCT
+        ) != 0) {
         free(pixels);
         LOG_ERROR("JPEG decode from %s failed (%s)", sourceLabel, tjGetErrorStr2(handle));
         tjDestroy(handle);
@@ -283,12 +279,7 @@ static int decodeJPEGImage(
     );
 }
 
-static int decodeEXRImage(
-    const void* data,
-    size_t size,
-    const char* sourceLabel,
-    VKRT_LoadedImage* outImage
-) {
+static int decodeEXRImage(const void* data, size_t size, const char* sourceLabel, VKRT_LoadedImage* outImage) {
     return vkrtLoadEXRImageFromMemory(data, size, sourceLabel, outImage);
 }
 
