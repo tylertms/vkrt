@@ -17,8 +17,8 @@
 			"material":	{
 				"baseColor":	[0, 0, 0],
 				"roughness":	1,
-				"emissionLuminance":	8000,
-				"diffuseRoughness":	1
+				"diffuseRoughness":	1,
+				"emissionLuminance":	8000
 			}
 		}, {
 			"index":	3,
@@ -83,17 +83,13 @@
 			"up":	[0, 0, 1],
 			"vfov":	26.899999618530273
 		},
-		"samplesPerPixel":	1,
 		"rrMinDepth":	4,
 		"rrMaxDepth":	8,
 		"toneMappingMode":	1,
 		"exposure":	1,
 		"autoExposureEnabled":	false,
-		"autoSPPEnabled":	true,
 		"environmentColor":	[0, 0, 0],
 		"environmentStrength":	0,
-		"debugMode":	0,
-		"misNeeEnabled":	true,
-		"selectedMeshIndex":	2
+		"misNeeEnabled":	true
 	}
 }

@@ -54,8 +54,8 @@
 			"name":	"sphere",
 			"material":	{
 				"baseColor":	[1, 1, 1],
-				"roughness":	0,
-				"metallic":	1
+				"metallic":	1,
+				"roughness":	0
 			}
 		}],
 	"meshes":	[{
@@ -187,17 +187,13 @@
 			"up":	[0, 0, 1],
 			"vfov":	26.899999618530273
 		},
-		"samplesPerPixel":	1,
 		"rrMinDepth":	4,
 		"rrMaxDepth":	8,
 		"toneMappingMode":	1,
 		"exposure":	1,
 		"autoExposureEnabled":	false,
-		"autoSPPEnabled":	true,
 		"environmentColor":	[0.25, 0.25, 0.25],
 		"environmentStrength":	1,
-		"debugMode":	0,
-		"misNeeEnabled":	true,
-		"selectedMeshIndex":	null
+		"misNeeEnabled":	true
 	}
 }

@@ -780,18 +780,14 @@ static int saveSceneSettings(cJSON* sceneRoot, const VKRT_SceneSettingsSnapshot*
     cJSON_AddItemToObject(camera, "up", createFloatArray(settings->camera.up, 3u));
     cJSON_AddNumberToObject(camera, "vfov", settings->camera.vfov);
     cJSON_AddItemToObject(settingsObject, "camera", camera);
-    cJSON_AddNumberToObject(settingsObject, "samplesPerPixel", settings->samplesPerPixel);
     cJSON_AddNumberToObject(settingsObject, "rrMinDepth", settings->rrMinDepth);
     cJSON_AddNumberToObject(settingsObject, "rrMaxDepth", settings->rrMaxDepth);
     cJSON_AddNumberToObject(settingsObject, "toneMappingMode", settings->toneMappingMode);
     cJSON_AddNumberToObject(settingsObject, "exposure", settings->exposure);
     cJSON_AddBoolToObject(settingsObject, "autoExposureEnabled", settings->autoExposureEnabled != 0u);
-    cJSON_AddBoolToObject(settingsObject, "autoSPPEnabled", settings->autoSPPEnabled != 0u);
     cJSON_AddItemToObject(settingsObject, "environmentColor", createFloatArray(settings->environmentColor, 3u));
     cJSON_AddNumberToObject(settingsObject, "environmentStrength", settings->environmentStrength);
-    cJSON_AddNumberToObject(settingsObject, "debugMode", settings->debugMode);
     cJSON_AddBoolToObject(settingsObject, "misNeeEnabled", settings->misNeeEnabled != 0u);
-    addUIntOrNull(settingsObject, "selectedMeshIndex", settings->selectedMeshIndex);
 
     addObjectItem(sceneRoot, "sceneSettings", settingsObject);
     return 1;
@@ -839,59 +835,45 @@ static int applySceneSettings(
     vec3 cameraTarget = {settings.camera.target[0], settings.camera.target[1], settings.camera.target[2]};
     vec3 cameraUp = {settings.camera.up[0], settings.camera.up[1], settings.camera.up[2]};
     float vfov = settings.camera.vfov;
-    uint32_t samplesPerPixel = settings.samplesPerPixel;
     uint32_t rrMinDepth = settings.rrMinDepth;
     uint32_t rrMaxDepth = settings.rrMaxDepth;
     uint32_t toneMappingMode = settings.toneMappingMode;
     float exposure = settings.exposure;
     uint8_t autoExposureEnabled = settings.autoExposureEnabled;
-    uint8_t autoSPPEnabled = settings.autoSPPEnabled;
     vec3 environmentColor = {
         settings.environmentColor[0],
         settings.environmentColor[1],
         settings.environmentColor[2],
     };
     float environmentStrength = settings.environmentStrength;
-    uint32_t debugMode = settings.debugMode;
     uint8_t misNeeEnabled = (uint8_t)(settings.misNeeEnabled != 0u);
-    uint32_t selectedMeshIndex = settings.selectedMeshIndex;
 
     if (!jsonReadOptionalFloatArrayField(cameraObject, "position", cameraPosition, 3u) ||
         !jsonReadOptionalFloatArrayField(cameraObject, "target", cameraTarget, 3u) ||
         !jsonReadOptionalFloatArrayField(cameraObject, "up", cameraUp, 3u) ||
         !jsonReadOptionalFloatField(cameraObject, "vfov", &vfov) ||
-        !jsonReadOptionalUInt32Field(settingsObject, "samplesPerPixel", &samplesPerPixel) ||
         !jsonReadOptionalUInt32Field(settingsObject, "rrMinDepth", &rrMinDepth) ||
         !jsonReadOptionalUInt32Field(settingsObject, "rrMaxDepth", &rrMaxDepth) ||
         !jsonReadOptionalUInt32Field(settingsObject, "toneMappingMode", &toneMappingMode) ||
         !jsonReadOptionalFloatField(settingsObject, "exposure", &exposure) ||
         !jsonReadOptionalBoolField(settingsObject, "autoExposureEnabled", &autoExposureEnabled) ||
-        !jsonReadOptionalBoolField(settingsObject, "autoSPPEnabled", &autoSPPEnabled) ||
         !jsonReadOptionalFloatArrayField(settingsObject, "environmentColor", environmentColor, 3u) ||
         !jsonReadOptionalFloatField(settingsObject, "environmentStrength", &environmentStrength) ||
-        !jsonReadOptionalUInt32Field(settingsObject, "debugMode", &debugMode) ||
-        !jsonReadOptionalBoolField(settingsObject, "misNeeEnabled", &misNeeEnabled) ||
-        !jsonReadOptionalIndexField(settingsObject, "selectedMeshIndex", &selectedMeshIndex)) {
+        !jsonReadOptionalBoolField(settingsObject, "misNeeEnabled", &misNeeEnabled)) {
         return 0;
     }
 
-    if (selectedMeshIndex != VKRT_INVALID_INDEX) {
-        if (selectedMeshIndex >= savedMeshCount || !savedToLoadedMeshIndex) return 0;
-        selectedMeshIndex = savedToLoadedMeshIndex[selectedMeshIndex];
-    }
+    (void)savedToLoadedMeshIndex;
+    (void)savedMeshCount;
 
-    return VKRT_setSamplesPerPixel(vkrt, samplesPerPixel) == VKRT_SUCCESS &&
-           VKRT_setPathDepth(vkrt, rrMinDepth, rrMaxDepth) == VKRT_SUCCESS &&
+    return VKRT_setPathDepth(vkrt, rrMinDepth, rrMaxDepth) == VKRT_SUCCESS &&
            VKRT_setToneMappingMode(vkrt, toneMappingMode) == VKRT_SUCCESS &&
            VKRT_setExposure(vkrt, exposure) == VKRT_SUCCESS &&
            VKRT_setAutoExposureEnabled(vkrt, autoExposureEnabled) == VKRT_SUCCESS &&
-           VKRT_setAutoSPPEnabled(vkrt, autoSPPEnabled) == VKRT_SUCCESS &&
            VKRT_setEnvironmentLight(vkrt, environmentColor, environmentStrength) == VKRT_SUCCESS &&
-           VKRT_setDebugMode(vkrt, debugMode) == VKRT_SUCCESS &&
            VKRT_setMISNEEEnabled(vkrt, misNeeEnabled ? 1u : 0u) == VKRT_SUCCESS &&
            VKRT_setSceneTimeline(vkrt, NULL) == VKRT_SUCCESS &&
-           VKRT_cameraSetPose(vkrt, cameraPosition, cameraTarget, cameraUp, vfov) == VKRT_SUCCESS &&
-           VKRT_setSelectedMesh(vkrt, selectedMeshIndex) == VKRT_SUCCESS;
+           VKRT_cameraSetPose(vkrt, cameraPosition, cameraTarget, cameraUp, vfov) == VKRT_SUCCESS;
 }
 
 static int queryHighestSavedMaterialIndex(
