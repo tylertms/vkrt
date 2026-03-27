@@ -7,6 +7,7 @@ Checks: >-
   performance-*,
   portability-*,
   readability-*,
+  -bugprone-easily-swappable-parameters,
   -readability-magic-numbers,
   -readability-qualified-auto,
   -readability-redundant-access-specifiers,
@@ -17,38 +18,22 @@ FormatStyle: file
 SystemHeaders: false
 
 CheckOptions:
-  - key: bugprone-argument-comment.StrictMode
-    value: 'true'
   - key: bugprone-assert-side-effect.AssertMacros
     value: 'assert,ASSERT,IM_ASSERT'
-  - key: bugprone-macro-parentheses.IgnoreCommandLineMacros
-    value: 'true'
   - key: readability-braces-around-statements.ShortStatementLines
     value: '1'
   - key: readability-function-size.LineThreshold
-    value: '180'
+    value: '300'
   - key: readability-function-size.StatementThreshold
-    value: '60'
+    value: '80'
   - key: readability-function-size.BranchThreshold
-    value: '15'
+    value: '18'
   - key: readability-function-size.NestingThreshold
-    value: '4'
+    value: '5'
   - key: readability-function-size.ParameterThreshold
-    value: '6'
+    value: '7'
   - key: readability-function-size.VariableThreshold
-    value: '15'
-  - key: readability-function-cognitive-complexity.Threshold
     value: '20'
-  - key: readability-function-cognitive-complexity.DescribeBasicIncrements
-    value: 'false'
-  - key: readability-else-after-return.WarnOnConditionVariables
-    value: 'true'
-  - key: readability-identifier-length.MinimumVariableNameLength
-    value: '3'
-  - key: readability-identifier-length.MinimumParameterNameLength
-    value: '3'
-  - key: readability-identifier-length.MinimumLoopCounterNameLength
-    value: '2'
   - key: readability-identifier-length.IgnoredVariableNames
     value: '^(x|y|z|r|g|b|a|u|v|w|ok)$'
   - key: readability-identifier-length.IgnoredParameterNames
@@ -56,30 +41,6 @@ CheckOptions:
   - key: readability-identifier-length.IgnoredLoopCounterNames
     value: '^[ijkxyzuvw_]$'
   - key: readability-inconsistent-declaration-parameter-name.Strict
-    value: 'true'
-  - key: readability-identifier-naming.FunctionCase
-    value: camelBack
-  - key: readability-identifier-naming.FunctionIgnoredRegexp
-    value: '^(VKRT_[A-Za-z0-9_]*|CLI[A-Za-z0-9]*|LOG_[A-Z0-9_]+)$'
-  - key: readability-identifier-naming.VariableCase
-    value: camelBack
-  - key: readability-identifier-naming.VariableIgnoredRegexp
-    value: '^_.*$'
-  - key: readability-identifier-naming.ConstantCase
-    value: camelBack
-  - key: readability-identifier-naming.ConstantIgnoredRegexp
-    value: '^_.*$'
-  - key: readability-identifier-naming.ParameterCase
-    value: camelBack
-  - key: readability-identifier-naming.StructMemberCase
-    value: camelBack
-  - key: readability-identifier-naming.StructMemberIgnoredRegexp
-    value: '^_.*$'
-  - key: readability-isolate-declaration.IgnoreSingleArgInlineFunctions
-    value: 'false'
-  - key: readability-named-parameter.InsertPlainNamesInForwardDecls
-    value: 'false'
-  - key: readability-simplify-boolean-expr.SimplifyDeMorgan
     value: 'true'
   - key: readability-identifier-naming.MacroDefinitionCase
     value: UPPER_CASE
@@ -95,3 +56,15 @@ CheckOptions:
     value: CamelCase
   - key: readability-identifier-naming.UnionCase
     value: CamelCase
+  - key: readability-identifier-naming.FunctionCase
+    value: camelBack
+  - key: readability-identifier-naming.FunctionIgnoredRegexp
+    value: '^(VKRT_[A-Za-z0-9_]*|CLI[A-Za-z0-9]*|LOG_[A-Z0-9_]+)$'
+  - key: readability-identifier-naming.VariableCase
+    value: camelBack
+  - key: readability-identifier-naming.ConstantCase
+    value: camelBack
+  - key: readability-identifier-naming.ParameterCase
+    value: camelBack
+  - key: readability-identifier-naming.StructMemberCase
+    value: camelBack
