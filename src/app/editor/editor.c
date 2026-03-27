@@ -94,6 +94,7 @@ static ImFontConfig makeDefaultFontConfig(void) {
     config.FontDataOwnedByAtlas = true;
     config.OversampleH = 0;
     config.OversampleV = 0;
+    config.ExtraSizeScale = 1.0f;
     config.GlyphMaxAdvanceX = FLT_MAX;
     config.RasterizerMultiply = 1.0f;
     config.RasterizerDensity = 1.0f;
@@ -108,7 +109,17 @@ static float queryEditorContentScale(GLFWwindow* window) {
     float scaleY = 1.0f;
     glfwGetWindowContentScale(window, &scaleX, &scaleY);
 
-    float scale = fmaxf(scaleX, scaleY);
+    int windowWidth = 0;
+    int windowHeight = 0;
+    glfwGetWindowSize(window, &windowWidth, &windowHeight);
+
+    int framebufferWidth = 0;
+    int framebufferHeight = 0;
+    glfwGetFramebufferSize(window, &framebufferWidth, &framebufferHeight);
+
+    float framebufferScaleX = windowWidth > 0 ? ((float)framebufferWidth / (float)windowWidth) : 1.0f;
+    float framebufferScaleY = windowHeight > 0 ? ((float)framebufferHeight / (float)windowHeight) : 1.0f;
+    float scale = fmaxf(fmaxf(scaleX, scaleY), fmaxf(framebufferScaleX, framebufferScaleY));
     return vkrtFiniteClampf(scale, 1.0f, FLT_MIN, INFINITY);
 }
 
@@ -138,14 +149,24 @@ static void populateVulkanInitInfo(const VKRT_OverlayInfo* overlay, ImGui_ImplVu
         .Allocator = VK_NULL_HANDLE,
         .MinImageCount = overlay->swapchainMinImageCount,
         .ImageCount = overlay->swapchainImageCount,
-        .MSAASamples = VK_SAMPLE_COUNT_1_BIT,
+        .PipelineInfoMain = {
+            .MSAASamples = VK_SAMPLE_COUNT_1_BIT,
+            .PipelineRenderingCreateInfo = {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+                .colorAttachmentCount = 1,
+                .pColorAttachmentFormats = &overlay->colorAttachmentFormat,
+            },
+        },
+        .PipelineInfoForViewports = {
+            .MSAASamples = VK_SAMPLE_COUNT_1_BIT,
+            .PipelineRenderingCreateInfo = {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+                .colorAttachmentCount = 1,
+                .pColorAttachmentFormats = &overlay->colorAttachmentFormat,
+            },
+        },
         .CheckVkResultFn = VK_NULL_HANDLE,
         .UseDynamicRendering = true,
-        .PipelineRenderingCreateInfo = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
-            .colorAttachmentCount = 1,
-            .pColorAttachmentFormats = &overlay->colorAttachmentFormat,
-        },
     };
 }
 
@@ -166,16 +187,9 @@ static bool initializeEditorVulkanBackend(EditorUIState* state, const VKRT_Overl
 
     state->overlay = *overlay;
 
-    ImGui_ImplVulkan_InitInfo initInfo = {
-        .MSAASamples = VK_SAMPLE_COUNT_1_BIT,
-    };
+    ImGui_ImplVulkan_InitInfo initInfo = {0};
     populateVulkanInitInfo(&state->overlay, &initInfo);
     if (!cImGui_ImplVulkan_Init(&initInfo)) {
-        memset(&state->overlay, 0, sizeof(state->overlay));
-        return false;
-    }
-    if (!cImGui_ImplVulkan_CreateFontsTexture()) {
-        cImGui_ImplVulkan_Shutdown();
         memset(&state->overlay, 0, sizeof(state->overlay));
         return false;
     }
@@ -283,14 +297,9 @@ static void rebuildEditorFonts(ImGuiIO* imguiIO, float uiScale) {
         &iconConfig,
         iconRanges
     );
-
-    unsigned char* pixels = NULL;
-    int width = 0;
-    int height = 0;
-    ImFontAtlas_GetTexDataAsRGBA32(imguiIO->Fonts, &pixels, &width, &height, NULL);
 }
 
-static void applyEditorUIScale(EditorUIState* state, float uiScale, bool refreshVulkanFonts) {
+static void applyEditorUIScale(EditorUIState* state, float uiScale) {
     if (!state) return;
     if (state->uiScale > 0.0f && fabsf(uiScale - state->uiScale) <= kEditorScaleEpsilon) return;
 
@@ -305,10 +314,6 @@ static void applyEditorUIScale(EditorUIState* state, float uiScale, bool refresh
 
     rebuildEditorFonts(imguiIO, uiScale);
     state->uiScale = uiScale;
-
-    if (refreshVulkanFonts) {
-        cImGui_ImplVulkan_CreateFontsTexture();
-    }
 }
 
 static float queryTopMenuBarHeight(void) {
@@ -860,7 +865,7 @@ void editorUIInitialize(VKRT* vkrt, void* userData) {
     state->window = overlay.window;
     editorUIInitializeDialogs(session, state->window);
     float uiScale = queryEditorContentScale(state->window);
-    applyEditorUIScale(state, uiScale, false);
+    applyEditorUIScale(state, uiScale);
 
     if (!initializeEditorGlfwBackend(state)) {
         ImGui_DestroyContext(NULL);
@@ -918,7 +923,7 @@ void editorUIUpdate(VKRT* vkrt, Session* session) {
 
     if (!refreshEditorOverlayBackend(state, vkrt) || !state->window || !state->glfwBackendInitialized) return;
 
-    applyEditorUIScale(state, queryEditorContentScale(state->window), true);
+    applyEditorUIScale(state, queryEditorContentScale(state->window));
 
     cImGui_ImplGlfw_NewFrame();
     cImGui_ImplVulkan_NewFrame();

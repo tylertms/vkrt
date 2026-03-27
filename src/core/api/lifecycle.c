@@ -495,6 +495,8 @@ VKRT_Result VKRT_initWithCreateInfo(VKRT* vkrt, const VKRT_CreateInfo* createInf
     if (!createInfo->headless) {
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
         glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
+        glfwWindowHint(GLFW_SCALE_TO_MONITOR, GLFW_TRUE);
+        glfwWindowHint(GLFW_SCALE_FRAMEBUFFER, GLFW_TRUE);
     }
     logStepTime("GLFW setup complete", stepStartTime);
     runInitializationSteps(vkrt, createInfo, initStartTime);
