@@ -416,14 +416,14 @@ static uint16_t floatToUnorm16(float value) {
     return (uint16_t)((value * 65535.0f) + 0.5f);
 }
 
-static void clampPixelRGBNonNegative(float pixel[static 4]) {
+static void clampPixelRGBNonNegative(float pixel[4]) {
     if (!pixel) return;
     pixel[0] = fmaxf(pixel[0], 0.0f);
     pixel[1] = fmaxf(pixel[1], 0.0f);
     pixel[2] = fmaxf(pixel[2], 0.0f);
 }
 
-static void normalizePixelRGB(float pixel[static 4]) {
+static void normalizePixelRGB(float pixel[4]) {
     if (!pixel) return;
 
     float lengthSquared = (pixel[0] * pixel[0]) + (pixel[1] * pixel[1]) + (pixel[2] * pixel[2]);

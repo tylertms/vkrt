@@ -17,7 +17,7 @@ env:
 
 jobs:
   build-windows:
-    name: Windows Release
+    name: Windows MSVC
     runs-on: windows-latest
 
     steps:
@@ -83,28 +83,28 @@ jobs:
         run: ./build/vkrt.exe --help && ./build/vkrt.exe --version
         shell: bash
 
-      - name: Stage Release
+      - name: Package Windows Artifact
         run: |
           python scripts/stage_release.py windows . --zip
 
-      - name: Test Packaged Windows Bundle
+      - name: Test Windows Package
         run: ./vkrt-windows-x64/bin/vkrt.exe --help && ./vkrt-windows-x64/bin/vkrt.exe --version
         shell: bash
 
-      - name: Upload Release Asset
+      - name: Upload Windows Release Asset
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2.6.1
         with:
           files: vkrt-windows-x64.zip
 
-      - name: Upload Workflow Artifact
+      - name: Upload Windows Artifact
         uses: actions/upload-artifact@v6
         with:
           name: vkrt-windows-x64
           path: vkrt-windows-x64.zip
 
   build-linux:
-    name: Linux Release
+    name: Ubuntu Linux
     runs-on: ubuntu-22.04
 
     steps:
@@ -156,7 +156,7 @@ jobs:
       - name: Install Linux Packages
         run: |
           sudo apt-get update
-          sudo apt-get install -y libdbus-1-dev pkg-config libfuse2 desktop-file-utils libwayland-dev libxkbcommon-dev wayland-protocols libx11-dev libxrandr-dev libxinerama-dev libxi-dev libxcursor-dev libxext-dev
+          sudo apt-get install -y libdbus-1-dev libturbojpeg0-dev pkg-config libfuse2 desktop-file-utils libwayland-dev libxkbcommon-dev wayland-protocols libx11-dev libxrandr-dev libxinerama-dev libxi-dev libxcursor-dev libxext-dev
 
       - name: Install Meson and Ninja
         run: python -m pip install meson ninja
@@ -170,14 +170,14 @@ jobs:
       - name: Test
         run: ./build/vkrt --help && ./build/vkrt --version
 
-      - name: Package Linux Release
+      - name: Package Linux Artifact
         env:
           APPIMAGETOOL_VERSION: ${{ env.APPIMAGETOOL_VERSION }}
           APPIMAGETOOL_SHA256: ${{ env.APPIMAGETOOL_SHA256 }}
         run: |
           python scripts/build_appimage.py . --appimage
 
-      - name: Test Packaged Linux Bundle
+      - name: Test Linux Package
         run: ./vkrt-linux-x64/bin/vkrt --help && ./vkrt-linux-x64/bin/vkrt --version
 
       - name: Test Linux Tarball
@@ -195,7 +195,7 @@ jobs:
           ./vkrt-linux-x86_64.AppImage --appimage-extract-and-run --help
           ./vkrt-linux-x86_64.AppImage --appimage-extract-and-run --version
 
-      - name: Upload Release Assets
+      - name: Upload Linux Release Assets
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2.6.1
         with:
@@ -203,7 +203,7 @@ jobs:
             vkrt-linux-x64.tar.gz
             vkrt-linux-x86_64.AppImage
 
-      - name: Upload Workflow Artifacts
+      - name: Upload Linux Artifacts
         uses: actions/upload-artifact@v6
         with:
           name: vkrt-linux-x64

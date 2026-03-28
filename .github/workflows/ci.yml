@@ -25,7 +25,7 @@ jobs:
             os: windows-latest
             archive_name: vkrt-windows-x64
             meson_args: --buildtype=release -Db_vscrt=static_from_buildtype
-          - name: Ubuntu
+          - name: Ubuntu Linux
             os: ubuntu-22.04
             archive_name: vkrt-linux-x64
             meson_args: --buildtype=release -Dlinux_window_backend=both -Dnfd_backend=portal
