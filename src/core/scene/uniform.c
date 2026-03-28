@@ -148,6 +148,7 @@ static void initializeDefaultSceneSettings(VKRT* vkrt, uint32_t initialWidth, ui
     vkrt->sceneSettings.rrMaxDepth = 8;
     vkrt->sceneSettings.rrMinDepth = 4;
     vkrt->sceneSettings.toneMappingMode = VKRT_TONE_MAPPING_MODE_ACES;
+    vkrt->sceneSettings.renderMode = VKRT_RENDER_MODE_RGB;
     vkrt->sceneSettings.exposure = 1.0f;
     vkrt->sceneSettings.autoExposureEnabled = 0u;
     vkrt->sceneSettings.environmentColor[0] = 0.25f;
@@ -201,7 +202,8 @@ static void writeSceneStateUniform(SceneData* sceneData, const VKRT* vkrt) {
     sceneData->samplesPerPixel = settings->samplesPerPixel > 0u ? settings->samplesPerPixel : 1u;
     sceneData->rrMaxDepth = settings->rrMaxDepth;
     sceneData->rrMinDepth = settings->rrMinDepth;
-    sceneData->toneMappingMode = settings->toneMappingMode;
+    sceneData->toneMapRenderMode =
+        VKRT_SCENE_PACK_TONE_MAPPING_RENDER_MODE(settings->toneMappingMode, settings->renderMode);
     sceneData->exposure = settings->exposure;
     sceneData->timeBase = settings->timeBase;
     sceneData->timeStep = settings->timeStep;

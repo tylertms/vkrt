@@ -115,6 +115,20 @@ VKRT_Result VKRT_setToneMappingMode(VKRT* vkrt, VKRT_ToneMappingMode toneMapping
     return VKRT_SUCCESS;
 }
 
+VKRT_Result VKRT_setRenderMode(VKRT* vkrt, VKRT_RenderMode renderMode) {
+    VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
+    if (stateReady != VKRT_SUCCESS) return stateReady;
+
+    if ((uint32_t)renderMode >= VKRT_RENDER_MODE_COUNT) {
+        return VKRT_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (vkrt->sceneSettings.renderMode == renderMode) return VKRT_SUCCESS;
+    vkrt->sceneSettings.renderMode = renderMode;
+    resetSceneData(vkrt);
+    return VKRT_SUCCESS;
+}
+
 VKRT_Result VKRT_setExposure(VKRT* vkrt, float exposure) {
     VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
     if (stateReady != VKRT_SUCCESS) return stateReady;

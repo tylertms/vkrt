@@ -730,8 +730,6 @@ static void drawSpecularMaterialSection(Material* material, bool* materialChange
     if (!beginMaterialSection("Specular", ImGuiTreeNodeFlags_DefaultOpen)) return;
 
     *materialChanged |=
-        ImGui_DragFloatEx("IOR", &material->ior, 0.01f, 1.0f, 4.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-    *materialChanged |=
         ImGui_SliderFloatEx("Weight", &material->specular, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     *materialChanged |=
         ImGui_SliderFloatEx("Tint", &material->specularTint, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
@@ -746,6 +744,10 @@ static void drawTransmissionMaterialSection(Material* material, bool* materialCh
 
     *materialChanged |=
         ImGui_SliderFloatEx("Weight", &material->transmission, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    *materialChanged |=
+        ImGui_DragFloatEx("IOR", &material->ior, 0.01f, 1.0f, 4.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    *materialChanged |=
+        ImGui_DragFloatEx("Abbe", &material->abbeNumber, 0.1f, 0.0f, 200.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
     *materialChanged |= ImGui_ColorEdit3("Attenuation Color", material->attenuationColor, ImGuiColorEditFlags_Float);
     *materialChanged |= ImGui_DragFloatEx(
         "Absorption",

@@ -125,6 +125,7 @@ static Material sanitizeMaterial(const VKRT* vkrt, Material material) {
     material.clearcoat = vkrtFiniteClampf(material.clearcoat, 0.0f, 0.0f, 1.0f);
     material.clearcoatGloss = vkrtFiniteClampf(material.clearcoatGloss, 0.0f, 0.0f, 1.0f);
     material.ior = vkrtFiniteClampf(material.ior, 1.0f, 1.0f, 4.0f);
+    material.abbeNumber = vkrtFiniteClampf(material.abbeNumber, 0.0f, 0.0f, 200.0f);
     material.transmission = vkrtFiniteClampf(material.transmission, 0.0f, 0.0f, 1.0f);
     material.subsurface = vkrtFiniteClampf(material.subsurface, 0.0f, 0.0f, 1.0f);
     material.sheenRoughness = vkrtFiniteClampf(material.sheenRoughness, 0.0f, 0.0f, 1.0f);
@@ -208,7 +209,8 @@ static int materialsEqual(const Material* a, const Material* b) {
            a->metallic == b->metallic && materialComponentEqual(a->k, b->k, 3) && a->anisotropic == b->anisotropic &&
            a->specular == b->specular && a->specularTint == b->specularTint &&
            materialComponentEqual(a->sheenTintWeight, b->sheenTintWeight, 4) && a->clearcoat == b->clearcoat &&
-           a->clearcoatGloss == b->clearcoatGloss && a->ior == b->ior && a->diffuseRoughness == b->diffuseRoughness &&
+           a->clearcoatGloss == b->clearcoatGloss && a->ior == b->ior && a->abbeNumber == b->abbeNumber &&
+           a->diffuseRoughness == b->diffuseRoughness &&
            a->transmission == b->transmission && a->subsurface == b->subsurface &&
            a->sheenRoughness == b->sheenRoughness && a->absorptionCoefficient == b->absorptionCoefficient &&
            materialComponentEqual(a->attenuationColor, b->attenuationColor, 3) &&

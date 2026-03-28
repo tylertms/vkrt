@@ -515,6 +515,7 @@ static cJSON* createMaterialJSON(const Material* material) {
     addFloatIfDifferent(object, "clearcoatGloss", material->clearcoatGloss, defaults.clearcoatGloss);
     addFloatArrayIfDifferent(object, "sheenTintWeight", material->sheenTintWeight, defaults.sheenTintWeight, 4u);
     addFloatIfDifferent(object, "sheenRoughness", material->sheenRoughness, defaults.sheenRoughness);
+    addFloatIfDifferent(object, "abbeNumber", material->abbeNumber, defaults.abbeNumber);
 
     addFloatIfDifferent(object, "emissionLuminance", material->emissionLuminance, defaults.emissionLuminance);
     addFloatArrayIfDifferent(object, "emissionColor", material->emissionColor, defaults.emissionColor, 3u);
@@ -596,6 +597,7 @@ static int parseMaterialJSON(const cJSON* object, Material* outMaterial) {
         !jsonReadOptionalFloatField(object, "clearcoat", &material.clearcoat) ||
         !jsonReadOptionalFloatField(object, "clearcoatGloss", &material.clearcoatGloss) ||
         !jsonReadOptionalFloatField(object, "ior", &material.ior) ||
+        !jsonReadOptionalFloatField(object, "abbeNumber", &material.abbeNumber) ||
         !jsonReadOptionalFloatField(object, "diffuseRoughness", &material.diffuseRoughness) ||
         !jsonReadOptionalFloatField(object, "transmission", &material.transmission) ||
         !jsonReadOptionalFloatField(object, "subsurface", &material.subsurface) ||
@@ -783,6 +785,7 @@ static int saveSceneSettings(cJSON* sceneRoot, const VKRT_SceneSettingsSnapshot*
     cJSON_AddNumberToObject(settingsObject, "rrMinDepth", settings->rrMinDepth);
     cJSON_AddNumberToObject(settingsObject, "rrMaxDepth", settings->rrMaxDepth);
     cJSON_AddNumberToObject(settingsObject, "toneMappingMode", settings->toneMappingMode);
+    cJSON_AddNumberToObject(settingsObject, "renderMode", settings->renderMode);
     cJSON_AddNumberToObject(settingsObject, "exposure", settings->exposure);
     cJSON_AddBoolToObject(settingsObject, "autoExposureEnabled", settings->autoExposureEnabled != 0u);
     cJSON_AddItemToObject(settingsObject, "environmentColor", createFloatArray(settings->environmentColor, 3u));
@@ -839,6 +842,7 @@ static int applySceneSettings(
     uint32_t rrMinDepth = settings.rrMinDepth;
     uint32_t rrMaxDepth = settings.rrMaxDepth;
     uint32_t toneMappingMode = settings.toneMappingMode;
+    uint32_t renderMode = settings.renderMode;
     float exposure = settings.exposure;
     uint8_t autoExposureEnabled = settings.autoExposureEnabled;
     vec3 environmentColor = {
@@ -857,6 +861,7 @@ static int applySceneSettings(
         !jsonReadOptionalUInt32Field(settingsObject, "rrMinDepth", &rrMinDepth) ||
         !jsonReadOptionalUInt32Field(settingsObject, "rrMaxDepth", &rrMaxDepth) ||
         !jsonReadOptionalUInt32Field(settingsObject, "toneMappingMode", &toneMappingMode) ||
+        !jsonReadOptionalUInt32Field(settingsObject, "renderMode", &renderMode) ||
         !jsonReadOptionalFloatField(settingsObject, "exposure", &exposure) ||
         !jsonReadOptionalBoolField(settingsObject, "autoExposureEnabled", &autoExposureEnabled) ||
         !jsonReadOptionalFloatArrayField(settingsObject, "environmentColor", environmentColor, 3u) ||
@@ -871,6 +876,7 @@ static int applySceneSettings(
 
     return VKRT_setPathDepth(vkrt, rrMinDepth, rrMaxDepth) == VKRT_SUCCESS &&
            VKRT_setToneMappingMode(vkrt, toneMappingMode) == VKRT_SUCCESS &&
+           VKRT_setRenderMode(vkrt, (VKRT_RenderMode)renderMode) == VKRT_SUCCESS &&
            VKRT_setExposure(vkrt, exposure) == VKRT_SUCCESS &&
            VKRT_setAutoExposureEnabled(vkrt, autoExposureEnabled) == VKRT_SUCCESS &&
            VKRT_setEnvironmentLight(vkrt, environmentColor, environmentStrength) == VKRT_SUCCESS &&

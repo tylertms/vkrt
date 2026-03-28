@@ -37,9 +37,9 @@ struct MeshInfo {
     uint renderBackfaces;
     float lightPdfArea;
     float opacity;
-    uint _meshPad0;
-    uint _meshPad1;
-    uint _meshPad2;
+    uint reserved0;
+    uint reserved1;
+    uint reserved2;
 };
 
 struct Material {
@@ -53,8 +53,8 @@ struct Material {
     float anisotropic;
     float specular;
     float specularTint;
-    float _materialPad0;
-    float _materialPad1;
+    float abbeNumber;
+    float reserved0;
     float4 sheenTintWeight;
     float clearcoat;
     float clearcoatGloss;
@@ -91,7 +91,7 @@ struct EmissiveMesh {
     float pmfMesh;
     float invTotalArea;
     float3 emission;
-    float _pad0;
+    float reserved0;
 };
 
 struct EmissiveTriangle {
@@ -112,7 +112,7 @@ struct SceneData {
     uint rrMaxDepth;
     uint rrMinDepth;
     uint4 viewportRect;
-    uint toneMappingMode;
+    uint toneMapRenderMode;
     float exposure;
     float timeBase;
     float timeStep;

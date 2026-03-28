@@ -46,6 +46,7 @@ static inline int vkrtCompareSceneTimelineKeyframesByTime(const void* lhs, const
 }
 
 typedef uint32_t VKRT_ToneMappingMode;
+typedef uint32_t VKRT_RenderMode;
 typedef uint32_t VKRT_MaterialTextureSlot;
 typedef uint32_t VKRT_TextureColorSpace;
 
@@ -108,6 +109,7 @@ static inline Material VKRT_materialDefault(void) {
         .clearcoat = 0.0f,
         .clearcoatGloss = 1.0f,
         .ior = 1.5f,
+        .abbeNumber = 0.0f,
         .eta = {0.0f, 0.0f, 0.0f},
         .k = {0.0f, 0.0f, 0.0f},
         .transmission = 0.0f,
@@ -145,6 +147,7 @@ typedef struct VKRT_SceneSettingsSnapshot {
     uint32_t rrMaxDepth;
     uint32_t rrMinDepth;
     VKRT_ToneMappingMode toneMappingMode;
+    VKRT_RenderMode renderMode;
     float exposure;
     uint8_t autoExposureEnabled;
     uint8_t autoSPPEnabled;

@@ -125,6 +125,22 @@ static void drawCameraShadingSection(VKRT* vkrt, VKRT_SceneSettingsSnapshot* set
             );
         }
 
+        const char* renderModeLabels[] = {"RGB", "Spectral"};
+        int renderMode = (int)settings->renderMode;
+        if (ImGui_ComboCharEx(
+                "Color Mode",
+                &renderMode,
+                renderModeLabels,
+                VKRT_RENDER_MODE_COUNT,
+                VKRT_RENDER_MODE_COUNT
+            )) {
+            VKRT_Result result = VKRT_setRenderMode(vkrt, (VKRT_RenderMode)renderMode);
+            logCameraInspectorFailure("Updating color mode failed", result);
+            if (result == VKRT_SUCCESS) {
+                settings->renderMode = (VKRT_RenderMode)renderMode;
+            }
+        }
+
         bool autoExposureEnabled = settings->autoExposureEnabled != 0;
         if (ImGui_Checkbox("Auto Exposure", &autoExposureEnabled)) {
             uint8_t autoExposureFlag = (uint8_t)autoExposureEnabled;
