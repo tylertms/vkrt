@@ -94,7 +94,7 @@ static float queryActiveRenderSeconds(const SessionRenderTimer* timer, uint64_t 
         return elapsedSeconds;
     }
 
-    return elapsedSeconds + (float)(nowUs - timer->startTimeUs) / kMicrosecondsPerSecond;
+    return elapsedSeconds + ((float)(nowUs - timer->startTimeUs) / kMicrosecondsPerSecond);
 }
 
 void inspectorPrepareRenderState(VKRT* vkrt, Session* session) {

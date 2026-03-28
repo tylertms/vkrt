@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <types.h>
+#include <vulkan/vulkan_core.h>
 
 static uint32_t sanitizeMeshSelection(const VKRT* vkrt, uint32_t meshIndex) {
     if (!vkrt || meshIndex == VKRT_INVALID_INDEX) return VKRT_INVALID_INDEX;

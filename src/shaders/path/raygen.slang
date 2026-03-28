@@ -306,4 +306,3 @@
         outputImage[pixel] = float4(mapped, 1.0);
     }
 }
-

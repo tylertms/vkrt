@@ -1,6 +1,5 @@
 #include "config.h"
 #include "constants.h"
-#include "denoise.h"
 #include "descriptor.h"
 #include "export.h"
 #include "images.h"

@@ -416,6 +416,54 @@ static uint16_t floatToUnorm16(float value) {
     return (uint16_t)((value * 65535.0f) + 0.5f);
 }
 
+static void clampPixelRGBNonNegative(float pixel[static 4]) {
+    if (!pixel) return;
+    pixel[0] = fmaxf(pixel[0], 0.0f);
+    pixel[1] = fmaxf(pixel[1], 0.0f);
+    pixel[2] = fmaxf(pixel[2], 0.0f);
+}
+
+static void normalizePixelRGB(float pixel[static 4]) {
+    if (!pixel) return;
+
+    float lengthSquared = (pixel[0] * pixel[0]) + (pixel[1] * pixel[1]) + (pixel[2] * pixel[2]);
+    if (lengthSquared > 1e-20f) {
+        float invLength = 1.0f / sqrtf(lengthSquared);
+        pixel[0] *= invLength;
+        pixel[1] *= invLength;
+        pixel[2] *= invLength;
+        return;
+    }
+
+    pixel[0] = 0.0f;
+    pixel[1] = 0.0f;
+    pixel[2] = 0.0f;
+}
+
+static int prepareRGBA32FPixels(
+    const RenderImageBuffer* source,
+    size_t pixelCount,
+    size_t byteCount,
+    float* converted
+) {
+    if (!source || !source->pixels || !converted) return 0;
+
+    if (source->format == RENDER_IMAGE_BUFFER_FORMAT_RGBA32F) {
+        memcpy(converted, source->pixels, byteCount);
+        return 1;
+    }
+
+    if (source->format == RENDER_IMAGE_BUFFER_FORMAT_RGBA16F) {
+        const uint16_t* halfPixels = (const uint16_t*)source->pixels;
+        for (size_t i = 0; i < pixelCount * 4u; i++) {
+            converted[i] = decodeHalfFloat(halfPixels[i]);
+        }
+        return 1;
+    }
+
+    return 0;
+}
+
 static int prepareRGBA32FBuffer(
     const RenderImageBuffer* source,
     uint32_t width,
@@ -438,14 +486,7 @@ static int prepareRGBA32FBuffer(
     float* converted = (float*)malloc(rgba32fByteCount);
     if (!converted) return 0;
 
-    if (source->format == RENDER_IMAGE_BUFFER_FORMAT_RGBA32F) {
-        memcpy(converted, source->pixels, rgba32fByteCount);
-    } else if (source->format == RENDER_IMAGE_BUFFER_FORMAT_RGBA16F) {
-        const uint16_t* halfPixels = (const uint16_t*)source->pixels;
-        for (size_t i = 0; i < pixelCount * 4u; i++) {
-            converted[i] = decodeHalfFloat(halfPixels[i]);
-        }
-    } else {
+    if (!prepareRGBA32FPixels(source, pixelCount, rgba32fByteCount, converted)) {
         free(converted);
         return 0;
     }
@@ -457,39 +498,41 @@ static int prepareRGBA32FBuffer(
             free(converted);
             return 0;
         }
+        float pixel[4] = {
+            converted[baseIndex + 0u],
+            converted[baseIndex + 1u],
+            converted[baseIndex + 2u],
+            converted[baseIndex + 3u],
+        };
 
-        float* pixel = &converted[baseIndex];
-        float sourceWeight = pixel[3];
         if (preserveSourceWeight) {
-            pixel[3] = fmaxf(sourceWeight, 0.0f);
+            pixel[3] = fmaxf(pixel[3], 0.0f);
             if (pixel[3] <= 0.0f) {
                 pixel[0] = 0.0f;
                 pixel[1] = 0.0f;
                 pixel[2] = 0.0f;
+                converted[baseIndex + 0u] = pixel[0];
+                converted[baseIndex + 1u] = pixel[1];
+                converted[baseIndex + 2u] = pixel[2];
+                converted[baseIndex + 3u] = pixel[3];
                 continue;
             }
         }
+
         if (clampNonNegative) {
-            pixel[0] = fmaxf(pixel[0], 0.0f);
-            pixel[1] = fmaxf(pixel[1], 0.0f);
-            pixel[2] = fmaxf(pixel[2], 0.0f);
+            clampPixelRGBNonNegative(pixel);
         }
         if (normalizeVectors) {
-            float lengthSquared = (pixel[0] * pixel[0]) + (pixel[1] * pixel[1]) + (pixel[2] * pixel[2]);
-            if (lengthSquared > 1e-20f) {
-                float invLength = 1.0f / sqrtf(lengthSquared);
-                pixel[0] *= invLength;
-                pixel[1] *= invLength;
-                pixel[2] *= invLength;
-            } else {
-                pixel[0] = 0.0f;
-                pixel[1] = 0.0f;
-                pixel[2] = 0.0f;
-            }
+            normalizePixelRGB(pixel);
         }
         if (!preserveSourceWeight) {
             pixel[3] = 1.0f;
         }
+
+        converted[baseIndex + 0u] = pixel[0];
+        converted[baseIndex + 1u] = pixel[1];
+        converted[baseIndex + 2u] = pixel[2];
+        converted[baseIndex + 3u] = pixel[3];
     }
 
     *outPixels = converted;
@@ -639,6 +682,79 @@ static int prefilterDenoiseFeatureBuffer(
     return 0;
 }
 
+static int tryPrefilterDenoiseFeatureBufferInPlace(
+    const char* outputLabel,
+    const char* featureLabel,
+    VKRT_OIDNAuxImage auxImage,
+    uint32_t width,
+    uint32_t height,
+    float** inOutBuffer
+) {
+    if (!inOutBuffer || !*inOutBuffer) return 0;
+
+    float* filtered = NULL;
+    if (!prefilterDenoiseFeatureBuffer(outputLabel, featureLabel, auxImage, *inOutBuffer, width, height, &filtered)) {
+        return 0;
+    }
+
+    free(*inOutBuffer);
+    *inOutBuffer = filtered;
+    return 1;
+}
+
+static void tryPrefilterDenoiseFeatureBuffers(
+    const LinearRenderOutputRequest* request,
+    const char* outputLabel,
+    float** albedo,
+    float** normal,
+    int* outAlbedoPrefiltered,
+    int* outNormalPrefiltered
+) {
+    if (outAlbedoPrefiltered) *outAlbedoPrefiltered = 0;
+    if (outNormalPrefiltered) *outNormalPrefiltered = 0;
+    if (!request) return;
+
+    if (outAlbedoPrefiltered) {
+        *outAlbedoPrefiltered = tryPrefilterDenoiseFeatureBufferInPlace(
+            outputLabel,
+            "albedo",
+            VKRT_OIDN_AUX_IMAGE_ALBEDO,
+            request->width,
+            request->height,
+            albedo
+        );
+    }
+    if (outNormalPrefiltered) {
+        *outNormalPrefiltered = tryPrefilterDenoiseFeatureBufferInPlace(
+            outputLabel,
+            "normal",
+            VKRT_OIDN_AUX_IMAGE_NORMAL,
+            request->width,
+            request->height,
+            normal
+        );
+    }
+}
+
+static int reportDenoiseFailure(
+    const LinearRenderOutputRequest* request,
+    const char* outputLabel,
+    const char* errorMessage
+) {
+    if (!request) return 0;
+
+    if (!request->allowRawFallback) {
+        LOG_ERROR("OIDN denoising failed for '%s'", outputLabel);
+    } else {
+        LOG_INFO("OIDN denoising failed for '%s'; using raw render", outputLabel);
+    }
+    if (errorMessage && errorMessage[0]) {
+        LOG_INFO("OIDN error detail: %s", errorMessage);
+    }
+
+    return request->allowRawFallback;
+}
+
 static int denoiseLinearRenderOutput(
     const LinearRenderOutputRequest* request,
     const char* outputLabel,
@@ -666,34 +782,14 @@ static int denoiseLinearRenderOutput(
     }
 
     if (featureBuffersReady) {
-        if (prefilterDenoiseFeatureBuffer(
-                outputLabel,
-                "albedo",
-                VKRT_OIDN_AUX_IMAGE_ALBEDO,
-                albedo,
-                request->width,
-                request->height,
-                &prefilteredAlbedo
-            )) {
-            free(albedo);
-            albedo = prefilteredAlbedo;
-            prefilteredAlbedo = NULL;
-            albedoPrefiltered = 1;
-        }
-        if (prefilterDenoiseFeatureBuffer(
-                outputLabel,
-                "normal",
-                VKRT_OIDN_AUX_IMAGE_NORMAL,
-                normal,
-                request->width,
-                request->height,
-                &prefilteredNormal
-            )) {
-            free(normal);
-            normal = prefilteredNormal;
-            prefilteredNormal = NULL;
-            normalPrefiltered = 1;
-        }
+        tryPrefilterDenoiseFeatureBuffers(
+            request,
+            outputLabel,
+            &albedo,
+            &normal,
+            &albedoPrefiltered,
+            &normalPrefiltered
+        );
     }
 
     const char* errorMessage = NULL;
@@ -714,17 +810,7 @@ static int denoiseLinearRenderOutput(
         goto cleanup;
     }
 
-    if (!request->allowRawFallback) {
-        LOG_ERROR("OIDN denoising failed for '%s'", outputLabel);
-    } else {
-        LOG_INFO("OIDN denoising failed for '%s'; using raw render", outputLabel);
-    }
-    if (errorMessage && errorMessage[0]) {
-        LOG_INFO("OIDN error detail: %s", errorMessage);
-    }
-    if (request->allowRawFallback) {
-        succeeded = 1;
-    }
+    succeeded = reportDenoiseFailure(request, outputLabel, errorMessage);
 
 cleanup:
     free(prefilteredNormal);
