@@ -166,6 +166,26 @@ VKRT_Result VKRT_setEnvironmentLight(VKRT* vkrt, vec3 color, float strength) {
     return VKRT_SUCCESS;
 }
 
+VKRT_Result VKRT_setEnvironmentRotation(VKRT* vkrt, float rotationDegrees) {
+    VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
+    if (stateReady != VKRT_SUCCESS) return stateReady;
+
+    rotationDegrees = vkrtFiniteOrf(rotationDegrees, 0.0f);
+    rotationDegrees = fmodf(rotationDegrees, 360.0f);
+    if (rotationDegrees < -180.0f) {
+        rotationDegrees += 360.0f;
+    }
+    if (rotationDegrees >= 180.0f) {
+        rotationDegrees -= 360.0f;
+    }
+
+    if (vkrt->sceneSettings.environmentRotation == rotationDegrees) return VKRT_SUCCESS;
+
+    vkrt->sceneSettings.environmentRotation = rotationDegrees;
+    resetSceneData(vkrt);
+    return VKRT_SUCCESS;
+}
+
 VKRT_Result VKRT_setDebugMode(VKRT* vkrt, uint32_t mode) {
     VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
     if (stateReady != VKRT_SUCCESS) return stateReady;

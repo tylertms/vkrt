@@ -787,6 +787,7 @@ static int saveSceneSettings(cJSON* sceneRoot, const VKRT_SceneSettingsSnapshot*
     cJSON_AddBoolToObject(settingsObject, "autoExposureEnabled", settings->autoExposureEnabled != 0u);
     cJSON_AddItemToObject(settingsObject, "environmentColor", createFloatArray(settings->environmentColor, 3u));
     cJSON_AddNumberToObject(settingsObject, "environmentStrength", settings->environmentStrength);
+    cJSON_AddNumberToObject(settingsObject, "environmentRotation", settings->environmentRotation);
     cJSON_AddBoolToObject(settingsObject, "misNeeEnabled", settings->misNeeEnabled != 0u);
 
     addObjectItem(sceneRoot, "sceneSettings", settingsObject);
@@ -846,6 +847,7 @@ static int applySceneSettings(
         settings.environmentColor[2],
     };
     float environmentStrength = settings.environmentStrength;
+    float environmentRotation = settings.environmentRotation;
     uint8_t misNeeEnabled = (uint8_t)(settings.misNeeEnabled != 0u);
 
     if (!jsonReadOptionalFloatArrayField(cameraObject, "position", cameraPosition, 3u) ||
@@ -859,6 +861,7 @@ static int applySceneSettings(
         !jsonReadOptionalBoolField(settingsObject, "autoExposureEnabled", &autoExposureEnabled) ||
         !jsonReadOptionalFloatArrayField(settingsObject, "environmentColor", environmentColor, 3u) ||
         !jsonReadOptionalFloatField(settingsObject, "environmentStrength", &environmentStrength) ||
+        !jsonReadOptionalFloatField(settingsObject, "environmentRotation", &environmentRotation) ||
         !jsonReadOptionalBoolField(settingsObject, "misNeeEnabled", &misNeeEnabled)) {
         return 0;
     }
@@ -871,6 +874,7 @@ static int applySceneSettings(
            VKRT_setExposure(vkrt, exposure) == VKRT_SUCCESS &&
            VKRT_setAutoExposureEnabled(vkrt, autoExposureEnabled) == VKRT_SUCCESS &&
            VKRT_setEnvironmentLight(vkrt, environmentColor, environmentStrength) == VKRT_SUCCESS &&
+           VKRT_setEnvironmentRotation(vkrt, environmentRotation) == VKRT_SUCCESS &&
            VKRT_setMISNEEEnabled(vkrt, misNeeEnabled ? 1u : 0u) == VKRT_SUCCESS &&
            VKRT_setSceneTimeline(vkrt, NULL) == VKRT_SUCCESS &&
            VKRT_cameraSetPose(vkrt, cameraPosition, cameraTarget, cameraUp, vfov) == VKRT_SUCCESS;

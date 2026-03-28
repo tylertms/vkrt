@@ -8,6 +8,7 @@
 #include "vkrt_types.h"
 
 #include <dcimgui.h>
+#include <math.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -21,6 +22,8 @@ static const float kCameraFovMaxDeg = 140.0f;
 static const float kExposureMin = 0.03125f;
 static const float kExposureMax = 32.0f;
 static const float kEnvironmentStrengthMax = 1000000.0f;
+static const float kEnvironmentRotationMinDeg = -360.0f;
+static const float kEnvironmentRotationMaxDeg = 360.0f;
 static const int kPathDepthMin = 0;
 static const int kPathDepthMax = 64;
 
@@ -234,6 +237,27 @@ static void drawCameraEnvironmentSection(
                 "Updating environment color failed",
                 VKRT_setEnvironmentLight(vkrt, environmentColor, settings->environmentStrength)
             );
+        }
+
+        float environmentRotation = settings->environmentRotation;
+        if (ImGui_DragFloatEx(
+                "Rotation",
+                &environmentRotation,
+                0.25f,
+                kEnvironmentRotationMinDeg,
+                kEnvironmentRotationMaxDeg,
+                "%.2f deg",
+                ImGuiSliderFlags_AlwaysClamp
+            )) {
+            environmentRotation = fmodf(environmentRotation, 360.0f);
+            if (environmentRotation < -180.0f) environmentRotation += 360.0f;
+            if (environmentRotation >= 180.0f) environmentRotation -= 360.0f;
+
+            VKRT_Result result = VKRT_setEnvironmentRotation(vkrt, environmentRotation);
+            logCameraInspectorFailure("Updating environment rotation failed", result);
+            if (result == VKRT_SUCCESS) {
+                settings->environmentRotation = environmentRotation;
+            }
         }
 
         drawEnvironmentTextureSummary(vkrt, settings);

@@ -118,6 +118,7 @@ struct SceneData {
     float timeStep;
     float4 environmentLight;
     uint environmentTextureIndex;
+    float environmentRotation;
     uint debugMode;
     uint misNeeEnabled;
     uint timelineEnabled;

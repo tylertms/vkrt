@@ -154,6 +154,7 @@ static void initializeDefaultSceneSettings(VKRT* vkrt, uint32_t initialWidth, ui
     vkrt->sceneSettings.environmentColor[1] = 0.25f;
     vkrt->sceneSettings.environmentColor[2] = 0.25f;
     vkrt->sceneSettings.environmentStrength = 1.0f;
+    vkrt->sceneSettings.environmentRotation = 0.0f;
     vkrt->sceneSettings.environmentTextureIndex = VKRT_INVALID_INDEX;
     vkrt->renderStatus.renderPhase = VKRT_RENDER_PHASE_INACTIVE;
     vkrt->renderStatus.renderDenoiseEnabled = vkrt->renderControl.finalImageDenoiseEnabled ? 1u : 0u;
@@ -209,6 +210,7 @@ static void writeSceneStateUniform(SceneData* sceneData, const VKRT* vkrt) {
     sceneData->environmentLight[2] = settings->environmentColor[2] * settings->environmentStrength;
     sceneData->environmentLight[3] = settings->environmentStrength;
     sceneData->environmentTextureIndex = settings->environmentTextureIndex;
+    sceneData->environmentRotation = settings->environmentRotation;
     sceneData->debugMode = settings->debugMode;
     sceneData->misNeeEnabled = settings->misNeeEnabled ? 1u : 0u;
     sceneData->selectionEnabled = settings->selectionEnabled ? 1u : 0u;
