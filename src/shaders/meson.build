@@ -1,5 +1,3 @@
-embed_spv = find_program(meson.project_source_root() / 'scripts' / 'embed_spv.py')
-
 shader_common_spirv_capabilities = [
   '-capability', 'spvShaderNonUniformEXT',
   '-capability', 'spvMinLod',
@@ -87,7 +85,7 @@ foreach shader_program : shader_programs
     'embed_shader_' + stage_name,
     input: shader_target,
     output: 'shader_' + stage_name + '.c',
-    command: [embed_spv, '@INPUT@', '@OUTPUT@', shader_symbol_name],
+    command: [embed_data, '--format', 'u32le', '@INPUT@', '@OUTPUT@', shader_symbol_name],
   )
   embedded_shader_sources += embed_target
 endforeach

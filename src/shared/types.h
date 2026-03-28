@@ -16,16 +16,24 @@ typedef uint uint4[4];
 typedef mat4 float4x4;
 #endif
 
-struct Vertex {
+#ifdef VKRT_SHADER
+#define VKRT_SHARED_STRUCT(name, fields) \
+    struct name fields;
+#else
+#define VKRT_SHARED_STRUCT(name, fields) \
+    typedef struct fields name;
+#endif
+
+VKRT_SHARED_STRUCT(Vertex, {
     float4 position;
     float4 normal;
     float4 tangent;
     float4 color;
     float2 texcoord0;
     float2 texcoord1;
-};
+})
 
-struct MeshInfo {
+VKRT_SHARED_STRUCT(MeshInfo, {
     float3 position;
     uint vertexBase;
     float3 rotation;
@@ -40,9 +48,9 @@ struct MeshInfo {
     uint reserved0;
     uint reserved1;
     uint reserved2;
-};
+})
 
-struct Material {
+VKRT_SHARED_STRUCT(Material, {
     float3 baseColor;
     float roughness;
     float3 emissionColor;
@@ -83,28 +91,35 @@ struct Material {
     float4 normalTextureTransform;
     float4 emissiveTextureTransform;
     float4 textureRotations;
-};
+})
 
-struct EmissiveMesh {
+VKRT_SHARED_STRUCT(EmissiveMesh, {
     uint triOffset;
     uint triCount;
     float pmfMesh;
     float invTotalArea;
     float3 emission;
     float reserved0;
-};
+})
 
-struct EmissiveTriangle {
+VKRT_SHARED_STRUCT(EmissiveTriangle, {
     float4 v0Area;
     float4 e1Pad;
     float4 e2Pad;
-};
+})
+
+VKRT_SHARED_STRUCT(RGB2SpecTableInfo, {
+    uint res;
+    uint scaleOffset;
+    uint dataOffset;
+    uint valid;
+})
 
 #if defined(_MSC_VER) && !defined(VKRT_SHADER)
 #pragma warning(push)
 #pragma warning(disable : 4324)
 #endif
-struct SceneData {
+VKRT_SHARED_STRUCT(SceneData, {
     float4x4 viewInverse;
     float4x4 projInverse;
     uint frameNumber;
@@ -121,32 +136,22 @@ struct SceneData {
     float environmentRotation;
     uint debugMode;
     uint misNeeEnabled;
-    uint timelineEnabled;
-    uint timelineKeyframeCount;
     uint emissiveMeshCount;
     uint emissiveTriangleCount;
     uint selectionEnabled;
     uint selectedMeshIndex;
-    float4 timelineTimeScale[VKRT_SCENE_TIMELINE_MAX_KEYFRAMES];
-    float4 timelineTint[VKRT_SCENE_TIMELINE_MAX_KEYFRAMES];
-};
+    RGB2SpecTableInfo rgb2specSRGB;
+})
+
 #if defined(_MSC_VER) && !defined(VKRT_SHADER)
 #pragma warning(pop)
 #endif
 
-struct Selection {
+VKRT_SHARED_STRUCT(Selection, {
     uint pixel;
     uint hitMeshIndex;
-};
+})
 
-#ifndef VKRT_SHADER
-typedef struct Vertex Vertex;
-typedef struct MeshInfo MeshInfo;
-typedef struct Material Material;
-typedef struct EmissiveMesh EmissiveMesh;
-typedef struct EmissiveTriangle EmissiveTriangle;
-typedef struct SceneData SceneData;
-typedef struct Selection Selection;
-#endif
+#undef VKRT_SHARED_STRUCT
 
 #endif

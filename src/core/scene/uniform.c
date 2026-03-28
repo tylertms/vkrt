@@ -9,21 +9,6 @@
 #include <stdint.h>
 #include <string.h>
 
-static VKRT_SceneTimelineKeyframe makeDefaultSceneTimelineKeyframe(float time) {
-    return (VKRT_SceneTimelineKeyframe){
-        .time = time,
-        .emissionScale = 1.0f,
-        .emissionTint = {1.0f, 1.0f, 1.0f},
-    };
-}
-
-static void resetTimelineDefaults(VKRT_SceneSettingsSnapshot* settings) {
-    settings->sceneTimeline.enabled = 0;
-    settings->sceneTimeline.keyframeCount = 2;
-    settings->sceneTimeline.keyframes[0] = makeDefaultSceneTimelineKeyframe(0.0f);
-    settings->sceneTimeline.keyframes[1] = makeDefaultSceneTimelineKeyframe(1.0f);
-}
-
 static void resetAutoSPPForSceneChange(VKRT* vkrt) {
     resetAutoSPPState(vkrt, VK_TRUE);
 }
@@ -33,38 +18,6 @@ static void resetAutoExposureForSceneChange(VKRT* vkrt) {
     vkrt->renderControl.autoExposure.filteredLuminance = 0.0f;
     for (uint32_t i = 0; i < VKRT_MAX_FRAMES_IN_FLIGHT; i++) {
         vkrt->renderControl.autoExposure.readbacks[i].pending = 0u;
-    }
-}
-
-static void writeTimelineUniform(SceneData* sceneData, const VKRT_SceneSettingsSnapshot* settings) {
-    sceneData->timelineEnabled = settings->sceneTimeline.enabled ? 1u : 0u;
-    uint32_t keyCount = settings->sceneTimeline.keyframeCount;
-    if (keyCount > VKRT_SCENE_TIMELINE_MAX_KEYFRAMES) keyCount = VKRT_SCENE_TIMELINE_MAX_KEYFRAMES;
-    sceneData->timelineKeyframeCount = keyCount;
-
-    for (uint32_t i = 0; i < VKRT_SCENE_TIMELINE_MAX_KEYFRAMES; i++) {
-        float time = 0.0f;
-        float scale = 1.0f;
-        float tint[3] = {1.0f, 1.0f, 1.0f};
-
-        if (i < keyCount) {
-            VKRT_SceneTimelineKeyframe key = settings->sceneTimeline.keyframes[i];
-            time = key.time;
-            scale = key.emissionScale;
-            for (int channelIndex = 0; channelIndex < 3; channelIndex++) {
-                tint[channelIndex] = key.emissionTint[channelIndex];
-            }
-        }
-
-        sceneData->timelineTimeScale[i][0] = time;
-        sceneData->timelineTimeScale[i][1] = scale;
-        sceneData->timelineTimeScale[i][2] = 0.0f;
-        sceneData->timelineTimeScale[i][3] = 0.0f;
-
-        sceneData->timelineTint[i][0] = tint[0];
-        sceneData->timelineTint[i][1] = tint[1];
-        sceneData->timelineTint[i][2] = tint[2];
-        sceneData->timelineTint[i][3] = 0.0f;
     }
 }
 
@@ -194,7 +147,6 @@ static void initializeDefaultSceneSettings(VKRT* vkrt, uint32_t initialWidth, ui
     vkrt->sceneSettings.misNeeEnabled = 1u;
     vkrt->sceneSettings.selectionEnabled = 0;
     vkrt->sceneSettings.selectedMeshIndex = VKRT_INVALID_INDEX;
-    resetTimelineDefaults(&vkrt->sceneSettings);
 }
 
 static void writeSceneStateUniform(SceneData* sceneData, const VKRT* vkrt) {
@@ -217,7 +169,7 @@ static void writeSceneStateUniform(SceneData* sceneData, const VKRT* vkrt) {
     sceneData->misNeeEnabled = settings->misNeeEnabled ? 1u : 0u;
     sceneData->selectionEnabled = settings->selectionEnabled ? 1u : 0u;
     sceneData->selectedMeshIndex = settings->selectedMeshIndex;
-    writeTimelineUniform(sceneData, settings);
+    sceneData->rgb2specSRGB = vkrt->core.rgb2specSRGBInfo;
 }
 
 static void syncSceneDataToFrame(VKRT* vkrt, uint32_t frameIndex) {
@@ -226,7 +178,7 @@ static void syncSceneDataToFrame(VKRT* vkrt, uint32_t frameIndex) {
     memcpy(vkrt->core.sceneFrameData[frameIndex], vkrt->core.sceneData, sizeof(*vkrt->core.sceneData));
 }
 
-static void syncAllSceneDataFrames(VKRT* vkrt) {
+void syncAllSceneDataFrames(VKRT* vkrt) {
     for (uint32_t frameIndex = 0; frameIndex < VKRT_MAX_FRAMES_IN_FLIGHT; frameIndex++) {
         syncSceneDataToFrame(vkrt, frameIndex);
     }

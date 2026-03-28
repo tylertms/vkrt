@@ -1,7 +1,5 @@
 - add license and proper readme
 - real animation/keyframe system for more than lighting
-- hero wavelength or some other method of adding wavelength-dependent refraction
 - maybe look into improving movement controls
 - move/rotate/scale with keybinds in viewport and potential post-rt widget draw
 - raster mode or single-ray RT mode just for scene viewing and movement
-- add support for different types of lights

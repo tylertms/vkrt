@@ -108,6 +108,8 @@ typedef struct VKRT_Core {
     Buffer sceneMeshAliasIdx;
     Buffer sceneTriAliasQ;
     Buffer sceneTriAliasIdx;
+    Buffer sceneRGB2SpecSRGBData;
+    RGB2SpecTableInfo rgb2specSRGBInfo;
     AccelerationStructure sceneTopLevelAccelerationStructure;
     AccelerationStructure selectionTopLevelAccelerationStructure;
     VkBool32 descriptorSetReady[VKRT_MAX_FRAMES_IN_FLIGHT];

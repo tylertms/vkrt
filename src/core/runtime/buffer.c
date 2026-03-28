@@ -44,6 +44,51 @@ static VKRT_Result appendPendingSceneTransfer(
     return VKRT_SUCCESS;
 }
 
+static void destroyRawBuffer(VKRT* vkrt, VkBuffer* buffer, VkDeviceMemory* memory) {
+    if (!vkrt || !buffer || !memory) return;
+    if (*buffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(vkrt->core.device, *buffer, NULL);
+        *buffer = VK_NULL_HANDLE;
+    }
+    if (*memory != VK_NULL_HANDLE) {
+        vkFreeMemory(vkrt->core.device, *memory, NULL);
+        *memory = VK_NULL_HANDLE;
+    }
+}
+
+static VKRT_Result createStagingBufferFromData(
+    VKRT* vkrt,
+    const void* hostData,
+    VkDeviceSize size,
+    VkBuffer* outBuffer,
+    VkDeviceMemory* outMemory
+) {
+    if (!vkrt || !hostData || !outBuffer || !outMemory) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    *outBuffer = VK_NULL_HANDLE;
+    *outMemory = VK_NULL_HANDLE;
+
+    VKRT_Result result = createBuffer(
+        vkrt,
+        size,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        outBuffer,
+        outMemory
+    );
+    if (result != VKRT_SUCCESS) return result;
+
+    void* mapped = NULL;
+    if (vkMapMemory(vkrt->core.device, *outMemory, 0, size, 0, &mapped) != VK_SUCCESS || !mapped) {
+        destroyRawBuffer(vkrt, outBuffer, outMemory);
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+
+    memcpy(mapped, hostData, (size_t)size);
+    vkUnmapMemory(vkrt->core.device, *outMemory);
+    return VKRT_SUCCESS;
+}
+
 VkDeviceAddress queryBufferDeviceAddress(VKRT* vkrt, VkBuffer buffer) {
     if (!vkrt || buffer == VK_NULL_HANDLE) return 0;
 
@@ -177,25 +222,8 @@ VKRT_Result createDeviceBufferFromData(
 
     VkBuffer stagingBuffer = VK_NULL_HANDLE;
     VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
-    VKRT_Result result = createBuffer(
-        vkrt,
-        size,
-        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        &stagingBuffer,
-        &stagingMemory
-    );
+    VKRT_Result result = createStagingBufferFromData(vkrt, hostData, size, &stagingBuffer, &stagingMemory);
     if (result != VKRT_SUCCESS) return result;
-
-    void* mapped = NULL;
-    if (vkMapMemory(vkrt->core.device, stagingMemory, 0, size, 0, &mapped) != VK_SUCCESS || !mapped) {
-        vkDestroyBuffer(vkrt->core.device, stagingBuffer, NULL);
-        vkFreeMemory(vkrt->core.device, stagingMemory, NULL);
-        return VKRT_ERROR_OPERATION_FAILED;
-    }
-
-    memcpy(mapped, hostData, (size_t)size);
-    vkUnmapMemory(vkrt->core.device, stagingMemory);
 
     result = createBuffer(
         vkrt,
@@ -206,19 +234,56 @@ VKRT_Result createDeviceBufferFromData(
         outMemory
     );
     if (result != VKRT_SUCCESS) {
-        vkDestroyBuffer(vkrt->core.device, stagingBuffer, NULL);
-        vkFreeMemory(vkrt->core.device, stagingMemory, NULL);
+        destroyRawBuffer(vkrt, &stagingBuffer, &stagingMemory);
         return result;
     }
 
     result = appendPendingSceneTransfer(vkrt, stagingBuffer, stagingMemory, *outBuffer, size);
     if (result != VKRT_SUCCESS) {
-        vkDestroyBuffer(vkrt->core.device, stagingBuffer, NULL);
-        vkFreeMemory(vkrt->core.device, stagingMemory, NULL);
-        vkDestroyBuffer(vkrt->core.device, *outBuffer, NULL);
-        vkFreeMemory(vkrt->core.device, *outMemory, NULL);
-        *outBuffer = VK_NULL_HANDLE;
-        *outMemory = VK_NULL_HANDLE;
+        destroyRawBuffer(vkrt, &stagingBuffer, &stagingMemory);
+        destroyRawBuffer(vkrt, outBuffer, outMemory);
+        return result;
+    }
+
+    if (outDeviceAddress) {
+        *outDeviceAddress = queryBufferDeviceAddress(vkrt, *outBuffer);
+    }
+    return VKRT_SUCCESS;
+}
+
+VKRT_Result createDeviceBufferFromDataImmediate(
+    VKRT* vkrt,
+    const void* hostData,
+    VkDeviceSize size,
+    VkBufferUsageFlags usage,
+    VkBuffer* outBuffer,
+    VkDeviceMemory* outMemory,
+    VkDeviceAddress* outDeviceAddress
+) {
+    if (!vkrt || !hostData || !outBuffer || !outMemory) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    VkBuffer stagingBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
+    VKRT_Result result = createStagingBufferFromData(vkrt, hostData, size, &stagingBuffer, &stagingMemory);
+    if (result != VKRT_SUCCESS) return result;
+
+    result = createBuffer(
+        vkrt,
+        size,
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT | usage,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        outBuffer,
+        outMemory
+    );
+    if (result != VKRT_SUCCESS) {
+        destroyRawBuffer(vkrt, &stagingBuffer, &stagingMemory);
+        return result;
+    }
+
+    result = copyBuffer(vkrt, stagingBuffer, *outBuffer, size);
+    destroyRawBuffer(vkrt, &stagingBuffer, &stagingMemory);
+    if (result != VKRT_SUCCESS) {
+        destroyRawBuffer(vkrt, outBuffer, outMemory);
         return result;
     }
 

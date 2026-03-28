@@ -26,4 +26,11 @@ float3 sampleEnvironmentRadiance(float3 worldDir) {
     return radiance * scene.environmentLight.w;
 }
 
+float3 sampleEnvironmentRadiance(float3 worldDir, WavelengthSample wavelength) {
+    return spectralSampleToLinearSrgb(
+        spectralScalarFromLinearSrgb(sampleEnvironmentRadiance(worldDir), wavelength.lambdaNm),
+        wavelength
+    );
+}
+
 #endif

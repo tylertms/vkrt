@@ -25,26 +25,6 @@ typedef enum VKRT_Result {
     VKRT_ERROR_SHADER_COMPILATION_FAILED = -8,
 } VKRT_Result;
 
-typedef struct VKRT_SceneTimelineKeyframe {
-    float time;
-    float emissionScale;
-    vec3 emissionTint;
-} VKRT_SceneTimelineKeyframe;
-
-typedef struct VKRT_SceneTimelineSettings {
-    uint8_t enabled;
-    uint32_t keyframeCount;
-    VKRT_SceneTimelineKeyframe keyframes[VKRT_SCENE_TIMELINE_MAX_KEYFRAMES];
-} VKRT_SceneTimelineSettings;
-
-static inline int vkrtCompareSceneTimelineKeyframesByTime(const void* lhs, const void* rhs) {
-    const VKRT_SceneTimelineKeyframe* a = (const VKRT_SceneTimelineKeyframe*)lhs;
-    const VKRT_SceneTimelineKeyframe* b = (const VKRT_SceneTimelineKeyframe*)rhs;
-    if (a->time < b->time) return -1;
-    if (a->time > b->time) return 1;
-    return 0;
-}
-
 typedef uint32_t VKRT_ToneMappingMode;
 typedef uint32_t VKRT_RenderMode;
 typedef uint32_t VKRT_MaterialTextureSlot;
@@ -138,7 +118,6 @@ static inline Material VKRT_materialDefault(void) {
     };
 }
 
-struct VKRT;
 typedef struct VKRT VKRT;
 
 typedef struct VKRT_SceneSettingsSnapshot {
@@ -162,7 +141,6 @@ typedef struct VKRT_SceneSettingsSnapshot {
     uint32_t misNeeEnabled;
     uint32_t selectionEnabled;
     uint32_t selectedMeshIndex;
-    VKRT_SceneTimelineSettings sceneTimeline;
 } VKRT_SceneSettingsSnapshot;
 
 typedef enum VKRT_RenderPhase {

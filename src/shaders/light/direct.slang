@@ -8,6 +8,7 @@
 
 #include "../bsdf/bsdf.slang"
 #include "../sample/sampling.slang"
+#include "../sample/wavelength.slang"
 #include "../scene/resources.slang"
 #include "../trace/shadow.slang"
 
@@ -84,6 +85,7 @@ DirectLightResult sampleDirectLight(
     ShadingBasis basis,
     BSDFState state,
     MediumState medium,
+    WavelengthSample wavelength,
     inout uint rng
 ) {
     DirectLightResult result;
@@ -132,6 +134,12 @@ DirectLightResult sampleDirectLight(
     float3 fCos = eval.value * abs(dot(wi, basis.normal));
     float misWeight = powerHeuristic(pdfSolidAngle, eval.pdf);
     float3 transmittance = mediumTransmittance(medium, shadowDist);
+    if (state.spectralMode != 0u) {
+        float spectralValue = fCos.x * spectralScalarFromLinearSrgb(lightSample.emission, wavelength.lambdaNm);
+        result.radiance =
+            misWeight * transmittance * spectralSampleToLinearSrgb(spectralValue / pdfSolidAngle, wavelength);
+        return result;
+    }
 
     result.radiance = misWeight * transmittance * fCos * lightSample.emission / pdfSolidAngle;
     return result;

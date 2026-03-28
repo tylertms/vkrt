@@ -679,7 +679,6 @@ static int clearCurrentScene(VKRT* vkrt, Session* session) {
     }
 
     if (VKRT_clearEnvironmentTexture(vkrt) != VKRT_SUCCESS) return 0;
-    if (VKRT_setSceneTimeline(vkrt, NULL) != VKRT_SUCCESS) return 0;
 
     sessionResetSceneState(session);
     return 1;
@@ -882,7 +881,6 @@ static int applySceneSettings(
            VKRT_setEnvironmentLight(vkrt, environmentColor, environmentStrength) == VKRT_SUCCESS &&
            VKRT_setEnvironmentRotation(vkrt, environmentRotation) == VKRT_SUCCESS &&
            VKRT_setMISNEEEnabled(vkrt, misNeeEnabled ? 1u : 0u) == VKRT_SUCCESS &&
-           VKRT_setSceneTimeline(vkrt, NULL) == VKRT_SUCCESS &&
            VKRT_cameraSetPose(vkrt, cameraPosition, cameraTarget, cameraUp, vfov) == VKRT_SUCCESS;
 }
 

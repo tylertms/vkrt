@@ -3,6 +3,7 @@
 
 #include "../camera/ray.slang"
 #include "../sample/random.slang"
+#include "../utility/spectral.slang"
 #include "types.slang"
 
 // References:
@@ -120,7 +121,7 @@ float maxComponent(float3 value) {
 }
 
 float bsdfLuminance(float3 value) {
-    return dot(value, float3(0.2126, 0.7152, 0.0722));
+    return spectralLuminance(value);
 }
 
 float3 bsdfTintColor(float3 baseColor) {
@@ -156,13 +157,28 @@ float interfaceIor(Material material) {
     return max(material.ior, 1.0);
 }
 
+float interfaceIor(Material material, float lambdaNm, uint spectralMode) {
+    float ior = interfaceIor(material);
+    return spectralMode != 0u ? dispersiveIor(ior, material.abbeNumber, lambdaNm) : ior;
+}
+
 float interfaceEta(Material material, uint frontFace) {
     float ior = interfaceIor(material);
     return frontFace != 0u ? ior : (1.0 / ior);
 }
 
+float interfaceEta(Material material, uint frontFace, float lambdaNm, uint spectralMode) {
+    float ior = interfaceIor(material, lambdaNm, spectralMode);
+    return frontFace != 0u ? ior : (1.0 / ior);
+}
+
 float interfaceRefractionEta(Material material, uint frontFace) {
     float ior = interfaceIor(material);
+    return frontFace != 0u ? (1.0 / ior) : ior;
+}
+
+float interfaceRefractionEta(Material material, uint frontFace, float lambdaNm, uint spectralMode) {
+    float ior = interfaceIor(material, lambdaNm, spectralMode);
     return frontFace != 0u ? (1.0 / ior) : ior;
 }
 
@@ -185,6 +201,15 @@ float3 materialAbsorptionSigma(Material material) {
     return -log(absorptionTint) * material.absorptionCoefficient;
 }
 
+float3 materialAbsorptionSigma(Material material, float lambdaNm, uint spectralMode) {
+    if (spectralMode == 0u) {
+        return materialAbsorptionSigma(material);
+    }
+
+    float absorptionTint = max(spectralScalarFromLinearSrgb(saturate(material.attenuationColor), lambdaNm), 1e-6);
+    return (-log(absorptionTint) * material.absorptionCoefficient).xxx;
+}
+
 bool mediumHasActiveBoundary(MediumState medium) {
     return medium.refractiveActive || medium.absorptionActive;
 }
@@ -197,6 +222,8 @@ void updateMediumStateFromTransmission(
     Material material,
     uint frontFace,
     uint isTransmission,
+    float lambdaNm,
+    uint spectralMode,
     inout MediumState medium
 ) {
     if (isTransmission == 0u) return;
@@ -204,7 +231,8 @@ void updateMediumStateFromTransmission(
     bool enteringMedium = frontFace != 0u;
     medium.refractiveActive = enteringMedium && materialMediumIsRefractive(material);
     medium.absorptionActive = enteringMedium && materialHasAbsorption(material);
-    medium.absorptionSigma = medium.absorptionActive ? materialAbsorptionSigma(material) : float3(0.0);
+    medium.absorptionSigma =
+        medium.absorptionActive ? materialAbsorptionSigma(material, lambdaNm, spectralMode) : float3(0.0);
 }
 
 float dielectricF0(float eta) {

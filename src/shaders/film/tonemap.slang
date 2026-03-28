@@ -17,11 +17,9 @@ float3 encodeDisplayColor(float3 color) {
 }
 
 float3 mapSceneColorToDisplay(float3 color) {
-    return encodeDisplayColor(toneMap(color * scene.exposure));
+    return encodeDisplayColor(toneMap(max(color * scene.exposure, float3(0.0))));
 }
 
-// ACES filmic approximation published by Krzysztof Narkowicz.
-// Source: https://knarkowicz.wordpress.com/2016/01/06/aces-filmic-tone-mapping-curve/
 float3 toneMapACES(float3 color) {
     return (color * (2.51 * color + 0.03)) / (color * (2.43 * color + 0.59) + 0.14);
 }

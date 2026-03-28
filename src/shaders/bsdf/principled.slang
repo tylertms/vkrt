@@ -37,6 +37,8 @@ struct BSDFState {
     GGXParams ggx;
     ClearcoatParams clearcoat;
     uint frontFace;
+    float wavelengthNm;
+    uint spectralMode;
     BSDFBranchWeights sampleWeights;
 };
 
@@ -166,11 +168,13 @@ BSDFBranchWeights makeBSDFBranchWeights(Material material, float3 wo, uint front
     return normalizeBranchWeights(weights);
 }
 
-BSDFState makeBSDFState(Material material, float3 wo, uint frontFace) {
+BSDFState makeBSDFState(Material material, float3 wo, uint frontFace, float wavelengthNm, uint spectralMode) {
     BSDFState state = BSDFState();
     state.material = material;
     state.wo = wo;
     state.frontFace = frontFace;
+    state.wavelengthNm = wavelengthNm;
+    state.spectralMode = spectralMode;
     state.ggx = makeGGXParams(material, wo);
     state.clearcoat = makeClearcoatParams(material);
     state.sampleWeights = makeBSDFBranchWeights(material, wo, frontFace);
@@ -250,6 +254,9 @@ BSDFEval evalReflectionStack(BSDFState state, float3 wi) {
 
     if (state.sampleWeights.sheen > 0.0 || !interiorInterface) {
         sheenColor = bsdfSheenColor(state.material);
+        if (state.spectralMode != 0u) {
+            sheenColor = spectralScalarFromLinearSrgb(saturate(sheenColor), state.wavelengthNm).xxx;
+        }
     }
 
     if (state.sampleWeights.sheen > 0.0) {
@@ -265,19 +272,30 @@ BSDFEval evalReflectionStack(BSDFState state, float3 wi) {
     }
 
     if (state.sampleWeights.metal > 0.0) {
-        BSDFEval metal = evalGGX(state.material, state.wo, wi, state.ggx);
+        BSDFEval metal = evalGGX(state.material, state.wo, wi, state.ggx, state.wavelengthNm, state.spectralMode);
         metalValue = metal.value;
         eval.pdf += state.sampleWeights.metal * metal.pdf;
     }
 
     if (state.sampleWeights.dielectric > 0.0) {
-        BSDFEval dielectric = evalDielectricReflection(state.material, state.wo, wi, state.frontFace, state.ggx);
+        BSDFEval dielectric = evalDielectricReflection(
+            state.material,
+            state.wo,
+            wi,
+            state.frontFace,
+            state.ggx,
+            state.wavelengthNm,
+            state.spectralMode
+        );
         dielectricValue = dielectric.value;
         eval.pdf += state.sampleWeights.dielectric * dielectric.pdf;
     }
 
     if (state.sampleWeights.diffuse > 0.0 || state.sampleWeights.subsurface > 0.0) {
         float3 diffuseColor = bsdfDiffuseColor(state.material);
+        if (state.spectralMode != 0u) {
+            diffuseColor = spectralScalarFromLinearSrgb(saturate(diffuseColor), state.wavelengthNm).xxx;
+        }
 
         if (state.sampleWeights.diffuse > 0.0) {
             float3 diffuseWeight =
@@ -332,7 +350,9 @@ BSDFEval evalBSDF(BSDFState state, float3 wi) {
         wi,
         state.frontFace,
         state.ggx,
-        useInteriorDielectricInterface(state) ? 1.0 : materialTransmissionStackAttenuation(state.material, state.wo)
+        useInteriorDielectricInterface(state) ? 1.0 : materialTransmissionStackAttenuation(state.material, state.wo),
+        state.wavelengthNm,
+        state.spectralMode
     );
 
     transmission.pdf *= state.sampleWeights.dielectric;
@@ -360,7 +380,16 @@ bool sampleBSDFDirection(BSDFState state, inout uint rng, out BSDFDirectionSampl
     selector -= state.sampleWeights.metal;
     if (selector < state.sampleWeights.dielectric) {
         DielectricSample dielectricSample;
-        if (!sampleDielectric(state.material, state.wo, state.frontFace, state.ggx, rng, dielectricSample)) {
+        if (!sampleDielectric(
+                state.material,
+                state.wo,
+                state.frontFace,
+                state.ggx,
+                state.wavelengthNm,
+                state.spectralMode,
+                rng,
+                dielectricSample
+            )) {
             return false;
         }
 

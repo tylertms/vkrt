@@ -21,6 +21,7 @@ cpp = meson.get_compiler('cpp')
 cmake = import('cmake')
 fs = import('fs')
 python = find_program('python3')
+embed_data = find_program(meson.project_source_root() / 'scripts' / 'embed_data.py')
 llvm_program_dirs = []
 if is_darwin
   llvm_program_dirs += [

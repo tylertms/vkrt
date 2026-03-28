@@ -19,20 +19,21 @@ bool dielectricIsIdentity(Material material) {
     return interfaceIor(material) <= 1.0 + 1e-4;
 }
 
-float dielectricFresnel(Material material, uint frontFace, float cosThetaI) {
+float dielectricFresnel(Material material, uint frontFace, float cosThetaI, float lambdaNm, uint spectralMode) {
     if (dielectricIsIdentity(material)) {
         return 0.0;
     }
 
-    return fresnelDielectric(cosThetaI, interfaceEta(material, frontFace));
+    return fresnelDielectric(cosThetaI, interfaceEta(material, frontFace, lambdaNm, spectralMode));
 }
 
-float3 dielectricReflectionColor(Material material, float cosThetaI, float fresnel) {
+float3 dielectricReflectionColor(Material material, float cosThetaI, float fresnel, float lambdaNm, uint spectralMode) {
     if (material.transmission > 0.0 && material.metallic <= 0.0) {
         return fresnel.xxx;
     }
 
-    return fresnelSchlick(cosThetaI, bsdfDielectricSpecularF0(material));
+    float3 reflectionColor = fresnelSchlick(cosThetaI, bsdfDielectricSpecularF0(material));
+    return spectralMode != 0u ? spectralScalarFromLinearSrgb(saturate(reflectionColor), lambdaNm).xxx : reflectionColor;
 }
 
 float dielectricTransmissionProbability(Material material, float fresnel) {
@@ -79,7 +80,15 @@ bool dielectricTransmissionHalfVector(
     return woDotWm > 0.0 && wiDotWm < 0.0 && abs(denom) > GGX_EPSILON;
 }
 
-BSDFEval evalDielectricReflection(Material material, float3 wo, float3 wi, uint frontFace, GGXParams params) {
+BSDFEval evalDielectricReflection(
+    Material material,
+    float3 wo,
+    float3 wi,
+    uint frontFace,
+    GGXParams params,
+    float lambdaNm,
+    uint spectralMode
+) {
     BSDFEval eval = BSDFEval();
     if (dielectricIsIdentity(material) || cosTheta(wo) <= 0.0 || cosTheta(wi) <= 0.0) {
         return eval;
@@ -91,7 +100,7 @@ BSDFEval evalDielectricReflection(Material material, float3 wo, float3 wi, uint 
         return eval;
     }
 
-    float fresnel = dielectricFresnel(material, frontFace, woDotWm);
+    float fresnel = dielectricFresnel(material, frontFace, woDotWm, lambdaNm, spectralMode);
     float reflectionProbability = 1.0 - dielectricTransmissionProbability(material, fresnel);
     if (reflectionProbability <= 0.0) {
         return eval;
@@ -99,7 +108,7 @@ BSDFEval evalDielectricReflection(Material material, float3 wo, float3 wi, uint 
 
     float Dm = ggxDistribution(wm, params.alpha);
     float G = ggxMasking(wo, wi, params.alpha);
-    eval.value = dielectricReflectionColor(material, woDotWm, fresnel) *
+    eval.value = dielectricReflectionColor(material, woDotWm, fresnel, lambdaNm, spectralMode) *
                  (Dm * G / max(4.0 * cosTheta(wo) * cosTheta(wi), GGX_EPSILON));
     eval.pdf = reflectionProbability * ggxReflectionPdf(wo, wm, params);
     return eval;
@@ -111,7 +120,9 @@ BSDFEval evalDielectricTransmission(
     float3 wi,
     uint frontFace,
     GGXParams params,
-    float coatAttenuation
+    float coatAttenuation,
+    float lambdaNm,
+    uint spectralMode
 ) {
     BSDFEval eval = BSDFEval();
     if (material.transmission <= 0.0 || cosTheta(wo) <= 0.0 || cosTheta(wi) >= 0.0) {
@@ -119,6 +130,9 @@ BSDFEval evalDielectricTransmission(
     }
 
     float3 transmissionColor = bsdfTransmissionColor(material) * ((1.0 - material.metallic) * material.transmission);
+    if (spectralMode != 0u) {
+        transmissionColor = spectralScalarFromLinearSrgb(saturate(transmissionColor), lambdaNm).xxx;
+    }
     if (dielectricIsIdentity(material)) {
         if (dot(wi, -wo) < 0.9999) {
             return eval;
@@ -129,7 +143,7 @@ BSDFEval evalDielectricTransmission(
         return eval;
     }
 
-    float etap = interfaceEta(material, frontFace);
+    float etap = interfaceEta(material, frontFace, lambdaNm, spectralMode);
     float3 wm;
     float woDotWm;
     float wiDotWm;
@@ -138,7 +152,7 @@ BSDFEval evalDielectricTransmission(
         return eval;
     }
 
-    float fresnel = dielectricFresnel(material, frontFace, woDotWm);
+    float fresnel = dielectricFresnel(material, frontFace, woDotWm, lambdaNm, spectralMode);
     float transmissionProbability = dielectricTransmissionProbability(material, fresnel);
     if (transmissionProbability <= 0.0) {
         return eval;
@@ -161,6 +175,8 @@ bool sampleDielectric(
     float3 wo,
     uint frontFace,
     GGXParams params,
+    float lambdaNm,
+    uint spectralMode,
     inout uint rng,
     out DielectricSample sample
 ) {
@@ -185,10 +201,10 @@ bool sampleDielectric(
         return false;
     }
 
-    float fresnel = dielectricFresnel(material, frontFace, woDotWm);
+    float fresnel = dielectricFresnel(material, frontFace, woDotWm, lambdaNm, spectralMode);
     float transmissionProbability = dielectricTransmissionProbability(material, fresnel);
     if (transmissionProbability > 0.0 && rand(rng) < transmissionProbability) {
-        float eta = interfaceRefractionEta(material, frontFace);
+        float eta = interfaceRefractionEta(material, frontFace, lambdaNm, spectralMode);
         float3 wi = refract(-wo, wm, eta);
         if (dot(wi, wi) > 0.0 && cosTheta(wi) < 0.0) {
             sample.wi = wi;

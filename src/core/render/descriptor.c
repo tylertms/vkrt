@@ -47,12 +47,14 @@ static VkBool32 descriptorResourcesReadyForFrame(VKRT* vkrt, uint32_t frameIndex
            vkrt->core.vertexData.buffer != VK_NULL_HANDLE && vkrt->core.indexData.buffer != VK_NULL_HANDLE &&
            vkrt->core.selection.buffer != VK_NULL_HANDLE && vkrt->core.sceneMeshData.buffer != VK_NULL_HANDLE &&
            vkrt->core.sceneMaterialData.buffer != VK_NULL_HANDLE &&
-           vkrt->core.sceneEmissiveMeshData.buffer != VK_NULL_HANDLE &&
-           vkrt->core.sceneEmissiveTriangleData.buffer != VK_NULL_HANDLE &&
-           vkrt->core.sceneMeshAliasQ.buffer != VK_NULL_HANDLE &&
-           vkrt->core.sceneMeshAliasIdx.buffer != VK_NULL_HANDLE &&
-           vkrt->core.sceneTriAliasQ.buffer != VK_NULL_HANDLE && vkrt->core.sceneTriAliasIdx.buffer != VK_NULL_HANDLE &&
-           textureDescriptorsReady(vkrt);
+            vkrt->core.sceneEmissiveMeshData.buffer != VK_NULL_HANDLE &&
+            vkrt->core.sceneEmissiveTriangleData.buffer != VK_NULL_HANDLE &&
+            vkrt->core.sceneMeshAliasQ.buffer != VK_NULL_HANDLE &&
+            vkrt->core.sceneMeshAliasIdx.buffer != VK_NULL_HANDLE &&
+            vkrt->core.sceneTriAliasQ.buffer != VK_NULL_HANDLE &&
+            vkrt->core.sceneTriAliasIdx.buffer != VK_NULL_HANDLE &&
+            vkrt->core.sceneRGB2SpecSRGBData.buffer != VK_NULL_HANDLE &&
+            textureDescriptorsReady(vkrt);
 }
 
 static VkWriteDescriptorSet makeDescriptorWrite(
@@ -127,8 +129,8 @@ typedef struct ImageDescriptorWriteState {
 } ImageDescriptorWriteState;
 
 typedef struct BufferDescriptorWriteState {
-    VkDescriptorBufferInfo infos[12];
-    VkWriteDescriptorSet writes[12];
+    VkDescriptorBufferInfo infos[13];
+    VkWriteDescriptorSet writes[13];
 } BufferDescriptorWriteState;
 
 typedef struct TextureDescriptorWriteState {
@@ -270,6 +272,7 @@ static VKRT_Result updateDescriptorSetForFrame(VKRT* vkrt, uint32_t frameIndex) 
         {19u, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, vkrt->core.sceneMeshAliasIdx.buffer, VK_WHOLE_SIZE},
         {20u, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, vkrt->core.sceneTriAliasQ.buffer, VK_WHOLE_SIZE},
         {21u, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, vkrt->core.sceneTriAliasIdx.buffer, VK_WHOLE_SIZE},
+        {24u, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, vkrt->core.sceneRGB2SpecSRGBData.buffer, VK_WHOLE_SIZE},
     };
     BufferDescriptorWriteState bufferState = {0};
     appendBufferDescriptorWrites(
@@ -336,6 +339,7 @@ VKRT_Result createDescriptorSetLayout(VKRT* vkrt) {
         makeDescriptorSetLayoutBinding(21u, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1u, rgen),
         makeDescriptorSetLayoutBinding(22u, VK_DESCRIPTOR_TYPE_SAMPLER, VKRT_TEXTURE_SAMPLER_VARIANT_COUNT, rtAll),
         makeDescriptorSetLayoutBinding(23u, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, VKRT_MAX_BINDLESS_TEXTURES, rtAll),
+        makeDescriptorSetLayoutBinding(24u, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1u, rtAll),
     };
 
     VkDescriptorSetLayoutCreateInfo createInfo = {0};
@@ -354,10 +358,11 @@ VKRT_Result createDescriptorSetLayout(VKRT* vkrt) {
 VKRT_Result createDescriptorPool(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
 
+    static const uint32_t kRendererStorageBufferBindingsPerFrame = 13u; // bindings 10, 11, 13-21, 24
     static const VkDescriptorPoolSize rendererPoolSizes[] = {
         {VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 2u * VKRT_MAX_FRAMES_IN_FLIGHT},
         {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 8u * VKRT_MAX_FRAMES_IN_FLIGHT},
-        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 11u * VKRT_MAX_FRAMES_IN_FLIGHT},
+        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, kRendererStorageBufferBindingsPerFrame * VKRT_MAX_FRAMES_IN_FLIGHT},
         {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VKRT_MAX_FRAMES_IN_FLIGHT},
         {VK_DESCRIPTOR_TYPE_SAMPLER, VKRT_TEXTURE_SAMPLER_VARIANT_COUNT * VKRT_MAX_FRAMES_IN_FLIGHT},
         {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, VKRT_MAX_BINDLESS_TEXTURES * VKRT_MAX_FRAMES_IN_FLIGHT},

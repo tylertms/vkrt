@@ -101,23 +101,33 @@ float ggxReflectionPdf(float3 wo, float3 m, GGXParams params) {
     return visiblePdf / max(4.0 * abs(dot(wo, m)), GGX_EPSILON);
 }
 
-float3 ggxConductorFresnel(Material material, float cosTheta) {
-    return materialHasConductor(material)
-             ? fresnelConductor(cosTheta, max(material.eta, float3(1e-3)), max(material.k, float3(0.0)))
-             : fresnelSchlick(cosTheta, material.baseColor);
+float3 ggxConductorFresnel(Material material, float cosTheta, float lambdaNm, uint spectralMode) {
+    float3 fresnelColor = materialHasConductor(material)
+                            ? fresnelConductor(cosTheta, max(material.eta, float3(1e-3)), max(material.k, float3(0.0)))
+                            : fresnelSchlick(cosTheta, material.baseColor);
+    return spectralMode != 0u ? spectralScalarFromLinearSrgb(saturate(fresnelColor), lambdaNm).xxx : fresnelColor;
 }
 
-BSDFEval evalGGXFromHalfVector(Material material, float3 wo, float3 wi, GGXParams params, float3 m, float woDotM) {
+BSDFEval evalGGXFromHalfVector(
+    Material material,
+    float3 wo,
+    float3 wi,
+    GGXParams params,
+    float3 m,
+    float woDotM,
+    float lambdaNm,
+    uint spectralMode
+) {
     float Dm = ggxDistribution(m, params.alpha);
     float G = ggxMasking(wo, wi, params.alpha);
-    float3 F = ggxConductorFresnel(material, woDotM);
+    float3 F = ggxConductorFresnel(material, woDotM, lambdaNm, spectralMode);
     BSDFEval eval;
     eval.value = F * (Dm * G / max(4.0 * cosTheta(wo) * cosTheta(wi), GGX_EPSILON));
     eval.pdf = ggxReflectionPdf(wo, m, params);
     return eval;
 }
 
-BSDFEval evalGGX(Material material, float3 wo, float3 wi, GGXParams params) {
+BSDFEval evalGGX(Material material, float3 wo, float3 wi, GGXParams params, float lambdaNm, uint spectralMode) {
     BSDFEval eval;
     eval.value = float3(0.0);
     eval.pdf = 0.0;
@@ -131,7 +141,7 @@ BSDFEval evalGGX(Material material, float3 wo, float3 wi, GGXParams params) {
         return eval;
     }
 
-    return evalGGXFromHalfVector(material, wo, wi, params, m, woDotM);
+    return evalGGXFromHalfVector(material, wo, wi, params, m, woDotM, lambdaNm, spectralMode);
 }
 
 bool sampleGGXVNDF(float3 wo, GGXParams params, float2 u, out float3 m) {

@@ -7,12 +7,14 @@
 #include "../light/environment.slang"
 #include "../material/textures.slang"
 #include "../sample/random.slang"
+#include "../sample/wavelength.slang"
 #include "../scene/resources.slang"
 #include "../trace/scene.slang"
 #include "../utility/debug.slang"
 #include "payload.slang"
 
-[shader("raygeneration")] void main() {
+[shader("raygeneration")]
+void main() {
     static const uint kSceneSerHintBits = 2u;
 
     int2 pixel = int2(DispatchRaysIndex().xy);
@@ -44,6 +46,7 @@
     bool denoiserFeatureDepthDebug = debugMode == VKRT_DEBUG_MODE_DENOISER_FEATURE_DEPTH;
     bool denoiserFollowSpecularDebug = debugMode == VKRT_DEBUG_MODE_DENOISER_FOLLOW_SPECULAR;
     bool neeEnabled = scene.misNeeEnabled != 0u && scene.emissiveMeshCount > 0u;
+    bool spectralMode = spectralRenderingEnabled();
 
     float3 frameRadiance = float3(0.0);
     float3 frameAlbedo = float3(0.0);
@@ -73,14 +76,17 @@
         float sampleFeatureDepth = 0.0;
         float sampleFollowSpecular = 0.0;
         bool sampleFeaturesResolved = false;
+
+        uint rng = initPixelSeed(pixel, scene.frameNumber, previousSamples + sampleIndex);
+        WavelengthSample wavelength = sampleUniformWavelength(rng);
         float3 throughput = float3(1.0);
+
         MediumState medium;
         medium.refractiveActive = false;
         medium.absorptionActive = false;
         medium.absorptionSigma = float3(0.0);
         bool prevVertexNeeAllowed = false;
 
-        uint rng = initPixelSeed(pixel, scene.frameNumber, previousSamples + sampleIndex);
         float2 jitter = float2(rand(rng), rand(rng)) - float2(0.5);
         RayDesc ray = makePrimaryRay(pixel, jitter);
 
@@ -99,7 +105,8 @@
 
             if (payload.didHit == 0u) {
                 if (!neeOnlyDebug && !mediumHasActiveBoundary(medium)) {
-                    radiance += throughput * sampleEnvironmentRadiance(ray.Direction);
+                    radiance += throughput * (spectralMode ? sampleEnvironmentRadiance(ray.Direction, wavelength)
+                                                           : sampleEnvironmentRadiance(ray.Direction));
                 }
                 break;
             }
@@ -153,13 +160,15 @@
             }
 
             float3 wo = worldToLocal(-ray.Direction, basis);
-            BSDFState state = makeBSDFState(material, wo, payload.frontFace);
+            BSDFState state =
+                makeBSDFState(material, wo, payload.frontFace, wavelength.lambdaNm, spectralMode ? 1u : 0u);
             bool currentVertexNeeAllowed = !medium.refractiveActive;
             bool vertexNeeSupported = currentVertexNeeAllowed;
 
             float3 contribution = float3(0.0);
             if (!bsdfOnlyDebug && neeEnabled && currentVertexNeeAllowed) {
-                DirectLightResult directLight = sampleDirectLight(hitPoint, geometricNormal, basis, state, medium, rng);
+                DirectLightResult directLight =
+                    sampleDirectLight(hitPoint, geometricNormal, basis, state, medium, wavelength, rng);
                 contribution += directLight.radiance;
                 vertexNeeSupported = directLight.neeSupported;
             }
@@ -177,7 +186,12 @@
                             payload.hitDistance
                         );
                     }
-                    contribution += emission * misWeight;
+                    contribution += spectralMode
+                                      ? spectralSampleToLinearSrgb(
+                                            spectralScalarFromLinearSrgb(emission, wavelength.lambdaNm) * misWeight,
+                                            wavelength
+                                        )
+                                      : emission * misWeight;
                 }
             }
 
@@ -200,7 +214,14 @@
                 sampledPathNeeAllowed = false;
             }
 
-            updateMediumStateFromTransmission(material, payload.frontFace, sample.isTransmission, medium);
+            updateMediumStateFromTransmission(
+                material,
+                payload.frontFace,
+                sample.isTransmission,
+                wavelength.lambdaNm,
+                spectralMode ? 1u : 0u,
+                medium
+            );
             prevVertexNeeAllowed = sampledPathNeeAllowed;
 
             if (depth + 1u >= scene.rrMinDepth) {
@@ -306,3 +327,4 @@
         outputImage[pixel] = float4(mapped, 1.0);
     }
 }
+

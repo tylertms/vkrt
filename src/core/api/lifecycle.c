@@ -152,6 +152,8 @@ static void cleanupSceneAndAccelerationResources(VKRT* vkrt) {
     destroyBufferAndMemory(vkrt, &vkrt->core.sceneMeshAliasIdx.buffer, &vkrt->core.sceneMeshAliasIdx.memory);
     destroyBufferAndMemory(vkrt, &vkrt->core.sceneTriAliasQ.buffer, &vkrt->core.sceneTriAliasQ.memory);
     destroyBufferAndMemory(vkrt, &vkrt->core.sceneTriAliasIdx.buffer, &vkrt->core.sceneTriAliasIdx.memory);
+    destroyBufferAndMemory(vkrt, &vkrt->core.sceneRGB2SpecSRGBData.buffer, &vkrt->core.sceneRGB2SpecSRGBData.memory);
+    vkrt->core.rgb2specSRGBInfo = (RGB2SpecTableInfo){0};
 
     for (uint32_t i = 0; i < vkrt->core.meshCount; i++) {
         if (!vkrt->core.meshes[i].ownsGeometry) continue;
@@ -431,6 +433,7 @@ static VKRT_Result createRenderBackendResources(VKRT* vkrt) {
     if (createComputePipeline(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
     if (createGPUImages(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
     if (createSceneUniform(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    if (createRGB2SpecResources(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
     if (createDescriptorPool(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
     if (createDescriptorSet(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
     if (createShaderBindingTable(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;

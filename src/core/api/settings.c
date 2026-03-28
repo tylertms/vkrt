@@ -242,60 +242,6 @@ VKRT_Result VKRT_setTimeRange(VKRT* vkrt, float timeBase, float timeStep) {
     return VKRT_SUCCESS;
 }
 
-VKRT_Result VKRT_setSceneTimeline(VKRT* vkrt, const VKRT_SceneTimelineSettings* timeline) {
-    VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
-    if (stateReady != VKRT_SUCCESS) return stateReady;
-
-    VKRT_SceneTimelineSettings sanitized = {0};
-
-    if (timeline) {
-        sanitized.enabled = timeline->enabled ? 1u : 0u;
-        uint32_t keyCount = timeline->keyframeCount;
-        if (keyCount > VKRT_SCENE_TIMELINE_MAX_KEYFRAMES) {
-            keyCount = VKRT_SCENE_TIMELINE_MAX_KEYFRAMES;
-        }
-
-        sanitized.keyframeCount = keyCount;
-        for (uint32_t keyIndex = 0; keyIndex < keyCount; keyIndex++) {
-            VKRT_SceneTimelineKeyframe key = timeline->keyframes[keyIndex];
-            key.time = vkrtFiniteOrf(key.time, 0.0f);
-            key.emissionScale = vkrtFiniteClampf(key.emissionScale, 1.0f, 0.0f, INFINITY);
-
-            for (int channel = 0; channel < 3; channel++) {
-                key.emissionTint[channel] = vkrtFiniteClampf(key.emissionTint[channel], 1.0f, 0.0f, INFINITY);
-            }
-
-            sanitized.keyframes[keyIndex] = key;
-        }
-
-        if (sanitized.keyframeCount > 1) {
-            qsort(
-                sanitized.keyframes,
-                sanitized.keyframeCount,
-                sizeof(sanitized.keyframes[0]),
-                vkrtCompareSceneTimelineKeyframesByTime
-            );
-        }
-    }
-
-    const VKRT_SceneTimelineSettings* currentTimeline = &vkrt->sceneSettings.sceneTimeline;
-    int timelineMatches =
-        currentTimeline->enabled == sanitized.enabled && currentTimeline->keyframeCount == sanitized.keyframeCount;
-    for (uint32_t keyIndex = 0; timelineMatches && keyIndex < sanitized.keyframeCount; keyIndex++) {
-        const VKRT_SceneTimelineKeyframe* currentKey = &currentTimeline->keyframes[keyIndex];
-        const VKRT_SceneTimelineKeyframe* sanitizedKey = &sanitized.keyframes[keyIndex];
-        timelineMatches = currentKey->time == sanitizedKey->time &&
-                          currentKey->emissionScale == sanitizedKey->emissionScale &&
-                          currentKey->emissionTint[0] == sanitizedKey->emissionTint[0] &&
-                          currentKey->emissionTint[1] == sanitizedKey->emissionTint[1] &&
-                          currentKey->emissionTint[2] == sanitizedKey->emissionTint[2];
-    }
-    if (timelineMatches) return VKRT_SUCCESS;
-    vkrt->sceneSettings.sceneTimeline = sanitized;
-    resetSceneData(vkrt);
-    return VKRT_SUCCESS;
-}
-
 VKRT_Result VKRT_requestSelectionAtPixel(VKRT* vkrt, uint32_t x, uint32_t y) {
     if (!vkrt || !vkrt->core.selectionData) return VKRT_ERROR_INVALID_ARGUMENT;
     if (x > 0xFFFFu || y > 0xFFFFu) return VKRT_ERROR_INVALID_ARGUMENT;

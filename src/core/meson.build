@@ -14,6 +14,7 @@ vkrt_sources = files(
   'scene/exposure.c',
   'scene/geometry.c',
   'scene/lighting.c',
+  'scene/rgb2spec.c',
   'scene/rebuild.c',
   'scene/textures.c',
   'scene/timing.c',
@@ -48,10 +49,19 @@ vkrt_sources = files(
   'utility/platform.c',
 )
 
+rgb2spec_embedded_sources = [
+  custom_target(
+    'embed_rgb2spec_srgb_coeff',
+    input: files('../../external/rgb2spec/srgb.coeff'),
+    output: 'rgb2spec_srgb_coeff.c',
+    command: [embed_data, '@INPUT@', '@OUTPUT@', 'rgb2specSrgbCoeff'],
+  ),
+]
+
 vkrt = static_library('vkrt_core',
   c_args: c_args,
   cpp_args: core_cpp_args,
-  sources: vkrt_sources,
+  sources: vkrt_sources + rgb2spec_embedded_sources,
   dependencies: core_dependencies,
   include_directories: [core_build_includes, core_internal_includes],
   link_with: [dcimgui],

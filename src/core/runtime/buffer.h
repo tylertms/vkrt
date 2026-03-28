@@ -29,6 +29,15 @@ VKRT_Result createDeviceBufferFromData(
     VkDeviceMemory* outMemory,
     VkDeviceAddress* outDeviceAddress
 );
+VKRT_Result createDeviceBufferFromDataImmediate(
+    VKRT* vkrt,
+    const void* hostData,
+    VkDeviceSize size,
+    VkBufferUsageFlags usage,
+    VkBuffer* outBuffer,
+    VkDeviceMemory* outMemory,
+    VkDeviceAddress* outDeviceAddress
+);
 VKRT_Result createZeroInitializedDeviceBuffer(
     VKRT* vkrt,
     VkDeviceSize size,
