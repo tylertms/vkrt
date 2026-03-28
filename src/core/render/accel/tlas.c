@@ -286,6 +286,31 @@ static VKRT_Result recordTLASBuild(
     return VKRT_SUCCESS;
 }
 
+static VkBool32 materialMayRejectRayHit(const Material* material, float meshOpacity) {
+    if (!material) return VK_TRUE;
+    if (material->alphaMode != VKRT_MATERIAL_ALPHA_MODE_OPAQUE) return VK_TRUE;
+    if (material->opacity < 0.999f || meshOpacity < 0.999f) return VK_TRUE;
+    return VK_FALSE;
+}
+
+static VkGeometryInstanceFlagsKHR queryTLASInstanceFlags(const VKRT* vkrt, const Mesh* mesh) {
+    VkGeometryInstanceFlagsKHR flags = 0;
+    if (!vkrt || !mesh) return flags;
+
+    if (mesh->info.renderBackfaces) {
+        flags |= VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
+    }
+
+    const Material* material = vkrtGetSceneMaterialData(vkrt, mesh->info.materialIndex);
+    if (materialMayRejectRayHit(material, mesh->info.opacity)) {
+        flags |= VK_GEOMETRY_INSTANCE_FORCE_NO_OPAQUE_BIT_KHR;
+    } else {
+        flags |= VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR;
+    }
+
+    return flags;
+}
+
 static VkBool32 buildTLASInstanceForMesh(
     const VKRT* vkrt,
     uint32_t meshIndex,
@@ -304,9 +329,7 @@ static VkBool32 buildTLASInstanceForMesh(
     outInstance->transform = getMeshWorldTransform(mesh);
     outInstance->instanceCustomIndex = meshIndex;
     outInstance->mask = 0xFF;
-    if (mesh->info.renderBackfaces) {
-        outInstance->flags |= VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
-    }
+    outInstance->flags = queryTLASInstanceFlags(vkrt, mesh);
     outInstance->accelerationStructureReference = mesh->bottomLevelAccelerationStructure.deviceAddress;
     return VK_TRUE;
 }

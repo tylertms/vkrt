@@ -108,7 +108,6 @@
             float3 shadingNormal = unpackOctNormal(payload.packedShadingNormal);
             float3 geometricNormal = unpackOctNormal(payload.packedGeometricNormal);
             Material material = materials[payload.materialIndex];
-            Material sourceMaterial = material;
             if (medium.absorptionActive) {
                 throughput *= mediumTransmittance(medium, payload.hitDistance);
                 if (!any(throughput > 0.0)) {
@@ -116,7 +115,7 @@
                 }
             }
             ShadingBasis basis = makeShadingBasis(shadingNormal, payload.tangent);
-            shadingNormal = applyNormalTexture(sourceMaterial, payload.texcoord0, payload.texcoord1, basis);
+            shadingNormal = applyNormalTexture(material, payload.texcoord0, payload.texcoord1, basis);
             shadingNormal = sanitizeShadingNormal(shadingNormal, geometricNormal, -ray.Direction);
             basis = makeShadingBasis(shadingNormal, payload.tangent);
 
@@ -134,8 +133,7 @@
                 }
 
                 if (isTextureMapDebugMode(debugMode)) {
-                    frameRadiance =
-                        evaluateTextureMapDebug(sourceMaterial, payload.texcoord0, payload.texcoord1, debugMode);
+                    frameRadiance = evaluateTextureMapDebug(material, payload.texcoord0, payload.texcoord1, debugMode);
                     debugEarlyOut = true;
                     break;
                 }
@@ -308,3 +306,4 @@
         outputImage[pixel] = float4(mapped, 1.0);
     }
 }
+
