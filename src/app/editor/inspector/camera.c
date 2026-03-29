@@ -141,6 +141,24 @@ static void drawCameraShadingSection(VKRT* vkrt, VKRT_SceneSettingsSnapshot* set
             }
         }
 
+        if (settings->renderMode == VKRT_RENDER_MODE_SPECTRAL) {
+            const char* spectralSamplingLabels[] = {"Single", "Hero (4)"};
+            int spectralSamplingMode = (int)settings->spectralSamplingMode;
+            if (ImGui_ComboCharEx(
+                    "Spectral Sampling",
+                    &spectralSamplingMode,
+                    spectralSamplingLabels,
+                    VKRT_SPECTRAL_SAMPLING_MODE_COUNT,
+                    VKRT_SPECTRAL_SAMPLING_MODE_COUNT
+                )) {
+                VKRT_Result result = VKRT_setSpectralSamplingMode(vkrt, (uint32_t)spectralSamplingMode);
+                logCameraInspectorFailure("Updating spectral sampling mode failed", result);
+                if (result == VKRT_SUCCESS) {
+                    settings->spectralSamplingMode = (uint32_t)spectralSamplingMode;
+                }
+            }
+        }
+
         bool autoExposureEnabled = settings->autoExposureEnabled != 0;
         if (ImGui_Checkbox("Auto Exposure", &autoExposureEnabled)) {
             uint8_t autoExposureFlag = (uint8_t)autoExposureEnabled;

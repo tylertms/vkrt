@@ -84,17 +84,22 @@ bool inspectorPaddedButton(const char* label) {
     return pressed;
 }
 
+enum {
+    K_PCI_VENDOR_ID_NVIDIA = 0x10DEu,
+    K_PCI_VENDOR_ID_INTEL = 0x8086u,
+};
+
 void formatDriverVersionText(uint32_t vendorID, uint32_t driverVersion, char* out, size_t outSize) {
     if (!out || outSize == 0) return;
 
-    if (vendorID == 0x10DEu) {  // NVIDIA
+    if (vendorID == K_PCI_VENDOR_ID_NVIDIA) {
         uint32_t major = (driverVersion >> 22u) & 0x3ffu;
         uint32_t minor = (driverVersion >> 14u) & 0xffu;
         (void)snprintf(out, outSize, "%u.%02u", major, minor);
         return;
     }
 
-    if (vendorID == 0x8086u) {  // INTEL
+    if (vendorID == K_PCI_VENDOR_ID_INTEL) {
         uint32_t major = driverVersion >> 14u;
         uint32_t minor = driverVersion & 0x3fffu;
         if (major > 0 && minor > 0) {
@@ -106,7 +111,7 @@ void formatDriverVersionText(uint32_t vendorID, uint32_t driverVersion, char* ou
     (void)snprintf(
         out,
         outSize,
-        "%u.%u.%u",  // AMD / UNKNOWN
+        "%u.%u.%u",
         VK_API_VERSION_MAJOR(driverVersion),
         VK_API_VERSION_MINOR(driverVersion),
         VK_API_VERSION_PATCH(driverVersion)

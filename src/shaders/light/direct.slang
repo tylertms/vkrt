@@ -5,6 +5,7 @@
 // MIS power heuristic: Pharr, Jakob, Humphreys, 2023 - https://www.pbr-book.org/4ed/Monte_Carlo_Integration/Improving_Efficiency
 // Direct lighting / NEE: Pharr, Jakob, Humphreys, 2023 - https://www.pbr-book.org/4ed/Light_Transport_I_Surface_Reflection/A_Better_Path_Tracer
 // Alias method: Schwarz, 2011 - https://www.keithschwarz.com/darts-dice-coins/
+// Hero wavelengths: Wilkie et al., 2014 - https://cgg.mff.cuni.cz/publications/hero-wavelength-spectral-sampling/
 
 #include "../bsdf/bsdf.slang"
 #include "../sample/sampling.slang"
@@ -22,7 +23,7 @@ struct LightSample {
 
 struct DirectLightResult {
     float3 radiance;
-    float spectralRadiance;
+    float4 spectralRadiance;
     bool neeSupported;
 };
 
@@ -69,15 +70,37 @@ float computeBSDFEmitterMISWeight(
     float3 rayDirection,
     float hitDistance
 ) {
-    if (lightPdfArea <= 0.0) return 1.0;
+    float lightPdfSolidAngle = lightPdfAreaToSolidAngle(lightPdfArea, geometricNormal, rayDirection, hitDistance);
+    if (lightPdfSolidAngle <= 0.0) return 1.0;
+    return powerHeuristic(bsdfPdf, lightPdfSolidAngle);
+}
+
+float lightPdfAreaToSolidAngle(float lightPdfArea, float3 geometricNormal, float3 rayDirection, float hitDistance) {
+    if (lightPdfArea <= 0.0) return 0.0;
     float distSq = hitDistance * hitDistance;
-    if (distSq <= 0.0) return 1.0;
+    if (distSq <= 0.0) return 0.0;
 
     float cosLight = abs(dot(rayDirection, geometricNormal));
     if (cosLight <= 0.0) return 0.0;
 
-    float lightPdfSolidAngle = lightPdfArea * distSq / cosLight;
-    return powerHeuristic(bsdfPdf, lightPdfSolidAngle);
+    return lightPdfArea * distSq / cosLight;
+}
+
+float computeSpectralMISWeight(float4 sampledTechniquePdf, float4 alternateTechniquePdf) {
+    float numerator = sampledTechniquePdf.x * sampledTechniquePdf.x;
+    float denominator =
+        dot(sampledTechniquePdf, sampledTechniquePdf) + dot(alternateTechniquePdf, alternateTechniquePdf);
+    return denominator > 0.0 ? numerator / denominator : 0.0;
+}
+
+float computeSpectralEmitterMISWeight(
+    float4 previousVertexTechniquePathPdf,
+    float4 previousBsdfTechniquePdf,
+    float lightPdfSolidAngle
+) {
+    float4 bsdfTechniquePdf = previousVertexTechniquePathPdf * previousBsdfTechniquePdf;
+    float4 lightTechniquePdf = previousVertexTechniquePathPdf * lightPdfSolidAngle;
+    return computeSpectralMISWeight(bsdfTechniquePdf, lightTechniquePdf);
 }
 
 DirectLightResult sampleDirectLight(
@@ -86,12 +109,13 @@ DirectLightResult sampleDirectLight(
     ShadingBasis basis,
     BSDFState state,
     MediumState medium,
-    float heroLambdaNm,
+    float4 techniquePathPdf,
+    float4 wavelengthsNm,
     inout uint rng
 ) {
     DirectLightResult result;
     result.radiance = float3(0.0);
-    result.spectralRadiance = 0.0;
+    result.spectralRadiance = float4(0.0);
     result.neeSupported = true;
 
     if (absCosTheta(state.wo) <= 0.0) return result;
@@ -130,17 +154,38 @@ DirectLightResult sampleDirectLight(
         return result;
     }
 
+    float absCosWi = absCosTheta(wiLocal);
+    if (state.spectralMode != 0u) {
+        if (!heroWavelengthSamplingEnabled()) {
+            BSDFEval eval = evalSingleWavelengthBSDF(state, wiLocal);
+            if (eval.pdf <= 0.0) return result;
+
+            float spectralValue =
+                eval.value.x * absCosWi * spectralScalarFromLinearSrgb(lightSample.emission, state.wavelengthNm);
+            float misWeight = powerHeuristic(pdfSolidAngle, eval.pdf);
+            result.spectralRadiance.x =
+                misWeight * mediumTransmittance(medium, shadowDist).x * spectralValue / pdfSolidAngle;
+            return result;
+        }
+
+        float4 bsdfLocalTechniquePdf = float4(0.0);
+        float4 fCos = evalSpectralBSDF(state, wiLocal, wavelengthsNm, bsdfLocalTechniquePdf) * absCosWi;
+        float4 lightTechniquePdf = techniquePathPdf * pdfSolidAngle;
+        float4 bsdfTechniquePdf = techniquePathPdf * bsdfLocalTechniquePdf;
+        float misWeight = computeSpectralMISWeight(lightTechniquePdf, bsdfTechniquePdf);
+        if (misWeight <= 0.0) return result;
+
+        result.spectralRadiance = misWeight * mediumSpectralTransmittance(medium, shadowDist) * fCos *
+                                  spectralScalarFromLinearSrgb4(lightSample.emission, wavelengthsNm) / pdfSolidAngle;
+        return result;
+    }
+
+    float3 transmittance = mediumTransmittance(medium, shadowDist);
     BSDFEval eval = evalBSDF(state, wiLocal);
     if (eval.pdf <= 0.0) return result;
 
-    float3 fCos = eval.value * abs(dot(wi, basis.normal));
+    float3 fCos = eval.value * absCosWi;
     float misWeight = powerHeuristic(pdfSolidAngle, eval.pdf);
-    float3 transmittance = mediumTransmittance(medium, shadowDist);
-    if (state.spectralMode != 0u) {
-        float spectralValue = fCos.x * spectralScalarFromLinearSrgb(lightSample.emission, heroLambdaNm);
-        result.spectralRadiance = misWeight * transmittance.x * spectralValue / pdfSolidAngle;
-        return result;
-    }
 
     result.radiance = misWeight * transmittance * fCos * lightSample.emission / pdfSolidAngle;
     return result;

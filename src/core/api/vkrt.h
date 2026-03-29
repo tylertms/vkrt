@@ -41,6 +41,7 @@ VKRT_Result VKRT_setAutoSPPEnabled(VKRT* vkrt, uint8_t enabled);
 VKRT_Result VKRT_setAutoSPPTargetFPS(VKRT* vkrt, uint32_t targetFPS);
 VKRT_Result VKRT_setToneMappingMode(VKRT* vkrt, VKRT_ToneMappingMode toneMappingMode);
 VKRT_Result VKRT_setRenderMode(VKRT* vkrt, VKRT_RenderMode renderMode);
+VKRT_Result VKRT_setSpectralSamplingMode(VKRT* vkrt, uint32_t spectralSamplingMode);
 VKRT_Result VKRT_setExposure(VKRT* vkrt, float exposure);
 VKRT_Result VKRT_setAutoExposureEnabled(VKRT* vkrt, uint8_t enabled);
 VKRT_Result VKRT_setEnvironmentLight(VKRT* vkrt, vec3 color, float strength);

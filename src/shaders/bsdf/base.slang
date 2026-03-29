@@ -183,6 +183,7 @@ struct MediumState {
     bool refractiveActive;
     bool absorptionActive;
     float3 absorptionSigma;
+    float4 spectralAbsorptionSigma;
 };
 
 bool materialHasAbsorption(Material material) {
@@ -207,12 +208,22 @@ float3 materialAbsorptionSigma(Material material, float lambdaNm, uint spectralM
     return (-log(absorptionTint) * material.absorptionCoefficient).xxx;
 }
 
+float4 materialAbsorptionSigma4(Material material, float4 wavelengthsNm) {
+    float4 absorptionTint =
+        max(spectralScalarFromLinearSrgb4(saturate(material.attenuationColor), wavelengthsNm), float4(1e-6));
+    return -log(absorptionTint) * material.absorptionCoefficient;
+}
+
 bool mediumHasActiveBoundary(MediumState medium) {
     return medium.refractiveActive || medium.absorptionActive;
 }
 
 float3 mediumTransmittance(MediumState medium, float distance) {
     return medium.absorptionActive ? exp(-medium.absorptionSigma * distance) : float3(1.0);
+}
+
+float4 mediumSpectralTransmittance(MediumState medium, float distance) {
+    return medium.absorptionActive ? exp(-medium.spectralAbsorptionSigma * distance) : float4(1.0);
 }
 
 void updateMediumStateFromTransmission(
@@ -230,6 +241,29 @@ void updateMediumStateFromTransmission(
     medium.absorptionActive = enteringMedium && materialHasAbsorption(material);
     medium.absorptionSigma =
         medium.absorptionActive ? materialAbsorptionSigma(material, lambdaNm, spectralMode) : float3(0.0);
+    medium.spectralAbsorptionSigma = medium.absorptionSigma.xxxx;
+}
+
+void updateMediumStateFromTransmissionSpectral(
+    Material material,
+    uint frontFace,
+    uint isTransmission,
+    float4 wavelengthsNm,
+    inout MediumState medium
+) {
+    if (isTransmission == 0u) return;
+
+    bool enteringMedium = frontFace != 0u;
+    medium.refractiveActive = false;
+    medium.absorptionActive = enteringMedium && materialHasAbsorption(material);
+    if (!medium.absorptionActive) {
+        medium.absorptionSigma = float3(0.0);
+        medium.spectralAbsorptionSigma = float4(0.0);
+        return;
+    }
+
+    medium.spectralAbsorptionSigma = materialAbsorptionSigma4(material, wavelengthsNm);
+    medium.absorptionSigma = medium.spectralAbsorptionSigma.xxx;
 }
 
 float dielectricF0(float eta) {

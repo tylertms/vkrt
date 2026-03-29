@@ -37,7 +37,8 @@ float3 rgb2specFetch(RGB2SpecTableInfo info, StructuredBuffer<float> table, floa
     }
 
     uint dominantChannel = 0u;
-    [unroll] for (uint channel = 1u; channel < 3u; ++channel) {
+    [unroll]
+    for (uint channel = 1u; channel < 3u; ++channel) {
         if (rgb[channel] >= rgb[dominantChannel]) {
             dominantChannel = channel;
         }
@@ -67,7 +68,8 @@ float3 rgb2specFetch(RGB2SpecTableInfo info, StructuredBuffer<float> table, floa
     float z0 = 1.0 - z1;
 
     float3 coeff = float3(0.0);
-    [unroll] for (uint j = 0; j < VKRT_RGB2SPEC_N_COEFFS; ++j) {
+    [unroll]
+    for (uint j = 0; j < VKRT_RGB2SPEC_N_COEFFS; ++j) {
         uint coeffOffset = info.dataOffset + offset + j;
         coeff[j] = ((table[coeffOffset] * x0 + table[coeffOffset + dx] * x1) * y0 +
                     (table[coeffOffset + dy] * x0 + table[coeffOffset + dy + dx] * x1) * y1) *
@@ -80,10 +82,13 @@ float3 rgb2specFetch(RGB2SpecTableInfo info, StructuredBuffer<float> table, floa
     return coeff;
 }
 
-float rgb2specEval(RGB2SpecTableInfo info, StructuredBuffer<float> table, float3 rgb, float lambdaNm) {
-    float3 coeff = rgb2specFetch(info, table, rgb);
+float rgb2specEvalCoeffs(float3 coeff, float lambdaNm) {
     float x = (coeff.x * lambdaNm + coeff.y) * lambdaNm + coeff.z;
     return 0.5 * x * rsqrt(x * x + 1.0) + 0.5;
+}
+
+float rgb2specEval(RGB2SpecTableInfo info, StructuredBuffer<float> table, float3 rgb, float lambdaNm) {
+    return rgb2specEvalCoeffs(rgb2specFetch(info, table, rgb), lambdaNm);
 }
 
 #endif

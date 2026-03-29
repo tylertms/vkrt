@@ -129,6 +129,20 @@ VKRT_Result VKRT_setRenderMode(VKRT* vkrt, VKRT_RenderMode renderMode) {
     return VKRT_SUCCESS;
 }
 
+VKRT_Result VKRT_setSpectralSamplingMode(VKRT* vkrt, uint32_t spectralSamplingMode) {
+    VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
+    if (stateReady != VKRT_SUCCESS) return stateReady;
+
+    if (spectralSamplingMode >= VKRT_SPECTRAL_SAMPLING_MODE_COUNT) {
+        return VKRT_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (vkrt->sceneSettings.spectralSamplingMode == spectralSamplingMode) return VKRT_SUCCESS;
+    vkrt->sceneSettings.spectralSamplingMode = spectralSamplingMode;
+    resetSceneData(vkrt);
+    return VKRT_SUCCESS;
+}
+
 VKRT_Result VKRT_setExposure(VKRT* vkrt, float exposure) {
     VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
     if (stateReady != VKRT_SUCCESS) return stateReady;

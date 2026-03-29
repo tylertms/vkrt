@@ -127,6 +127,7 @@ typedef struct VKRT_SceneSettingsSnapshot {
     uint32_t rrMinDepth;
     VKRT_ToneMappingMode toneMappingMode;
     VKRT_RenderMode renderMode;
+    uint32_t spectralSamplingMode;
     float exposure;
     uint8_t autoExposureEnabled;
     uint8_t autoSPPEnabled;

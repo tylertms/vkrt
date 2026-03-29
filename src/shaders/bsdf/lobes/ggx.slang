@@ -108,6 +108,13 @@ float3 ggxConductorFresnel(Material material, float cosTheta, float lambdaNm, ui
     return spectralMode != 0u ? spectralScalarFromLinearSrgb(saturate(fresnelColor), lambdaNm).xxx : fresnelColor;
 }
 
+float4 ggxConductorFresnel4(Material material, float cosTheta, float4 wavelengthsNm) {
+    float3 fresnelColor = materialHasConductor(material)
+                            ? fresnelConductor(cosTheta, max(material.eta, float3(1e-3)), max(material.k, float3(0.0)))
+                            : fresnelSchlick(cosTheta, material.baseColor);
+    return spectralScalarFromLinearSrgb4(saturate(fresnelColor), wavelengthsNm);
+}
+
 BSDFEval evalGGXFromHalfVector(
     Material material,
     float3 wo,
@@ -142,6 +149,25 @@ BSDFEval evalGGX(Material material, float3 wo, float3 wi, GGXParams params, floa
     }
 
     return evalGGXFromHalfVector(material, wo, wi, params, m, woDotM, lambdaNm, spectralMode);
+}
+
+float4 evalSpectralGGX(Material material, float3 wo, float3 wi, GGXParams params, float4 wavelengthsNm, out float pdf) {
+    pdf = 0.0;
+    if (cosTheta(wo) <= 0.0 || cosTheta(wi) <= 0.0) {
+        return float4(0.0);
+    }
+
+    float3 m;
+    float woDotM;
+    if (!ggxHalfVector(wo, wi, m, woDotM)) {
+        return float4(0.0);
+    }
+
+    float Dm = ggxDistribution(m, params.alpha);
+    float G = ggxMasking(wo, wi, params.alpha);
+    pdf = ggxReflectionPdf(wo, m, params);
+    return ggxConductorFresnel4(material, woDotM, wavelengthsNm) *
+           (Dm * G / max(4.0 * cosTheta(wo) * cosTheta(wi), GGX_EPSILON));
 }
 
 bool sampleGGXVNDF(float3 wo, GGXParams params, float2 u, out float3 m) {

@@ -25,7 +25,7 @@ float3 toneMapACES(float3 color) {
 }
 
 float3 toneMap(float3 color) {
-    if (VKRT_SCENE_TONE_MAPPING_MODE_FROM_PACKED(scene.toneMapRenderMode) == VKRT_TONE_MAPPING_MODE_ACES) {
+    if (VKRT_SCENE_TONE_MAPPING_MODE_FROM_RENDER_SETTINGS(scene.packedRenderSettings) == VKRT_TONE_MAPPING_MODE_ACES) {
         return toneMapACES(color);
     }
     return color;

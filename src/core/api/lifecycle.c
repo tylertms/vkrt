@@ -33,8 +33,10 @@
 #include <GLFW/glfw3native.h>
 #include <dwmapi.h>
 
-#ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
-#define DWMWA_USE_IMMERSIVE_DARK_MODE 20
+#ifdef DWMWA_USE_IMMERSIVE_DARK_MODE
+enum { VKRT_DWM_WINDOW_ATTRIBUTE_USE_IMMERSIVE_DARK_MODE = DWMWA_USE_IMMERSIVE_DARK_MODE };
+#else
+enum { VKRT_DWM_WINDOW_ATTRIBUTE_USE_IMMERSIVE_DARK_MODE = 20 };
 #endif
 #endif
 
@@ -388,7 +390,7 @@ static VKRT_Result createRuntimeWindow(
     BOOL value = TRUE;
     HRESULT hr = DwmSetWindowAttribute(
         glfwGetWin32Window(vkrt->runtime.window),
-        DWMWA_USE_IMMERSIVE_DARK_MODE,
+        VKRT_DWM_WINDOW_ATTRIBUTE_USE_IMMERSIVE_DARK_MODE,
         &value,
         sizeof(value)
     );

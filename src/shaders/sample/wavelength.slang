@@ -3,12 +3,14 @@
 
 #include "random.slang"
 
+// References:
+// Hero wavelengths: Wilkie et al., 2014 - https://cgg.mff.cuni.cz/publications/hero-wavelength-spectral-sampling/
+// Fixed-size sampled wavelengths: Pharr, Jakob, Humphreys, 2023 - https://www.pbr-book.org/4ed/Radiometry%2C_Spectra%2C_and_Color/Representing_Spectral_Distributions
+
 static const float VKRT_WAVELENGTH_MIN_NM = 360.0;
 static const float VKRT_WAVELENGTH_MAX_NM = 830.0;
 static const float VKRT_WAVELENGTH_RANGE_NM = VKRT_WAVELENGTH_MAX_NM - VKRT_WAVELENGTH_MIN_NM;
 static const float VKRT_INV_UINT32 = 1.0 / 4294967296.0;
-static const uint VKRT_HERO_WAVELENGTH_LANE_COUNT = 4u;
-static const float VKRT_HERO_WAVELENGTH_INV_LANE_COUNT = 0.25;
 static const float4 VKRT_HERO_WAVELENGTH_OFFSETS = float4(0.0, 0.25, 0.5, 0.75);
 
 struct WavelengthSample {
@@ -45,7 +47,7 @@ float4 sampleHeroWavelengths4(inout uint rng, uint sampleIndex) {
 }
 
 float4 heroWavelengthInvPdf4() {
-    return (VKRT_WAVELENGTH_RANGE_NM * VKRT_HERO_WAVELENGTH_INV_LANE_COUNT).xxxx;
+    return VKRT_WAVELENGTH_RANGE_NM.xxxx;
 }
 
 #endif

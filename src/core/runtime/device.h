@@ -2,13 +2,15 @@
 
 #include "vkrt_internal.h"
 
-#define NUM_REQ_EXTENSIONS 5
-#define NUM_OPT_EXTENSIONS 1
+enum {
+    K_REQUIRED_DEVICE_EXTENSION_COUNT = 5,
+    K_OPTIONAL_DEVICE_EXTENSION_COUNT = 1,
+};
 
-extern const char* requiredDeviceExtensions[NUM_REQ_EXTENSIONS];
-extern const char* optionalDeviceExtensions[NUM_OPT_EXTENSIONS];
-extern const uint32_t requiredDeviceExtensionBits[NUM_REQ_EXTENSIONS];
-extern const uint32_t optionalDeviceExtensionBits[NUM_OPT_EXTENSIONS];
+extern const char* requiredDeviceExtensions[K_REQUIRED_DEVICE_EXTENSION_COUNT];
+extern const char* optionalDeviceExtensions[K_OPTIONAL_DEVICE_EXTENSION_COUNT];
+extern const uint32_t requiredDeviceExtensionBits[K_REQUIRED_DEVICE_EXTENSION_COUNT];
+extern const uint32_t optionalDeviceExtensionBits[K_OPTIONAL_DEVICE_EXTENSION_COUNT];
 
 VKRT_Result pickPhysicalDevice(VKRT* vkrt, const VKRT_CreateInfo* createInfo);
 VKRT_Result createLogicalDevice(VKRT* vkrt);

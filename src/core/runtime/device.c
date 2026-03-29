@@ -16,23 +16,23 @@
 #include <string.h>
 #include <vulkan/vulkan_core.h>
 
-const char* requiredDeviceExtensions[NUM_REQ_EXTENSIONS] =
+const char* requiredDeviceExtensions[K_REQUIRED_DEVICE_EXTENSION_COUNT] =
     {VK_KHR_SWAPCHAIN_EXTENSION_NAME,
      VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
      VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
      VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
      VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME};
 
-const char* optionalDeviceExtensions[NUM_OPT_EXTENSIONS] = {VK_EXT_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME};
+const char* optionalDeviceExtensions[K_OPTIONAL_DEVICE_EXTENSION_COUNT] = {VK_EXT_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME};
 
-const uint32_t requiredDeviceExtensionBits[NUM_REQ_EXTENSIONS] =
+const uint32_t requiredDeviceExtensionBits[K_REQUIRED_DEVICE_EXTENSION_COUNT] =
     {DEVICE_EXTENSION_SWAPCHAIN_BIT,
      DEVICE_EXTENSION_ACCELERATION_STRUCTURE_BIT,
      DEVICE_EXTENSION_RAY_TRACING_PIPELINE_BIT,
      DEVICE_EXTENSION_DEFERRED_HOST_OPERATIONS_BIT,
      DEVICE_EXTENSION_BUFFER_DEVICE_ADDRESS_BIT};
 
-const uint32_t optionalDeviceExtensionBits[NUM_OPT_EXTENSIONS] = {DEVICE_EXTENSION_RAY_TRACING_INVOCATION_REORDER_BIT};
+const uint32_t optionalDeviceExtensionBits[K_OPTIONAL_DEVICE_EXTENSION_COUNT] = {DEVICE_EXTENSION_RAY_TRACING_INVOCATION_REORDER_BIT};
 
 static const VkPhysicalDeviceType rankedDeviceTypes[4] =
     {VK_PHYSICAL_DEVICE_TYPE_CPU,
@@ -61,10 +61,10 @@ static void logRequestedDevicePreference(const VKRT_CreateInfo* createInfo);
 static DeviceExtensionSupport initDeviceExtensionSupport(void) {
     DeviceExtensionSupport support = {0};
 
-    for (uint32_t i = 0; i < NUM_REQ_EXTENSIONS; i++) {
+    for (uint32_t i = 0; i < K_REQUIRED_DEVICE_EXTENSION_COUNT; i++) {
         support.requiredMask |= requiredDeviceExtensionBits[i];
     }
-    for (uint32_t i = 0; i < NUM_OPT_EXTENSIONS; i++) {
+    for (uint32_t i = 0; i < K_OPTIONAL_DEVICE_EXTENSION_COUNT; i++) {
         support.optionalMask |= optionalDeviceExtensionBits[i];
     }
 
@@ -99,7 +99,7 @@ static void logMissingRequiredDeviceExtensions(const DeviceExtensionSupport* sup
     if (!support || !support->missingRequiredMask) return;
 
     LOG_INFO("    Missing required device extensions:");
-    for (uint32_t i = 0; i < NUM_REQ_EXTENSIONS; i++) {
+    for (uint32_t i = 0; i < K_REQUIRED_DEVICE_EXTENSION_COUNT; i++) {
         if (support->missingRequiredMask & requiredDeviceExtensionBits[i]) {
             LOG_INFO("      %s", requiredDeviceExtensions[i]);
         }
@@ -115,7 +115,7 @@ static void logDeviceExtensionSupport(const char* deviceName, const DeviceExtens
         "required",
         requiredDeviceExtensions,
         requiredDeviceExtensionBits,
-        NUM_REQ_EXTENSIONS,
+        K_REQUIRED_DEVICE_EXTENSION_COUNT,
         support->availableMask,
         "loaded",
         "missing"
@@ -125,7 +125,7 @@ static void logDeviceExtensionSupport(const char* deviceName, const DeviceExtens
         "optional",
         optionalDeviceExtensions,
         optionalDeviceExtensionBits,
-        NUM_OPT_EXTENSIONS,
+        K_OPTIONAL_DEVICE_EXTENSION_COUNT,
         support->availableMask,
         "loaded",
         "not loaded"
@@ -339,7 +339,7 @@ static void logEnabledDeviceExtensions(
         "required",
         requiredDeviceExtensions,
         requiredDeviceExtensionBits,
-        NUM_REQ_EXTENSIONS,
+        K_REQUIRED_DEVICE_EXTENSION_COUNT,
         extensionSupport.enabledMask,
         "enabled",
         "disabled"
@@ -348,7 +348,7 @@ static void logEnabledDeviceExtensions(
         "optional",
         optionalDeviceExtensions,
         optionalDeviceExtensionBits,
-        NUM_OPT_EXTENSIONS,
+        K_OPTIONAL_DEVICE_EXTENSION_COUNT,
         extensionSupport.enabledMask,
         "enabled",
         "disabled"
@@ -701,10 +701,10 @@ VKRT_Result createLogicalDevice(VKRT* vkrt) {
     VkPhysicalDeviceRayTracingInvocationReorderFeaturesEXT supportedReorderFeatures;
     querySupportedReorderFeatures(vkrt, extensionSupport, &supportedReorderFeatures);
 
-    const char* enabledExtensions[NUM_REQ_EXTENSIONS + NUM_OPT_EXTENSIONS + 1] = {0};
+    const char* enabledExtensions[K_REQUIRED_DEVICE_EXTENSION_COUNT + K_OPTIONAL_DEVICE_EXTENSION_COUNT + 1] = {0};
     uint32_t enabledExtensionCount = 0;
     uint32_t requiredExtensionStart = queryRequiredDeviceExtensionStartIndex(vkrt);
-    for (uint32_t i = requiredExtensionStart; i < NUM_REQ_EXTENSIONS; i++) {
+    for (uint32_t i = requiredExtensionStart; i < K_REQUIRED_DEVICE_EXTENSION_COUNT; i++) {
         enabledExtensions[enabledExtensionCount++] = requiredDeviceExtensions[i];
         extensionSupport.enabledMask |= requiredDeviceExtensionBits[i];
     }
@@ -838,12 +838,12 @@ VkBool32 extensionsSupported(VKRT* vkrt, VkPhysicalDevice device, DeviceExtensio
     }
 
     support.requiredMask = 0;
-    for (uint32_t i = requiredExtensionStart; i < NUM_REQ_EXTENSIONS; i++) {
+    for (uint32_t i = requiredExtensionStart; i < K_REQUIRED_DEVICE_EXTENSION_COUNT; i++) {
         support.requiredMask |= requiredDeviceExtensionBits[i];
     }
     support.missingRequiredMask = support.requiredMask;
 
-    for (uint32_t i = requiredExtensionStart; i < NUM_REQ_EXTENSIONS; i++) {
+    for (uint32_t i = requiredExtensionStart; i < K_REQUIRED_DEVICE_EXTENSION_COUNT; i++) {
         for (uint32_t j = 0; j < extensionCount; j++) {
             if (!strcmp(requiredDeviceExtensions[i], availableExtensions[j].extensionName)) {
                 support.availableMask |= requiredDeviceExtensionBits[i];
@@ -852,7 +852,7 @@ VkBool32 extensionsSupported(VKRT* vkrt, VkPhysicalDevice device, DeviceExtensio
         }
     }
 
-    for (uint32_t i = 0; i < NUM_OPT_EXTENSIONS; i++) {
+    for (uint32_t i = 0; i < K_OPTIONAL_DEVICE_EXTENSION_COUNT; i++) {
         for (uint32_t j = 0; j < extensionCount; j++) {
             if (!strcmp(optionalDeviceExtensions[i], availableExtensions[j].extensionName)) {
                 support.availableMask |= optionalDeviceExtensionBits[i];

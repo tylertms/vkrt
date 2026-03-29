@@ -124,7 +124,7 @@ VKRT_SHARED_STRUCT(SceneData, {
     uint rrMaxDepth;
     uint rrMinDepth;
     uint4 viewportRect;
-    uint toneMapRenderMode;
+    uint packedRenderSettings;
     float exposure;
     float timeBase;
     float timeStep;

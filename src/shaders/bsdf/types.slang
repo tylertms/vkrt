@@ -19,4 +19,15 @@ struct BSDFEval {
     float pdf;
 };
 
+struct SpectralBSDFSample {
+    float3 wi;
+    float4 weight;
+    float4 techniquePdf;
+    uint isTransmission;
+
+    bool isUsable() {
+        return any(weight > 0.0);
+    }
+};
+
 #endif

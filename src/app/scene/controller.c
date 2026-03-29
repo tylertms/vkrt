@@ -785,6 +785,7 @@ static int saveSceneSettings(cJSON* sceneRoot, const VKRT_SceneSettingsSnapshot*
     cJSON_AddNumberToObject(settingsObject, "rrMaxDepth", settings->rrMaxDepth);
     cJSON_AddNumberToObject(settingsObject, "toneMappingMode", settings->toneMappingMode);
     cJSON_AddNumberToObject(settingsObject, "renderMode", settings->renderMode);
+    cJSON_AddNumberToObject(settingsObject, "spectralSamplingMode", settings->spectralSamplingMode);
     cJSON_AddNumberToObject(settingsObject, "exposure", settings->exposure);
     cJSON_AddBoolToObject(settingsObject, "autoExposureEnabled", settings->autoExposureEnabled != 0u);
     cJSON_AddItemToObject(settingsObject, "environmentColor", createFloatArray(settings->environmentColor, 3u));
@@ -842,6 +843,7 @@ static int applySceneSettings(
     uint32_t rrMaxDepth = settings.rrMaxDepth;
     uint32_t toneMappingMode = settings.toneMappingMode;
     uint32_t renderMode = settings.renderMode;
+    uint32_t spectralSamplingMode = settings.spectralSamplingMode;
     float exposure = settings.exposure;
     uint8_t autoExposureEnabled = settings.autoExposureEnabled;
     vec3 environmentColor = {
@@ -861,6 +863,7 @@ static int applySceneSettings(
         !jsonReadOptionalUInt32Field(settingsObject, "rrMaxDepth", &rrMaxDepth) ||
         !jsonReadOptionalUInt32Field(settingsObject, "toneMappingMode", &toneMappingMode) ||
         !jsonReadOptionalUInt32Field(settingsObject, "renderMode", &renderMode) ||
+        !jsonReadOptionalUInt32Field(settingsObject, "spectralSamplingMode", &spectralSamplingMode) ||
         !jsonReadOptionalFloatField(settingsObject, "exposure", &exposure) ||
         !jsonReadOptionalBoolField(settingsObject, "autoExposureEnabled", &autoExposureEnabled) ||
         !jsonReadOptionalFloatArrayField(settingsObject, "environmentColor", environmentColor, 3u) ||
@@ -876,6 +879,7 @@ static int applySceneSettings(
     return VKRT_setPathDepth(vkrt, rrMinDepth, rrMaxDepth) == VKRT_SUCCESS &&
            VKRT_setToneMappingMode(vkrt, toneMappingMode) == VKRT_SUCCESS &&
            VKRT_setRenderMode(vkrt, (VKRT_RenderMode)renderMode) == VKRT_SUCCESS &&
+           VKRT_setSpectralSamplingMode(vkrt, spectralSamplingMode) == VKRT_SUCCESS &&
            VKRT_setExposure(vkrt, exposure) == VKRT_SUCCESS &&
            VKRT_setAutoExposureEnabled(vkrt, autoExposureEnabled) == VKRT_SUCCESS &&
            VKRT_setEnvironmentLight(vkrt, environmentColor, environmentStrength) == VKRT_SUCCESS &&
@@ -1535,7 +1539,7 @@ static int loadSceneDocument(VKRT* vkrt, Session* session, cJSON* root, const ch
     const cJSON* environmentTexturePath = cJSON_GetObjectItemCaseSensitive(root, "environmentTexturePath");
     uint32_t fileVersion = 0u;
     if (!cJSON_IsString(format) || strcmp(format->valuestring, "vkrt.scene") != 0 ||
-        !jsonToUInt32(version, &fileVersion) || fileVersion != K_SCENE_FILE_VERSION ||
+    !jsonToUInt32(version, &fileVersion) || fileVersion != K_SCENE_FILE_VERSION ||
         !cJSON_IsArray(meshImportsArray) || (textureImportsArray && !cJSON_IsArray(textureImportsArray)) ||
         !cJSON_IsArray(meshesArray) || !cJSON_IsArray(sceneObjectsArray) || !cJSON_IsObject(settingsObject) ||
         (materialsArray && !cJSON_IsArray(materialsArray)) ||
