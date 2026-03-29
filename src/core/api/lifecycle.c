@@ -17,6 +17,7 @@
 #include "swapchain.h"
 #include "sync.h"
 #include "textures.h"
+#include "types.h"
 #include "validation.h"
 #include "vkrt_internal.h"
 #include "vkrt_types.h"

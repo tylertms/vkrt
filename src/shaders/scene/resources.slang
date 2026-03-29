@@ -10,29 +10,21 @@ RaytracingAccelerationStructure topLevelAS;
 RaytracingAccelerationStructure selectionTopLevelAS;
 
 [[vk::binding(2, 0)]]
-[vk::image_format("rgba32f")]
-RWTexture2D<float4> accumulationReadImage;
+[vk::image_format("rgba32f")] RWTexture2D<float4> accumulationReadImage;
 [[vk::binding(3, 0)]]
-[vk::image_format("rgba32f")]
-RWTexture2D<float4> accumulationWriteImage;
+[vk::image_format("rgba32f")] RWTexture2D<float4> accumulationWriteImage;
 [[vk::binding(4, 0)]]
-[vk::image_format("rgba16")]
-RWTexture2D<float4> outputImage;
+[vk::image_format("rgba16")] RWTexture2D<float4> outputImage;
 [[vk::binding(5, 0)]]
-[vk::image_format("r32ui")]
-RWTexture2D<uint> selectionMaskImage;
+[vk::image_format("r32ui")] RWTexture2D<uint> selectionMaskImage;
 [[vk::binding(6, 0)]]
-[vk::image_format("rgba16f")]
-RWTexture2D<float4> albedoReadImage;
+[vk::image_format("rgba16f")] RWTexture2D<float4> albedoReadImage;
 [[vk::binding(7, 0)]]
-[vk::image_format("rgba16f")]
-RWTexture2D<float4> albedoWriteImage;
+[vk::image_format("rgba16f")] RWTexture2D<float4> albedoWriteImage;
 [[vk::binding(8, 0)]]
-[vk::image_format("rgba16f")]
-RWTexture2D<float4> normalReadImage;
+[vk::image_format("rgba16f")] RWTexture2D<float4> normalReadImage;
 [[vk::binding(9, 0)]]
-[vk::image_format("rgba16f")]
-RWTexture2D<float4> normalWriteImage;
+[vk::image_format("rgba16f")] RWTexture2D<float4> normalWriteImage;
 
 [[vk::binding(10, 0)]]
 StructuredBuffer<Vertex> vertices;

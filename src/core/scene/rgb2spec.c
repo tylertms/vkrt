@@ -1,7 +1,6 @@
-#include "scene.h"
-
 #include "buffer.h"
 #include "debug.h"
+#include "scene.h"
 #include "vkrt_engine_types.h"
 #include "vkrt_types.h"
 
@@ -38,7 +37,8 @@ static VKRT_Result parseRGB2SpecHeader(
         return VKRT_ERROR_OPERATION_FAILED;
     }
 
-    uint64_t coeffValueCount = (uint64_t)3u * (uint64_t)res * (uint64_t)res * (uint64_t)res * (uint64_t)kRGB2SpecCoeffCount;
+    uint64_t coeffValueCount =
+        (uint64_t)3u * (uint64_t)res * (uint64_t)res * (uint64_t)res * (uint64_t)kRGB2SpecCoeffCount;
     uint64_t totalFloatCount = (uint64_t)res + coeffValueCount;
     uint64_t payloadSize64 = totalFloatCount * sizeof(float);
     if (payloadSize64 > SIZE_MAX || fileSize != 8u + (size_t)payloadSize64) {

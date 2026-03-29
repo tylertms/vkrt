@@ -17,11 +17,9 @@ typedef mat4 float4x4;
 #endif
 
 #ifdef VKRT_SHADER
-#define VKRT_SHARED_STRUCT(name, fields) \
-    struct name fields;
+#define VKRT_SHARED_STRUCT(name, fields) struct name fields;
 #else
-#define VKRT_SHARED_STRUCT(name, fields) \
-    typedef struct fields name;
+#define VKRT_SHARED_STRUCT(name, fields) typedef struct fields name;
 #endif
 
 VKRT_SHARED_STRUCT(Vertex, {

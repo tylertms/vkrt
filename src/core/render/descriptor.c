@@ -47,14 +47,12 @@ static VkBool32 descriptorResourcesReadyForFrame(VKRT* vkrt, uint32_t frameIndex
            vkrt->core.vertexData.buffer != VK_NULL_HANDLE && vkrt->core.indexData.buffer != VK_NULL_HANDLE &&
            vkrt->core.selection.buffer != VK_NULL_HANDLE && vkrt->core.sceneMeshData.buffer != VK_NULL_HANDLE &&
            vkrt->core.sceneMaterialData.buffer != VK_NULL_HANDLE &&
-            vkrt->core.sceneEmissiveMeshData.buffer != VK_NULL_HANDLE &&
-            vkrt->core.sceneEmissiveTriangleData.buffer != VK_NULL_HANDLE &&
-            vkrt->core.sceneMeshAliasQ.buffer != VK_NULL_HANDLE &&
-            vkrt->core.sceneMeshAliasIdx.buffer != VK_NULL_HANDLE &&
-            vkrt->core.sceneTriAliasQ.buffer != VK_NULL_HANDLE &&
-            vkrt->core.sceneTriAliasIdx.buffer != VK_NULL_HANDLE &&
-            vkrt->core.sceneRGB2SpecSRGBData.buffer != VK_NULL_HANDLE &&
-            textureDescriptorsReady(vkrt);
+           vkrt->core.sceneEmissiveMeshData.buffer != VK_NULL_HANDLE &&
+           vkrt->core.sceneEmissiveTriangleData.buffer != VK_NULL_HANDLE &&
+           vkrt->core.sceneMeshAliasQ.buffer != VK_NULL_HANDLE &&
+           vkrt->core.sceneMeshAliasIdx.buffer != VK_NULL_HANDLE &&
+           vkrt->core.sceneTriAliasQ.buffer != VK_NULL_HANDLE && vkrt->core.sceneTriAliasIdx.buffer != VK_NULL_HANDLE &&
+           vkrt->core.sceneRGB2SpecSRGBData.buffer != VK_NULL_HANDLE && textureDescriptorsReady(vkrt);
 }
 
 static VkWriteDescriptorSet makeDescriptorWrite(
@@ -358,7 +356,7 @@ VKRT_Result createDescriptorSetLayout(VKRT* vkrt) {
 VKRT_Result createDescriptorPool(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
 
-    static const uint32_t kRendererStorageBufferBindingsPerFrame = 13u; // bindings 10, 11, 13-21, 24
+    static const uint32_t kRendererStorageBufferBindingsPerFrame = 13u;  // bindings 10, 11, 13-21, 24
     static const VkDescriptorPoolSize rendererPoolSizes[] = {
         {VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 2u * VKRT_MAX_FRAMES_IN_FLIGHT},
         {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 8u * VKRT_MAX_FRAMES_IN_FLIGHT},

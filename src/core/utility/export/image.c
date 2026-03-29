@@ -394,9 +394,8 @@ static void sanitizeLinearRGBA32FInPlace(
                 pixel[channel] = 0.0f;
             }
         }
-        if (forceOpaqueAlpha) {
-            pixel[3] = alphaFallback;
-        } else if (!isfinite(pixel[3])) {
+
+        if (forceOpaqueAlpha || !isfinite(pixel[3])) {
             pixel[3] = alphaFallback;
         }
     }

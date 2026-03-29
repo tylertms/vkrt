@@ -210,9 +210,9 @@ static int materialsEqual(const Material* a, const Material* b) {
            a->specular == b->specular && a->specularTint == b->specularTint &&
            materialComponentEqual(a->sheenTintWeight, b->sheenTintWeight, 4) && a->clearcoat == b->clearcoat &&
            a->clearcoatGloss == b->clearcoatGloss && a->ior == b->ior && a->abbeNumber == b->abbeNumber &&
-           a->diffuseRoughness == b->diffuseRoughness &&
-           a->transmission == b->transmission && a->subsurface == b->subsurface &&
-           a->sheenRoughness == b->sheenRoughness && a->absorptionCoefficient == b->absorptionCoefficient &&
+           a->diffuseRoughness == b->diffuseRoughness && a->transmission == b->transmission &&
+           a->subsurface == b->subsurface && a->sheenRoughness == b->sheenRoughness &&
+           a->absorptionCoefficient == b->absorptionCoefficient &&
            materialComponentEqual(a->attenuationColor, b->attenuationColor, 3) &&
            a->normalTextureScale == b->normalTextureScale && a->baseColorTextureIndex == b->baseColorTextureIndex &&
            a->metallicRoughnessTextureIndex == b->metallicRoughnessTextureIndex &&
