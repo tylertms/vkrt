@@ -306,6 +306,12 @@ static int appendImportedTextureReference(
     return 1;
 }
 
+static const cgltf_texture_view* queryMaterialBaseColorTextureView(const cgltf_material* material) {
+    if (!material) return NULL;
+    if (material->has_pbr_specular_glossiness) return &material->pbr_specular_glossiness.diffuse_texture;
+    return &material->pbr_metallic_roughness.base_color_texture;
+}
+
 static int collectImportedTextureReferences(
     const cgltf_data* data,
     ImportedTextureReference* references,
@@ -319,7 +325,7 @@ static int collectImportedTextureReferences(
         if (!appendImportedTextureReference(
                 references,
                 outReferenceCount,
-                &material->pbr_metallic_roughness.base_color_texture,
+                queryMaterialBaseColorTextureView(material),
                 VKRT_TEXTURE_COLOR_SPACE_SRGB
             )) {
             return 0;
@@ -919,6 +925,41 @@ static int populateImportMaterials(const cgltf_data* data, MeshImportData* impor
     return 0;
 }
 
+static void applyBaseColorTexture(
+    Material* material,
+    const char* resolvedPath,
+    MeshImportData* importData,
+    MaterialTextureCache* textureCache,
+    const cgltf_texture_view* textureView
+) {
+    if (!material || !resolvedPath || !importData || !textureCache || !textureView) return;
+    uint32_t baseColorTextureIndex = VKRT_INVALID_INDEX;
+    if (registerImportedTexture(
+            importData,
+            resolvedPath,
+            textureView,
+            VKRT_TEXTURE_COLOR_SPACE_SRGB,
+            textureCache,
+            &baseColorTextureIndex
+        )) {
+        material->baseColorTextureIndex = baseColorTextureIndex;
+        material->baseColorTextureWrap = packTextureWrapModes(
+            textureView->texture->sampler ? textureView->texture->sampler->wrap_s : cgltf_wrap_mode_repeat,
+            textureView->texture->sampler ? textureView->texture->sampler->wrap_t : cgltf_wrap_mode_repeat
+        );
+        setMaterialTextureTexcoordSet(
+            material,
+            VKRT_MATERIAL_TEXTURE_SLOT_BASE_COLOR,
+            queryTextureViewTexcoordSet(textureView)
+        );
+        copyTextureTransform(
+            material->baseColorTextureTransform,
+            &material->textureRotations[VKRT_MATERIAL_TEXTURE_SLOT_BASE_COLOR],
+            textureView
+        );
+    }
+}
+
 static void applyPBRMaterialProperties(
     Material* material,
     const cgltf_material* sourceMaterial,
@@ -926,7 +967,25 @@ static void applyPBRMaterialProperties(
     MeshImportData* importData,
     MaterialTextureCache* textureCache
 ) {
-    if (!material || !sourceMaterial || !sourceMaterial->has_pbr_metallic_roughness) return;
+    if (!material || !sourceMaterial) return;
+
+    if (sourceMaterial->has_pbr_specular_glossiness) {
+        material->baseColor[0] = sourceMaterial->pbr_specular_glossiness.diffuse_factor[0];
+        material->baseColor[1] = sourceMaterial->pbr_specular_glossiness.diffuse_factor[1];
+        material->baseColor[2] = sourceMaterial->pbr_specular_glossiness.diffuse_factor[2];
+        material->opacity = sourceMaterial->pbr_specular_glossiness.diffuse_factor[3];
+        material->roughness = 1.0f - sourceMaterial->pbr_specular_glossiness.glossiness_factor;
+        applyBaseColorTexture(
+            material,
+            resolvedPath,
+            importData,
+            textureCache,
+            &sourceMaterial->pbr_specular_glossiness.diffuse_texture
+        );
+        return;
+    }
+
+    if (!sourceMaterial->has_pbr_metallic_roughness) return;
 
     material->baseColor[0] = sourceMaterial->pbr_metallic_roughness.base_color_factor[0];
     material->baseColor[1] = sourceMaterial->pbr_metallic_roughness.base_color_factor[1];
@@ -934,36 +993,13 @@ static void applyPBRMaterialProperties(
     material->opacity = sourceMaterial->pbr_metallic_roughness.base_color_factor[3];
     material->metallic = sourceMaterial->pbr_metallic_roughness.metallic_factor;
     material->roughness = sourceMaterial->pbr_metallic_roughness.roughness_factor;
-
-    uint32_t baseColorTextureIndex = VKRT_INVALID_INDEX;
-    if (registerImportedTexture(
-            importData,
-            resolvedPath,
-            &sourceMaterial->pbr_metallic_roughness.base_color_texture,
-            VKRT_TEXTURE_COLOR_SPACE_SRGB,
-            textureCache,
-            &baseColorTextureIndex
-        )) {
-        material->baseColorTextureIndex = baseColorTextureIndex;
-        material->baseColorTextureWrap = packTextureWrapModes(
-            sourceMaterial->pbr_metallic_roughness.base_color_texture.texture->sampler
-                ? sourceMaterial->pbr_metallic_roughness.base_color_texture.texture->sampler->wrap_s
-                : cgltf_wrap_mode_repeat,
-            sourceMaterial->pbr_metallic_roughness.base_color_texture.texture->sampler
-                ? sourceMaterial->pbr_metallic_roughness.base_color_texture.texture->sampler->wrap_t
-                : cgltf_wrap_mode_repeat
-        );
-        setMaterialTextureTexcoordSet(
-            material,
-            VKRT_MATERIAL_TEXTURE_SLOT_BASE_COLOR,
-            queryTextureViewTexcoordSet(&sourceMaterial->pbr_metallic_roughness.base_color_texture)
-        );
-        copyTextureTransform(
-            material->baseColorTextureTransform,
-            &material->textureRotations[VKRT_MATERIAL_TEXTURE_SLOT_BASE_COLOR],
-            &sourceMaterial->pbr_metallic_roughness.base_color_texture
-        );
-    }
+    applyBaseColorTexture(
+        material,
+        resolvedPath,
+        importData,
+        textureCache,
+        &sourceMaterial->pbr_metallic_roughness.base_color_texture
+    );
 
     uint32_t metallicRoughnessTextureIndex = VKRT_INVALID_INDEX;
     if (registerImportedTexture(
@@ -1182,7 +1218,8 @@ static int materialUsesUnsupportedTextureTransforms(const cgltf_material* materi
 static int materialUsesUnsupportedTextures(const cgltf_material* material) {
     if (!material) return 0;
 
-    return materialUsesTextureView(&material->occlusion_texture) ||
+    return materialUsesTextureView(&material->pbr_specular_glossiness.specular_glossiness_texture) ||
+           materialUsesTextureView(&material->occlusion_texture) ||
            materialUsesTextureView(&material->clearcoat.clearcoat_texture) ||
            materialUsesTextureView(&material->clearcoat.clearcoat_roughness_texture) ||
            materialUsesTextureView(&material->clearcoat.clearcoat_normal_texture) ||
@@ -1207,9 +1244,8 @@ static int materialUsesUnsupportedVolume(const cgltf_material* material) {
 static int materialUsesUnsupportedModels(const cgltf_material* material) {
     if (!material) return 0;
 
-    return material->has_pbr_specular_glossiness || materialUsesUnsupportedVolume(material) ||
-           material->has_iridescence || material->has_diffuse_transmission || material->has_anisotropy ||
-           material->has_dispersion || material->unlit;
+    return materialUsesUnsupportedVolume(material) || material->has_iridescence || material->has_diffuse_transmission ||
+           material->has_anisotropy || material->has_dispersion || material->unlit;
 }
 
 static void collectIgnoredImportFeatures(const cgltf_data* data, MeshImportFeatureReport* outReport) {

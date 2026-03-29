@@ -131,18 +131,15 @@ static int removeSceneObjectHierarchy(VKRT* vkrt, Session* session, uint32_t obj
     if (!vkrt || !session || objectIndex >= sessionGetSceneObjectCount(session)) return 0;
 
     uint32_t objectCount = sessionGetSceneObjectCount(session);
-    uint32_t* meshIndices = objectCount > 0u ? (uint32_t*)malloc((size_t)objectCount * sizeof(uint32_t)) : NULL;
-    if (objectCount > 0u && !meshIndices) {
-        return 0;
-    }
+    if (objectCount == 0u) return 0;
+
+    uint32_t* meshIndices = (uint32_t*)malloc((size_t)objectCount * sizeof(uint32_t));
+    if (!meshIndices) return 0;
 
     uint32_t meshCount = collectSceneObjectSubtreeMeshIndices(session, objectIndex, meshIndices, objectCount);
     sortMeshIndicesDescending(meshIndices, meshCount);
 
     for (uint32_t meshIndex = 0u; meshIndex < meshCount; meshIndex++) {
-        if (!meshIndices) {
-            return 0;
-        }
         VKRT_Result result = VKRT_removeMesh(vkrt, meshIndices[meshIndex]);
         if (result != VKRT_SUCCESS) {
             LOG_ERROR("Removing scene object mesh failed (%d)", (int)result);

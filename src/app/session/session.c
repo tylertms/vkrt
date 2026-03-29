@@ -21,6 +21,11 @@
 
 static const uint32_t kDefaultRenderTargetSamples = 1024u;
 
+typedef struct SceneObjectMarkBuffer {
+    uint32_t capacity;
+    uint8_t* data;
+} SceneObjectMarkBuffer;
+
 static void clearOwnedString(char** value) {
     if (!value || !*value) return;
     free(*value);
@@ -214,9 +219,7 @@ static void removeSceneObjectAt(Session* session, uint32_t objectIndex) {
 
     for (uint32_t i = 0; i < session->editor.sceneObjectCount; i++) {
         SessionSceneObject* object = &session->editor.sceneObjects[i];
-        if (object->parentIndex == objectIndex) {
-            object->parentIndex = VKRT_INVALID_INDEX;
-        } else if (object->parentIndex != VKRT_INVALID_INDEX && object->parentIndex > objectIndex) {
+        if (object->parentIndex != VKRT_INVALID_INDEX && object->parentIndex > objectIndex) {
             object->parentIndex--;
         }
     }
@@ -231,6 +234,25 @@ static void removeSceneObjectAt(Session* session, uint32_t objectIndex) {
     }
 }
 
+static void removeSceneObjectAtWithMarks(Session* session, uint32_t objectIndex, SceneObjectMarkBuffer marks) {
+    if (!session || objectIndex >= session->editor.sceneObjectCount) return;
+
+    removeSceneObjectAt(session, objectIndex);
+    if (!marks.data) return;
+
+    uint32_t count = session->editor.sceneObjectCount;
+    if (objectIndex < count) {
+        memmove(
+            &marks.data[objectIndex],
+            &marks.data[objectIndex + 1u],
+            (size_t)(count - objectIndex) * sizeof(*marks.data)
+        );
+    }
+    if (count < marks.capacity) {
+        marks.data[count] = 0u;
+    }
+}
+
 static int sceneObjectHasChildren(const Session* session, uint32_t objectIndex) {
     if (!session) return 0;
     for (uint32_t i = 0; i < session->editor.sceneObjectCount; i++) {
@@ -239,26 +261,45 @@ static int sceneObjectHasChildren(const Session* session, uint32_t objectIndex) 
     return 0;
 }
 
-static int sceneObjectDescendsFrom(const Session* session, uint32_t objectIndex, uint32_t ancestorIndex) {
+static int sceneObjectIsEmpty(const Session* session, uint32_t objectIndex) {
     if (!session || objectIndex >= session->editor.sceneObjectCount) return 0;
-
-    uint32_t currentIndex = objectIndex;
-    uint32_t maxDepth = session->editor.sceneObjectCount;
-    while (currentIndex != VKRT_INVALID_INDEX && currentIndex < session->editor.sceneObjectCount && maxDepth-- > 0u) {
-        if (currentIndex == ancestorIndex) return 1;
-        currentIndex = session->editor.sceneObjects[currentIndex].parentIndex;
-    }
-    return 0;
+    const SessionSceneObject* object = &session->editor.sceneObjects[objectIndex];
+    return object->meshIndex == VKRT_INVALID_INDEX && !sceneObjectHasChildren(session, objectIndex);
 }
 
-static void pruneEmptyLeafGroups(Session* session) {
-    if (!session) return;
-    for (uint32_t i = session->editor.sceneObjectCount; i > 0u; i--) {
-        uint32_t objectIndex = i - 1u;
+static void markSceneObjectAndAncestors(const Session* session, uint32_t objectIndex, uint8_t* marks, uint32_t count) {
+    if (!session || !marks) return;
+
+    while (objectIndex != VKRT_INVALID_INDEX && objectIndex < count) {
+        if (marks[objectIndex]) break;
+        marks[objectIndex] = 1u;
+        objectIndex = session->editor.sceneObjects[objectIndex].parentIndex;
+    }
+}
+
+static void markSceneObjectSubtree(const Session* session, uint32_t rootObjectIndex, uint8_t* marks, uint32_t count) {
+    if (!session || !marks || rootObjectIndex >= count) return;
+
+    for (uint32_t objectIndex = 0; objectIndex < count; objectIndex++) {
+        uint32_t currentIndex = objectIndex;
+        uint32_t maxDepth = count;
+        while (currentIndex != VKRT_INVALID_INDEX && currentIndex < count && maxDepth-- > 0u) {
+            if (currentIndex == rootObjectIndex) {
+                marks[objectIndex] = 1u;
+                break;
+            }
+            currentIndex = session->editor.sceneObjects[currentIndex].parentIndex;
+        }
+    }
+}
+
+static void pruneEmptySceneObjectAncestors(Session* session, uint32_t objectIndex) {
+    while (session && objectIndex != VKRT_INVALID_INDEX && objectIndex < session->editor.sceneObjectCount) {
         const SessionSceneObject* object = &session->editor.sceneObjects[objectIndex];
-        if (object->meshIndex != VKRT_INVALID_INDEX) continue;
-        if (sceneObjectHasChildren(session, objectIndex)) continue;
+        if (!sceneObjectIsEmpty(session, objectIndex)) break;
+        uint32_t parentIndex = object->parentIndex;
         removeSceneObjectAt(session, objectIndex);
+        objectIndex = parentIndex;
     }
 }
 
@@ -810,12 +851,29 @@ int sessionSetSceneObjectLocalTransformForMesh(
 
 void sessionRemoveSceneObjectSubtree(Session* session, uint32_t objectIndex) {
     if (!session || objectIndex >= session->editor.sceneObjectCount) return;
+    uint32_t objectCount = session->editor.sceneObjectCount;
+    uint8_t* markedObjects = (uint8_t*)calloc((size_t)objectCount, sizeof(*markedObjects));
+    if (!markedObjects) return;
+    SceneObjectMarkBuffer markBuffer = {
+        .capacity = objectCount,
+        .data = markedObjects,
+    };
 
-    for (uint32_t i = session->editor.sceneObjectCount; i > 0u; i--) {
+    uint32_t parentIndex = session->editor.sceneObjects[objectIndex].parentIndex;
+    markSceneObjectSubtree(session, objectIndex, markedObjects, objectCount);
+
+    for (uint32_t i = objectCount; i > 0u; i--) {
         uint32_t candidateIndex = i - 1u;
-        if (!sceneObjectDescendsFrom(session, objectIndex, candidateIndex)) continue;
-        removeSceneObjectAt(session, candidateIndex);
+        if (!markedObjects[candidateIndex]) continue;
+        removeSceneObjectAtWithMarks(session, candidateIndex, markBuffer);
+        if (parentIndex != VKRT_INVALID_INDEX && parentIndex > candidateIndex) {
+            parentIndex--;
+        }
     }
+
+    free(markedObjects);
+
+    pruneEmptySceneObjectAncestors(session, parentIndex);
 }
 
 void sessionRemoveMeshReferencesNoPrune(Session* session, uint32_t meshIndex) {
@@ -832,8 +890,45 @@ void sessionRemoveMeshReferencesNoPrune(Session* session, uint32_t meshIndex) {
 }
 
 void sessionRemoveMeshReferences(Session* session, uint32_t meshIndex) {
-    sessionRemoveMeshReferencesNoPrune(session, meshIndex);
-    pruneEmptyLeafGroups(session);
+    if (!session) return;
+
+    uint32_t objectCount = session->editor.sceneObjectCount;
+    uint8_t* markedObjects = objectCount > 0u ? (uint8_t*)calloc((size_t)objectCount, sizeof(*markedObjects)) : NULL;
+    if (objectCount > 0u && !markedObjects) return;
+    SceneObjectMarkBuffer markBuffer = {
+        .capacity = objectCount,
+        .data = markedObjects,
+    };
+
+    for (uint32_t i = 0; i < objectCount; i++) {
+        SessionSceneObject* object = &session->editor.sceneObjects[i];
+        if (object->meshIndex == meshIndex) {
+            object->meshIndex = VKRT_INVALID_INDEX;
+            markSceneObjectAndAncestors(session, i, markedObjects, objectCount);
+        } else if (object->meshIndex != VKRT_INVALID_INDEX && object->meshIndex > meshIndex) {
+            object->meshIndex--;
+        }
+    }
+
+    for (;;) {
+        int removedObject = 0;
+        for (uint32_t i = session->editor.sceneObjectCount; i > 0u; i--) {
+            uint32_t objectIndex = i - 1u;
+            if (!markedObjects[objectIndex] || !sceneObjectIsEmpty(session, objectIndex)) continue;
+
+            uint32_t parentIndex = session->editor.sceneObjects[objectIndex].parentIndex;
+            removeSceneObjectAtWithMarks(session, objectIndex, markBuffer);
+            if (parentIndex != VKRT_INVALID_INDEX && parentIndex < objectCount) {
+                markedObjects[parentIndex] = 1u;
+            }
+            removedObject = 1;
+            break;
+        }
+
+        if (!removedObject) break;
+    }
+
+    free(markedObjects);
 }
 
 int sessionSyncSceneObjectTransforms(VKRT* vkrt, Session* session) {

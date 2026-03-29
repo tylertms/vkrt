@@ -1,8 +1,10 @@
 #include "buffer.h"
 #include "debug.h"
 #include "scene.h"
+#include "types.h"
 #include "vkrt_engine_types.h"
 #include "vkrt_types.h"
+#include "vulkan/vulkan_core.h"
 
 #include <stdint.h>
 #include <string.h>
@@ -50,7 +52,6 @@ static VKRT_Result parseRGB2SpecHeader(
         .res = res,
         .scaleOffset = 0u,
         .dataOffset = res,
-        .valid = 1u,
     };
     *outPayload = (const float*)(fileData + 8u);
     *outPayloadSize = (size_t)payloadSize64;

@@ -24,33 +24,13 @@ struct Payload {
 
     static Payload make(uint seed) {
         Payload payload;
-        payload.didHit = 0u;
         payload.rng = seed;
-        payload.instanceIndex = VKRT_INVALID_INDEX;
-        payload.materialIndex = VKRT_INVALID_INDEX;
-        payload.frontFace = 0u;
-        payload.hitDistance = 0.0;
-        payload.packedShadingNormal = 0u;
-        payload.packedGeometricNormal = 0u;
-        payload.tangent = float4(0.0);
-        payload.color = float4(1.0);
-        payload.texcoord0 = float2(0.0);
-        payload.texcoord1 = float2(0.0);
         return payload;
     }
 
     [mutating] void setMiss() {
         didHit = 0u;
         instanceIndex = VKRT_INVALID_INDEX;
-        materialIndex = VKRT_INVALID_INDEX;
-        frontFace = 0u;
-        hitDistance = 0.0;
-        packedShadingNormal = 0u;
-        packedGeometricNormal = 0u;
-        tangent = float4(0.0);
-        color = float4(1.0);
-        texcoord0 = float2(0.0);
-        texcoord1 = float2(0.0);
     }
 
         [mutating] void setSurfaceHit(
@@ -85,7 +65,6 @@ struct ShadowPayload {
 
     static ShadowPayload make(uint seed) {
         ShadowPayload payload;
-        payload.visibility = VKRT_SHADOW_VISIBILITY_OCCLUDED;
         payload.rng = seed;
         return payload;
     }

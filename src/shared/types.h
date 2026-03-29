@@ -110,7 +110,6 @@ VKRT_SHARED_STRUCT(RGB2SpecTableInfo, {
     uint res;
     uint scaleOffset;
     uint dataOffset;
-    uint valid;
 })
 
 #if defined(_MSC_VER) && !defined(VKRT_SHADER)

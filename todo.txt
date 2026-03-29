@@ -3,3 +3,7 @@
 - maybe look into improving movement controls
 - move/rotate/scale with keybinds in viewport and potential post-rt widget draw
 - raster mode or single-ray RT mode just for scene viewing and movement
+- volumetric scattering
+- fix up menu, add everything into menu bar + keybinds
+- maybe something weird with non-volume transmission
+- add support for more glb features

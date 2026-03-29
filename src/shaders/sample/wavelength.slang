@@ -13,14 +13,6 @@ struct WavelengthSample {
     float invPdf;
 };
 
-float wavelengthFromUnitSample(float u) {
-    return VKRT_WAVELENGTH_MIN_NM + saturate(u) * VKRT_WAVELENGTH_RANGE_NM;
-}
-
-float wavelengthPdfUniform() {
-    return 1.0 / VKRT_WAVELENGTH_RANGE_NM;
-}
-
 uint reverseBits32(uint value) {
     value = ((value & 0x55555555u) << 1u) | ((value >> 1u) & 0x55555555u);
     value = ((value & 0x33333333u) << 2u) | ((value >> 2u) & 0x33333333u);
@@ -29,23 +21,16 @@ uint reverseBits32(uint value) {
     return (value << 16u) | (value >> 16u);
 }
 
-float radicalInverseBase2(uint sampleIndex) {
-    return float(reverseBits32(sampleIndex)) * VKRT_INV_UINT32;
-}
-
-float wavelengthUnitSample(uint sampleIndex, inout uint rng) {
-    return frac(radicalInverseBase2(sampleIndex) + rand(rng));
-}
-
 WavelengthSample sampleUniformWavelength(inout uint rng, uint sampleIndex) {
     WavelengthSample sample;
-    sample.lambdaNm = wavelengthFromUnitSample(wavelengthUnitSample(sampleIndex, rng));
-    sample.invPdf = 1.0 / wavelengthPdfUniform();
-    return sample;
-}
 
-WavelengthSample sampleUniformWavelength(inout uint rng) {
-    return sampleUniformWavelength(rng, 0u);
+    float radInvB2 = float(reverseBits32(sampleIndex)) * VKRT_INV_UINT32;
+    float unitSample = frac(radInvB2 + rand(rng));
+
+    sample.lambdaNm = VKRT_WAVELENGTH_MIN_NM + saturate(unitSample) * VKRT_WAVELENGTH_RANGE_NM;
+    sample.invPdf = VKRT_WAVELENGTH_RANGE_NM;
+
+    return sample;
 }
 
 #endif

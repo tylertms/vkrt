@@ -27,8 +27,6 @@
 
     uint spp = max(scene.samplesPerPixel, 1u);
     float4 previous = accumulationReadImage[pixel];
-    float4 previousAlbedo = albedoReadImage[pixel];
-    float4 previousNormal = normalReadImage[pixel];
     uint previousSamples = (uint)(previous.w + 0.5);
 
     int2 selectionPixel = int2(int(selection[0].pixel & 0xffffu), int((selection[0].pixel >> 16) & 0xffffu));
@@ -111,7 +109,8 @@
                 if (!neeOnlyDebug && !mediumHasActiveBoundary(medium)) {
                     if (spectralMode) {
                         spectralRadiance +=
-                            spectralThroughput * sampleEnvironmentRadianceScalar(ray.Direction, wavelength.lambdaNm);
+                            spectralThroughput *
+                            spectralScalarFromLinearSrgb(sampleEnvironmentRadiance(ray.Direction), wavelength.lambdaNm);
                     } else {
                         radiance += throughput * sampleEnvironmentRadiance(ray.Direction);
                     }
@@ -119,10 +118,6 @@
                 break;
             }
 
-            float3 hitPoint = ray.Origin + ray.Direction * payload.hitDistance;
-            float3 shadingNormal = unpackOctNormal(payload.packedShadingNormal);
-            float3 geometricNormal = unpackOctNormal(payload.packedGeometricNormal);
-            Material material = materials[payload.materialIndex];
             if (medium.absorptionActive) {
                 float3 transmittance = mediumTransmittance(medium, payload.hitDistance);
                 if (spectralMode) {
@@ -143,6 +138,10 @@
             if (spectralMode && spectralThroughput <= 0.0) {
                 break;
             }
+            float3 hitPoint = ray.Origin + ray.Direction * payload.hitDistance;
+            float3 shadingNormal = unpackOctNormal(payload.packedShadingNormal);
+            float3 geometricNormal = unpackOctNormal(payload.packedGeometricNormal);
+            Material material = materials[payload.materialIndex];
             ShadingBasis basis = makeShadingBasis(shadingNormal, payload.tangent);
             shadingNormal = applyNormalTexture(material, payload.texcoord0, payload.texcoord1, basis);
             shadingNormal = sanitizeShadingNormal(shadingNormal, geometricNormal, -ray.Direction);
@@ -343,6 +342,8 @@
         normalWriteImage[pixel] = float4(0.0);
         outputImage[pixel] = float4(encodeDisplayColor(frameRadiance), 1.0);
     } else {
+        float4 previousAlbedo = albedoReadImage[pixel];
+        float4 previousNormal = normalReadImage[pixel];
         float previousWeight = float(previousSamples);
         float newWeight = float(spp);
         float totalWeight = previousWeight + newWeight;

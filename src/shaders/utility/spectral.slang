@@ -9,7 +9,6 @@
 // CIE XYZ fits: Wyman, Sloan, Shirley, 2013 - https://jcgt.org/published/0002/02/01/
 // Fraunhofer line wavelengths / Abbe number relation: https://en.wikipedia.org/wiki/Abbe_number
 
-static const float3 VKRT_SPECTRAL_LUMINANCE_WEIGHTS = float3(0.2126, 0.7152, 0.0722);
 static const float3x3 VKRT_XYZ_TO_LINEAR_SRGB =
     float3x3(3.2404542, -1.5371385, -0.4985314, -0.9692660, 1.8760108, 0.0415560, 0.0556434, -0.2040259, 1.0572252);
 static const float VKRT_CIE_Y_INTEGRAL_1931_FIT = 106.9461715;
@@ -19,31 +18,20 @@ static const float VKRT_FRAUNHOFER_D_UM = 0.5875618;
 static const float VKRT_FRAUNHOFER_F_UM = 0.4861327;
 
 bool spectralRenderingEnabled() {
-    return VKRT_SCENE_RENDER_MODE_FROM_PACKED(scene.toneMapRenderMode) == VKRT_RENDER_MODE_SPECTRAL &&
-           rgb2specTableInfoIsValid(scene.rgb2specSRGB);
-}
-
-float spectralLuminance(float3 value) {
-    return dot(value, VKRT_SPECTRAL_LUMINANCE_WEIGHTS);
+    return VKRT_SCENE_RENDER_MODE_FROM_PACKED(scene.toneMapRenderMode) == VKRT_RENDER_MODE_SPECTRAL;
 }
 
 float spectralScalarFromLinearSrgb(float3 rgb, float lambdaNm) {
-    float3 safeRgb = max(rgb, float3(0.0));
-    float maxValue = max(safeRgb.x, max(safeRgb.y, safeRgb.z));
+    float maxValue = max(rgb.x, max(rgb.y, rgb.z));
     if (maxValue <= 0.0) {
         return 0.0;
     }
 
-    if (!rgb2specTableInfoIsValid(scene.rgb2specSRGB)) {
-        return spectralLuminance(safeRgb);
-    }
-
-    RGB2SpecModel model = rgb2specModelFromTableInfo(scene.rgb2specSRGB);
     if (maxValue <= 1.0) {
-        return rgb2specEvalFast(model, rgb2specSRGBTable, safeRgb, lambdaNm);
+        return rgb2specEval(scene.rgb2specSRGB, rgb2specSRGBTable, rgb, lambdaNm);
     }
 
-    return maxValue * rgb2specEvalFast(model, rgb2specSRGBTable, safeRgb / maxValue, lambdaNm);
+    return maxValue * rgb2specEval(scene.rgb2specSRGB, rgb2specSRGBTable, rgb / maxValue, lambdaNm);
 }
 
 float spectralXFit1931(float lambdaNm) {
@@ -69,13 +57,9 @@ float3 spectralXYZ1931(float lambdaNm) {
     return max(float3(spectralXFit1931(lambdaNm), spectralYFit1931(lambdaNm), spectralZFit1931(lambdaNm)), float3(0.0));
 }
 
-float3 xyzToLinearSrgb(float3 xyz) {
-    return mul(VKRT_XYZ_TO_LINEAR_SRGB, xyz);
-}
-
 float3 spectralSampleToLinearSrgb(float scalarValue, WavelengthSample wavelength) {
     float xyzScale = (scalarValue * wavelength.invPdf) / VKRT_CIE_Y_INTEGRAL_1931_FIT;
-    return xyzToLinearSrgb(spectralXYZ1931(wavelength.lambdaNm) * xyzScale);
+    return mul(VKRT_XYZ_TO_LINEAR_SRGB, spectralXYZ1931(wavelength.lambdaNm) * xyzScale);
 }
 
 float dispersiveIor(float ior, float abbeNumber, float lambdaNm) {

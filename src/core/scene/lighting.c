@@ -51,13 +51,14 @@ typedef struct LightBuildScratch {
     float totalSelectionWeight;
 } LightBuildScratch;
 
-static float luminance3(const vec3 value) {
-    return (value[0] * 0.2126f) + (value[1] * 0.7152f) + (value[2] * 0.0722f);
+static float computeLinearSRGBLuminance(const float* rgb) {
+    if (!rgb) return 0.0f;
+    return (0.2126f * rgb[0]) + (0.7152f * rgb[1]) + (0.0722f * rgb[2]);
 }
 
 static float materialEmissionWeight(const Material* material) {
     if (!isfinite(material->emissionLuminance) || material->emissionLuminance <= 0.0f) return 0.0f;
-    float lum = luminance3(material->emissionColor);
+    float lum = computeLinearSRGBLuminance(material->emissionColor);
     if (lum <= 0.0f) return 0.0f;
     return lum * material->emissionLuminance;
 }

@@ -135,13 +135,13 @@ BSDFBranchWeights makeBSDFBranchWeights(Material material, float3 wo, uint front
     float3 diffuseColor = bsdfDiffuseColor(material);
     float3 sheenColor = bsdfSheenColor(material);
     float nonMetal = 1.0 - material.metallic;
-    float baseColorWeight = max(bsdfLuminance(material.baseColor), 1e-3);
-    float diffuseColorWeight = max(bsdfLuminance(diffuseColor), 1e-3);
+    float baseColorWeight = max(linearSrgbLuminance(material.baseColor), 1e-3);
+    float diffuseColorWeight = max(linearSrgbLuminance(diffuseColor), 1e-3);
     float baseScatter = nonMetal * (1.0 - material.transmission);
-    float transmissionWeight = material.transmission * max(bsdfLuminance(bsdfTransmissionColor(material)), 1e-3);
+    float transmissionWeight = material.transmission * max(linearSrgbLuminance(bsdfTransmissionColor(material)), 1e-3);
     float dielectricSpecularWeight =
         nonMetal * max(bsdfDielectricSpecularF0Luminance(material) + transmissionWeight, 0.0);
-    weights.sheen = bsdfLuminance(sheenColor);
+    weights.sheen = linearSrgbLuminance(sheenColor);
 
     if (material.transmission > 0.0 && frontFace == 0u) {
         weights.sheen = 0.0;
@@ -155,7 +155,7 @@ BSDFBranchWeights makeBSDFBranchWeights(Material material, float3 wo, uint front
 
     float viewSheenAttenuation = sheenDirectionalAttenuation(sheenColor, wo, material.sheenRoughness);
     float viewCoatAttenuation = coatDirectionalAttenuation(material, wo);
-    float dielectricWeightAttenuation = bsdfLuminance(dielectricDirectionalAttenuation(material, wo));
+    float dielectricWeightAttenuation = linearSrgbLuminance(dielectricDirectionalAttenuation(material, wo));
 
     weights.coat = viewSheenAttenuation * material.clearcoat * 0.25;
     weights.metal = viewSheenAttenuation * viewCoatAttenuation * material.metallic * baseColorWeight;

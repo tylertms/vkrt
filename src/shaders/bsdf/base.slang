@@ -3,6 +3,7 @@
 
 #include "../camera/ray.slang"
 #include "../sample/random.slang"
+#include "../utility/color.slang"
 #include "../utility/spectral.slang"
 #include "types.slang"
 
@@ -120,12 +121,8 @@ float maxComponent(float3 value) {
     return max(value.x, max(value.y, value.z));
 }
 
-float bsdfLuminance(float3 value) {
-    return spectralLuminance(value);
-}
-
 float3 bsdfTintColor(float3 baseColor) {
-    float luminance = bsdfLuminance(baseColor);
+    float luminance = linearSrgbLuminance(baseColor);
     if (luminance <= 0.0) {
         return float3(1.0);
     }
@@ -229,7 +226,7 @@ void updateMediumStateFromTransmission(
     if (isTransmission == 0u) return;
 
     bool enteringMedium = frontFace != 0u;
-    medium.refractiveActive = enteringMedium && materialMediumIsRefractive(material);
+    medium.refractiveActive = false;
     medium.absorptionActive = enteringMedium && materialHasAbsorption(material);
     medium.absorptionSigma =
         medium.absorptionActive ? materialAbsorptionSigma(material, lambdaNm, spectralMode) : float3(0.0);
@@ -254,7 +251,7 @@ float3 bsdfDielectricSpecularF0(Material material) {
 }
 
 float bsdfDielectricSpecularF0Luminance(Material material) {
-    return saturate(bsdfLuminance(bsdfDielectricSpecularF0(material)));
+    return saturate(linearSrgbLuminance(bsdfDielectricSpecularF0(material)));
 }
 
 float3 fresnelSchlick(float cosTheta, float3 f0) {
