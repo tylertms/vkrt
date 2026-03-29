@@ -1,4 +1,5 @@
 #include "buffer.h"
+#include "color.h"
 #include "command/record.h"
 #include "config.h"
 #include "constants.h"
@@ -20,11 +21,6 @@ enum {
 static const float kAutoExposureKey = 0.18f;
 static const float kAutoExposureSmoothing = 0.18f;
 static const float kAutoExposureAdaptationStrength = 0.65f;
-
-static float computeLinearSRGBLuminance(const float* rgb) {
-    if (!rgb) return 0.0f;
-    return (0.2126f * rgb[0]) + (0.7152f * rgb[1]) + (0.0722f * rgb[2]);
-}
 
 static float filterAutoExposureLuminance(float previousFiltered, float averageLuminance) {
     if (previousFiltered <= 0.0f) {
@@ -56,7 +52,7 @@ static int computeAutoExposureAverageLuminance(const float* samples, float* outA
     float luminanceSum = 0.0f;
     uint32_t count = 0u;
     for (uint32_t i = 0; i < K_AUTO_EXPOSURE_SAMPLE_COUNT; i++) {
-        float luminance = computeLinearSRGBLuminance(&samples[(size_t)(i * 4u)]);
+        float luminance = linearSRGBLuminance(&samples[(size_t)(i * 4u)]);
         if (!isfinite(luminance)) continue;
         luminanceSum += luminance;
         count++;

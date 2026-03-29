@@ -2,6 +2,7 @@
 
 #include "../../../external/cglm/include/types.h"
 #include "buffer.h"
+#include "color.h"
 #include "constants.h"
 #include "debug.h"
 #include "scene.h"
@@ -51,14 +52,9 @@ typedef struct LightBuildScratch {
     float totalSelectionWeight;
 } LightBuildScratch;
 
-static float computeLinearSRGBLuminance(const float* rgb) {
-    if (!rgb) return 0.0f;
-    return (0.2126f * rgb[0]) + (0.7152f * rgb[1]) + (0.0722f * rgb[2]);
-}
-
 static float materialEmissionWeight(const Material* material) {
     if (!isfinite(material->emissionLuminance) || material->emissionLuminance <= 0.0f) return 0.0f;
-    float lum = computeLinearSRGBLuminance(material->emissionColor);
+    float lum = linearSRGBLuminance(material->emissionColor);
     if (lum <= 0.0f) return 0.0f;
     return lum * material->emissionLuminance;
 }
