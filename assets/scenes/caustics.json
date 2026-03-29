@@ -27,6 +27,8 @@
 				"baseColor":	[1, 1, 1],
 				"roughness":	0,
 				"transmission":	1,
+				"attenuationColor":	[0.5, 0.5, 0.5],
+				"absorptionCoefficient":	0.40000000596046448,
 				"abbeNumber":	40
 			}
 		}],
