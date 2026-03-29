@@ -7,7 +7,7 @@
 			"index":	1,
 			"name":	"floor",
 			"material":	{
-				"baseColor":	[1, 0.37000000476837158, 0],
+				"baseColor":	[0.54933333396911621, 0.537000000476837, 0.33700001239776611],
 				"roughness":	1,
 				"diffuseRoughness":	1
 			}
@@ -26,7 +26,8 @@
 			"material":	{
 				"baseColor":	[1, 1, 1],
 				"roughness":	0,
-				"transmission":	1
+				"transmission":	1,
+				"abbeNumber":	40
 			}
 		}],
 	"meshes":	[{
@@ -86,10 +87,12 @@
 		"rrMinDepth":	4,
 		"rrMaxDepth":	8,
 		"toneMappingMode":	1,
+		"renderMode":	1,
 		"exposure":	1,
 		"autoExposureEnabled":	false,
 		"environmentColor":	[0, 0, 0],
 		"environmentStrength":	0,
+		"environmentRotation":	0,
 		"misNeeEnabled":	true
 	}
 }

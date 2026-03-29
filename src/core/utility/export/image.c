@@ -377,6 +377,31 @@ static float clampf(float value, float minValue, float maxValue) {
     return value;
 }
 
+static void sanitizeLinearRGBA32FInPlace(
+    float* pixels,
+    uint32_t width,
+    uint32_t height,
+    float alphaFallback,
+    int forceOpaqueAlpha
+) {
+    size_t pixelCount = 0u;
+    if (!pixels || !tryComputePixelCount(width, height, &pixelCount)) return;
+
+    for (size_t pixelIndex = 0u; pixelIndex < pixelCount; pixelIndex++) {
+        float* pixel = pixels + (pixelIndex * 4u);
+        for (uint32_t channel = 0u; channel < 3u; channel++) {
+            if (!isfinite(pixel[channel])) {
+                pixel[channel] = 0.0f;
+            }
+        }
+        if (forceOpaqueAlpha) {
+            pixel[3] = alphaFallback;
+        } else if (!isfinite(pixel[3])) {
+            pixel[3] = alphaFallback;
+        }
+    }
+}
+
 static float srgbEncodeScalar(float value) {
     value = clampf(value, 0.0f, 1.0f);
     if (value <= 0.0031308f) return 12.92f * value;
@@ -803,6 +828,7 @@ static int denoiseLinearRenderOutput(
     };
 
     if (vkrtOIDNDenoise(&input, denoised, &errorMessage)) {
+        sanitizeLinearRGBA32FInPlace(denoised, request->width, request->height, 1.0f, 1);
         free(*inOutLinearOutput);
         *inOutLinearOutput = denoised;
         denoised = NULL;
@@ -846,6 +872,8 @@ static int prepareLinearRenderOutput(const LinearRenderOutputRequest* request, f
     if (shouldDenoise && !denoiseLinearRenderOutput(request, outputLabel, &linearOutput)) {
         goto cleanup;
     }
+
+    sanitizeLinearRGBA32FInPlace(linearOutput, request->width, request->height, 1.0f, 0);
 
     *outLinearOutput = linearOutput;
     linearOutput = NULL;

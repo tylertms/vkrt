@@ -22,6 +22,7 @@ struct LightSample {
 
 struct DirectLightResult {
     float3 radiance;
+    float spectralRadiance;
     bool neeSupported;
 };
 
@@ -90,6 +91,7 @@ DirectLightResult sampleDirectLight(
 ) {
     DirectLightResult result;
     result.radiance = float3(0.0);
+    result.spectralRadiance = 0.0;
     result.neeSupported = true;
 
     if (absCosTheta(state.wo) <= 0.0) return result;
@@ -136,8 +138,7 @@ DirectLightResult sampleDirectLight(
     float3 transmittance = mediumTransmittance(medium, shadowDist);
     if (state.spectralMode != 0u) {
         float spectralValue = fCos.x * spectralScalarFromLinearSrgb(lightSample.emission, wavelength.lambdaNm);
-        result.radiance =
-            misWeight * transmittance * spectralSampleToLinearSrgb(spectralValue / pdfSolidAngle, wavelength);
+        result.spectralRadiance = misWeight * transmittance.x * spectralValue / pdfSolidAngle;
         return result;
     }
 

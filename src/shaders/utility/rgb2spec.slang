@@ -61,7 +61,7 @@ uint rgb2specFindInterval(RGB2SpecModel model, StructuredBuffer<float> table, fl
         int half = size >> 1;
         int middle = left + half + 1;
 
-        if (rgb2specScaleValue(model, table, uint(middle)) < x) {
+        if (rgb2specScaleValue(model, table, uint(middle)) <= x) {
             left = middle;
             size -= half + 1;
         } else {

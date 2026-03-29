@@ -70,6 +70,7 @@ void main() {
 
     for (uint sampleIndex = 0u; sampleIndex < spp && !debugEarlyOut; sampleIndex++) {
         float3 radiance = float3(0.0);
+        float spectralRadiance = 0.0;
         float3 sampleAlbedo = float3(0.0);
         float3 sampleNormal = float3(0.0);
         float sampleFeatureWeight = 0.0;
@@ -78,8 +79,12 @@ void main() {
         bool sampleFeaturesResolved = false;
 
         uint rng = initPixelSeed(pixel, scene.frameNumber, previousSamples + sampleIndex);
-        WavelengthSample wavelength = sampleUniformWavelength(rng);
+        WavelengthSample wavelength = WavelengthSample();
+        if (spectralMode) {
+            wavelength = sampleUniformWavelength(rng, previousSamples + sampleIndex);
+        }
         float3 throughput = float3(1.0);
+        float spectralThroughput = 1.0;
 
         MediumState medium;
         medium.refractiveActive = false;
@@ -105,8 +110,12 @@ void main() {
 
             if (payload.didHit == 0u) {
                 if (!neeOnlyDebug && !mediumHasActiveBoundary(medium)) {
-                    radiance += throughput * (spectralMode ? sampleEnvironmentRadiance(ray.Direction, wavelength)
-                                                           : sampleEnvironmentRadiance(ray.Direction));
+                    if (spectralMode) {
+                        spectralRadiance +=
+                            spectralThroughput * sampleEnvironmentRadianceScalar(ray.Direction, wavelength.lambdaNm);
+                    } else {
+                        radiance += throughput * sampleEnvironmentRadiance(ray.Direction);
+                    }
                 }
                 break;
             }
@@ -116,10 +125,24 @@ void main() {
             float3 geometricNormal = unpackOctNormal(payload.packedGeometricNormal);
             Material material = materials[payload.materialIndex];
             if (medium.absorptionActive) {
-                throughput *= mediumTransmittance(medium, payload.hitDistance);
-                if (!any(throughput > 0.0)) {
-                    break;
+                float3 transmittance = mediumTransmittance(medium, payload.hitDistance);
+                if (spectralMode) {
+                    spectralThroughput *= transmittance.x;
+                    if (spectralThroughput <= 0.0) {
+                        break;
+                    }
+                } else {
+                    throughput *= transmittance;
+                    if (!any(throughput > 0.0)) {
+                        break;
+                    }
                 }
+            }
+            if (!spectralMode && !any(throughput > 0.0)) {
+                break;
+            }
+            if (spectralMode && spectralThroughput <= 0.0) {
+                break;
             }
             ShadingBasis basis = makeShadingBasis(shadingNormal, payload.tangent);
             shadingNormal = applyNormalTexture(material, payload.texcoord0, payload.texcoord1, basis);
@@ -166,10 +189,15 @@ void main() {
             bool vertexNeeSupported = currentVertexNeeAllowed;
 
             float3 contribution = float3(0.0);
+            float spectralContribution = 0.0;
             if (!bsdfOnlyDebug && neeEnabled && currentVertexNeeAllowed) {
                 DirectLightResult directLight =
                     sampleDirectLight(hitPoint, geometricNormal, basis, state, medium, wavelength, rng);
-                contribution += directLight.radiance;
+                if (spectralMode) {
+                    spectralContribution += directLight.spectralRadiance;
+                } else {
+                    contribution += directLight.radiance;
+                }
                 vertexNeeSupported = directLight.neeSupported;
             }
 
@@ -186,16 +214,19 @@ void main() {
                             payload.hitDistance
                         );
                     }
-                    contribution += spectralMode
-                                      ? spectralSampleToLinearSrgb(
-                                            spectralScalarFromLinearSrgb(emission, wavelength.lambdaNm) * misWeight,
-                                            wavelength
-                                        )
-                                      : emission * misWeight;
+                    if (spectralMode) {
+                        spectralContribution += spectralScalarFromLinearSrgb(emission, wavelength.lambdaNm) * misWeight;
+                    } else {
+                        contribution += emission * misWeight;
+                    }
                 }
             }
 
-            radiance += throughput * contribution;
+            if (spectralMode) {
+                spectralRadiance += spectralThroughput * spectralContribution;
+            } else {
+                radiance += throughput * contribution;
+            }
             bounceCount = depth + 1u;
 
             BSDFSample sample = sampleBSDF(state, basis, rng);
@@ -203,9 +234,13 @@ void main() {
                 break;
             }
 
-            throughput *= sample.weight;
+            if (spectralMode) {
+                spectralThroughput *= sample.weight.x;
+            } else {
+                throughput *= sample.weight;
+            }
             prevBsdfPdf = sample.pdf;
-            if (!any(throughput > 0.0)) {
+            if (spectralMode ? (spectralThroughput <= 0.0) : !any(throughput > 0.0)) {
                 break;
             }
 
@@ -226,11 +261,17 @@ void main() {
 
             if (depth + 1u >= scene.rrMinDepth) {
                 float continueProbability =
-                    clamp(maxComponent(throughput), VKRT_RR_MIN_CONTINUE_PROB, VKRT_RR_MAX_CONTINUE_PROB);
+                    spectralMode
+                        ? clamp(spectralThroughput, VKRT_RR_MIN_CONTINUE_PROB, VKRT_RR_MAX_CONTINUE_PROB)
+                        : clamp(maxComponent(throughput), VKRT_RR_MIN_CONTINUE_PROB, VKRT_RR_MAX_CONTINUE_PROB);
                 if (rand(rng) > continueProbability) {
                     break;
                 }
-                throughput /= continueProbability;
+                if (spectralMode) {
+                    spectralThroughput /= continueProbability;
+                } else {
+                    throughput /= continueProbability;
+                }
             }
 
             float3 offsetDir = sample.isTransmission != 0u ? -geometricNormal : geometricNormal;
@@ -247,7 +288,7 @@ void main() {
         }
 
         if (!debugEarlyOut) {
-            frameRadiance += radiance;
+            frameRadiance += spectralMode ? spectralSampleToLinearSrgb(spectralRadiance, wavelength) : radiance;
             frameAlbedo += sampleAlbedo;
             frameNormal += sampleNormal;
             frameFeatureWeight += sampleFeatureWeight;
