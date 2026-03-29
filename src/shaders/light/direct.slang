@@ -86,7 +86,7 @@ DirectLightResult sampleDirectLight(
     ShadingBasis basis,
     BSDFState state,
     MediumState medium,
-    WavelengthSample wavelength,
+    float heroLambdaNm,
     inout uint rng
 ) {
     DirectLightResult result;
@@ -137,7 +137,7 @@ DirectLightResult sampleDirectLight(
     float misWeight = powerHeuristic(pdfSolidAngle, eval.pdf);
     float3 transmittance = mediumTransmittance(medium, shadowDist);
     if (state.spectralMode != 0u) {
-        float spectralValue = fCos.x * spectralScalarFromLinearSrgb(lightSample.emission, wavelength.lambdaNm);
+        float spectralValue = fCos.x * spectralScalarFromLinearSrgb(lightSample.emission, heroLambdaNm);
         result.spectralRadiance = misWeight * transmittance.x * spectralValue / pdfSolidAngle;
         return result;
     }

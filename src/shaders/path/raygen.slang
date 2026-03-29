@@ -13,7 +13,8 @@
 #include "../utility/debug.slang"
 #include "payload.slang"
 
-[shader("raygeneration")] void main() {
+[shader("raygeneration")]
+void main() {
     static const uint kSceneSerHintBits = 2u;
 
     int2 pixel = int2(DispatchRaysIndex().xy);
@@ -67,7 +68,7 @@
 
     for (uint sampleIndex = 0u; sampleIndex < spp && !debugEarlyOut; sampleIndex++) {
         float3 radiance = float3(0.0);
-        float spectralRadiance = 0.0;
+        float4 spectralRadiance = float4(0.0, 0.0, 0.0, 0.0);
         float3 sampleAlbedo = float3(0.0);
         float3 sampleNormal = float3(0.0);
         float sampleFeatureWeight = 0.0;
@@ -76,12 +77,16 @@
         bool sampleFeaturesResolved = false;
 
         uint rng = initPixelSeed(pixel, scene.frameNumber, previousSamples + sampleIndex);
-        WavelengthSample wavelength = WavelengthSample();
+        float4 wavelengthsNm = float4(0.0, 0.0, 0.0, 0.0);
+        float4 invWavelengthPdf = float4(0.0, 0.0, 0.0, 0.0);
+        float heroLambdaNm = 0.0;
         if (spectralMode) {
-            wavelength = sampleUniformWavelength(rng, previousSamples + sampleIndex);
+            wavelengthsNm = sampleHeroWavelengths4(rng, previousSamples + sampleIndex);
+            invWavelengthPdf = heroWavelengthInvPdf4();
+            heroLambdaNm = wavelengthsNm.x;
         }
         float3 throughput = float3(1.0);
-        float spectralThroughput = 1.0;
+        float4 spectralThroughput = float4(1.0, 1.0, 1.0, 1.0);
 
         MediumState medium;
         medium.refractiveActive = false;
@@ -110,7 +115,7 @@
                     if (spectralMode) {
                         spectralRadiance +=
                             spectralThroughput *
-                            spectralScalarFromLinearSrgb(sampleEnvironmentRadiance(ray.Direction), wavelength.lambdaNm);
+                            spectralScalarFromLinearSrgb4(sampleEnvironmentRadiance(ray.Direction), wavelengthsNm);
                     } else {
                         radiance += throughput * sampleEnvironmentRadiance(ray.Direction);
                     }
@@ -121,8 +126,8 @@
             if (medium.absorptionActive) {
                 float3 transmittance = mediumTransmittance(medium, payload.hitDistance);
                 if (spectralMode) {
-                    spectralThroughput *= transmittance.x;
-                    if (spectralThroughput <= 0.0) {
+                    spectralThroughput *= transmittance.xxxx;
+                    if (!any(spectralThroughput > 0.0)) {
                         break;
                     }
                 } else {
@@ -135,7 +140,7 @@
             if (!spectralMode && !any(throughput > 0.0)) {
                 break;
             }
-            if (spectralMode && spectralThroughput <= 0.0) {
+            if (spectralMode && !any(spectralThroughput > 0.0)) {
                 break;
             }
             float3 hitPoint = ray.Origin + ray.Direction * payload.hitDistance;
@@ -181,18 +186,17 @@
             }
 
             float3 wo = worldToLocal(-ray.Direction, basis);
-            BSDFState state =
-                makeBSDFState(material, wo, payload.frontFace, wavelength.lambdaNm, spectralMode ? 1u : 0u);
+            BSDFState state = makeBSDFState(material, wo, payload.frontFace, heroLambdaNm, spectralMode ? 1u : 0u);
             bool currentVertexNeeAllowed = !medium.refractiveActive;
             bool vertexNeeSupported = currentVertexNeeAllowed;
 
             float3 contribution = float3(0.0);
-            float spectralContribution = 0.0;
+            float4 spectralContribution = float4(0.0, 0.0, 0.0, 0.0);
             if (!bsdfOnlyDebug && neeEnabled && currentVertexNeeAllowed) {
                 DirectLightResult directLight =
-                    sampleDirectLight(hitPoint, geometricNormal, basis, state, medium, wavelength, rng);
+                    sampleDirectLight(hitPoint, geometricNormal, basis, state, medium, heroLambdaNm, rng);
                 if (spectralMode) {
-                    spectralContribution += directLight.spectralRadiance;
+                    spectralContribution.x += directLight.spectralRadiance;
                 } else {
                     contribution += directLight.radiance;
                 }
@@ -213,7 +217,7 @@
                         );
                     }
                     if (spectralMode) {
-                        spectralContribution += spectralScalarFromLinearSrgb(emission, wavelength.lambdaNm) * misWeight;
+                        spectralContribution += spectralScalarFromLinearSrgb4(emission, wavelengthsNm) * misWeight;
                     } else {
                         contribution += emission * misWeight;
                     }
@@ -233,12 +237,12 @@
             }
 
             if (spectralMode) {
-                spectralThroughput *= sample.weight.x;
+                spectralThroughput *= sample.weight.xxxx;
             } else {
                 throughput *= sample.weight;
             }
             prevBsdfPdf = sample.pdf;
-            if (spectralMode ? (spectralThroughput <= 0.0) : !any(throughput > 0.0)) {
+            if (spectralMode ? !any(spectralThroughput > 0.0) : !any(throughput > 0.0)) {
                 break;
             }
 
@@ -251,7 +255,7 @@
                 material,
                 payload.frontFace,
                 sample.isTransmission,
-                wavelength.lambdaNm,
+                heroLambdaNm,
                 spectralMode ? 1u : 0u,
                 medium
             );
@@ -260,7 +264,7 @@
             if (depth + 1u >= scene.rrMinDepth) {
                 float continueProbability =
                     spectralMode
-                        ? clamp(spectralThroughput, VKRT_RR_MIN_CONTINUE_PROB, VKRT_RR_MAX_CONTINUE_PROB)
+                        ? clamp(maxComponent4(spectralThroughput), VKRT_RR_MIN_CONTINUE_PROB, VKRT_RR_MAX_CONTINUE_PROB)
                         : clamp(maxComponent(throughput), VKRT_RR_MIN_CONTINUE_PROB, VKRT_RR_MAX_CONTINUE_PROB);
                 if (rand(rng) > continueProbability) {
                     break;
@@ -286,7 +290,9 @@
         }
 
         if (!debugEarlyOut) {
-            frameRadiance += spectralMode ? spectralSampleToLinearSrgb(spectralRadiance, wavelength) : radiance;
+            frameRadiance += spectralMode
+                               ? spectralSample4ToLinearSrgb(spectralRadiance, wavelengthsNm, invWavelengthPdf)
+                               : radiance;
             frameAlbedo += sampleAlbedo;
             frameNormal += sampleNormal;
             frameFeatureWeight += sampleFeatureWeight;
@@ -368,3 +374,4 @@
         outputImage[pixel] = float4(mapped, 1.0);
     }
 }
+

@@ -34,6 +34,15 @@ float spectralScalarFromLinearSrgb(float3 rgb, float lambdaNm) {
     return maxValue * rgb2specEval(scene.rgb2specSRGB, rgb2specSRGBTable, rgb / maxValue, lambdaNm);
 }
 
+float4 spectralScalarFromLinearSrgb4(float3 rgb, float4 lambdaNm) {
+    return float4(
+        spectralScalarFromLinearSrgb(rgb, lambdaNm.x),
+        spectralScalarFromLinearSrgb(rgb, lambdaNm.y),
+        spectralScalarFromLinearSrgb(rgb, lambdaNm.z),
+        spectralScalarFromLinearSrgb(rgb, lambdaNm.w)
+    );
+}
+
 float spectralXFit1931(float lambdaNm) {
     float t1 = (lambdaNm - 442.0) * (lambdaNm < 442.0 ? 0.0624 : 0.0374);
     float t2 = (lambdaNm - 599.8) * (lambdaNm < 599.8 ? 0.0264 : 0.0323);
@@ -60,6 +69,21 @@ float3 spectralXYZ1931(float lambdaNm) {
 float3 spectralSampleToLinearSrgb(float scalarValue, WavelengthSample wavelength) {
     float xyzScale = (scalarValue * wavelength.invPdf) / VKRT_CIE_Y_INTEGRAL_1931_FIT;
     return mul(VKRT_XYZ_TO_LINEAR_SRGB, spectralXYZ1931(wavelength.lambdaNm) * xyzScale);
+}
+
+float3 spectralSample4ToLinearSrgb(float4 scalarValue, float4 lambdaNm, float4 invPdf) {
+    float3 xyz = float3(0.0);
+
+    xyz += spectralXYZ1931(lambdaNm.x) * ((scalarValue.x * invPdf.x) / VKRT_CIE_Y_INTEGRAL_1931_FIT);
+    xyz += spectralXYZ1931(lambdaNm.y) * ((scalarValue.y * invPdf.y) / VKRT_CIE_Y_INTEGRAL_1931_FIT);
+    xyz += spectralXYZ1931(lambdaNm.z) * ((scalarValue.z * invPdf.z) / VKRT_CIE_Y_INTEGRAL_1931_FIT);
+    xyz += spectralXYZ1931(lambdaNm.w) * ((scalarValue.w * invPdf.w) / VKRT_CIE_Y_INTEGRAL_1931_FIT);
+
+    return mul(VKRT_XYZ_TO_LINEAR_SRGB, xyz);
+}
+
+float maxComponent4(float4 value) {
+    return max(max(value.x, value.y), max(value.z, value.w));
 }
 
 float dispersiveIor(float ior, float abbeNumber, float lambdaNm) {
