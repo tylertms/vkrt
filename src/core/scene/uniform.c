@@ -155,11 +155,8 @@ static void writeSceneStateUniform(SceneData* sceneData, const VKRT* vkrt) {
     sceneData->samplesPerPixel = settings->samplesPerPixel > 0u ? settings->samplesPerPixel : 1u;
     sceneData->rrMaxDepth = settings->rrMaxDepth;
     sceneData->rrMinDepth = settings->rrMinDepth;
-    sceneData->packedRenderSettings = VKRT_SCENE_PACK_RENDER_SETTINGS(
-        settings->toneMappingMode,
-        settings->renderMode,
-        settings->spectralSamplingMode
-    );
+    sceneData->packedRenderSettings =
+        VKRT_SCENE_PACK_RENDER_SETTINGS(settings->toneMappingMode, settings->renderMode, settings->spectralSamplingMode);
     sceneData->exposure = settings->exposure;
     sceneData->timeBase = settings->timeBase;
     sceneData->timeStep = settings->timeStep;

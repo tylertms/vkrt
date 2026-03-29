@@ -105,86 +105,112 @@ static void drawCameraPoseSection(VKRT* vkrt, bool renderModeActive) {
     }
 }
 
+static void drawToneMappingControls(VKRT* vkrt, VKRT_SceneSettingsSnapshot* settings) {
+    const char* toneMappingLabels[] = {"None", "ACES"};
+    int toneMappingMode = (int)settings->toneMappingMode;
+    if (!ImGui_ComboCharEx(
+            "Tone Mapping",
+            &toneMappingMode,
+            toneMappingLabels,
+            VKRT_TONE_MAPPING_MODE_COUNT,
+            VKRT_TONE_MAPPING_MODE_COUNT
+        )) {
+        return;
+    }
+
+    VKRT_Result result = VKRT_setToneMappingMode(vkrt, (VKRT_ToneMappingMode)toneMappingMode);
+    logCameraInspectorFailure("Updating tone mapping mode failed", result);
+    if (result == VKRT_SUCCESS) {
+        settings->toneMappingMode = (VKRT_ToneMappingMode)toneMappingMode;
+    }
+}
+
+static void drawRenderModeControls(VKRT* vkrt, VKRT_SceneSettingsSnapshot* settings) {
+    const char* renderModeLabels[] = {"RGB", "Spectral"};
+    int renderMode = (int)settings->renderMode;
+    if (
+        !ImGui_ComboCharEx("Color Mode", &renderMode, renderModeLabels, VKRT_RENDER_MODE_COUNT, VKRT_RENDER_MODE_COUNT)
+    ) {
+        return;
+    }
+
+    VKRT_Result result = VKRT_setRenderMode(vkrt, (VKRT_RenderMode)renderMode);
+    logCameraInspectorFailure("Updating color mode failed", result);
+    if (result == VKRT_SUCCESS) {
+        settings->renderMode = (VKRT_RenderMode)renderMode;
+    }
+}
+
+static void drawSpectralSamplingControls(VKRT* vkrt, VKRT_SceneSettingsSnapshot* settings) {
+    if (settings->renderMode != VKRT_RENDER_MODE_SPECTRAL) return;
+
+    const char* spectralSamplingLabels[] = {"Single", "Hero (4)"};
+    int spectralSamplingMode = (int)settings->spectralSamplingMode;
+    if (!ImGui_ComboCharEx(
+            "Spectral Sampling",
+            &spectralSamplingMode,
+            spectralSamplingLabels,
+            VKRT_SPECTRAL_SAMPLING_MODE_COUNT,
+            VKRT_SPECTRAL_SAMPLING_MODE_COUNT
+        )) {
+        return;
+    }
+
+    VKRT_Result result = VKRT_setSpectralSamplingMode(vkrt, (uint32_t)spectralSamplingMode);
+    logCameraInspectorFailure("Updating spectral sampling mode failed", result);
+    if (result == VKRT_SUCCESS) {
+        settings->spectralSamplingMode = (uint32_t)spectralSamplingMode;
+    }
+}
+
+static bool drawAutoExposureControls(VKRT* vkrt, VKRT_SceneSettingsSnapshot* settings) {
+    bool autoExposureEnabled = settings->autoExposureEnabled != 0;
+    if (ImGui_Checkbox("Auto Exposure", &autoExposureEnabled)) {
+        uint8_t autoExposureFlag = (uint8_t)autoExposureEnabled;
+        VKRT_Result result = VKRT_setAutoExposureEnabled(vkrt, autoExposureFlag);
+        logCameraInspectorFailure("Updating auto exposure failed", result);
+        if (result == VKRT_SUCCESS) {
+            settings->autoExposureEnabled = autoExposureFlag;
+        } else {
+            autoExposureEnabled = settings->autoExposureEnabled != 0;
+        }
+    }
+
+    return autoExposureEnabled;
+}
+
+static void drawExposureControls(VKRT* vkrt, VKRT_SceneSettingsSnapshot* settings) {
+    float exposure = settings->exposure;
+    if (!ImGui_DragFloatEx(
+            "Exposure",
+            &exposure,
+            0.01f,
+            kExposureMin,
+            kExposureMax,
+            "%.3f",
+            ImGuiSliderFlags_AlwaysClamp
+        )) {
+        return;
+    }
+
+    VKRT_Result result = VKRT_setExposure(vkrt, exposure);
+    logCameraInspectorFailure("Updating exposure failed", result);
+    if (result == VKRT_SUCCESS) {
+        settings->exposure = exposure;
+    }
+}
+
 static void drawCameraShadingSection(VKRT* vkrt, VKRT_SceneSettingsSnapshot* settings, bool renderModeActive) {
     if (inspectorBeginCollapsingHeaderSection("Shading", ImGuiTreeNodeFlags_DefaultOpen)) {
         inspectorIndentSection();
         ImGui_BeginDisabled(renderModeActive);
 
-        const char* toneMappingLabels[] = {"None", "ACES"};
-        int toneMappingMode = (int)settings->toneMappingMode;
-        if (ImGui_ComboCharEx(
-                "Tone Mapping",
-                &toneMappingMode,
-                toneMappingLabels,
-                VKRT_TONE_MAPPING_MODE_COUNT,
-                VKRT_TONE_MAPPING_MODE_COUNT
-            )) {
-            logCameraInspectorFailure(
-                "Updating tone mapping mode failed",
-                VKRT_setToneMappingMode(vkrt, (VKRT_ToneMappingMode)toneMappingMode)
-            );
-        }
+        drawToneMappingControls(vkrt, settings);
+        drawRenderModeControls(vkrt, settings);
+        drawSpectralSamplingControls(vkrt, settings);
 
-        const char* renderModeLabels[] = {"RGB", "Spectral"};
-        int renderMode = (int)settings->renderMode;
-        if (ImGui_ComboCharEx(
-                "Color Mode",
-                &renderMode,
-                renderModeLabels,
-                VKRT_RENDER_MODE_COUNT,
-                VKRT_RENDER_MODE_COUNT
-            )) {
-            VKRT_Result result = VKRT_setRenderMode(vkrt, (VKRT_RenderMode)renderMode);
-            logCameraInspectorFailure("Updating color mode failed", result);
-            if (result == VKRT_SUCCESS) {
-                settings->renderMode = (VKRT_RenderMode)renderMode;
-            }
-        }
-
-        if (settings->renderMode == VKRT_RENDER_MODE_SPECTRAL) {
-            const char* spectralSamplingLabels[] = {"Single", "Hero (4)"};
-            int spectralSamplingMode = (int)settings->spectralSamplingMode;
-            if (ImGui_ComboCharEx(
-                    "Spectral Sampling",
-                    &spectralSamplingMode,
-                    spectralSamplingLabels,
-                    VKRT_SPECTRAL_SAMPLING_MODE_COUNT,
-                    VKRT_SPECTRAL_SAMPLING_MODE_COUNT
-                )) {
-                VKRT_Result result = VKRT_setSpectralSamplingMode(vkrt, (uint32_t)spectralSamplingMode);
-                logCameraInspectorFailure("Updating spectral sampling mode failed", result);
-                if (result == VKRT_SUCCESS) {
-                    settings->spectralSamplingMode = (uint32_t)spectralSamplingMode;
-                }
-            }
-        }
-
-        bool autoExposureEnabled = settings->autoExposureEnabled != 0;
-        if (ImGui_Checkbox("Auto Exposure", &autoExposureEnabled)) {
-            uint8_t autoExposureFlag = (uint8_t)autoExposureEnabled;
-            logCameraInspectorFailure(
-                "Updating auto exposure failed",
-                VKRT_setAutoExposureEnabled(vkrt, autoExposureFlag)
-            );
-        }
-        if (!autoExposureEnabled) {
-            float exposure = settings->exposure;
-            if (ImGui_DragFloatEx(
-                    "Exposure",
-                    &exposure,
-                    0.01f,
-                    kExposureMin,
-                    kExposureMax,
-                    "%.3f",
-                    ImGuiSliderFlags_AlwaysClamp
-                )) {
-                VKRT_Result result = VKRT_setExposure(vkrt, exposure);
-                logCameraInspectorFailure("Updating exposure failed", result);
-                if (result == VKRT_SUCCESS) {
-                    settings->exposure = exposure;
-                }
-            }
-        }
+        bool autoExposureEnabled = drawAutoExposureControls(vkrt, settings);
+        if (!autoExposureEnabled) drawExposureControls(vkrt, settings);
 
         ImGui_EndDisabled();
 

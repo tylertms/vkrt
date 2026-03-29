@@ -233,7 +233,7 @@ int loadEXRImageCommon(
     return ok;
 }
 
-}
+}  // namespace
 
 extern "C" {
 
@@ -322,5 +322,4 @@ int vkrtWriteEXRFromRGBA32F(const char* path, const float* rgba32f, uint32_t wid
     freeTinyEXRError(error);
     return 1;
 }
-
 }

@@ -13,8 +13,7 @@
 #include "../utility/debug.slang"
 #include "payload.slang"
 
-[shader("raygeneration")]
-void main() {
+[shader("raygeneration")] void main() {
     static const uint kSceneSerHintBits = 2u;
 
     int2 pixel = int2(DispatchRaysIndex().xy);
@@ -497,4 +496,3 @@ void main() {
         outputImage[pixel] = float4(mapped, 1.0);
     }
 }
-

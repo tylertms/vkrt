@@ -37,8 +37,7 @@ float3 rgb2specFetch(RGB2SpecTableInfo info, StructuredBuffer<float> table, floa
     }
 
     uint dominantChannel = 0u;
-    [unroll]
-    for (uint channel = 1u; channel < 3u; ++channel) {
+    [unroll] for (uint channel = 1u; channel < 3u; ++channel) {
         if (rgb[channel] >= rgb[dominantChannel]) {
             dominantChannel = channel;
         }
@@ -68,8 +67,7 @@ float3 rgb2specFetch(RGB2SpecTableInfo info, StructuredBuffer<float> table, floa
     float z0 = 1.0 - z1;
 
     float3 coeff = float3(0.0);
-    [unroll]
-    for (uint j = 0; j < VKRT_RGB2SPEC_N_COEFFS; ++j) {
+    [unroll] for (uint j = 0; j < VKRT_RGB2SPEC_N_COEFFS; ++j) {
         uint coeffOffset = info.dataOffset + offset + j;
         coeff[j] = ((table[coeffOffset] * x0 + table[coeffOffset + dx] * x1) * y0 +
                     (table[coeffOffset + dy] * x0 + table[coeffOffset + dy + dx] * x1) * y1) *

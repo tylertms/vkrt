@@ -1539,7 +1539,7 @@ static int loadSceneDocument(VKRT* vkrt, Session* session, cJSON* root, const ch
     const cJSON* environmentTexturePath = cJSON_GetObjectItemCaseSensitive(root, "environmentTexturePath");
     uint32_t fileVersion = 0u;
     if (!cJSON_IsString(format) || strcmp(format->valuestring, "vkrt.scene") != 0 ||
-    !jsonToUInt32(version, &fileVersion) || fileVersion != K_SCENE_FILE_VERSION ||
+        !jsonToUInt32(version, &fileVersion) || fileVersion != K_SCENE_FILE_VERSION ||
         !cJSON_IsArray(meshImportsArray) || (textureImportsArray && !cJSON_IsArray(textureImportsArray)) ||
         !cJSON_IsArray(meshesArray) || !cJSON_IsArray(sceneObjectsArray) || !cJSON_IsObject(settingsObject) ||
         (materialsArray && !cJSON_IsArray(materialsArray)) ||

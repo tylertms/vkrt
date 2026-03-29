@@ -166,7 +166,7 @@ static void drawIdleRenderState(Session* session, const SessionRenderTimer* time
     }
 
     if (timer->completedSeconds > 0.0f) {
-    char totalText[K_RENDER_TIME_TEXT_CAPACITY];
+        char totalText[K_RENDER_TIME_TEXT_CAPACITY];
         formatTime(timer->completedSeconds, totalText, sizeof(totalText));
         ImGui_TextDisabled(ICON_FA_CLOCK " Last render: %s", totalText);
     }
@@ -292,7 +292,7 @@ static void drawRenderProgressStatusText(
 
     if (VKRT_renderStatusIsComplete(status)) {
         float elapsedDoneSeconds = completedSeconds > 0.0f ? completedSeconds : elapsedActiveSeconds;
-    char elapsedText[K_RENDER_TIME_TEXT_CAPACITY];
+        char elapsedText[K_RENDER_TIME_TEXT_CAPACITY];
         formatTime(fmaxf(elapsedDoneSeconds, 0.0f), elapsedText, sizeof(elapsedText));
         ImGui_Text(ICON_FA_CHECK " Complete  " ICON_FA_CLOCK " %s", elapsedText);
         return;
@@ -300,7 +300,7 @@ static void drawRenderProgressStatusText(
 
     float etaSeconds = queryRenderEtaSeconds(status, elapsedActiveSeconds);
     if (etaSeconds >= 0.0f) {
-    char etaText[K_RENDER_TIME_TEXT_CAPACITY];
+        char etaText[K_RENDER_TIME_TEXT_CAPACITY];
         formatTime(etaSeconds, etaText, sizeof(etaText));
         ImGui_Text("Rendering  " ICON_FA_CLOCK " ETA %s", etaText);
         return;
@@ -319,7 +319,7 @@ static void drawRenderProgressSection(
 
     ImGui_TextDisabled("Output %ux%u", runtime->renderWidth, runtime->renderHeight);
     {
-    char overlay[K_RENDER_PROGRESS_OVERLAY_CAPACITY];
+        char overlay[K_RENDER_PROGRESS_OVERLAY_CAPACITY];
         float progress = 0.0f;
         uint64_t shownSamples = 0u;
 
