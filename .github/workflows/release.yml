@@ -88,8 +88,8 @@ jobs:
           python scripts/stage_release.py windows . --zip
 
       - name: Test Windows Package
-        run: ./vkrt-windows-x64/bin/vkrt.exe --help && ./vkrt-windows-x64/bin/vkrt.exe --version
         shell: bash
+        run: ./vkrt-windows-x64/bin/vkrt.exe --help && ./vkrt-windows-x64/bin/vkrt.exe --version
 
       - name: Upload Windows Release Asset
         if: github.ref_type == 'tag'

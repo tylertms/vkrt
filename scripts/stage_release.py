@@ -75,7 +75,7 @@ def main():
         bin_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(binary_path, bin_dir / binary_name)
         copy_runtime_files(bin_dir, runtime_patterns)
-        shutil.copytree(ROOT / "assets", bin_dir / "assets", symlinks=True)
+        shutil.copytree(ROOT / "assets", bundle_dir / "assets", symlinks=True)
     else:
         bin_dir = bundle_dir / "bin"
         lib_dir = bundle_dir / "lib"
