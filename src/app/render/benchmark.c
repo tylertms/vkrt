@@ -1,6 +1,5 @@
 #include "benchmark.h"
 
-#include "cli/cli.h"
 #include "debug.h"
 #include "vkrt.h"
 #include "vkrt_types.h"
@@ -9,11 +8,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static const uint32_t kBenchmarkSetupFrameCount = 2u;
-static const uint32_t kBenchmarkWarmupSamples = 512u;
-static const uint64_t kBenchmarkWarmupTimeUs = 2000000u;
+static const uint32_t kOfflineRenderSetupFrameCount = 2u;
+static const uint32_t kOfflineRenderWarmupSamples = 512u;
+static const uint64_t kOfflineRenderWarmupTimeUs = 2000000u;
 
-typedef struct BenchmarkState {
+typedef struct OfflineRenderState {
     uint8_t renderStarted;
     uint8_t timingStarted;
     uint32_t setupFramesRemaining;
@@ -22,36 +21,36 @@ typedef struct BenchmarkState {
     uint64_t renderStartTimeUs;
     uint64_t measurementSamplesStart;
     uint64_t startTimeUs;
-} BenchmarkState;
+} OfflineRenderState;
 
-typedef enum BenchmarkStepResult {
-    BENCHMARK_STEP_CONTINUE = 0,
-    BENCHMARK_STEP_SUCCESS,
-    BENCHMARK_STEP_FAILURE,
-} BenchmarkStepResult;
+typedef enum OfflineRenderStepResult {
+    OFFLINE_RENDER_STEP_CONTINUE = 0,
+    OFFLINE_RENDER_STEP_SUCCESS,
+    OFFLINE_RENDER_STEP_FAILURE,
+} OfflineRenderStepResult;
 
-static uint32_t queryBenchmarkWarmupSamples(uint32_t targetSamples) {
-    uint32_t warmupSamples = kBenchmarkWarmupSamples;
+static uint32_t queryOfflineRenderWarmupSamples(uint32_t targetSamples) {
+    uint32_t warmupSamples = kOfflineRenderWarmupSamples;
     if (targetSamples > 0u && warmupSamples * 2u > targetSamples) {
         warmupSamples = targetSamples / 4u;
     }
     return warmupSamples > 0u ? warmupSamples : 1u;
 }
 
-static const char* queryBenchmarkModeName(const CLIBenchmarkOptions* options) {
+static const char* queryOfflineRenderModeName(const CLIOfflineRenderOptions* options) {
     return options && options->headless ? "headless" : "windowed";
 }
 
-static double normalizeBenchmarkSeconds(double elapsedSeconds, uint64_t actualSamples, uint32_t targetSamples) {
+static double normalizeOfflineRenderSeconds(double elapsedSeconds, uint64_t actualSamples, uint32_t targetSamples) {
     if (elapsedSeconds <= 0.0 || actualSamples == 0u || targetSamples == 0u) return 0.0;
     return elapsedSeconds * (double)targetSamples / (double)actualSamples;
 }
 
-static int configureBenchmarkWarmup(VKRT* vkrt) {
+static int configureOfflineRenderWarmup(VKRT* vkrt) {
     return VKRT_setAutoSPPEnabled(vkrt, 1u) == VKRT_SUCCESS;
 }
 
-static int lockBenchmarkSampling(VKRT* vkrt, uint32_t* outSamplesPerFrame) {
+static int lockOfflineRenderSampling(VKRT* vkrt, uint32_t* outSamplesPerFrame) {
     if (!vkrt || !outSamplesPerFrame) return 0;
 
     VKRT_SceneSettingsSnapshot settings = {0};
@@ -69,7 +68,7 @@ static int lockBenchmarkSampling(VKRT* vkrt, uint32_t* outSamplesPerFrame) {
     return 1;
 }
 
-static int beginBenchmarkRender(VKRT* vkrt, const CLIBenchmarkOptions* options, BenchmarkState* state) {
+static int beginOfflineRender(VKRT* vkrt, const CLIOfflineRenderOptions* options, OfflineRenderState* state) {
     if (!vkrt || !options || !state) return 0;
     if (VKRT_startRender(vkrt, options->width, options->height, UINT32_MAX) != VKRT_SUCCESS) {
         return 0;
@@ -79,20 +78,20 @@ static int beginBenchmarkRender(VKRT* vkrt, const CLIBenchmarkOptions* options, 
     return 1;
 }
 
-static int queryBenchmarkStatus(VKRT* vkrt, VKRT_RenderStatusSnapshot* status) {
+static int queryOfflineRenderStatus(VKRT* vkrt, VKRT_RenderStatusSnapshot* status) {
     return vkrt && status && VKRT_getRenderStatus(vkrt, status) == VKRT_SUCCESS;
 }
 
-static int beginBenchmarkTiming(VKRT* vkrt, BenchmarkState* state, uint64_t totalSamples, uint64_t nowUs) {
+static int beginOfflineRenderTiming(VKRT* vkrt, OfflineRenderState* state, uint64_t totalSamples, uint64_t nowUs) {
     int warmupSamplesReached = 0;
     int warmupTimeReached = 0;
 
     if (!vkrt || !state || state->timingStarted) return 1;
     warmupSamplesReached = totalSamples >= state->warmupSamples;
     warmupTimeReached = state->renderStartTimeUs > 0u && nowUs >= state->renderStartTimeUs &&
-                        nowUs - state->renderStartTimeUs >= kBenchmarkWarmupTimeUs;
+                        nowUs - state->renderStartTimeUs >= kOfflineRenderWarmupTimeUs;
     if (!warmupSamplesReached || !warmupTimeReached) return 1;
-    if (!lockBenchmarkSampling(vkrt, &state->lockedSamplesPerFrame)) return 0;
+    if (!lockOfflineRenderSampling(vkrt, &state->lockedSamplesPerFrame)) return 0;
 
     state->timingStarted = 1u;
     state->measurementSamplesStart = totalSamples;
@@ -100,14 +99,14 @@ static int beginBenchmarkTiming(VKRT* vkrt, BenchmarkState* state, uint64_t tota
     return 1;
 }
 
-static uint64_t queryMeasuredSamples(const BenchmarkState* state, uint64_t totalSamples) {
+static uint64_t queryMeasuredSamples(const OfflineRenderState* state, uint64_t totalSamples) {
     if (!state || totalSamples < state->measurementSamplesStart) return 0u;
     return totalSamples - state->measurementSamplesStart;
 }
 
-static void printBenchmarkResult(
-    const BenchmarkState* state,
-    const CLIBenchmarkOptions* options,
+static void printOfflineRenderResult(
+    const OfflineRenderState* state,
+    const CLIOfflineRenderOptions* options,
     uint64_t nowUs,
     uint64_t measuredSamples
 ) {
@@ -120,12 +119,12 @@ static void printBenchmarkResult(
         elapsedSeconds = (double)(nowUs - state->startTimeUs) / 1000000.0;
     }
     normalizedSeconds =
-        normalizeBenchmarkSeconds(elapsedSeconds, measuredSamples, options ? options->targetSamples : 0u);
+        normalizeOfflineRenderSeconds(elapsedSeconds, measuredSamples, options ? options->targetSamples : 0u);
     samplesPerSecond = elapsedSeconds > 0.0 ? (double)measuredSamples / elapsedSeconds : 0.0;
     millisecondsPerSample = measuredSamples > 0u ? (elapsedSeconds * 1000.0) / (double)measuredSamples : 0.0;
 
     printf(
-        "Benchmark complete: %.3f s, %.2f samples/s, %.3f ms/sample, %u spp/frame, actual %llu "
+        "Offline render complete: %.3f s, %.2f samples/s, %.3f ms/sample, %u spp/frame, actual %llu "
         "samples\n",
         normalizedSeconds,
         samplesPerSecond,
@@ -135,7 +134,7 @@ static void printBenchmarkResult(
     );
 }
 
-static void queryBenchmarkDeviceName(VKRT* vkrt, char* outName, size_t outNameSize) {
+static void queryOfflineRenderDeviceName(VKRT* vkrt, char* outName, size_t outNameSize) {
     VKRT_SystemInfo systemInfo = {0};
     if (!outName || outNameSize == 0u) return;
 
@@ -147,13 +146,13 @@ static void queryBenchmarkDeviceName(VKRT* vkrt, char* outName, size_t outNameSi
     (void)snprintf(outName, outNameSize, "%s", "(unknown device)");
 }
 
-static void printBenchmarkHeader(VKRT* vkrt, const CLIBenchmarkOptions* options) {
+static void printOfflineRenderHeader(VKRT* vkrt, const CLIOfflineRenderOptions* options) {
     char deviceName[256];
 
-    queryBenchmarkDeviceName(vkrt, deviceName, sizeof(deviceName));
+    queryOfflineRenderDeviceName(vkrt, deviceName, sizeof(deviceName));
     printf(
-        "Benchmark %s: %s, %ux%u, target %u samples\n",
-        queryBenchmarkModeName(options),
+        "Offline render %s: %s, %ux%u, target %u samples\n",
+        queryOfflineRenderModeName(options),
         deviceName,
         options->width,
         options->height,
@@ -161,92 +160,92 @@ static void printBenchmarkHeader(VKRT* vkrt, const CLIBenchmarkOptions* options)
     );
 }
 
-static int handleBenchmarkWindowClose(VKRT* vkrt, const CLIBenchmarkOptions* options) {
+static int handleOfflineRenderWindowClose(VKRT* vkrt, const CLIOfflineRenderOptions* options) {
     if (options->headless || !VKRT_shouldDeinit(vkrt)) return 1;
-    LOG_ERROR("Benchmark aborted after window close");
+    LOG_ERROR("Offline render aborted after window close");
     return 0;
 }
 
-static int startBenchmarkRenderIfReady(VKRT* vkrt, const CLIBenchmarkOptions* options, BenchmarkState* state) {
+static int startOfflineRenderIfReady(VKRT* vkrt, const CLIOfflineRenderOptions* options, OfflineRenderState* state) {
     if (!vkrt || !options || !state) return 0;
     if (state->renderStarted || state->setupFramesRemaining > 0u) return 1;
-    if (beginBenchmarkRender(vkrt, options, state)) return 1;
-    LOG_ERROR("Failed to start benchmark render");
+    if (beginOfflineRender(vkrt, options, state)) return 1;
+    LOG_ERROR("Failed to start offline render");
     return 0;
 }
 
-static int drawBenchmarkFrame(VKRT* vkrt) {
+static int drawOfflineRenderFrame(VKRT* vkrt) {
     if (VKRT_draw(vkrt) == VKRT_SUCCESS) return 1;
     LOG_ERROR("Frame render failed");
     return 0;
 }
 
-static BenchmarkStepResult advanceBenchmarkSetup(BenchmarkState* state) {
-    if (!state || state->renderStarted) return BENCHMARK_STEP_CONTINUE;
+static OfflineRenderStepResult advanceOfflineRenderSetup(OfflineRenderState* state) {
+    if (!state || state->renderStarted) return OFFLINE_RENDER_STEP_CONTINUE;
     if (state->setupFramesRemaining > 0u) state->setupFramesRemaining--;
-    return BENCHMARK_STEP_CONTINUE;
+    return OFFLINE_RENDER_STEP_CONTINUE;
 }
 
-static BenchmarkStepResult finishBenchmarkIfTargetReached(
-    const BenchmarkState* state,
-    const CLIBenchmarkOptions* options,
+static OfflineRenderStepResult finishOfflineRenderIfTargetReached(
+    const OfflineRenderState* state,
+    const CLIOfflineRenderOptions* options,
     const VKRT_RenderStatusSnapshot* status,
     uint64_t nowUs
 ) {
     uint64_t measuredSamples = 0u;
 
-    if (!state || !options || !status || !state->timingStarted) return BENCHMARK_STEP_CONTINUE;
+    if (!state || !options || !status || !state->timingStarted) return OFFLINE_RENDER_STEP_CONTINUE;
 
     measuredSamples = queryMeasuredSamples(state, status->totalSamples);
     if (measuredSamples >= options->targetSamples) {
-        printBenchmarkResult(state, options, nowUs, measuredSamples);
-        return BENCHMARK_STEP_SUCCESS;
+        printOfflineRenderResult(state, options, nowUs, measuredSamples);
+        return OFFLINE_RENDER_STEP_SUCCESS;
     }
     if (VKRT_renderStatusIsComplete(status)) {
-        LOG_ERROR("Benchmark render finished before reaching the timed sample target");
-        return BENCHMARK_STEP_FAILURE;
+        LOG_ERROR("Offline render finished before reaching the timed sample target");
+        return OFFLINE_RENDER_STEP_FAILURE;
     }
-    return BENCHMARK_STEP_CONTINUE;
+    return OFFLINE_RENDER_STEP_CONTINUE;
 }
 
-static BenchmarkStepResult runBenchmarkIteration(
+static OfflineRenderStepResult runOfflineRenderIteration(
     VKRT* vkrt,
-    const CLIBenchmarkOptions* options,
-    BenchmarkState* state
+    const CLIOfflineRenderOptions* options,
+    OfflineRenderState* state
 ) {
     VKRT_RenderStatusSnapshot status = {0};
     uint64_t nowUs = 0u;
 
     VKRT_poll(vkrt);
-    if (!handleBenchmarkWindowClose(vkrt, options)) return BENCHMARK_STEP_FAILURE;
-    if (!startBenchmarkRenderIfReady(vkrt, options, state)) return BENCHMARK_STEP_FAILURE;
-    if (!drawBenchmarkFrame(vkrt)) return BENCHMARK_STEP_FAILURE;
-    if (!state->renderStarted) return advanceBenchmarkSetup(state);
+    if (!handleOfflineRenderWindowClose(vkrt, options)) return OFFLINE_RENDER_STEP_FAILURE;
+    if (!startOfflineRenderIfReady(vkrt, options, state)) return OFFLINE_RENDER_STEP_FAILURE;
+    if (!drawOfflineRenderFrame(vkrt)) return OFFLINE_RENDER_STEP_FAILURE;
+    if (!state->renderStarted) return advanceOfflineRenderSetup(state);
 
-    if (!queryBenchmarkStatus(vkrt, &status)) {
-        LOG_ERROR("Failed to query benchmark status");
-        return BENCHMARK_STEP_FAILURE;
+    if (!queryOfflineRenderStatus(vkrt, &status)) {
+        LOG_ERROR("Failed to query offline render status");
+        return OFFLINE_RENDER_STEP_FAILURE;
     }
 
     nowUs = getMicroseconds();
-    if (!beginBenchmarkTiming(vkrt, state, status.totalSamples, nowUs)) {
-        LOG_ERROR("Failed to lock benchmark sampling");
-        return BENCHMARK_STEP_FAILURE;
+    if (!beginOfflineRenderTiming(vkrt, state, status.totalSamples, nowUs)) {
+        LOG_ERROR("Failed to lock offline render sampling");
+        return OFFLINE_RENDER_STEP_FAILURE;
     }
     if (state->timingStarted && (state->startTimeUs == 0u || state->startTimeUs > nowUs)) {
-        return BENCHMARK_STEP_CONTINUE;
+        return OFFLINE_RENDER_STEP_CONTINUE;
     }
 
-    return finishBenchmarkIfTargetReached(state, options, &status, nowUs);
+    return finishOfflineRenderIfTargetReached(state, options, &status, nowUs);
 }
 
-void benchmarkPrepareLaunchOptions(CLILaunchOptions* options) {
-    if (!options || !options->benchmark.enabled) return;
+void offlineRenderPrepareLaunchOptions(CLILaunchOptions* options) {
+    if (!options || !options->offlineRender.enabled) return;
 
-    options->createInfo.headless = options->benchmark.headless;
-    if (options->benchmark.headless) {
-        options->createInfo.width = options->benchmark.width;
-        options->createInfo.height = options->benchmark.height;
+    options->createInfo.headless = options->offlineRender.headless;
+    if (options->offlineRender.headless) {
+        options->createInfo.width = options->offlineRender.width;
+        options->createInfo.height = options->offlineRender.height;
         options->createInfo.startMaximized = 0u;
         options->createInfo.startFullscreen = 0u;
     }
@@ -254,25 +253,39 @@ void benchmarkPrepareLaunchOptions(CLILaunchOptions* options) {
     vkrtSetInfoLoggingEnabled(0);
 }
 
-int benchmarkRun(VKRT* vkrt, const CLIBenchmarkOptions* options) {
-    BenchmarkStepResult stepResult = BENCHMARK_STEP_CONTINUE;
+int offlineRenderSaveOutput(VKRT* vkrt, const char* outputPath) {
+    if (!vkrt || !outputPath) return EXIT_FAILURE;
+
+    VKRT_RenderExportSettings exportSettings = {0};
+    VKRT_defaultRenderExportSettings(&exportSettings);
+    exportSettings.denoiseEnabled = 0u;
+    if (VKRT_saveRenderImageEx(vkrt, outputPath, &exportSettings) == VKRT_SUCCESS) {
+        return EXIT_SUCCESS;
+    }
+
+    LOG_ERROR("Saving offline render failed. Path: %s", outputPath);
+    return EXIT_FAILURE;
+}
+
+int offlineRenderRun(VKRT* vkrt, const CLIOfflineRenderOptions* options) {
+    OfflineRenderStepResult stepResult = OFFLINE_RENDER_STEP_CONTINUE;
 
     if (!vkrt || !options || !options->enabled) return EXIT_FAILURE;
-    if (!configureBenchmarkWarmup(vkrt)) {
-        LOG_ERROR("Failed to configure benchmark warmup");
+    if (!configureOfflineRenderWarmup(vkrt)) {
+        LOG_ERROR("Failed to configure offline render warmup");
         return EXIT_FAILURE;
     }
 
-    BenchmarkState state = {
-        .setupFramesRemaining = kBenchmarkSetupFrameCount,
-        .warmupSamples = queryBenchmarkWarmupSamples(options->targetSamples),
+    OfflineRenderState state = {
+        .setupFramesRemaining = kOfflineRenderSetupFrameCount,
+        .warmupSamples = queryOfflineRenderWarmupSamples(options->targetSamples),
     };
 
-    printBenchmarkHeader(vkrt, options);
+    printOfflineRenderHeader(vkrt, options);
 
     for (;;) {
-        stepResult = runBenchmarkIteration(vkrt, options, &state);
-        if (stepResult == BENCHMARK_STEP_SUCCESS) return EXIT_SUCCESS;
-        if (stepResult == BENCHMARK_STEP_FAILURE) return EXIT_FAILURE;
+        stepResult = runOfflineRenderIteration(vkrt, options, &state);
+        if (stepResult == OFFLINE_RENDER_STEP_SUCCESS) return EXIT_SUCCESS;
+        if (stepResult == OFFLINE_RENDER_STEP_FAILURE) return EXIT_FAILURE;
     }
 }

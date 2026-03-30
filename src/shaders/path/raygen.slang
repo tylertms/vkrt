@@ -13,7 +13,8 @@
 #include "../utility/debug.slang"
 #include "payload.slang"
 
-[shader("raygeneration")] void main() {
+[shader("raygeneration")]
+void main() {
     static const uint kSceneSerHintBits = 2u;
 
     int2 pixel = int2(DispatchRaysIndex().xy);
@@ -45,7 +46,6 @@
     bool neeEnabled = scene.misNeeEnabled != 0u && scene.emissiveMeshCount > 0u;
     bool spectralMode = spectralRenderingEnabled();
     bool heroWavelengthMode = heroWavelengthSamplingEnabled();
-    bool singleWavelengthSpectralMode = spectralMode && !heroWavelengthMode;
 
     float3 frameRadiance = float3(0.0);
     float3 frameAlbedo = float3(0.0);
@@ -83,7 +83,7 @@
         float4 wavelengthsNm = float4(0.0, 0.0, 0.0, 0.0);
         float4 invWavelengthPdf = float4(0.0, 0.0, 0.0, 0.0);
         float heroLambdaNm = 0.0;
-        if (singleWavelengthSpectralMode) {
+        if (spectralMode && !heroWavelengthMode) {
             wavelength = sampleUniformWavelength(rng, previousSamples + sampleIndex);
             heroLambdaNm = wavelength.lambdaNm;
         } else if (spectralMode) {
@@ -94,6 +94,7 @@
         float3 throughput = float3(1.0);
         float spectralThroughputScalar = 1.0;
         float4 spectralThroughput = heroWavelengthMode ? float4(1.0, 1.0, 1.0, 1.0) : float4(1.0, 0.0, 0.0, 0.0);
+        bool pathUsesHeroWavelengths = heroWavelengthMode;
 
         MediumState medium;
         medium.refractiveActive = false;
@@ -123,11 +124,11 @@
 
             if (payload.didHit == 0u) {
                 if (!neeOnlyDebug && !mediumHasActiveBoundary(medium)) {
-                    if (heroWavelengthMode) {
+                    if (pathUsesHeroWavelengths) {
                         spectralRadiance +=
                             spectralThroughput * heroWavelengthBalanceWeight(techniquePathPdf) *
                             spectralScalarFromLinearSrgb4(sampleEnvironmentRadiance(ray.Direction), wavelengthsNm);
-                    } else if (singleWavelengthSpectralMode) {
+                    } else if (spectralMode) {
                         spectralRadianceScalar +=
                             spectralThroughputScalar *
                             spectralScalarFromLinearSrgb(sampleEnvironmentRadiance(ray.Direction), wavelength.lambdaNm);
@@ -139,12 +140,12 @@
             }
 
             if (medium.absorptionActive) {
-                if (heroWavelengthMode) {
+                if (pathUsesHeroWavelengths) {
                     spectralThroughput *= mediumSpectralTransmittance(medium, payload.hitDistance);
                     if (!any(spectralThroughput > 0.0)) {
                         break;
                     }
-                } else if (singleWavelengthSpectralMode) {
+                } else if (spectralMode) {
                     spectralThroughputScalar *= mediumTransmittance(medium, payload.hitDistance).x;
                     if (spectralThroughputScalar <= 0.0) {
                         break;
@@ -160,10 +161,10 @@
             if (!spectralMode && !any(throughput > 0.0)) {
                 break;
             }
-            if (heroWavelengthMode && !any(spectralThroughput > 0.0)) {
+            if (pathUsesHeroWavelengths && !any(spectralThroughput > 0.0)) {
                 break;
             }
-            if (singleWavelengthSpectralMode && spectralThroughputScalar <= 0.0) {
+            if (spectralMode && !pathUsesHeroWavelengths && spectralThroughputScalar <= 0.0) {
                 break;
             }
             float3 hitPoint = ray.Origin + ray.Direction * payload.hitDistance;
@@ -225,11 +226,12 @@
                     medium,
                     techniquePathPdf,
                     wavelengthsNm,
+                    pathUsesHeroWavelengths,
                     rng
                 );
-                if (heroWavelengthMode) {
+                if (pathUsesHeroWavelengths) {
                     spectralContribution += directLight.spectralRadiance;
-                } else if (singleWavelengthSpectralMode) {
+                } else if (spectralMode) {
                     spectralContributionScalar += directLight.spectralRadiance.x;
                 } else {
                     contribution += directLight.radiance;
@@ -241,7 +243,7 @@
                 float3 emission = material.emissionColor * material.emissionLuminance;
                 if (any(emission > 0.0)) {
                     float misWeight = 1.0;
-                    if (heroWavelengthMode) {
+                    if (pathUsesHeroWavelengths) {
                         misWeight = heroWavelengthBalanceWeight(techniquePathPdf);
                         if (neeEnabled && prevVertexNeeAllowed && depth > 0u) {
                             float lightPdfSolidAngle = lightPdfAreaToSolidAngle(
@@ -256,7 +258,7 @@
                                 lightPdfSolidAngle
                             );
                         }
-                    } else if (singleWavelengthSpectralMode) {
+                    } else if (spectralMode) {
                         if (neeEnabled && prevVertexNeeAllowed && depth > 0u && prevBsdfPdf > 0.0) {
                             misWeight = computeBSDFEmitterMISWeight(
                                 prevBsdfPdf,
@@ -275,9 +277,9 @@
                             payload.hitDistance
                         );
                     }
-                    if (heroWavelengthMode) {
+                    if (pathUsesHeroWavelengths) {
                         spectralContribution += spectralScalarFromLinearSrgb4(emission, wavelengthsNm) * misWeight;
-                    } else if (singleWavelengthSpectralMode) {
+                    } else if (spectralMode) {
                         spectralContributionScalar +=
                             spectralScalarFromLinearSrgb(emission, wavelength.lambdaNm) * misWeight;
                     } else {
@@ -286,9 +288,9 @@
                 }
             }
 
-            if (heroWavelengthMode) {
+            if (pathUsesHeroWavelengths) {
                 spectralRadiance += spectralThroughput * spectralContribution;
-            } else if (singleWavelengthSpectralMode) {
+            } else if (spectralMode) {
                 spectralRadianceScalar += spectralThroughputScalar * spectralContributionScalar;
             } else {
                 radiance += throughput * contribution;
@@ -297,7 +299,7 @@
 
             uint sampleIsTransmission = 0u;
             float3 sampleWi = float3(0.0);
-            if (heroWavelengthMode) {
+            if (pathUsesHeroWavelengths) {
                 SpectralBSDFSample sample = sampleSpectralBSDF(state, basis, wavelengthsNm, rng);
                 if (!sample.isUsable()) {
                     break;
@@ -311,9 +313,20 @@
                     break;
                 }
 
+                if (sample.isTransmission != 0u && materialMediumIsRefractive(material) && material.abbeNumber > 0.0) {
+                    radiance += spectralSample4ToXYZ(spectralRadiance, wavelengthsNm, invWavelengthPdf);
+                    spectralRadiance = float4(0.0);
+                    spectralThroughputScalar = spectralThroughput.x;
+                    spectralThroughput = float4(0.0);
+                    wavelength.lambdaNm = heroLambdaNm;
+                    wavelength.invPdf = invWavelengthPdf.x;
+                    prevBsdfPdf = sample.techniquePdf.x;
+                    pathUsesHeroWavelengths = false;
+                }
+
                 sampleIsTransmission = sample.isTransmission;
                 sampleWi = sample.wi;
-            } else if (singleWavelengthSpectralMode) {
+            } else if (spectralMode) {
                 BSDFSample sample = sampleBSDF(state, basis, rng);
                 if (!sample.isUsable()) {
                     break;
@@ -348,7 +361,7 @@
                 sampledPathNeeAllowed = false;
             }
 
-            if (heroWavelengthMode) {
+            if (pathUsesHeroWavelengths) {
                 updateMediumStateFromTransmissionSpectral(
                     material,
                     payload.frontFace,
@@ -356,7 +369,7 @@
                     wavelengthsNm,
                     medium
                 );
-            } else if (singleWavelengthSpectralMode) {
+            } else if (spectralMode) {
                 updateMediumStateFromTransmission(
                     material,
                     payload.frontFace,
@@ -379,18 +392,18 @@
 
             if (depth + 1u >= scene.rrMinDepth) {
                 float continueProbability =
-                    heroWavelengthMode
+                    pathUsesHeroWavelengths
                         ? clamp(maxComponent4(spectralThroughput), VKRT_RR_MIN_CONTINUE_PROB, VKRT_RR_MAX_CONTINUE_PROB)
-                    : singleWavelengthSpectralMode
+                    : spectralMode
                         ? clamp(spectralThroughputScalar, VKRT_RR_MIN_CONTINUE_PROB, VKRT_RR_MAX_CONTINUE_PROB)
                         : clamp(maxComponent(throughput), VKRT_RR_MIN_CONTINUE_PROB, VKRT_RR_MAX_CONTINUE_PROB);
                 if (rand(rng) > continueProbability) {
                     break;
                 }
-                if (heroWavelengthMode) {
+                if (pathUsesHeroWavelengths) {
                     techniquePathPdf *= continueProbability.xxxx;
                     spectralThroughput /= continueProbability;
-                } else if (singleWavelengthSpectralMode) {
+                } else if (spectralMode) {
                     spectralThroughputScalar /= continueProbability;
                 } else {
                     throughput /= continueProbability;
@@ -411,10 +424,13 @@
         }
 
         if (!debugEarlyOut) {
-            frameRadiance +=
-                heroWavelengthMode ? spectralSample4ToLinearSrgb(spectralRadiance, wavelengthsNm, invWavelengthPdf)
-                : singleWavelengthSpectralMode ? spectralSampleToLinearSrgb(spectralRadianceScalar, wavelength)
-                                               : radiance;
+            float3 sampleRadiance = radiance;
+            if (pathUsesHeroWavelengths) {
+                sampleRadiance += spectralSample4ToXYZ(spectralRadiance, wavelengthsNm, invWavelengthPdf);
+            } else if (spectralMode) {
+                sampleRadiance += spectralSampleToXYZ(spectralRadianceScalar, wavelength);
+            }
+            frameRadiance += sampleRadiance;
             frameAlbedo += sampleAlbedo;
             frameNormal += sampleNormal;
             frameFeatureWeight += sampleFeatureWeight;
@@ -488,7 +504,7 @@
             totalNormalWeight > 0.0
                 ? (previousNormal.xyz * previousNormalWeight + frameNormal * frameFeatureWeight) / totalNormalWeight
                 : float3(0.0);
-        float3 mapped = mapSceneColorToDisplay(accumulated);
+        float3 mapped = mapSceneColorToDisplay(spectralMode ? xyzToLinearSrgb(accumulated) : accumulated);
 
         accumulationWriteImage[pixel] = float4(accumulated, totalWeight);
         albedoWriteImage[pixel] = float4(accumulatedAlbedo, totalAlbedoWeight);
@@ -496,3 +512,4 @@
         outputImage[pixel] = float4(mapped, 1.0);
     }
 }
+

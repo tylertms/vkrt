@@ -27,9 +27,9 @@
 #define VKRT_TURBOJPEG_VERSION "unknown"
 #endif
 
-static const uint32_t kBenchmarkWidth = 3840u;
-static const uint32_t kBenchmarkHeight = 2160u;
-static const uint32_t kBenchmarkTargetSamples = 16384u;
+static const uint32_t kOfflineRenderWidth = 3840u;
+static const uint32_t kOfflineRenderHeight = 2160u;
+static const uint32_t kOfflineRenderTargetSamples = 16384u;
 
 static int stringsEqual(const char* lhs, const char* rhs) {
     if (!lhs || !rhs) return 0;
@@ -125,9 +125,9 @@ void CLIDefaultLaunchOptions(CLILaunchOptions* options) {
     memset(options, 0, sizeof(*options));
     options->mode = CLI_MODE_RUN;
     options->loadDefaultScene = 1u;
-    options->benchmark.width = kBenchmarkWidth;
-    options->benchmark.height = kBenchmarkHeight;
-    options->benchmark.targetSamples = kBenchmarkTargetSamples;
+    options->offlineRender.width = kOfflineRenderWidth;
+    options->offlineRender.height = kOfflineRenderHeight;
+    options->offlineRender.targetSamples = kOfflineRenderTargetSamples;
     VKRT_defaultCreateInfo(&options->createInfo);
 }
 
@@ -179,7 +179,7 @@ static int parseWindowArgument(
     return -1;
 }
 
-static int parseBenchmarkArgument(
+static int parseOfflineRenderArgument(
     const char* arg,
     int argc,
     char* argv[],
@@ -188,28 +188,28 @@ static int parseBenchmarkArgument(
     char* error,
     size_t errorSize
 ) {
-    if (stringsEqual(arg, "--benchmark")) {
-        options->benchmark.enabled = 1u;
-        options->benchmark.headless = 0u;
+    if (stringsEqual(arg, "--render") || stringsEqual(arg, "--benchmark")) {
+        options->offlineRender.enabled = 1u;
+        options->offlineRender.headless = 0u;
         return 1;
     }
-    if (stringsEqual(arg, "--benchmark-headless")) {
-        options->benchmark.enabled = 1u;
-        options->benchmark.headless = 1u;
+    if (stringsEqual(arg, "--render-headless")) {
+        options->offlineRender.enabled = 1u;
+        options->offlineRender.headless = 1u;
         return 1;
     }
-    if (optionMatches(arg, "--benchmark-width")) {
-        const char* value = requireOptionValue(argc, argv, index, "--benchmark-width", error, errorSize);
-        return value && parseUnsignedValue(value, &options->benchmark.width, "--benchmark-width", error, errorSize);
+    if (optionMatches(arg, "--render-width")) {
+        const char* value = requireOptionValue(argc, argv, index, "--render-width", error, errorSize);
+        return value && parseUnsignedValue(value, &options->offlineRender.width, "--render-width", error, errorSize);
     }
-    if (optionMatches(arg, "--benchmark-height")) {
-        const char* value = requireOptionValue(argc, argv, index, "--benchmark-height", error, errorSize);
-        return value && parseUnsignedValue(value, &options->benchmark.height, "--benchmark-height", error, errorSize);
+    if (optionMatches(arg, "--render-height")) {
+        const char* value = requireOptionValue(argc, argv, index, "--render-height", error, errorSize);
+        return value && parseUnsignedValue(value, &options->offlineRender.height, "--render-height", error, errorSize);
     }
-    if (optionMatches(arg, "--benchmark-samples")) {
-        const char* value = requireOptionValue(argc, argv, index, "--benchmark-samples", error, errorSize);
+    if (optionMatches(arg, "--render-samples")) {
+        const char* value = requireOptionValue(argc, argv, index, "--render-samples", error, errorSize);
         return value &&
-               parseUnsignedValue(value, &options->benchmark.targetSamples, "--benchmark-samples", error, errorSize);
+               parseUnsignedValue(value, &options->offlineRender.targetSamples, "--render-samples", error, errorSize);
     }
     return -1;
 }
@@ -227,22 +227,38 @@ static int parseSceneArgument(
         options->loadDefaultScene = 0u;
         return 1;
     }
+    if (optionMatches(arg, "--scene")) {
+        const char* value = requireOptionValue(argc, argv, index, "--scene", error, errorSize);
+        if (!value || !value[0]) return setCLIError(error, errorSize, "Invalid value for --scene", NULL);
+        options->startupScenePath = value;
+        options->loadDefaultScene = 0u;
+        return 1;
+    }
     if (optionMatches(arg, "--import")) {
         const char* value = requireOptionValue(argc, argv, index, "--import", error, errorSize);
         if (!value || !value[0]) return setCLIError(error, errorSize, "Invalid value for --import", NULL);
         options->startupImportPath = value;
         return 1;
     }
+    if (optionMatches(arg, "--render-output")) {
+        const char* value = requireOptionValue(argc, argv, index, "--render-output", error, errorSize);
+        if (!value || !value[0]) return setCLIError(error, errorSize, "Invalid value for --render-output", NULL);
+        options->renderOutputPath = value;
+        return 1;
+    }
     return -1;
 }
 
 static int validateCLIArgumentCombination(const CLILaunchOptions* options, char* error, size_t errorSize) {
-    if (!options->benchmark.enabled) return 1;
-    if (!options->loadDefaultScene) {
-        return setCLIError(error, errorSize, "--benchmark requires the default scene", NULL);
-    }
+    if (!options->offlineRender.enabled) return 1;
     if (options->startupImportPath) {
-        return setCLIError(error, errorSize, "--benchmark cannot be combined with --import", NULL);
+        return setCLIError(error, errorSize, "--render cannot be combined with --import", NULL);
+    }
+    if (!options->loadDefaultScene && !options->startupScenePath) {
+        return setCLIError(error, errorSize, "--render requires either the default scene or --scene", NULL);
+    }
+    if (options->renderOutputPath && !options->offlineRender.headless) {
+        return setCLIError(error, errorSize, "--render-output currently requires --render-headless", NULL);
     }
     return 1;
 }
@@ -270,7 +286,7 @@ int CLIParseArguments(int argc, char* argv[], CLILaunchOptions* outOptions, char
         if (parseResult == 0) return 0;
         if (parseResult > 0) continue;
 
-        parseResult = parseBenchmarkArgument(arg, argc, argv, &i, outOptions, error, errorSize);
+        parseResult = parseOfflineRenderArgument(arg, argc, argv, &i, outOptions, error, errorSize);
         if (parseResult == 0) return 0;
         if (parseResult > 0) continue;
 
@@ -345,15 +361,18 @@ void CLIPrintHelp(void) {
     printf("  --device-index <index>    Force a Vulkan device by enumerated index\n");
     printf("  --device-name <text>      Force a Vulkan device if its name contains this text\n");
     printf("  --empty-scene             Skip loading the default starter scene\n");
-    printf("  --benchmark               Run the default benchmark with presentation enabled\n");
+    printf("  --scene <path>            Load a vkrt scene (.json) on startup\n");
+    printf("  --render                  Run an offline render with presentation enabled\n");
     printf(
-        "  --benchmark-headless      Run the default benchmark offscreen with no window or "
+        "  --render-headless         Run an offline render offscreen with no window or "
         "presentation\n"
     );
-    printf("  --benchmark-width <px>    Override benchmark render width (default: 3840)\n");
-    printf("  --benchmark-height <px>   Override benchmark render height (default: 2160)\n");
-    printf("  --benchmark-samples <n>   Override benchmark target samples (default: 16384)\n");
+    printf("  --render-width <px>       Override offline render width (default: 3840)\n");
+    printf("  --render-height <px>      Override offline render height (default: 2160)\n");
+    printf("  --render-samples <n>      Override offline render target samples (default: 16384)\n");
     printf("  --import <path>           Import a mesh on startup\n");
+    printf("  --render-output <path>    Save the --render-headless image after completion\n");
+    printf("  --benchmark               Alias for --render\n");
     printf("\nViewport Controls:\n");
     printf("  Middle mouse drag          Orbit camera\n");
     printf("  Shift + middle mouse drag  Pan camera\n");

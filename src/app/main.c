@@ -7,7 +7,6 @@
 #include "scene/controller.h"
 #include "session.h"
 #include "vkrt.h"
-#include "vkrt_overlay.h"
 #include "vkrt_types.h"
 
 #include <stdint.h>
@@ -24,7 +23,7 @@ int main(int argc, char* argv[]) {
     int earlyExitCode = EXIT_SUCCESS;
     if (CLIHandleImmediateMode(&launchOptions, &earlyExitCode)) return earlyExitCode;
 
-    benchmarkPrepareLaunchOptions(&launchOptions);
+    offlineRenderPrepareLaunchOptions(&launchOptions);
 
     VKRT* vkrt = NULL;
     Session session = {0};
@@ -37,15 +36,9 @@ int main(int argc, char* argv[]) {
 
     sessionInit(&session);
 
-    const uint8_t benchmarkMode = launchOptions.benchmark.enabled;
-    if (!benchmarkMode) {
-        VKRT_AppHooks hooks = {
-            .init = editorUIInitialize,
-            .deinit = editorUIShutdown,
-            .drawOverlay = editorUIDraw,
-            .userData = &session,
-        };
-        VKRT_registerAppHooks(vkrt, hooks);
+    const uint8_t offlineRenderMode = launchOptions.offlineRender.enabled;
+    if (!offlineRenderMode) {
+        editorRegisterAppHooks(vkrt, &session);
     }
 
     if (VKRT_initWithCreateInfo(vkrt, &launchOptions.createInfo) != VKRT_SUCCESS) {
@@ -54,42 +47,37 @@ int main(int argc, char* argv[]) {
         goto cleanup;
     }
 
-    if (launchOptions.loadDefaultScene) {
-        if (!sceneControllerLoadDefaultScene(vkrt, &session)) {
+    if (!sceneControllerLoadStartupScene(
+            vkrt,
+            &session,
+            launchOptions.startupScenePath,
+            launchOptions.loadDefaultScene
+        )) {
+        if (launchOptions.startupScenePath) {
+            LOG_ERROR("Loading startup scene failed. Path: %s", launchOptions.startupScenePath);
+        } else {
             LOG_ERROR("Loading default scene failed");
-            exitCode = EXIT_FAILURE;
-            goto cleanup;
         }
-    }
-
-    if (launchOptions.startupImportPath) {
-        if (!meshControllerImportMesh(vkrt, &session, launchOptions.startupImportPath, NULL, NULL)) {
-            LOG_ERROR("Startup mesh import failed. Path: %s", launchOptions.startupImportPath);
-            exitCode = EXIT_FAILURE;
-            goto cleanup;
-        }
-    }
-
-    if (benchmarkMode) {
-        exitCode = benchmarkRun(vkrt, &launchOptions.benchmark);
+        exitCode = EXIT_FAILURE;
         goto cleanup;
     }
 
-    while (!VKRT_shouldDeinit(vkrt)) {
-        VKRT_poll(vkrt);
-
-        editorUIProcessDialogs(&session);
-        sceneControllerApplySessionActions(vkrt, &session);
-        meshControllerApplySessionActions(vkrt, &session);
-        renderControllerApplySessionActions(vkrt, &session);
-        editorUIUpdate(vkrt, &session);
-
-        if (VKRT_draw(vkrt) != VKRT_SUCCESS) {
-            LOG_ERROR("Frame render failed");
-            exitCode = EXIT_FAILURE;
-            break;
-        }
+    if (launchOptions.startupImportPath &&
+        !meshControllerImportMesh(vkrt, &session, launchOptions.startupImportPath, NULL, NULL)) {
+        LOG_ERROR("Startup mesh import failed. Path: %s", launchOptions.startupImportPath);
+        exitCode = EXIT_FAILURE;
+        goto cleanup;
     }
+
+    if (offlineRenderMode) {
+        exitCode = offlineRenderRun(vkrt, &launchOptions.offlineRender);
+        if (exitCode == EXIT_SUCCESS && launchOptions.renderOutputPath) {
+            exitCode = offlineRenderSaveOutput(vkrt, launchOptions.renderOutputPath);
+        }
+        goto cleanup;
+    }
+
+    exitCode = renderControllerRunInteractiveLoop(vkrt, &session);
 
 cleanup:
     VKRT_destroy(vkrt);

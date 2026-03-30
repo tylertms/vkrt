@@ -9,3 +9,4 @@ void editorUIShutdown(VKRT* vkrt, void* userData);
 void editorUIUpdate(VKRT* vkrt, Session* session);
 void editorUIDraw(VKRT* vkrt, VkCommandBuffer commandBuffer, void* userData);
 void editorUIProcessDialogs(Session* session);
+void editorRegisterAppHooks(VKRT* vkrt, Session* session);

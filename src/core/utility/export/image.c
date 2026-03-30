@@ -595,6 +595,7 @@ static int hasPreparedFeatureCoverage(const float* pixels, uint32_t width, uint3
 
 static int convertLinearToDisplayRGBA16(
     const float* linearPixels,
+    size_t linearByteCount,
     uint32_t width,
     uint32_t height,
     const VKRT_SceneSettingsSnapshot* sceneSettings,
@@ -609,6 +610,13 @@ static int convertLinearToDisplayRGBA16(
         !tryComputePixelCount(width, height, &pixelCount)) {
         return 0;
     }
+    if (pixelCount > SIZE_MAX / 4u || pixelCount > SIZE_MAX / (4u * sizeof(float))) {
+        return 0;
+    }
+    size_t requiredLinearByteCount = pixelCount * 4u * sizeof(float);
+    if (linearByteCount < requiredLinearByteCount) {
+        return 0;
+    }
 
     uint16_t* displayPixels = (uint16_t*)malloc(rgba16ByteCount);
     if (!displayPixels) return 0;
@@ -618,14 +626,19 @@ static int convertLinearToDisplayRGBA16(
     if (!isfinite(exposure) || exposure < 0.0f) exposure = 1.0f;
 
     for (size_t pixelIndex = 0; pixelIndex < pixelCount; pixelIndex++) {
-        const float* src = linearPixels + (pixelIndex * 4u);
-        float mapped[3] = {src[0], src[1], src[2]};
+        size_t baseByteOffset = pixelIndex * 4u * sizeof(float);
+        if (baseByteOffset > linearByteCount || linearByteCount - baseByteOffset < (3u * sizeof(float))) {
+            free(displayPixels);
+            return 0;
+        }
+        float mapped[3] = {0.0f, 0.0f, 0.0f};
         float encoded[3] = {0.0f, 0.0f, 0.0f};
+        memcpy(mapped, ((const uint8_t*)linearPixels) + baseByteOffset, sizeof(mapped));
 
         if (!debugOutput) {
-            mapped[0] = src[0] * exposure;
-            mapped[1] = src[1] * exposure;
-            mapped[2] = src[2] * exposure;
+            mapped[0] *= exposure;
+            mapped[1] *= exposure;
+            mapped[2] *= exposure;
             toneMapSceneColor(sceneSettings, mapped, mapped);
         }
 
@@ -862,6 +875,24 @@ static int prepareLinearRenderOutput(const LinearRenderOutputRequest* request, f
         LOG_ERROR("Failed to prepare beauty buffer for '%s'", outputLabel);
         goto cleanup;
     }
+
+    if (request->sceneSettings->renderMode == VKRT_RENDER_MODE_SPECTRAL) {
+        size_t pixelCount = 0u;
+        if (!tryComputePixelCount(request->width, request->height, &pixelCount)) {
+            goto cleanup;
+        }
+
+        for (size_t pixelIndex = 0u; pixelIndex < pixelCount; pixelIndex++) {
+            float* pixel = beauty + (pixelIndex * 4u);
+            float x = pixel[0];
+            float y = pixel[1];
+            float z = pixel[2];
+            pixel[0] = (3.2404542f * x) + (-1.5371385f * y) + (-0.4985314f * z);
+            pixel[1] = (-0.9692660f * x) + (1.8760108f * y) + (0.0415560f * z);
+            pixel[2] = (0.0556434f * x) + (-0.2040259f * y) + (1.0572252f * z);
+        }
+    }
+
     linearOutput = beauty;
     beauty = NULL;
 
@@ -889,6 +920,7 @@ int processRenderImageExportJob(RenderImageExportJob* job) {
 
     float* linearOutput = NULL;
     uint16_t* displayPixels = NULL;
+    size_t linearByteCount = 0u;
     int result = -1;
     LinearRenderOutputRequest request = {
         .label = job->path,
@@ -905,13 +937,24 @@ int processRenderImageExportJob(RenderImageExportJob* job) {
     if (!prepareLinearRenderOutput(&request, &linearOutput)) {
         goto cleanup;
     }
+    if (!tryComputeRGBAByteCount(job->width, job->height, sizeof(float), &linearByteCount)) {
+        LOG_ERROR("Linear render export size overflow for '%s'", job->path);
+        goto cleanup;
+    }
 
     if (job->format == RENDER_IMAGE_FORMAT_EXR) {
         result = writeRenderImageFile(job->path, linearOutput, job->width, job->height, job->format);
         goto cleanup;
     }
 
-    if (!convertLinearToDisplayRGBA16(linearOutput, job->width, job->height, &job->sceneSettings, &displayPixels)) {
+    if (!convertLinearToDisplayRGBA16(
+            linearOutput,
+            linearByteCount,
+            job->width,
+            job->height,
+            &job->sceneSettings,
+            &displayPixels
+        )) {
         LOG_ERROR("Failed to tone-map render export for '%s'", job->path);
         goto cleanup;
     }
@@ -934,6 +977,7 @@ int processViewportDenoiseJob(RenderImageExportJob* job, uint16_t** outPixels, s
     float* linearOutput = NULL;
     uint16_t* displayPixels = NULL;
     size_t displayByteCount = 0u;
+    size_t linearByteCount = 0u;
     int result = -1;
     LinearRenderOutputRequest request = {
         .label = "viewport denoise",
@@ -950,8 +994,19 @@ int processViewportDenoiseJob(RenderImageExportJob* job, uint16_t** outPixels, s
     if (!prepareLinearRenderOutput(&request, &linearOutput)) {
         goto cleanup;
     }
+    if (!tryComputeRGBAByteCount(job->width, job->height, sizeof(float), &linearByteCount)) {
+        LOG_ERROR("Viewport denoise linear output size overflow");
+        goto cleanup;
+    }
 
-    if (!convertLinearToDisplayRGBA16(linearOutput, job->width, job->height, &job->sceneSettings, &displayPixels)) {
+    if (!convertLinearToDisplayRGBA16(
+            linearOutput,
+            linearByteCount,
+            job->width,
+            job->height,
+            &job->sceneSettings,
+            &displayPixels
+        )) {
         LOG_ERROR("Failed to tone-map viewport denoise result");
         goto cleanup;
     }

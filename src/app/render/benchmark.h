@@ -3,5 +3,6 @@
 #include "cli/cli.h"
 #include "vkrt.h"
 
-void benchmarkPrepareLaunchOptions(CLILaunchOptions* options);
-int benchmarkRun(VKRT* vkrt, const CLIBenchmarkOptions* options);
+int offlineRenderRun(VKRT* vkrt, const CLIOfflineRenderOptions* options);
+void offlineRenderPrepareLaunchOptions(CLILaunchOptions* options);
+int offlineRenderSaveOutput(VKRT* vkrt, const char* outputPath);

@@ -1593,7 +1593,7 @@ static int loadSceneDocument(VKRT* vkrt, Session* session, cJSON* root, const ch
     return 1;
 }
 
-static int sceneControllerLoadScene(VKRT* vkrt, Session* session, const char* path) {
+int sceneControllerLoadSceneFromPath(VKRT* vkrt, Session* session, const char* path) {
     if (!vkrt || !session || !path || !path[0]) return 0;
 
     char* jsonText = NULL;
@@ -1659,7 +1659,14 @@ int sceneControllerLoadDefaultScene(VKRT* vkrt, Session* session) {
     if (resolveExistingPath(kDefaultScenePath, resolvedPath, sizeof(resolvedPath)) != 0) {
         return 0;
     }
-    return sceneControllerLoadScene(vkrt, session, resolvedPath);
+    return sceneControllerLoadSceneFromPath(vkrt, session, resolvedPath);
+}
+
+int sceneControllerLoadStartupScene(VKRT* vkrt, Session* session, const char* startupScenePath, uint8_t loadDefaultScene) {
+    if (!vkrt || !session) return 0;
+    if (startupScenePath) return sceneControllerLoadSceneFromPath(vkrt, session, startupScenePath);
+    if (loadDefaultScene) return sceneControllerLoadDefaultScene(vkrt, session);
+    return 1;
 }
 
 void sceneControllerApplySessionActions(VKRT* vkrt, Session* session) {
@@ -1667,7 +1674,7 @@ void sceneControllerApplySessionActions(VKRT* vkrt, Session* session) {
 
     char* openScenePath = NULL;
     if (sessionTakeSceneOpen(session, &openScenePath)) {
-        if (!sceneControllerLoadScene(vkrt, session, openScenePath)) {
+        if (!sceneControllerLoadSceneFromPath(vkrt, session, openScenePath)) {
             LOG_ERROR("Scene load failed. File: %s", openScenePath);
         }
         free(openScenePath);

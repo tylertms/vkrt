@@ -1,6 +1,9 @@
 #include "controller.h"
 
 #include "debug.h"
+#include "editor/editor.h"
+#include "mesh/controller.h"
+#include "scene/controller.h"
 #include "session.h"
 #include "vkrt.h"
 #include "vkrt_types.h"
@@ -135,4 +138,25 @@ void renderControllerApplySessionActions(VKRT* vkrt, Session* session) {
         }
         free(savePath);
     }
+}
+
+int renderControllerRunInteractiveLoop(VKRT* vkrt, Session* session) {
+    if (!vkrt || !session) return EXIT_FAILURE;
+
+    while (!VKRT_shouldDeinit(vkrt)) {
+        VKRT_poll(vkrt);
+
+        editorUIProcessDialogs(session);
+        sceneControllerApplySessionActions(vkrt, session);
+        meshControllerApplySessionActions(vkrt, session);
+        renderControllerApplySessionActions(vkrt, session);
+        editorUIUpdate(vkrt, session);
+
+        if (VKRT_draw(vkrt) != VKRT_SUCCESS) {
+            LOG_ERROR("Frame render failed");
+            return EXIT_FAILURE;
+        }
+    }
+
+    return EXIT_SUCCESS;
 }

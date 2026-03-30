@@ -237,7 +237,7 @@ void updateMediumStateFromTransmission(
     if (isTransmission == 0u) return;
 
     bool enteringMedium = frontFace != 0u;
-    medium.refractiveActive = false;
+    medium.refractiveActive = enteringMedium && materialMediumIsRefractive(material);
     medium.absorptionActive = enteringMedium && materialHasAbsorption(material);
     medium.absorptionSigma =
         medium.absorptionActive ? materialAbsorptionSigma(material, lambdaNm, spectralMode) : float3(0.0);
@@ -254,7 +254,7 @@ void updateMediumStateFromTransmissionSpectral(
     if (isTransmission == 0u) return;
 
     bool enteringMedium = frontFace != 0u;
-    medium.refractiveActive = false;
+    medium.refractiveActive = enteringMedium && materialMediumIsRefractive(material);
     medium.absorptionActive = enteringMedium && materialHasAbsorption(material);
     if (!medium.absorptionActive) {
         medium.absorptionSigma = float3(0.0);

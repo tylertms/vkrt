@@ -87,10 +87,8 @@ float lightPdfAreaToSolidAngle(float lightPdfArea, float3 geometricNormal, float
 }
 
 float computeSpectralMISWeight(float4 sampledTechniquePdf, float4 alternateTechniquePdf) {
-    float numerator = sampledTechniquePdf.x * sampledTechniquePdf.x;
-    float denominator =
-        dot(sampledTechniquePdf, sampledTechniquePdf) + dot(alternateTechniquePdf, alternateTechniquePdf);
-    return denominator > 0.0 ? numerator / denominator : 0.0;
+    float denominator = dot(sampledTechniquePdf, float4(1.0)) + dot(alternateTechniquePdf, float4(1.0));
+    return denominator > 0.0 ? sampledTechniquePdf.x / denominator : 0.0;
 }
 
 float computeSpectralEmitterMISWeight(
@@ -111,6 +109,7 @@ DirectLightResult sampleDirectLight(
     MediumState medium,
     float4 techniquePathPdf,
     float4 wavelengthsNm,
+    bool heroWavelengthMode,
     inout uint rng
 ) {
     DirectLightResult result;
@@ -156,7 +155,7 @@ DirectLightResult sampleDirectLight(
 
     float absCosWi = absCosTheta(wiLocal);
     if (state.spectralMode != 0u) {
-        if (!heroWavelengthSamplingEnabled()) {
+        if (!heroWavelengthMode) {
             BSDFEval eval = evalSingleWavelengthBSDF(state, wiLocal);
             if (eval.pdf <= 0.0) return result;
 

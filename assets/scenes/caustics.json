@@ -18,7 +18,7 @@
 				"baseColor":	[0, 0, 0],
 				"roughness":	1,
 				"diffuseRoughness":	1,
-				"emissionLuminance":	2000
+				"emissionLuminance":	32000
 			}
 		}, {
 			"index":	3,
@@ -70,7 +70,7 @@
 			"meshIndex":	1,
 			"localPosition":	[4.04099988937378, -0.88300001621246338, 2.1210000514984131],
 			"localRotation":	[0, 0, 0],
-			"localScale":	[0.20000000298023224, 0.20000000298023224, 0.20000000298023224]
+			"localScale":	[0.050000004470348358, 0.050000004470348358, 0.050000004470348358]
 		}, {
 			"name":	"suzanne",
 			"parentIndex":	null,
@@ -90,6 +90,7 @@
 		"rrMaxDepth":	8,
 		"toneMappingMode":	1,
 		"renderMode":	1,
+		"spectralSamplingMode":	1,
 		"exposure":	1,
 		"autoExposureEnabled":	false,
 		"environmentColor":	[0, 0, 0],

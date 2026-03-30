@@ -81,12 +81,16 @@ float3 spectralXYZ1931(float lambdaNm) {
     return max(float3(spectralXFit1931(lambdaNm), spectralYFit1931(lambdaNm), spectralZFit1931(lambdaNm)), float3(0.0));
 }
 
-float3 spectralSampleToLinearSrgb(float scalarValue, WavelengthSample wavelength) {
-    float xyzScale = (scalarValue * wavelength.invPdf) / VKRT_CIE_Y_INTEGRAL_1931_FIT;
-    return mul(VKRT_XYZ_TO_LINEAR_SRGB, spectralXYZ1931(wavelength.lambdaNm) * xyzScale);
+float3 xyzToLinearSrgb(float3 xyz) {
+    return mul(VKRT_XYZ_TO_LINEAR_SRGB, xyz);
 }
 
-float3 spectralSample4ToLinearSrgb(float4 scalarValue, float4 lambdaNm, float4 invPdf) {
+float3 spectralSampleToXYZ(float scalarValue, WavelengthSample wavelength) {
+    float xyzScale = (scalarValue * wavelength.invPdf) / VKRT_CIE_Y_INTEGRAL_1931_FIT;
+    return spectralXYZ1931(wavelength.lambdaNm) * xyzScale;
+}
+
+float3 spectralSample4ToXYZ(float4 scalarValue, float4 lambdaNm, float4 invPdf) {
     float3 xyz = float3(0.0);
 
     xyz += spectralXYZ1931(lambdaNm.x) * ((scalarValue.x * invPdf.x) / VKRT_CIE_Y_INTEGRAL_1931_FIT);
@@ -94,7 +98,7 @@ float3 spectralSample4ToLinearSrgb(float4 scalarValue, float4 lambdaNm, float4 i
     xyz += spectralXYZ1931(lambdaNm.z) * ((scalarValue.z * invPdf.z) / VKRT_CIE_Y_INTEGRAL_1931_FIT);
     xyz += spectralXYZ1931(lambdaNm.w) * ((scalarValue.w * invPdf.w) / VKRT_CIE_Y_INTEGRAL_1931_FIT);
 
-    return mul(VKRT_XYZ_TO_LINEAR_SRGB, xyz);
+    return xyz;
 }
 
 float heroWavelengthBalanceWeight(float4 techniquePathPdf) {

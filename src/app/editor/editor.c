@@ -847,6 +847,18 @@ static void applyEditorCameraInput(
     applyInteractiveCameraInput(vkrt, viewportHovered, imguiIO);
 }
 
+void editorRegisterAppHooks(VKRT* vkrt, Session* session) {
+    if (!vkrt || !session) return;
+
+    VKRT_AppHooks hooks = {
+        .init = editorUIInitialize,
+        .deinit = editorUIShutdown,
+        .drawOverlay = editorUIDraw,
+        .userData = session,
+    };
+    VKRT_registerAppHooks(vkrt, hooks);
+}
+
 void editorUIInitialize(VKRT* vkrt, void* userData) {
     Session* session = (Session*)userData;
     if (!session || session->editor.uiState) return;

@@ -7,3 +7,4 @@
 - fix up menu, add everything into menu bar + keybinds
 - maybe something weird with non-volume transmission
 - add support for more glb features
+- move denoise to GPU

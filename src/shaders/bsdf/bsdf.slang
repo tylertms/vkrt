@@ -38,9 +38,7 @@ SpectralBSDFSample sampleSpectralBSDF(BSDFState state, ShadingBasis basis, float
     float4 techniquePdf = float4(0.0);
     float4 spectralValue = evalSpectralBSDF(state, directionSample.wi, wavelengthsNm, techniquePdf);
     float sampledPdf = techniquePdf.x;
-    if (sampledPdf <= 0.0) {
-        return sample;
-    }
+    if (!(sampledPdf > 0.0)) return sample;
 
     sample.weight = spectralValue * absCosTheta(directionSample.wi) / sampledPdf;
     sample.techniquePdf = techniquePdf;

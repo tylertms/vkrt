@@ -11,7 +11,6 @@
 #include "vulkan/vulkan_core.h"
 
 #include <stdint.h>
-#include <stdlib.h>
 
 static const VkClearColorValue kViewportClearColor = {.float32 = {0.02f, 0.02f, 0.025f, 1.0f}};
 
@@ -718,7 +717,7 @@ static void recordPresentBlitPass(const RecordCommandContext* context) {
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         1,
         &blit,
-        VK_FILTER_LINEAR
+        VK_FILTER_NEAREST
     );
     endDebugLabel(context->vkrt, context->commandBuffer);
 }

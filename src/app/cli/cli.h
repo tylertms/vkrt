@@ -11,20 +11,22 @@ typedef enum CLIMode {
     CLI_MODE_VERSION,
 } CLIMode;
 
-typedef struct CLIBenchmarkOptions {
+typedef struct CLIOfflineRenderOptions {
     uint8_t enabled;
     uint8_t headless;
     uint32_t width;
     uint32_t height;
     uint32_t targetSamples;
-} CLIBenchmarkOptions;
+} CLIOfflineRenderOptions;
 
 typedef struct CLILaunchOptions {
     CLIMode mode;
     VKRT_CreateInfo createInfo;
     uint8_t loadDefaultScene;
+    const char* startupScenePath;
     const char* startupImportPath;
-    CLIBenchmarkOptions benchmark;
+    const char* renderOutputPath;
+    CLIOfflineRenderOptions offlineRender;
 } CLILaunchOptions;
 
 void CLIDefaultLaunchOptions(CLILaunchOptions* options);
