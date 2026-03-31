@@ -46,6 +46,7 @@ vkrt_sources = files(
   'utility/export/worker.c',
   'utility/image.c',
   'utility/io.c',
+  'utility/packing.c',
   'utility/platform.c',
 )
 

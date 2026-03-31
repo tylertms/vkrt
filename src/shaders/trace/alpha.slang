@@ -17,39 +17,24 @@ bool materialUsesAlphaBlend(Material material, float meshOpacity) {
     return material.alphaMode == VKRT_MATERIAL_ALPHA_MODE_BLEND || material.opacity < 0.999 || meshOpacity < 0.999;
 }
 
-float evaluateMaterialTextureAlpha(Material material, float4 vertexColor, float2 texcoord0, float2 texcoord1) {
+float evaluateMaterialTextureAlpha(Material material, SurfaceTextureData surface) {
     if (material.alphaMode == VKRT_MATERIAL_ALPHA_MODE_OPAQUE) {
-        return vertexColor.a;
+        return surface.color.a;
     }
 
-    return sampleMaterialTextureSlot(material, VKRT_TEXTURE_SLOT_BASE_COLOR, texcoord0, texcoord1).a * vertexColor.a;
+    return sampleBaseColorTexture(material, surface).a * surface.color.a;
 }
 
-float evaluateMaterialOpacity(
-    Material material,
-    float meshOpacity,
-    float4 vertexColor,
-    float2 texcoord0,
-    float2 texcoord1
-) {
-    return saturate(
-        meshOpacity * material.opacity * evaluateMaterialTextureAlpha(material, vertexColor, texcoord0, texcoord1)
-    );
+float evaluateMaterialOpacity(Material material, float meshOpacity, SurfaceTextureData surface) {
+    return saturate(meshOpacity * material.opacity * evaluateMaterialTextureAlpha(material, surface));
 }
 
-bool alphaPass(
-    Material material,
-    float meshOpacity,
-    float4 vertexColor,
-    float2 texcoord0,
-    float2 texcoord1,
-    inout uint rng
-) {
+bool alphaPass(Material material, float meshOpacity, SurfaceTextureData surface, inout uint rng) {
     if (materialUsesAlphaMask(material)) {
-        if (evaluateMaterialTextureAlpha(material, vertexColor, texcoord0, texcoord1) < material.alphaCutoff) {
+        if (evaluateMaterialTextureAlpha(material, surface) < material.alphaCutoff) {
             return false;
         }
-        float maskOpacity = saturate(meshOpacity * material.opacity * vertexColor.a);
+        float maskOpacity = saturate(meshOpacity * material.opacity * surface.color.a);
         if (maskOpacity >= 1.0) {
             return true;
         }
@@ -58,7 +43,7 @@ bool alphaPass(
         }
         return rand(rng) <= maskOpacity;
     }
-    float opacity = evaluateMaterialOpacity(material, meshOpacity, vertexColor, texcoord0, texcoord1);
+    float opacity = evaluateMaterialOpacity(material, meshOpacity, surface);
     if (!materialUsesAlphaBlend(material, meshOpacity)) {
         return true;
     }
@@ -76,8 +61,8 @@ bool alphaHitAccepted(MeshInfo mesh, Material material, uint primitiveIndex, flo
         return true;
     }
 
-    SurfaceAlphaAttributes surface = evaluateSurfaceAlphaAttributes(mesh, primitiveIndex, barycentrics);
-    return alphaPass(material, mesh.opacity, surface.color, surface.texcoord0, surface.texcoord1, rng);
+    SurfaceTextureData surface = evaluateSurfaceTextureData(mesh, primitiveIndex, barycentrics);
+    return alphaPass(material, mesh.opacity, surface, rng);
 }
 
 bool selectionAlphaHitAccepted(MeshInfo mesh, Material material, uint primitiveIndex, float2 barycentrics) {
@@ -85,9 +70,8 @@ bool selectionAlphaHitAccepted(MeshInfo mesh, Material material, uint primitiveI
         return true;
     }
 
-    SurfaceAlphaAttributes surface = evaluateSurfaceAlphaAttributes(mesh, primitiveIndex, barycentrics);
-    return evaluateMaterialTextureAlpha(material, surface.color, surface.texcoord0, surface.texcoord1) >=
-           material.alphaCutoff;
+    SurfaceTextureData surface = evaluateSurfaceTextureData(mesh, primitiveIndex, barycentrics);
+    return evaluateMaterialTextureAlpha(material, surface) >= material.alphaCutoff;
 }
 
 #endif

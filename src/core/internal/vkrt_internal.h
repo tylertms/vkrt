@@ -14,6 +14,8 @@ typedef struct VKRT_DeviceProcedures {
     PFN_vkCmdBuildAccelerationStructuresKHR vkCmdBuildAccelerationStructuresKHR;
     PFN_vkGetBufferDeviceAddressKHR vkGetBufferDeviceAddressKHR;
     PFN_vkCmdTraceRaysKHR vkCmdTraceRaysKHR;
+    PFN_vkGetRayTracingShaderGroupStackSizeKHR vkGetRayTracingShaderGroupStackSizeKHR;
+    PFN_vkCmdSetRayTracingPipelineStackSizeKHR vkCmdSetRayTracingPipelineStackSizeKHR;
     PFN_vkCmdBeginDebugUtilsLabelEXT vkCmdBeginDebugUtilsLabelEXT;
     PFN_vkCmdEndDebugUtilsLabelEXT vkCmdEndDebugUtilsLabelEXT;
 } VKRT_DeviceProcedures;
@@ -34,6 +36,19 @@ typedef struct DeviceExtensionSupport {
     uint32_t enabledMask;
     uint32_t missingRequiredMask;
 } DeviceExtensionSupport;
+
+typedef enum VKRT_MainRaygenGroupIndex {
+    VKRT_MAIN_RAYGEN_GROUP_RGB = 0u,
+    VKRT_MAIN_RAYGEN_GROUP_SPECTRAL_SINGLE = 1u,
+    VKRT_MAIN_RAYGEN_GROUP_SPECTRAL_HERO = 2u,
+    VKRT_MAIN_RAYGEN_GROUP_COUNT = 3u
+} VKRT_MainRaygenGroupIndex;
+
+typedef enum VKRT_HitGroupVariant {
+    VKRT_HIT_GROUP_VARIANT_OPAQUE = 0u,
+    VKRT_HIT_GROUP_VARIANT_ALPHA_TESTED = 1u,
+    VKRT_HIT_GROUP_VARIANT_COUNT = 2u
+} VKRT_HitGroupVariant;
 
 typedef struct VKRT_Core {
     VkInstance instance;
@@ -58,9 +73,12 @@ typedef struct VKRT_Core {
     VkBuffer shaderBindingTableBuffer;
     VkDeviceMemory shaderBindingTableMemory;
     VkStridedDeviceAddressRegionKHR shaderBindingTables[4];
+    VkStridedDeviceAddressRegionKHR mainRaygenRegions[VKRT_MAIN_RAYGEN_GROUP_COUNT];
+    uint32_t mainRayTracingStackSizes[VKRT_MAIN_RAYGEN_GROUP_COUNT];
     VkBuffer selectionShaderBindingTableBuffer;
     VkDeviceMemory selectionShaderBindingTableMemory;
     VkStridedDeviceAddressRegionKHR selectionShaderBindingTables[4];
+    uint32_t selectionRayTracingStackSize;
     SceneData sceneDataHost;
     SceneData* sceneData;
     VkBuffer sceneDataBuffers[VKRT_MAX_FRAMES_IN_FLIGHT];
@@ -271,6 +289,16 @@ typedef struct VKRT {
 static inline VkBool32 vkrtSerEnabled(const VKRT* vkrt) {
     return vkrt &&
            (vkrt->core.deviceExtensionSupport.enabledMask & DEVICE_EXTENSION_RAY_TRACING_INVOCATION_REORDER_BIT) != 0;
+}
+
+static inline uint32_t vkrtSelectMainRaygenGroupIndex(const VKRT* vkrt) {
+    if (!vkrt || vkrt->sceneSettings.renderMode != VKRT_RENDER_MODE_SPECTRAL) {
+        return VKRT_MAIN_RAYGEN_GROUP_RGB;
+    }
+
+    return vkrt->sceneSettings.spectralSamplingMode == VKRT_SPECTRAL_SAMPLING_MODE_HERO
+             ? VKRT_MAIN_RAYGEN_GROUP_SPECTRAL_HERO
+             : VKRT_MAIN_RAYGEN_GROUP_SPECTRAL_SINGLE;
 }
 
 static inline FrameSceneUpdate* vkrtCurrentFrameSceneUpdate(VKRT* vkrt) {

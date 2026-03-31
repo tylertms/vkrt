@@ -9,8 +9,9 @@
 #include <string.h>
 
 #ifdef _WIN32
-#include <direct.h>
-#include <windows.h>
+#include <fileapi.h>
+#include <libloaderapi.h>
+#include <minwindef.h>
 #elif defined(__APPLE__)
 #include <mach-o/dyld.h>
 #include <sys/stat.h>
@@ -33,8 +34,9 @@ static int getExeDir(char* out, size_t outSize) {
     DWORD len = GetModuleFileNameA(NULL, out, (DWORD)outSize);
     if (len == 0 || len == outSize) return -1;
 
-    while (len && out[len] != '\\')
+    while (len && out[len] != '\\') {
         --len;
+    }
     out[len] = '\0';
     return 0;
 #elif defined(__APPLE__)

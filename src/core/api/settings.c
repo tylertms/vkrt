@@ -8,7 +8,6 @@
 
 #include <math.h>
 #include <stdint.h>
-#include <stdlib.h>
 #include <string.h>
 #include <types.h>
 #include <vulkan/vulkan_core.h>

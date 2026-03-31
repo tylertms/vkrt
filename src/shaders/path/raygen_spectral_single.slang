@@ -1,4 +1,4 @@
-#include "../integrator/path/modes/rgb.slang"
+#include "../integrator/path/modes/spectral_single.slang"
 #include "../integrator/path/writeback.slang"
 
 [shader("raygeneration")] void main() {
@@ -20,7 +20,7 @@
     } else {
         for (uint sampleIndex = 0u; sampleIndex < pixelState.spp && !raygenFrameDebugEarlyOut(frameState);
              sampleIndex++) {
-            tracePathSample(pixelState, modeState, sampleIndex, frameState, RgbPathMode());
+            tracePathSample(pixelState, modeState, sampleIndex, frameState, SpectralSinglePathMode());
         }
     }
 
@@ -31,5 +31,5 @@
         selection[0].hitMeshIndex = pixelState.firstHitInstance;
     }
 
-    writeFrameOutputs(pixelState, frameState, RgbPathMode());
+    writeFrameOutputs(pixelState, frameState, SpectralSinglePathMode());
 }

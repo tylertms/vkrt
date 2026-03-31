@@ -13,14 +13,14 @@
 #include <stdlib.h>
 
 typedef struct RayTracingShaderVariant {
-    const uint32_t* rayGenData;
+    const uint32_t* rayGenData[VKRT_MAIN_RAYGEN_GROUP_COUNT];
     const uint32_t* closestHitData;
     const uint32_t* anyHitData;
     const uint32_t* missData;
     const uint32_t* shadowClosestHitData;
     const uint32_t* shadowAnyHitData;
     const uint32_t* shadowMissData;
-    size_t rayGenSize;
+    size_t rayGenSize[VKRT_MAIN_RAYGEN_GROUP_COUNT];
     size_t closestHitSize;
     size_t anyHitSize;
     size_t missSize;
@@ -30,7 +30,7 @@ typedef struct RayTracingShaderVariant {
 } RayTracingShaderVariant;
 
 typedef struct RayTracingShaderModules {
-    VkShaderModule rayGen;
+    VkShaderModule rayGen[VKRT_MAIN_RAYGEN_GROUP_COUNT];
     VkShaderModule closestHit;
     VkShaderModule anyHit;
     VkShaderModule miss;
@@ -38,6 +38,152 @@ typedef struct RayTracingShaderModules {
     VkShaderModule shadowAnyHit;
     VkShaderModule shadowMiss;
 } RayTracingShaderModules;
+
+typedef enum MainRayTracingShaderGroupIndex {
+    MAIN_RAY_TRACING_GROUP_RAYGEN_RGB = 0u,
+    MAIN_RAY_TRACING_GROUP_RAYGEN_SPECTRAL_SINGLE = 1u,
+    MAIN_RAY_TRACING_GROUP_RAYGEN_SPECTRAL_HERO = 2u,
+    MAIN_RAY_TRACING_GROUP_MISS_MAIN = 3u,
+    MAIN_RAY_TRACING_GROUP_MISS_SHADOW = 4u,
+    MAIN_RAY_TRACING_GROUP_HIT_MAIN_OPAQUE = 5u,
+    MAIN_RAY_TRACING_GROUP_HIT_MAIN_ALPHA = 6u,
+    MAIN_RAY_TRACING_GROUP_HIT_SHADOW_OPAQUE = 7u,
+    MAIN_RAY_TRACING_GROUP_HIT_SHADOW_ALPHA = 8u,
+    MAIN_RAY_TRACING_GROUP_COUNT = 9u
+} MainRayTracingShaderGroupIndex;
+
+typedef enum SelectionRayTracingShaderGroupIndex {
+    SELECTION_RAY_TRACING_GROUP_RAYGEN = 0u,
+    SELECTION_RAY_TRACING_GROUP_MISS = 1u,
+    SELECTION_RAY_TRACING_GROUP_HIT = 2u
+} SelectionRayTracingShaderGroupIndex;
+
+static VkPipelineDynamicStateCreateInfo makeRayTracingPipelineDynamicStateCreateInfo(
+    const VkDynamicState* dynamicStates,
+    uint32_t dynamicStateCount
+) {
+    return (VkPipelineDynamicStateCreateInfo){
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+        .dynamicStateCount = dynamicStateCount,
+        .pDynamicStates = dynamicStates,
+    };
+}
+
+static VkDeviceSize queryShaderGroupStackSize(
+    const VKRT* vkrt,
+    VkPipeline pipeline,
+    uint32_t group,
+    VkShaderGroupShaderKHR shader
+) {
+    if (!vkrt || pipeline == VK_NULL_HANDLE || !vkrt->core.procs.vkGetRayTracingShaderGroupStackSizeKHR) return 0;
+    return vkrt->core.procs.vkGetRayTracingShaderGroupStackSizeKHR(vkrt->core.device, pipeline, group, shader);
+}
+
+static VkDeviceSize maxDeviceSize(VkDeviceSize a, VkDeviceSize b) {
+    return a > b ? a : b;
+}
+
+static VKRT_Result storeMainRayTracingStackSizes(VKRT* vkrt, VkPipeline pipeline) {
+    if (!vkrt || pipeline == VK_NULL_HANDLE) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    const VkDeviceSize mainMissStack =
+        queryShaderGroupStackSize(vkrt, pipeline, MAIN_RAY_TRACING_GROUP_MISS_MAIN, VK_SHADER_GROUP_SHADER_GENERAL_KHR);
+    const VkDeviceSize shadowMissStack = queryShaderGroupStackSize(
+        vkrt,
+        pipeline,
+        MAIN_RAY_TRACING_GROUP_MISS_SHADOW,
+        VK_SHADER_GROUP_SHADER_GENERAL_KHR
+    );
+    const VkDeviceSize mainClosestHitStack = maxDeviceSize(
+        queryShaderGroupStackSize(
+            vkrt,
+            pipeline,
+            MAIN_RAY_TRACING_GROUP_HIT_MAIN_OPAQUE,
+            VK_SHADER_GROUP_SHADER_CLOSEST_HIT_KHR
+        ),
+        queryShaderGroupStackSize(
+            vkrt,
+            pipeline,
+            MAIN_RAY_TRACING_GROUP_HIT_MAIN_ALPHA,
+            VK_SHADER_GROUP_SHADER_CLOSEST_HIT_KHR
+        )
+    );
+    const VkDeviceSize mainAnyHitStack = queryShaderGroupStackSize(
+        vkrt,
+        pipeline,
+        MAIN_RAY_TRACING_GROUP_HIT_MAIN_ALPHA,
+        VK_SHADER_GROUP_SHADER_ANY_HIT_KHR
+    );
+    const VkDeviceSize shadowClosestHitStack = maxDeviceSize(
+        queryShaderGroupStackSize(
+            vkrt,
+            pipeline,
+            MAIN_RAY_TRACING_GROUP_HIT_SHADOW_OPAQUE,
+            VK_SHADER_GROUP_SHADER_CLOSEST_HIT_KHR
+        ),
+        queryShaderGroupStackSize(
+            vkrt,
+            pipeline,
+            MAIN_RAY_TRACING_GROUP_HIT_SHADOW_ALPHA,
+            VK_SHADER_GROUP_SHADER_CLOSEST_HIT_KHR
+        )
+    );
+    const VkDeviceSize shadowAnyHitStack = queryShaderGroupStackSize(
+        vkrt,
+        pipeline,
+        MAIN_RAY_TRACING_GROUP_HIT_SHADOW_ALPHA,
+        VK_SHADER_GROUP_SHADER_ANY_HIT_KHR
+    );
+
+    const VkDeviceSize mainTraceStack =
+        maxDeviceSize(mainMissStack, maxDeviceSize(mainClosestHitStack, mainAnyHitStack));
+    const VkDeviceSize shadowTraceStack =
+        maxDeviceSize(shadowMissStack, maxDeviceSize(shadowClosestHitStack, shadowAnyHitStack));
+    const VkDeviceSize traceTailStack = maxDeviceSize(mainTraceStack, shadowTraceStack);
+
+    for (uint32_t raygenIndex = 0; raygenIndex < VKRT_MAIN_RAYGEN_GROUP_COUNT; raygenIndex++) {
+        VkDeviceSize raygenStack =
+            queryShaderGroupStackSize(vkrt, pipeline, raygenIndex, VK_SHADER_GROUP_SHADER_GENERAL_KHR);
+        VkDeviceSize totalStack = raygenStack + traceTailStack;
+        if (totalStack > UINT32_MAX) {
+            LOG_ERROR("Ray tracing pipeline stack size overflow for raygen group %u", raygenIndex);
+            return VKRT_ERROR_OPERATION_FAILED;
+        }
+        vkrt->core.mainRayTracingStackSizes[raygenIndex] = (uint32_t)totalStack;
+    }
+
+    return VKRT_SUCCESS;
+}
+
+static VKRT_Result storeSelectionRayTracingStackSize(VKRT* vkrt, VkPipeline pipeline) {
+    if (!vkrt || pipeline == VK_NULL_HANDLE) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    const VkDeviceSize raygenStack = queryShaderGroupStackSize(
+        vkrt,
+        pipeline,
+        SELECTION_RAY_TRACING_GROUP_RAYGEN,
+        VK_SHADER_GROUP_SHADER_GENERAL_KHR
+    );
+    const VkDeviceSize missStack =
+        queryShaderGroupStackSize(vkrt, pipeline, SELECTION_RAY_TRACING_GROUP_MISS, VK_SHADER_GROUP_SHADER_GENERAL_KHR);
+    const VkDeviceSize closestHitStack = queryShaderGroupStackSize(
+        vkrt,
+        pipeline,
+        SELECTION_RAY_TRACING_GROUP_HIT,
+        VK_SHADER_GROUP_SHADER_CLOSEST_HIT_KHR
+    );
+    const VkDeviceSize anyHitStack =
+        queryShaderGroupStackSize(vkrt, pipeline, SELECTION_RAY_TRACING_GROUP_HIT, VK_SHADER_GROUP_SHADER_ANY_HIT_KHR);
+    const VkDeviceSize totalStack = raygenStack + maxDeviceSize(missStack, maxDeviceSize(closestHitStack, anyHitStack));
+
+    if (totalStack > UINT32_MAX) {
+        LOG_ERROR("Selection ray tracing pipeline stack size overflow");
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+
+    vkrt->core.selectionRayTracingStackSize = (uint32_t)totalStack;
+    return VKRT_SUCCESS;
+}
 
 static VKRT_Result createRayTracingPipelineLayout(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
@@ -59,14 +205,24 @@ static VKRT_Result createRayTracingPipelineLayout(VKRT* vkrt) {
 
 static RayTracingShaderVariant selectRayTracingShaderVariant(VkBool32 useSerShaders) {
     return (RayTracingShaderVariant){
-        .rayGenData = useSerShaders ? shaderRgenSerData : shaderRgenData,
+        .rayGenData =
+            {
+                useSerShaders ? shaderRgenSerData : shaderRgenData,
+                useSerShaders ? shaderRgenSpectralSingleSerData : shaderRgenSpectralSingleData,
+                useSerShaders ? shaderRgenSpectralHeroSerData : shaderRgenSpectralHeroData,
+            },
         .closestHitData = useSerShaders ? shaderRchitSerData : shaderRchitData,
         .anyHitData = shaderRahitData,
         .missData = useSerShaders ? shaderRmissSerData : shaderRmissData,
         .shadowClosestHitData = useSerShaders ? shaderShadowRchitSerData : shaderShadowRchitData,
         .shadowAnyHitData = shaderShadowRahitData,
         .shadowMissData = useSerShaders ? shaderShadowMissSerData : shaderShadowMissData,
-        .rayGenSize = useSerShaders ? shaderRgenSerSize : shaderRgenSize,
+        .rayGenSize =
+            {
+                useSerShaders ? shaderRgenSerSize : shaderRgenSize,
+                useSerShaders ? shaderRgenSpectralSingleSerSize : shaderRgenSpectralSingleSize,
+                useSerShaders ? shaderRgenSpectralHeroSerSize : shaderRgenSpectralHeroSize,
+            },
         .closestHitSize = useSerShaders ? shaderRchitSerSize : shaderRchitSize,
         .anyHitSize = shaderRahitSize,
         .missSize = useSerShaders ? shaderRmissSerSize : shaderRmissSize,
@@ -79,7 +235,11 @@ static RayTracingShaderVariant selectRayTracingShaderVariant(VkBool32 useSerShad
 static void destroyRayTracingShaderModules(VKRT* vkrt, RayTracingShaderModules* modules) {
     if (!vkrt || !modules) return;
 
-    if (modules->rayGen != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, modules->rayGen, NULL);
+    for (uint32_t i = 0; i < VKRT_MAIN_RAYGEN_GROUP_COUNT; i++) {
+        if (modules->rayGen[i] != VK_NULL_HANDLE) {
+            vkDestroyShaderModule(vkrt->core.device, modules->rayGen[i], NULL);
+        }
+    }
     if (modules->closestHit != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, modules->closestHit, NULL);
     if (modules->anyHit != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, modules->anyHit, NULL);
     if (modules->miss != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, modules->miss, NULL);
@@ -97,8 +257,15 @@ static VKRT_Result createRayTracingShaderModules(
     RayTracingShaderModules* outModules
 ) {
     *outModules = (RayTracingShaderModules){0};
-    if (createShaderModule(vkrt, variant->rayGenData, variant->rayGenSize, &outModules->rayGen) != VKRT_SUCCESS ||
-        createShaderModule(vkrt, variant->closestHitData, variant->closestHitSize, &outModules->closestHit) !=
+    for (uint32_t i = 0; i < VKRT_MAIN_RAYGEN_GROUP_COUNT; i++) {
+        if (createShaderModule(vkrt, variant->rayGenData[i], variant->rayGenSize[i], &outModules->rayGen[i]) !=
+            VKRT_SUCCESS) {
+            destroyRayTracingShaderModules(vkrt, outModules);
+            return VKRT_ERROR_SHADER_COMPILATION_FAILED;
+        }
+    }
+
+    if (createShaderModule(vkrt, variant->closestHitData, variant->closestHitSize, &outModules->closestHit) !=
             VKRT_SUCCESS ||
         createShaderModule(vkrt, variant->anyHitData, variant->anyHitSize, &outModules->anyHit) != VKRT_SUCCESS ||
         createShaderModule(vkrt, variant->missData, variant->missSize, &outModules->miss) != VKRT_SUCCESS ||
@@ -168,7 +335,15 @@ VKRT_Result createRayTracingPipeline(VKRT* vkrt) {
     }
 
     VkPipelineShaderStageCreateInfo shaderStages[] = {
-        makePipelineShaderStageInfo(VK_SHADER_STAGE_RAYGEN_BIT_KHR, modules.rayGen),
+        makePipelineShaderStageInfo(VK_SHADER_STAGE_RAYGEN_BIT_KHR, modules.rayGen[VKRT_MAIN_RAYGEN_GROUP_RGB]),
+        makePipelineShaderStageInfo(
+            VK_SHADER_STAGE_RAYGEN_BIT_KHR,
+            modules.rayGen[VKRT_MAIN_RAYGEN_GROUP_SPECTRAL_SINGLE]
+        ),
+        makePipelineShaderStageInfo(
+            VK_SHADER_STAGE_RAYGEN_BIT_KHR,
+            modules.rayGen[VKRT_MAIN_RAYGEN_GROUP_SPECTRAL_HERO]
+        ),
         makePipelineShaderStageInfo(VK_SHADER_STAGE_MISS_BIT_KHR, modules.miss),
         makePipelineShaderStageInfo(VK_SHADER_STAGE_MISS_BIT_KHR, modules.shadowMiss),
         makePipelineShaderStageInfo(VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, modules.closestHit),
@@ -181,9 +356,17 @@ VKRT_Result createRayTracingPipeline(VKRT* vkrt) {
         makeGeneralShaderGroup(0),
         makeGeneralShaderGroup(1),
         makeGeneralShaderGroup(2),
-        makeTriangleHitShaderGroup(3, 5),
-        makeTriangleHitShaderGroup(4, 6),
+        makeGeneralShaderGroup(3),
+        makeGeneralShaderGroup(4),
+        makeTriangleHitShaderGroup(5, VK_SHADER_UNUSED_KHR),
+        makeTriangleHitShaderGroup(5, 7),
+        makeTriangleHitShaderGroup(6, VK_SHADER_UNUSED_KHR),
+        makeTriangleHitShaderGroup(6, 8),
     };
+
+    VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_RAY_TRACING_PIPELINE_STACK_SIZE_KHR};
+    VkPipelineDynamicStateCreateInfo dynamicStateInfo =
+        makeRayTracingPipelineDynamicStateCreateInfo(dynamicStates, (uint32_t)VKRT_ARRAY_COUNT(dynamicStates));
 
     VkRayTracingPipelineCreateInfoKHR pipelineCreateInfo = {0};
     pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR;
@@ -193,6 +376,7 @@ VKRT_Result createRayTracingPipeline(VKRT* vkrt) {
     pipelineCreateInfo.pGroups = shaderGroups;
     pipelineCreateInfo.maxPipelineRayRecursionDepth = 1;
     pipelineCreateInfo.layout = vkrt->core.pipelineLayout;
+    pipelineCreateInfo.pDynamicState = &dynamicStateInfo;
 
     if (vkrt->core.procs.vkCreateRayTracingPipelinesKHR(
             vkrt->core.device,
@@ -208,12 +392,20 @@ VKRT_Result createRayTracingPipeline(VKRT* vkrt) {
         return VKRT_ERROR_OPERATION_FAILED;
     }
 
+    if (storeMainRayTracingStackSizes(vkrt, vkrt->core.rayTracingPipeline) != VKRT_SUCCESS) {
+        destroyRayTracingShaderModules(vkrt, &modules);
+        vkDestroyPipeline(vkrt->core.device, vkrt->core.rayTracingPipeline, NULL);
+        vkrt->core.rayTracingPipeline = VK_NULL_HANDLE;
+        return VKRT_ERROR_OPERATION_FAILED;
+    }
+
     destroyRayTracingShaderModules(vkrt, &modules);
 
     LOG_INFO(
-        "Ray tracing pipeline created. Variant: %s, Shader Stages: %u, Shader Groups: %u, in "
+        "Ray tracing pipeline created. Variant: %s, SER hint: %s, Shader Stages: %u, Shader Groups: %u, in "
         "%.3f ms",
         useSerShaders ? "SER" : "default",
+        vkrt->core.serReorderingHintMode == VK_RAY_TRACING_INVOCATION_REORDER_MODE_REORDER_EXT ? "reorder" : "none",
         (uint32_t)VKRT_ARRAY_COUNT(shaderStages),
         (uint32_t)VKRT_ARRAY_COUNT(shaderGroups),
         (double)(getMicroseconds() - startTime) / 1e3
@@ -279,6 +471,10 @@ VKRT_Result createSelectionRayTracingPipeline(VKRT* vkrt) {
          .intersectionShader = VK_SHADER_UNUSED_KHR},
     };
 
+    VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_RAY_TRACING_PIPELINE_STACK_SIZE_KHR};
+    VkPipelineDynamicStateCreateInfo dynamicStateInfo =
+        makeRayTracingPipelineDynamicStateCreateInfo(dynamicStates, (uint32_t)VKRT_ARRAY_COUNT(dynamicStates));
+
     VkRayTracingPipelineCreateInfoKHR pipelineCreateInfo = {0};
     pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR;
     pipelineCreateInfo.stageCount = (uint32_t)(sizeof(shaderStages) / sizeof(shaderStages[0]));
@@ -287,6 +483,7 @@ VKRT_Result createSelectionRayTracingPipeline(VKRT* vkrt) {
     pipelineCreateInfo.pGroups = shaderGroups;
     pipelineCreateInfo.maxPipelineRayRecursionDepth = 1;
     pipelineCreateInfo.layout = vkrt->core.pipelineLayout;
+    pipelineCreateInfo.pDynamicState = &dynamicStateInfo;
 
     if (vkrt->core.procs.vkCreateRayTracingPipelinesKHR(
             vkrt->core.device,
@@ -298,6 +495,12 @@ VKRT_Result createSelectionRayTracingPipeline(VKRT* vkrt) {
             &vkrt->core.selectionRayTracingPipeline
         ) != VK_SUCCESS) {
         LOG_ERROR("Failed to create selection ray tracing pipeline");
+        goto cleanup;
+    }
+
+    if (storeSelectionRayTracingStackSize(vkrt, vkrt->core.selectionRayTracingPipeline) != VKRT_SUCCESS) {
+        vkDestroyPipeline(vkrt->core.device, vkrt->core.selectionRayTracingPipeline, NULL);
+        vkrt->core.selectionRayTracingPipeline = VK_NULL_HANDLE;
         goto cleanup;
     }
 

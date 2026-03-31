@@ -32,7 +32,7 @@ struct BSDFBranchWeights {
 };
 
 struct BSDFState {
-    Material material;
+    BSDFMaterial material;
     float3 wo;
     GGXParams ggx;
     ClearcoatParams clearcoat;
@@ -40,6 +40,17 @@ struct BSDFState {
     float wavelengthNm;
     uint spectralMode;
     BSDFBranchWeights sampleWeights;
+
+    __init(BSDFMaterial material, float3 wo, uint frontFace, float wavelengthNm, uint spectralMode) {
+        this.material = material;
+        this.wo = wo;
+        this.frontFace = frontFace;
+        this.wavelengthNm = wavelengthNm;
+        this.spectralMode = spectralMode;
+        ggx = makeGGXParams(material, wo);
+        clearcoat = makeClearcoatParams(material);
+        sampleWeights = makeBSDFBranchWeights(material, wo, frontFace);
+    }
 };
 
 bool useInteriorDielectricInterface(BSDFState state) {
@@ -50,7 +61,7 @@ float scalarSchlickFresnel(float cosThetaValue, float f0) {
     return lerp(f0, 1.0, schlickWeight(abs(cosThetaValue)));
 }
 
-float coatDirectionalAttenuation(Material material, float3 w) {
+float coatDirectionalAttenuation(BSDFMaterial material, float3 w) {
     if (material.clearcoat <= 0.0) {
         return 1.0;
     }
@@ -78,7 +89,7 @@ float2 dielectricDirectionalAlbedoAB(float roughness, float cosThetaValue) {
     return saturate(float2(-1.04, 1.04) * a004 + r.zw);
 }
 
-float3 dielectricDirectionalAlbedo(Material material, float3 w) {
+float3 dielectricDirectionalAlbedo(BSDFMaterial material, float3 w) {
     if (absCosTheta(w) <= 0.0) {
         return float3(1.0);
     }
@@ -87,11 +98,11 @@ float3 dielectricDirectionalAlbedo(Material material, float3 w) {
     return saturate(bsdfDielectricSpecularF0(material) * ab.x + ab.y);
 }
 
-float3 dielectricDirectionalAttenuation(Material material, float3 w) {
+float3 dielectricDirectionalAttenuation(BSDFMaterial material, float3 w) {
     return saturate(1.0 - dielectricDirectionalAlbedo(material, w));
 }
 
-float reflectionStackAttenuation(Material material, float viewCoatAttenuation, float3 wi) {
+float reflectionStackAttenuation(BSDFMaterial material, float viewCoatAttenuation, float3 wi) {
     return viewCoatAttenuation * coatDirectionalAttenuation(material, wi);
 }
 
@@ -99,7 +110,7 @@ float transmissionStackAttenuation(float viewSheenAttenuation, float viewCoatAtt
     return viewSheenAttenuation * viewCoatAttenuation;
 }
 
-float materialTransmissionStackAttenuation(Material material, float3 wo) {
+float materialTransmissionStackAttenuation(BSDFMaterial material, float3 wo) {
     return transmissionStackAttenuation(
         sheenDirectionalAttenuation(bsdfSheenColor(material), wo, material.sheenRoughness),
         coatDirectionalAttenuation(material, wo)
@@ -130,7 +141,7 @@ BSDFBranchWeights normalizeBranchWeights(BSDFBranchWeights weights) {
     return weights;
 }
 
-BSDFBranchWeights makeBSDFBranchWeights(Material material, float3 wo, uint frontFace) {
+BSDFBranchWeights makeBSDFBranchWeights(BSDFMaterial material, float3 wo, uint frontFace) {
     BSDFBranchWeights weights;
     float3 diffuseColor = bsdfDiffuseColor(material);
     float3 sheenColor = bsdfSheenColor(material);
@@ -168,23 +179,10 @@ BSDFBranchWeights makeBSDFBranchWeights(Material material, float3 wo, uint front
     return normalizeBranchWeights(weights);
 }
 
-BSDFState makeBSDFState(Material material, float3 wo, uint frontFace, float wavelengthNm, uint spectralMode) {
-    BSDFState state;
-    state.material = material;
-    state.wo = wo;
-    state.frontFace = frontFace;
-    state.wavelengthNm = wavelengthNm;
-    state.spectralMode = spectralMode;
-    state.ggx = makeGGXParams(material, wo);
-    state.clearcoat = makeClearcoatParams(material);
-    state.sampleWeights = makeBSDFBranchWeights(material, wo, frontFace);
-    return state;
-}
-
 static const float VKRT_DENOISER_SPECULAR_FOLLOW_ROUGHNESS = 0.02;
 static const float VKRT_DENOISER_LAYER_EPSILON = 1e-3;
 
-bool materialDenoiserShouldFollowSpecularHit(Material material, uint frontFace) {
+bool materialDenoiserShouldFollowSpecularHit(BSDFMaterial material, uint frontFace) {
     float diffuseWeight = maxComponent(bsdfDiffuseColor(material)) * (1.0 - material.transmission);
     float subsurfaceWeight = diffuseWeight * material.subsurface;
     float sheenLayerWeight = maxComponent(bsdfSheenColor(material)) * (1.0 - material.transmission);
@@ -211,7 +209,7 @@ bool materialDenoiserShouldFollowSpecularHit(Material material, uint frontFace) 
     return hasSpecularOnlyResponse;
 }
 
-float3 materialDenoiserAlbedo(Material material) {
+float3 materialDenoiserAlbedo(BSDFMaterial material) {
     float nonMetal = 1.0 - material.metallic;
     float3 diffuseColor = bsdfDiffuseColor(material);
     float3 sheenColor = bsdfSheenColor(material);

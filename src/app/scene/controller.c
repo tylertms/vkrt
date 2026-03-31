@@ -1662,7 +1662,12 @@ int sceneControllerLoadDefaultScene(VKRT* vkrt, Session* session) {
     return sceneControllerLoadSceneFromPath(vkrt, session, resolvedPath);
 }
 
-int sceneControllerLoadStartupScene(VKRT* vkrt, Session* session, const char* startupScenePath, uint8_t loadDefaultScene) {
+int sceneControllerLoadStartupScene(
+    VKRT* vkrt,
+    Session* session,
+    const char* startupScenePath,
+    uint8_t loadDefaultScene
+) {
     if (!vkrt || !session) return 0;
     if (startupScenePath) return sceneControllerLoadSceneFromPath(vkrt, session, startupScenePath);
     if (loadDefaultScene) return sceneControllerLoadDefaultScene(vkrt, session);

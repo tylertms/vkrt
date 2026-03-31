@@ -1,16 +1,19 @@
-#if defined(_WIN32)
+#ifdef _WIN32
 #define GLFW_EXPOSE_NATIVE_WIN32
 #else
 #define GLFW_EXPOSE_NATIVE_X11
 #define GLFW_EXPOSE_NATIVE_WAYLAND
 #endif
 
+#include "GLFW/glfw3.h"
+#include "constants.h"
 #include "debug.h"
 #include "editor.h"
 #include "editor_internal.h"
 #include "io.h"
 #include "nfd.h"
 #include "nfd_glfw3.h"
+#include "platform.h"
 #include "session.h"
 
 #include <stddef.h>

@@ -32,6 +32,9 @@
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3native.h>
 #include <dwmapi.h>
+#include <minwindef.h>
+#include <winerror.h>
+#include <winnt.h>
 
 #ifdef DWMWA_USE_IMMERSIVE_DARK_MODE
 enum {
@@ -392,14 +395,14 @@ static VKRT_Result createRuntimeWindow(
 
 #ifdef _WIN32
     BOOL value = TRUE;
-    HRESULT hr = DwmSetWindowAttribute(
+    HRESULT hresult = DwmSetWindowAttribute(
         glfwGetWin32Window(vkrt->runtime.window),
         VKRT_DWM_WINDOW_ATTRIBUTE_USE_IMMERSIVE_DARK_MODE,
         &value,
         sizeof(value)
     );
 
-    if (!SUCCEEDED(hr)) {
+    if (!SUCCEEDED(hresult)) {
         LOG_INFO("Did not use immersive title bar");
     }
 #endif

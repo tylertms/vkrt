@@ -3,6 +3,7 @@
 
 #include "../path/payload.slang"
 #include "../scene/resources.slang"
+#include "layout.slang"
 
 static const uint kSceneRayMask = 0xffu;
 static const uint kSceneRayFlags = RAY_FLAG_NONE;
@@ -10,13 +11,31 @@ static const uint kSceneRayFlags = RAY_FLAG_NONE;
 void traceSceneRay(inout Payload payload, RayDesc ray, uint depth, uint coherenceHint, uint coherenceHintBits) {
 #ifdef VKRT_SER_ENABLED
     if (depth > 0u) {
-        HitObject hitObject = HitObject::TraceRay(topLevelAS, kSceneRayFlags, kSceneRayMask, 0u, 0u, 0u, ray, payload);
+        HitObject hitObject = HitObject::TraceRay(
+            topLevelAS,
+            kSceneRayFlags,
+            kSceneRayMask,
+            kMainSceneRaySbtOffset,
+            kSceneHitGroupStride,
+            kMainMissIndex,
+            ray,
+            payload
+        );
         ReorderThread(hitObject, coherenceHint, coherenceHintBits);
         HitObject::Invoke(topLevelAS, hitObject, payload);
         return;
     }
 #endif
-    TraceRay(topLevelAS, kSceneRayFlags, kSceneRayMask, 0u, 0u, 0u, ray, payload);
+    TraceRay(
+        topLevelAS,
+        kSceneRayFlags,
+        kSceneRayMask,
+        kMainSceneRaySbtOffset,
+        kSceneHitGroupStride,
+        kMainMissIndex,
+        ray,
+        payload
+    );
 }
 
 #endif

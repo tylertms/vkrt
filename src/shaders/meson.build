@@ -8,18 +8,22 @@ shader_common_spirv_capabilities = [
 ]
 
 shader_programs = [
-  ['rgen',          'path/raygen.slang',         'rgen.spv',           'raygeneration', ['rt'],        'shaderRgen'          ],
-  ['rchit',         'path/hit.slang',            'rchit.spv',          'closesthit',    ['rt'],        'shaderRchit'         ],
-  ['rmiss',         'path/miss.slang',           'rmiss.spv',          'miss',          ['rt'],        'shaderRmiss'         ],
-  ['shadowRchit',   'path/shadow_hit.slang',     'shadowRchit.spv',    'closesthit',    ['rt'],        'shaderShadowRchit'   ],
-  ['rahit',         'path/any.slang',            'rahit.spv',          'anyhit',        ['rt'],        'shaderRahit'         ],
-  ['shadowRahit',   'path/shadow_any.slang',     'shadowRahit.spv',    'anyhit',        ['rt'],        'shaderShadowRahit'   ],
-  ['shadowMiss',    'path/shadow_miss.slang',    'shadowMiss.spv',     'miss',          ['rt'],        'shaderShadowMiss'    ],
-  ['rgenSer',       'path/raygen.slang',         'rgenSer.spv',        'raygeneration', ['rt', 'ser'], 'shaderRgenSer'       ],
-  ['rchitSer',      'path/hit.slang',            'rchitSer.spv',       'closesthit',    ['rt', 'ser'], 'shaderRchitSer'      ],
-  ['rmissSer',      'path/miss.slang',           'rmissSer.spv',       'miss',          ['rt', 'ser'], 'shaderRmissSer'      ],
-  ['shadowRchitSer','path/shadow_hit.slang',     'shadowRchitSer.spv', 'closesthit',    ['rt', 'ser'], 'shaderShadowRchitSer'],
-  ['shadowMissSer', 'path/shadow_miss.slang',    'shadowMissSer.spv',  'miss',          ['rt', 'ser'], 'shaderShadowMissSer' ],
+  ['rgen',                  'path/raygen.slang',                    'rgen.spv',                     'raygeneration', ['rt'],        'shaderRgen'                    ],
+  ['rgenSpectralSingle',    'path/raygen_spectral_single.slang',    'rgenSpectralSingle.spv',       'raygeneration', ['rt'],        'shaderRgenSpectralSingle'      ],
+  ['rgenSpectralHero',      'path/raygen_spectral_hero.slang',   '  rgenSpectralHero.spv',          'raygeneration', ['rt'],        'shaderRgenSpectralHero'        ],
+  ['rchit',                 'path/hit.slang',                       'rchit.spv',                    'closesthit',    ['rt'],        'shaderRchit'                   ],
+  ['rmiss',                 'path/miss.slang',                      'rmiss.spv',                    'miss',          ['rt'],        'shaderRmiss'                   ],
+  ['shadowRchit',           'path/shadow_hit.slang',                'shadowRchit.spv',              'closesthit',    ['rt'],        'shaderShadowRchit'             ],
+  ['rahit',                 'path/any.slang',                       'rahit.spv',                    'anyhit',        ['rt'],        'shaderRahit'                   ],
+  ['shadowRahit',           'path/shadow_any.slang',                'shadowRahit.spv',              'anyhit',        ['rt'],        'shaderShadowRahit'             ],
+  ['shadowMiss',            'path/shadow_miss.slang',               'shadowMiss.spv',               'miss',          ['rt'],        'shaderShadowMiss'              ],
+  ['rgenSer',               'path/raygen.slang',                    'rgenSer.spv',                  'raygeneration', ['rt', 'ser'], 'shaderRgenSer'                 ],
+  ['rgenSpectralSingleSer', 'path/raygen_spectral_single.slang',    'rgenSpectralSingleSer.spv',    'raygeneration', ['rt', 'ser'], 'shaderRgenSpectralSingleSer'   ],
+  ['rgenSpectralHeroSer',   'path/raygen_spectral_hero.slang',      'rgenSpectralHeroSer.spv',      'raygeneration', ['rt', 'ser'], 'shaderRgenSpectralHeroSer'     ],
+  ['rchitSer',              'path/hit.slang',                       'rchitSer.spv',                 'closesthit',    ['rt', 'ser'], 'shaderRchitSer'                ],
+  ['rmissSer',              'path/miss.slang',                      'rmissSer.spv',                 'miss',          ['rt', 'ser'], 'shaderRmissSer'                ],
+  ['shadowRchitSer',        'path/shadow_hit.slang',                'shadowRchitSer.spv',           'closesthit',    ['rt', 'ser'], 'shaderShadowRchitSer'          ],
+  ['shadowMissSer',         'path/shadow_miss.slang',               'shadowMissSer.spv',            'miss',          ['rt', 'ser'], 'shaderShadowMissSer'           ],
 ]
 
 shader_programs += [

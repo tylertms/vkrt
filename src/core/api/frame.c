@@ -18,7 +18,6 @@
 #include "vulkan/vulkan_core.h"
 
 #include <stdint.h>
-#include <stdlib.h>
 
 static int queryDrawableFramebufferExtent(const VKRT* vkrt, uint32_t* outWidth, uint32_t* outHeight) {
     if (!vkrt || !vkrt->runtime.window || !outWidth || !outHeight) return 0;

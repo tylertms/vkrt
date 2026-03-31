@@ -2,6 +2,7 @@
 #define VKRT_MATERIAL_TEXTURES_SLANG
 
 #include "../bsdf/base.slang"
+#include "../geometry/surface.slang"
 #include "../scene/resources.slang"
 
 static const uint VKRT_WRAP_CLAMP_TO_EDGE = VKRT_TEXTURE_WRAP_CLAMP_TO_EDGE;
@@ -36,14 +37,6 @@ uint textureSamplerVariant(uint packedWrap) {
     return textureWrapVariant(textureWrapModeS(packedWrap)) * 3u + textureWrapVariant(textureWrapModeT(packedWrap));
 }
 
-struct MaterialTextureSampleInfo {
-    uint index;
-    uint packedWrap;
-    float4 transform;
-    float rotation;
-    float4 fallbackValue;
-};
-
 float materialTextureRotation(Material material, uint textureSlot) {
     return material.textureRotations[textureSlot];
 }
@@ -61,8 +54,8 @@ uint materialTextureTexcoordSet(Material material, uint textureSlot) {
     return (material.textureTexcoordSets >> (textureSlot * 8u)) & 0xffu;
 }
 
-float2 selectMaterialTextureUV(Material material, float2 texcoord0, float2 texcoord1, uint textureSlot) {
-    return materialTextureTexcoordSet(material, textureSlot) == 1u ? texcoord1 : texcoord0;
+float2 selectMaterialTextureUV(SurfaceTextureData surface, uint texcoordSet) {
+    return texcoordSet == 1u ? surface.texcoord1 : surface.texcoord0;
 }
 
 float4 sampleTexture(uint textureIndex, float2 uv, uint packedWrap) {
@@ -71,62 +64,81 @@ float4 sampleTexture(uint textureIndex, float2 uv, uint packedWrap) {
     return sceneTextures[resourceIndex].SampleLevel(textureSamplers[samplerIndex], uv, 0.0);
 }
 
-MaterialTextureSampleInfo queryMaterialTextureSampleInfo(Material material, uint textureSlot) {
-    MaterialTextureSampleInfo info;
-    info.index = VKRT_INVALID_INDEX;
-    info.packedWrap = VKRT_TEXTURE_WRAP_DEFAULT;
-    info.transform = float4(1.0, 1.0, 0.0, 0.0);
-    info.rotation = materialTextureRotation(material, textureSlot);
-    info.fallbackValue = textureSlot == VKRT_TEXTURE_SLOT_NORMAL ? float4(0.5, 0.5, 1.0, 1.0) : float4(1.0);
-
-    switch (textureSlot) {
-        case VKRT_TEXTURE_SLOT_BASE_COLOR:
-            info.index = material.baseColorTextureIndex;
-            info.packedWrap = material.baseColorTextureWrap;
-            info.transform = material.baseColorTextureTransform;
-            break;
-        case VKRT_TEXTURE_SLOT_METALLIC_ROUGHNESS:
-            info.index = material.metallicRoughnessTextureIndex;
-            info.packedWrap = material.metallicRoughnessTextureWrap;
-            info.transform = material.metallicRoughnessTextureTransform;
-            break;
-        case VKRT_TEXTURE_SLOT_NORMAL:
-            info.index = material.normalTextureIndex;
-            info.packedWrap = material.normalTextureWrap;
-            info.transform = material.normalTextureTransform;
-            break;
-        case VKRT_TEXTURE_SLOT_EMISSIVE:
-            info.index = material.emissiveTextureIndex;
-            info.packedWrap = material.emissiveTextureWrap;
-            info.transform = material.emissiveTextureTransform;
-            break;
-        default:
-            break;
-    }
-    return info;
-}
-
-float4 sampleMaterialTextureSlot(Material material, uint textureSlot, float2 texcoord0, float2 texcoord1) {
-    MaterialTextureSampleInfo info = queryMaterialTextureSampleInfo(material, textureSlot);
-    if (info.index == VKRT_INVALID_INDEX) {
-        return info.fallbackValue;
+float4 sampleMaterialTexture(
+    uint textureIndex,
+    uint packedWrap,
+    float4 transform,
+    float rotation,
+    uint texcoordSet,
+    SurfaceTextureData surface,
+    float4 fallbackValue
+) {
+    if (textureIndex == VKRT_INVALID_INDEX) {
+        return fallbackValue;
     }
 
-    float2 uv = selectMaterialTextureUV(material, texcoord0, texcoord1, textureSlot);
-    return sampleTexture(info.index, evaluateTextureUV(uv, info.transform, info.rotation), info.packedWrap);
+    float2 uv = selectMaterialTextureUV(surface, texcoordSet);
+    return sampleTexture(textureIndex, evaluateTextureUV(uv, transform, rotation), packedWrap);
 }
 
-void applySurfaceTextures(inout Material material, float4 vertexColor, float2 texcoord0, float2 texcoord1) {
-    float4 baseColorSample = sampleMaterialTextureSlot(material, VKRT_TEXTURE_SLOT_BASE_COLOR, texcoord0, texcoord1);
-    material.baseColor *= baseColorSample.rgb * vertexColor.rgb;
+float4 sampleBaseColorTexture(Material material, SurfaceTextureData surface) {
+    return sampleMaterialTexture(
+        material.baseColorTextureIndex,
+        material.baseColorTextureWrap,
+        material.baseColorTextureTransform,
+        materialTextureRotation(material, VKRT_TEXTURE_SLOT_BASE_COLOR),
+        materialTextureTexcoordSet(material, VKRT_TEXTURE_SLOT_BASE_COLOR),
+        surface,
+        float4(1.0)
+    );
+}
 
-    float4 metallicRoughnessSample =
-        sampleMaterialTextureSlot(material, VKRT_TEXTURE_SLOT_METALLIC_ROUGHNESS, texcoord0, texcoord1);
+float4 sampleMetallicRoughnessTexture(Material material, SurfaceTextureData surface) {
+    return sampleMaterialTexture(
+        material.metallicRoughnessTextureIndex,
+        material.metallicRoughnessTextureWrap,
+        material.metallicRoughnessTextureTransform,
+        materialTextureRotation(material, VKRT_TEXTURE_SLOT_METALLIC_ROUGHNESS),
+        materialTextureTexcoordSet(material, VKRT_TEXTURE_SLOT_METALLIC_ROUGHNESS),
+        surface,
+        float4(1.0)
+    );
+}
+
+float4 sampleNormalTexture(Material material, SurfaceTextureData surface) {
+    return sampleMaterialTexture(
+        material.normalTextureIndex,
+        material.normalTextureWrap,
+        material.normalTextureTransform,
+        materialTextureRotation(material, VKRT_TEXTURE_SLOT_NORMAL),
+        materialTextureTexcoordSet(material, VKRT_TEXTURE_SLOT_NORMAL),
+        surface,
+        float4(0.5, 0.5, 1.0, 1.0)
+    );
+}
+
+float4 sampleEmissiveTexture(Material material, SurfaceTextureData surface) {
+    return sampleMaterialTexture(
+        material.emissiveTextureIndex,
+        material.emissiveTextureWrap,
+        material.emissiveTextureTransform,
+        materialTextureRotation(material, VKRT_TEXTURE_SLOT_EMISSIVE),
+        materialTextureTexcoordSet(material, VKRT_TEXTURE_SLOT_EMISSIVE),
+        surface,
+        float4(1.0)
+    );
+}
+
+void applySurfaceTextures(inout Material material, SurfaceTextureData surface) {
+    float4 baseColorSample = sampleBaseColorTexture(material, surface);
+    material.baseColor *= baseColorSample.rgb * surface.color.rgb;
+
+    float4 metallicRoughnessSample = sampleMetallicRoughnessTexture(material, surface);
     material.roughness = saturate(material.roughness * metallicRoughnessSample.g);
     material.metallic = saturate(material.metallic * metallicRoughnessSample.b);
 
-    float3 emission = material.emissionColor * material.emissionLuminance *
-                      sampleMaterialTextureSlot(material, VKRT_TEXTURE_SLOT_EMISSIVE, texcoord0, texcoord1).rgb;
+    float3 emission =
+        material.emissionColor * material.emissionLuminance * sampleEmissiveTexture(material, surface).rgb;
     float emissionMax = maxComponent(emission);
     if (emissionMax > 0.0) {
         material.emissionColor = emission / emissionMax;
@@ -137,13 +149,12 @@ void applySurfaceTextures(inout Material material, float4 vertexColor, float2 te
     }
 }
 
-float3 applyNormalTexture(Material material, float2 texcoord0, float2 texcoord1, ShadingBasis basis) {
+float3 applyNormalTexture(Material material, SurfaceTextureData surface, ShadingBasis basis) {
     if (material.normalTextureIndex == VKRT_INVALID_INDEX) {
         return basis.normal;
     }
 
-    float3 normalSample =
-        sampleMaterialTextureSlot(material, VKRT_TEXTURE_SLOT_NORMAL, texcoord0, texcoord1).xyz * 2.0 - 1.0;
+    float3 normalSample = sampleNormalTexture(material, surface).xyz * 2.0 - 1.0;
     normalSample.xy *= material.normalTextureScale;
     normalSample = safeNormalize(normalSample);
 

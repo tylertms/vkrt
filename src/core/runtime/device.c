@@ -296,6 +296,26 @@ static void querySupportedReorderFeatures(
     vkrt->core.serMaxShaderBindingTableRecordIndex = 0u;
 }
 
+static VkBool32 shouldEnableSER(
+    const VKRT* vkrt,
+    DeviceExtensionSupport extensionSupport,
+    VkPhysicalDeviceRayTracingInvocationReorderFeaturesEXT supportedReorderFeatures
+) {
+    if (!vkrt || vkrt->runtime.disableSER) return VK_FALSE;
+    if (!(extensionSupport.availableMask & DEVICE_EXTENSION_RAY_TRACING_INVOCATION_REORDER_BIT)) return VK_FALSE;
+    return supportedReorderFeatures.rayTracingInvocationReorder ? VK_TRUE : VK_FALSE;
+}
+
+static const char* querySERHintModeName(VkRayTracingInvocationReorderModeEXT hintMode) {
+    switch (hintMode) {
+        case VK_RAY_TRACING_INVOCATION_REORDER_MODE_REORDER_EXT:
+            return "reorder";
+        case VK_RAY_TRACING_INVOCATION_REORDER_MODE_NONE_EXT:
+        default:
+            return "none";
+    }
+}
+
 static void logSERExtensionStatus(
     const VKRT* vkrt,
     DeviceExtensionSupport extensionSupport,
@@ -321,12 +341,10 @@ static void logSERExtensionStatus(
     }
 
     if (extensionSupport.availableMask & DEVICE_EXTENSION_RAY_TRACING_INVOCATION_REORDER_BIT) {
-        const char* reorderHintMode =
-            vkrt->core.serReorderingHintMode == VK_RAY_TRACING_INVOCATION_REORDER_MODE_REORDER_EXT ? "reorder" : "none";
         LOG_INFO(
-            "    SER properties: hint mode=%s, max shader table record index=%u",
-            reorderHintMode,
-            vkrt->core.serMaxShaderBindingTableRecordIndex
+            "    SER status: feature=%s, hint mode=%s",
+            reorderFeatureSupported ? "supported" : "unsupported",
+            querySERHintModeName(vkrt->core.serReorderingHintMode)
         );
     }
 }
@@ -713,9 +731,7 @@ VKRT_Result createLogicalDevice(VKRT* vkrt) {
         extensionSupport.enabledMask |= requiredDeviceExtensionBits[i];
     }
 
-    if (!vkrt->runtime.disableSER &&
-        (extensionSupport.availableMask & DEVICE_EXTENSION_RAY_TRACING_INVOCATION_REORDER_BIT) &&
-        supportedReorderFeatures.rayTracingInvocationReorder) {
+    if (shouldEnableSER(vkrt, extensionSupport, supportedReorderFeatures)) {
         enabledExtensions[enabledExtensionCount++] = optionalDeviceExtensions[0];
         extensionSupport.enabledMask |= DEVICE_EXTENSION_RAY_TRACING_INVOCATION_REORDER_BIT;
         featureChain.deviceRayTracingPipelineFeatures.pNext = &featureChain.deviceReorderFeatures;

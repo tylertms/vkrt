@@ -10,7 +10,7 @@
         return;
     }
 
-    SelectionPayload payload = SelectionPayload.make();
+    SelectionPayload payload = SelectionPayload();
     traceSelectionRay(payload, makePrimaryRay(pixel, float2(0.0)));
     selectionMaskImage[pixel] = payload.didHit != 0u ? 1u : 0u;
 }

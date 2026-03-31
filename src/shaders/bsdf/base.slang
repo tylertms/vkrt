@@ -24,6 +24,55 @@ struct ShadingBasis {
     float3 normal;
 };
 
+struct BSDFMaterial {
+    float3 baseColor = float3(1.0);
+    float roughness = 1.0;
+    float3 eta = float3(1.0);
+    float metallic = 0.0;
+    float3 k = float3(0.0);
+    float anisotropic = 0.0;
+    float specular = 0.5;
+    float specularTint = 0.0;
+    float abbeNumber = 0.0;
+    float4 sheenTintWeight = float4(0.0);
+    float clearcoat = 0.0;
+    float clearcoatGloss = 0.0;
+    float ior = 1.0;
+    float diffuseRoughness = 0.0;
+    float transmission = 0.0;
+    float subsurface = 0.0;
+    float sheenRoughness = 0.0;
+    float absorptionCoefficient = 0.0;
+    float3 attenuationColor = float3(1.0);
+
+    __init() {}
+
+    __init(Material material) {
+        baseColor = material.baseColor;
+        roughness = material.roughness;
+        eta = material.eta;
+        metallic = material.metallic;
+        k = material.k;
+        anisotropic = material.anisotropic;
+        specular = material.specular;
+        specularTint = material.specularTint;
+        abbeNumber = material.abbeNumber;
+        sheenTintWeight = material.sheenTintWeight;
+        clearcoat = material.clearcoat;
+        clearcoatGloss = material.clearcoatGloss;
+        ior = material.ior;
+        diffuseRoughness = material.diffuseRoughness;
+        transmission = material.transmission;
+        subsurface = material.subsurface;
+        sheenRoughness = material.sheenRoughness;
+        absorptionCoefficient = material.absorptionCoefficient;
+        attenuationColor = material.attenuationColor;
+    }
+};
+
+static const uint VKRT_MEDIUM_FLAG_REFRACTIVE_ACTIVE = 1u << 0;
+static const uint VKRT_MEDIUM_FLAG_ABSORPTION_ACTIVE = 1u << 1;
+
 float pow5(float value) {
     float value2 = value * value;
     return value2 * value2 * value;
@@ -113,7 +162,7 @@ float3 worldToLocal(float3 worldDir, ShadingBasis basis) {
     return float3(dot(worldDir, basis.tangent), dot(worldDir, basis.bitangent), dot(worldDir, basis.normal));
 }
 
-float3 bsdfDiffuseColor(Material material) {
+float3 bsdfDiffuseColor(BSDFMaterial material) {
     return material.baseColor * (1.0 - material.metallic);
 }
 
@@ -130,19 +179,19 @@ float3 bsdfTintColor(float3 baseColor) {
     return baseColor / luminance;
 }
 
-float sheenWeight(Material material) {
+float sheenWeight(BSDFMaterial material) {
     return saturate(material.sheenTintWeight.w);
 }
 
-float3 sheenTint(Material material) {
+float3 sheenTint(BSDFMaterial material) {
     return saturate(material.sheenTintWeight.xyz);
 }
 
-float3 bsdfSheenColor(Material material) {
+float3 bsdfSheenColor(BSDFMaterial material) {
     return sheenTint(material) * sheenWeight(material);
 }
 
-float3 bsdfTransmissionColor(Material material) {
+float3 bsdfTransmissionColor(BSDFMaterial material) {
     if (material.transmission > 0.0 && material.metallic <= 0.0) {
         return float3(1.0);
     }
@@ -150,56 +199,77 @@ float3 bsdfTransmissionColor(Material material) {
     return material.baseColor;
 }
 
-float interfaceIor(Material material) {
+float interfaceIor(BSDFMaterial material) {
     return max(material.ior, 1.0);
 }
 
-float interfaceIor(Material material, float lambdaNm, uint spectralMode) {
+float interfaceIor(BSDFMaterial material, float lambdaNm, uint spectralMode) {
     float ior = interfaceIor(material);
     return spectralMode != 0u ? dispersiveIor(ior, material.abbeNumber, lambdaNm) : ior;
 }
 
-float interfaceEta(Material material, uint frontFace) {
+float interfaceEta(BSDFMaterial material, uint frontFace) {
     float ior = interfaceIor(material);
     return frontFace != 0u ? ior : (1.0 / ior);
 }
 
-float interfaceEta(Material material, uint frontFace, float lambdaNm, uint spectralMode) {
+float interfaceEta(BSDFMaterial material, uint frontFace, float lambdaNm, uint spectralMode) {
     float ior = interfaceIor(material, lambdaNm, spectralMode);
     return frontFace != 0u ? ior : (1.0 / ior);
 }
 
-float interfaceRefractionEta(Material material, uint frontFace) {
+float interfaceRefractionEta(BSDFMaterial material, uint frontFace) {
     float ior = interfaceIor(material);
     return frontFace != 0u ? (1.0 / ior) : ior;
 }
 
-float interfaceRefractionEta(Material material, uint frontFace, float lambdaNm, uint spectralMode) {
+float interfaceRefractionEta(BSDFMaterial material, uint frontFace, float lambdaNm, uint spectralMode) {
     float ior = interfaceIor(material, lambdaNm, spectralMode);
     return frontFace != 0u ? (1.0 / ior) : ior;
 }
 
 struct MediumState {
-    bool refractiveActive;
-    bool absorptionActive;
+    uint flags = 0u;
     float3 absorptionSigma;
     float4 spectralAbsorptionSigma;
+
+    __init() {
+        flags = 0u;
+        absorptionSigma = float3(0.0);
+        spectralAbsorptionSigma = float4(0.0);
+    }
+
+    bool refractiveActive() {
+        return (flags & VKRT_MEDIUM_FLAG_REFRACTIVE_ACTIVE) != 0u;
+    }
+
+    bool absorptionActive() {
+        return (flags & VKRT_MEDIUM_FLAG_ABSORPTION_ACTIVE) != 0u;
+    }
+
+    [mutating] void setRefractiveActive(bool enabled) {
+        flags = enabled ? (flags | VKRT_MEDIUM_FLAG_REFRACTIVE_ACTIVE) : (flags & ~VKRT_MEDIUM_FLAG_REFRACTIVE_ACTIVE);
+    }
+
+        [mutating] void setAbsorptionActive(bool enabled) {
+        flags = enabled ? (flags | VKRT_MEDIUM_FLAG_ABSORPTION_ACTIVE) : (flags & ~VKRT_MEDIUM_FLAG_ABSORPTION_ACTIVE);
+    }
 };
 
-bool materialHasAbsorption(Material material) {
+bool materialHasAbsorption(BSDFMaterial material) {
     return material.absorptionCoefficient > 0.0 && any(material.attenuationColor < float3(0.9999));
 }
 
-bool materialMediumIsRefractive(Material material) {
+bool materialMediumIsRefractive(BSDFMaterial material) {
     return material.transmission > 0.0 && interfaceIor(material) > 1.0 + 1e-4;
 }
 
-float3 materialAbsorptionSigma(Material material) {
+float3 materialAbsorptionSigma(BSDFMaterial material) {
     float3 absorptionTint = max(saturate(material.attenuationColor), float3(1e-6));
     return -log(absorptionTint) * material.absorptionCoefficient;
 }
 
-float3 materialAbsorptionSigma(Material material, float lambdaNm, uint spectralMode) {
+float3 materialAbsorptionSigma(BSDFMaterial material, float lambdaNm, uint spectralMode) {
     if (spectralMode == 0u) {
         return materialAbsorptionSigma(material);
     }
@@ -208,26 +278,26 @@ float3 materialAbsorptionSigma(Material material, float lambdaNm, uint spectralM
     return (-log(absorptionTint) * material.absorptionCoefficient).xxx;
 }
 
-float4 materialAbsorptionSigma4(Material material, float4 wavelengthsNm) {
+float4 materialAbsorptionSigma4(BSDFMaterial material, float4 wavelengthsNm) {
     float4 absorptionTint =
         max(spectralScalarFromLinearSrgb4(saturate(material.attenuationColor), wavelengthsNm), float4(1e-6));
     return -log(absorptionTint) * material.absorptionCoefficient;
 }
 
 bool mediumHasActiveBoundary(MediumState medium) {
-    return medium.refractiveActive || medium.absorptionActive;
+    return medium.flags != 0u;
 }
 
 float3 mediumTransmittance(MediumState medium, float distance) {
-    return medium.absorptionActive ? exp(-medium.absorptionSigma * distance) : float3(1.0);
+    return medium.absorptionActive() ? exp(-medium.absorptionSigma * distance) : float3(1.0);
 }
 
 float4 mediumSpectralTransmittance(MediumState medium, float distance) {
-    return medium.absorptionActive ? exp(-medium.spectralAbsorptionSigma * distance) : float4(1.0);
+    return medium.absorptionActive() ? exp(-medium.spectralAbsorptionSigma * distance) : float4(1.0);
 }
 
 void updateMediumStateFromTransmission(
-    Material material,
+    BSDFMaterial material,
     uint frontFace,
     uint isTransmission,
     float lambdaNm,
@@ -237,15 +307,15 @@ void updateMediumStateFromTransmission(
     if (isTransmission == 0u) return;
 
     bool enteringMedium = frontFace != 0u;
-    medium.refractiveActive = enteringMedium && materialMediumIsRefractive(material);
-    medium.absorptionActive = enteringMedium && materialHasAbsorption(material);
+    medium.setRefractiveActive(enteringMedium && materialMediumIsRefractive(material));
+    medium.setAbsorptionActive(enteringMedium && materialHasAbsorption(material));
     medium.absorptionSigma =
-        medium.absorptionActive ? materialAbsorptionSigma(material, lambdaNm, spectralMode) : float3(0.0);
+        medium.absorptionActive() ? materialAbsorptionSigma(material, lambdaNm, spectralMode) : float3(0.0);
     medium.spectralAbsorptionSigma = medium.absorptionSigma.xxxx;
 }
 
 void updateMediumStateFromTransmissionSpectral(
-    Material material,
+    BSDFMaterial material,
     uint frontFace,
     uint isTransmission,
     float4 wavelengthsNm,
@@ -254,9 +324,9 @@ void updateMediumStateFromTransmissionSpectral(
     if (isTransmission == 0u) return;
 
     bool enteringMedium = frontFace != 0u;
-    medium.refractiveActive = enteringMedium && materialMediumIsRefractive(material);
-    medium.absorptionActive = enteringMedium && materialHasAbsorption(material);
-    if (!medium.absorptionActive) {
+    medium.setRefractiveActive(enteringMedium && materialMediumIsRefractive(material));
+    medium.setAbsorptionActive(enteringMedium && materialHasAbsorption(material));
+    if (!medium.absorptionActive()) {
         medium.absorptionSigma = float3(0.0);
         medium.spectralAbsorptionSigma = float4(0.0);
         return;
@@ -273,18 +343,18 @@ float dielectricF0(float eta) {
     return f0 * f0;
 }
 
-bool materialHasConductor(Material material) {
+bool materialHasConductor(BSDFMaterial material) {
     return any(material.k > 0.0);
 }
 
-float3 bsdfDielectricSpecularF0(Material material) {
+float3 bsdfDielectricSpecularF0(BSDFMaterial material) {
     float dielectric = dielectricF0(material.ior);
     float specularScale = material.specular / 0.5;
     float3 tint = lerp(float3(1.0), bsdfTintColor(material.baseColor), saturate(material.specularTint));
     return saturate(dielectric * specularScale * tint);
 }
 
-float bsdfDielectricSpecularF0Luminance(Material material) {
+float bsdfDielectricSpecularF0Luminance(BSDFMaterial material) {
     return saturate(linearSrgbLuminance(bsdfDielectricSpecularF0(material)));
 }
 

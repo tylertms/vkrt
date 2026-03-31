@@ -22,7 +22,7 @@ struct GGXParams {
     float projectedWoLength;
 };
 
-float2 ggxAlpha(Material material) {
+float2 ggxAlpha(BSDFMaterial material) {
     float roughness = max(material.roughness, GGX_MIN_ALPHA);
     float aspect = sqrt(max(1.0 - 0.9 * material.anisotropic, GGX_MIN_ALPHA));
     float a = roughness * roughness;
@@ -63,7 +63,7 @@ float ggxProjectedLength(float3 wo, float2 alpha) {
     return sqrt(dot(stretchedXY, stretchedXY) + wo.z * wo.z);
 }
 
-GGXParams makeGGXParams(Material material, float3 wo) {
+GGXParams makeGGXParams(BSDFMaterial material, float3 wo) {
     GGXParams params;
     params.alpha = ggxAlpha(material);
     params.vndfK = ggxVNDFK(wo, params.alpha);
@@ -101,14 +101,14 @@ float ggxReflectionPdf(float3 wo, float3 m, GGXParams params) {
     return visiblePdf / max(4.0 * abs(dot(wo, m)), GGX_EPSILON);
 }
 
-float3 ggxConductorFresnel(Material material, float cosTheta, float lambdaNm, uint spectralMode) {
+float3 ggxConductorFresnel(BSDFMaterial material, float cosTheta, float lambdaNm, uint spectralMode) {
     float3 fresnelColor = materialHasConductor(material)
                             ? fresnelConductor(cosTheta, max(material.eta, float3(1e-3)), max(material.k, float3(0.0)))
                             : fresnelSchlick(cosTheta, material.baseColor);
     return spectralMode != 0u ? spectralScalarFromLinearSrgb(saturate(fresnelColor), lambdaNm).xxx : fresnelColor;
 }
 
-float4 ggxConductorFresnel4(Material material, float cosTheta, float4 wavelengthsNm) {
+float4 ggxConductorFresnel4(BSDFMaterial material, float cosTheta, float4 wavelengthsNm) {
     float3 fresnelColor = materialHasConductor(material)
                             ? fresnelConductor(cosTheta, max(material.eta, float3(1e-3)), max(material.k, float3(0.0)))
                             : fresnelSchlick(cosTheta, material.baseColor);
@@ -116,7 +116,7 @@ float4 ggxConductorFresnel4(Material material, float cosTheta, float4 wavelength
 }
 
 BSDFEval evalGGXFromHalfVector(
-    Material material,
+    BSDFMaterial material,
     float3 wo,
     float3 wi,
     GGXParams params,
@@ -134,7 +134,7 @@ BSDFEval evalGGXFromHalfVector(
     return eval;
 }
 
-BSDFEval evalGGX(Material material, float3 wo, float3 wi, GGXParams params, float lambdaNm, uint spectralMode) {
+BSDFEval evalGGX(BSDFMaterial material, float3 wo, float3 wi, GGXParams params, float lambdaNm, uint spectralMode) {
     BSDFEval eval;
     eval.value = float3(0.0);
     eval.pdf = 0.0;
@@ -151,7 +151,14 @@ BSDFEval evalGGX(Material material, float3 wo, float3 wi, GGXParams params, floa
     return evalGGXFromHalfVector(material, wo, wi, params, m, woDotM, lambdaNm, spectralMode);
 }
 
-float4 evalSpectralGGX(Material material, float3 wo, float3 wi, GGXParams params, float4 wavelengthsNm, out float pdf) {
+float4 evalSpectralGGX(
+    BSDFMaterial material,
+    float3 wo,
+    float3 wi,
+    GGXParams params,
+    float4 wavelengthsNm,
+    out float pdf
+) {
     pdf = 0.0;
     if (cosTheta(wo) <= 0.0 || cosTheta(wi) <= 0.0) {
         return float4(0.0);

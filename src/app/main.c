@@ -47,12 +47,9 @@ int main(int argc, char* argv[]) {
         goto cleanup;
     }
 
-    if (!sceneControllerLoadStartupScene(
-            vkrt,
-            &session,
-            launchOptions.startupScenePath,
-            launchOptions.loadDefaultScene
-        )) {
+    if (
+        !sceneControllerLoadStartupScene(vkrt, &session, launchOptions.startupScenePath, launchOptions.loadDefaultScene)
+    ) {
         if (launchOptions.startupScenePath) {
             LOG_ERROR("Loading startup scene failed. Path: %s", launchOptions.startupScenePath);
         } else {

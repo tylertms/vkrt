@@ -9,53 +9,41 @@ static const uint VKRT_SHADOW_VISIBILITY_VISIBLE = 1u;
 static const uint VKRT_SHADOW_VISIBILITY_UNSUPPORTED_TRANSMISSION = 2u;
 
 struct Payload {
-    uint didHit;
     uint rng;
     uint instanceIndex;
-    uint materialIndex;
-    uint frontFace;
+    uint primitiveIndex;
     float hitDistance;
-    uint packedShadingNormal;
-    uint packedGeometricNormal;
-    float4 tangent;
-    float4 color;
-    float2 texcoord0;
-    float2 texcoord1;
+    float2 barycentrics;
 
-    static Payload make(uint seed) {
-        Payload payload;
-        payload.rng = seed;
-        return payload;
+    __init(uint seed) {
+        rng = seed;
+        instanceIndex = VKRT_INVALID_INDEX;
+        primitiveIndex = VKRT_INVALID_INDEX;
+        hitDistance = 0.0;
+        barycentrics = float2(0.0);
+    }
+
+    bool hit() {
+        return instanceIndex != VKRT_INVALID_INDEX;
     }
 
     [mutating] void setMiss() {
-        didHit = 0u;
         instanceIndex = VKRT_INVALID_INDEX;
+        primitiveIndex = VKRT_INVALID_INDEX;
+        hitDistance = 0.0;
+        barycentrics = float2(0.0);
     }
 
         [mutating] void setSurfaceHit(
             uint hitInstanceIndex,
-            uint hitMaterialIndex,
-            uint hitFrontFace,
+            uint hitPrimitiveIndex,
             float distance,
-            uint shadingNormal,
-            uint geometricNormal,
-            float4 hitTangent,
-            float4 hitColor,
-            float2 hitTexcoord0,
-            float2 hitTexcoord1
+            float2 hitBarycentrics
         ) {
-        didHit = 1u;
         instanceIndex = hitInstanceIndex;
-        materialIndex = hitMaterialIndex;
-        frontFace = hitFrontFace;
+        primitiveIndex = hitPrimitiveIndex;
         hitDistance = distance;
-        packedShadingNormal = shadingNormal;
-        packedGeometricNormal = geometricNormal;
-        tangent = hitTangent;
-        color = hitColor;
-        texcoord0 = hitTexcoord0;
-        texcoord1 = hitTexcoord1;
+        barycentrics = hitBarycentrics;
     }
 };
 
@@ -63,10 +51,9 @@ struct ShadowPayload {
     uint visibility;
     uint rng;
 
-    static ShadowPayload make(uint seed) {
-        ShadowPayload payload;
-        payload.rng = seed;
-        return payload;
+    __init(uint seed) {
+        visibility = VKRT_SHADOW_VISIBILITY_OCCLUDED;
+        rng = seed;
     }
 };
 

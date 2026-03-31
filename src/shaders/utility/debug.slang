@@ -10,24 +10,23 @@ bool isTextureMapDebugMode(uint debugMode) {
            debugMode == VKRT_DEBUG_MODE_EMISSIVE_MAP;
 }
 
-float3 evaluateTextureMapDebug(Material material, float2 texcoord0, float2 texcoord1, uint debugMode) {
+float3 evaluateTextureMapDebug(Material material, SurfaceTextureData surface, uint debugMode) {
     float4 metallicRoughness = float4(0.0);
     if (debugMode == VKRT_DEBUG_MODE_METALLIC_MAP || debugMode == VKRT_DEBUG_MODE_ROUGHNESS_MAP) {
-        metallicRoughness =
-            sampleMaterialTextureSlot(material, VKRT_TEXTURE_SLOT_METALLIC_ROUGHNESS, texcoord0, texcoord1);
+        metallicRoughness = sampleMetallicRoughnessTexture(material, surface);
     }
 
     switch (debugMode) {
         case VKRT_DEBUG_MODE_BASE_COLOR_MAP:
-            return sampleMaterialTextureSlot(material, VKRT_TEXTURE_SLOT_BASE_COLOR, texcoord0, texcoord1).rgb;
+            return sampleBaseColorTexture(material, surface).rgb;
         case VKRT_DEBUG_MODE_METALLIC_MAP:
             return metallicRoughness.bbb;
         case VKRT_DEBUG_MODE_ROUGHNESS_MAP:
             return metallicRoughness.ggg;
         case VKRT_DEBUG_MODE_NORMAL_MAP:
-            return sampleMaterialTextureSlot(material, VKRT_TEXTURE_SLOT_NORMAL, texcoord0, texcoord1).rgb;
+            return sampleNormalTexture(material, surface).rgb;
         case VKRT_DEBUG_MODE_EMISSIVE_MAP:
-            return sampleMaterialTextureSlot(material, VKRT_TEXTURE_SLOT_EMISSIVE, texcoord0, texcoord1).rgb;
+            return sampleEmissiveTexture(material, surface).rgb;
         default:
             return float3(0.0);
     }

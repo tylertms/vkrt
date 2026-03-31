@@ -15,11 +15,11 @@ struct DielectricSample {
 // Burley, 2015 - https://blog.selfshadow.com/publications/s2015-shading-course/burley/s2015_pbs_disney_bsdf_notes.pdf
 // Pharr, Jakob, Humphreys, 2023 - https://www.pbr-book.org/4ed/Reflection_Models/Dielectric_BSDF
 
-bool dielectricIsIdentity(Material material) {
+bool dielectricIsIdentity(BSDFMaterial material) {
     return interfaceIor(material) <= 1.0 + 1e-4;
 }
 
-float dielectricFresnel(Material material, uint frontFace, float cosThetaI, float lambdaNm, uint spectralMode) {
+float dielectricFresnel(BSDFMaterial material, uint frontFace, float cosThetaI, float lambdaNm, uint spectralMode) {
     if (dielectricIsIdentity(material)) {
         return 0.0;
     }
@@ -27,7 +27,7 @@ float dielectricFresnel(Material material, uint frontFace, float cosThetaI, floa
     return fresnelDielectric(cosThetaI, interfaceEta(material, frontFace, lambdaNm, spectralMode));
 }
 
-float4 dielectricFresnel4(Material material, uint frontFace, float cosThetaI, float4 wavelengthsNm) {
+float4 dielectricFresnel4(BSDFMaterial material, uint frontFace, float cosThetaI, float4 wavelengthsNm) {
     if (dielectricIsIdentity(material)) {
         return float4(0.0);
     }
@@ -40,7 +40,13 @@ float4 dielectricFresnel4(Material material, uint frontFace, float cosThetaI, fl
     );
 }
 
-float3 dielectricReflectionColor(Material material, float cosThetaI, float fresnel, float lambdaNm, uint spectralMode) {
+float3 dielectricReflectionColor(
+    BSDFMaterial material,
+    float cosThetaI,
+    float fresnel,
+    float lambdaNm,
+    uint spectralMode
+) {
     if (material.transmission > 0.0 && material.metallic <= 0.0) {
         return fresnel.xxx;
     }
@@ -49,7 +55,7 @@ float3 dielectricReflectionColor(Material material, float cosThetaI, float fresn
     return spectralMode != 0u ? spectralScalarFromLinearSrgb(saturate(reflectionColor), lambdaNm).xxx : reflectionColor;
 }
 
-float4 dielectricReflectionColor4(Material material, float cosThetaI, float4 fresnel, float4 wavelengthsNm) {
+float4 dielectricReflectionColor4(BSDFMaterial material, float cosThetaI, float4 fresnel, float4 wavelengthsNm) {
     if (material.transmission > 0.0 && material.metallic <= 0.0) {
         return fresnel;
     }
@@ -58,7 +64,7 @@ float4 dielectricReflectionColor4(Material material, float cosThetaI, float4 fre
     return spectralScalarFromLinearSrgb4(saturate(reflectionColor), wavelengthsNm);
 }
 
-float dielectricTransmissionProbability(Material material, float fresnel) {
+float dielectricTransmissionProbability(BSDFMaterial material, float fresnel) {
     float transmissionWeight = material.transmission * (1.0 - fresnel);
     float totalWeight = fresnel + transmissionWeight;
     if (totalWeight <= 0.0) {
@@ -103,7 +109,7 @@ bool dielectricTransmissionHalfVector(
 }
 
 BSDFEval evalDielectricReflection(
-    Material material,
+    BSDFMaterial material,
     float3 wo,
     float3 wi,
     uint frontFace,
@@ -137,7 +143,7 @@ BSDFEval evalDielectricReflection(
 }
 
 BSDFEval evalDielectricTransmission(
-    Material material,
+    BSDFMaterial material,
     float3 wo,
     float3 wi,
     uint frontFace,
@@ -193,7 +199,7 @@ BSDFEval evalDielectricTransmission(
 }
 
 float4 evalSpectralDielectricReflection(
-    Material material,
+    BSDFMaterial material,
     float3 wo,
     float3 wi,
     uint frontFace,
@@ -232,7 +238,7 @@ float4 evalSpectralDielectricReflection(
 }
 
 float evalSpectralDielectricTransmissionLane(
-    Material material,
+    BSDFMaterial material,
     float3 wo,
     float3 wi,
     uint frontFace,
@@ -283,7 +289,7 @@ float evalSpectralDielectricTransmissionLane(
 }
 
 float4 evalSpectralDielectricTransmission(
-    Material material,
+    BSDFMaterial material,
     float3 wo,
     float3 wi,
     uint frontFace,
@@ -345,7 +351,7 @@ float4 evalSpectralDielectricTransmission(
 }
 
 bool sampleDielectric(
-    Material material,
+    BSDFMaterial material,
     float3 wo,
     uint frontFace,
     GGXParams params,

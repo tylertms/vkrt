@@ -5,14 +5,16 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
-#ifdef __APPLE__
-#include <mach/mach_time.h>
-#else
-#include <time.h>
-#endif
 
 #ifdef _WIN32
+#include <handleapi.h>
+#include <minwindef.h>
 #include <process.h>
+#include <processthreadsapi.h>
+#include <profileapi.h>
+#include <synchapi.h>
+#include <windows.h>
+#include <winnt.h>
 
 static int gVkrtInfoLoggingEnabled = 1;
 

@@ -5,6 +5,10 @@
 
 extern const uint32_t shaderRgenData[];
 extern const size_t shaderRgenSize;
+extern const uint32_t shaderRgenSpectralSingleData[];
+extern const size_t shaderRgenSpectralSingleSize;
+extern const uint32_t shaderRgenSpectralHeroData[];
+extern const size_t shaderRgenSpectralHeroSize;
 
 extern const uint32_t shaderRchitData[];
 extern const size_t shaderRchitSize;
@@ -26,6 +30,10 @@ extern const size_t shaderShadowMissSize;
 
 extern const uint32_t shaderRgenSerData[];
 extern const size_t shaderRgenSerSize;
+extern const uint32_t shaderRgenSpectralSingleSerData[];
+extern const size_t shaderRgenSpectralSingleSerSize;
+extern const uint32_t shaderRgenSpectralHeroSerData[];
+extern const size_t shaderRgenSpectralHeroSerSize;
 
 extern const uint32_t shaderRchitSerData[];
 extern const size_t shaderRchitSerSize;

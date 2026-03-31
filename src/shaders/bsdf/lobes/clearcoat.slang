@@ -17,11 +17,11 @@ struct ClearcoatParams {
     float alpha;
 };
 
-float clearcoatAlpha(Material material) {
+float clearcoatAlpha(BSDFMaterial material) {
     return lerp(0.1, 0.001, saturate(material.clearcoatGloss));
 }
 
-ClearcoatParams makeClearcoatParams(Material material) {
+ClearcoatParams makeClearcoatParams(BSDFMaterial material) {
     ClearcoatParams params;
     params.alpha = max(clearcoatAlpha(material), 1e-3);
     return params;

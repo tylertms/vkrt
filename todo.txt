@@ -8,3 +8,6 @@
 - maybe something weird with non-volume transmission
 - add support for more glb features
 - move denoise to GPU
+- try packing more inter-shader communication stuff
+- clear scene button
+- multi object selection

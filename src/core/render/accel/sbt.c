@@ -2,6 +2,7 @@
 #include "buffer.h"
 #include "debug.h"
 #include "device.h"
+#include "vkrt_internal.h"
 #include "vkrt_types.h"
 #include "vulkan/vulkan_core.h"
 
@@ -164,6 +165,17 @@ static void buildShaderBindingTableRegions(
     outTables[3].size = 0;
 }
 
+static void buildMainRaygenRegions(VKRT* vkrt) {
+    if (!vkrt) return;
+
+    VkStridedDeviceAddressRegionKHR baseRegion = vkrt->core.shaderBindingTables[0];
+    for (uint32_t groupIndex = 0; groupIndex < VKRT_MAIN_RAYGEN_GROUP_COUNT; groupIndex++) {
+        vkrt->core.mainRaygenRegions[groupIndex] = baseRegion;
+        vkrt->core.mainRaygenRegions[groupIndex].deviceAddress += (VkDeviceAddress)groupIndex * baseRegion.stride;
+        vkrt->core.mainRaygenRegions[groupIndex].size = baseRegion.stride;
+    }
+}
+
 static VKRT_Result createShaderBindingTableForPipeline(
     VKRT* vkrt,
     VkPipeline pipeline,
@@ -176,7 +188,7 @@ static VKRT_Result createShaderBindingTableForPipeline(
         return VKRT_ERROR_INVALID_ARGUMENT;
     }
 
-    if (raygenGroupCount != 1u || missGroupCount == 0u || hitGroupCount == 0u) {
+    if (raygenGroupCount == 0u || missGroupCount == 0u || hitGroupCount == 0u) {
         return VKRT_ERROR_INVALID_ARGUMENT;
     }
 
@@ -241,9 +253,9 @@ VKRT_Result createShaderBindingTable(VKRT* vkrt) {
     VKRT_Result result = createShaderBindingTableForPipeline(
         vkrt,
         vkrt->core.rayTracingPipeline,
-        1u,
+        VKRT_MAIN_RAYGEN_GROUP_COUNT,
         2u,
-        2u,
+        4u,
         (ShaderBindingTableBuildOutput){
             .buffer = &vkrt->core.shaderBindingTableBuffer,
             .memory = &vkrt->core.shaderBindingTableMemory,
@@ -251,6 +263,8 @@ VKRT_Result createShaderBindingTable(VKRT* vkrt) {
         }
     );
     if (result != VKRT_SUCCESS) return result;
+
+    buildMainRaygenRegions(vkrt);
 
     LOG_TRACE("Shader binding table created");
     return VKRT_SUCCESS;

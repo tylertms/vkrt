@@ -5,9 +5,6 @@
 #include "vkrt_types.h"
 #include "vulkan/vulkan_core.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-
 VKRT_Result createSurface(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
     if (glfwCreateWindowSurface(vkrt->core.instance, vkrt->runtime.window, NULL, &vkrt->runtime.surface) !=

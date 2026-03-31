@@ -27,7 +27,7 @@ RaytracingAccelerationStructure selectionTopLevelAS;
 [vk::image_format("rgba16f")] RWTexture2D<float4> normalWriteImage;
 
 [[vk::binding(10, 0)]]
-StructuredBuffer<Vertex> vertices;
+StructuredBuffer<ShaderVertex> vertices;
 [[vk::binding(11, 0)]]
 StructuredBuffer<uint> indices;
 [[vk::binding(12, 0)]]

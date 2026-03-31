@@ -127,8 +127,8 @@ static void recordSceneUpdateCommands(VKRT* vkrt, VkCommandBuffer commandBuffer)
         VkBufferCopy copyRegions[2] = {
             {
                 .srcOffset = 0,
-                .dstOffset = (VkDeviceSize)mesh->info.vertexBase * sizeof(Vertex),
-                .size = (VkDeviceSize)mesh->info.vertexCount * sizeof(Vertex),
+                .dstOffset = (VkDeviceSize)mesh->info.vertexBase * sizeof(ShaderVertex),
+                .size = (VkDeviceSize)mesh->info.vertexCount * sizeof(ShaderVertex),
             },
             {
                 .srcOffset = upload->indexOffset,
@@ -448,6 +448,9 @@ static void resetAccumulationImages(const RecordCommandContext* context) {
 static void recordMainTracePass(const RecordCommandContext* context) {
     if (!context || !context->shouldTrace) return;
 
+    const uint32_t raygenGroupIndex = vkrtSelectMainRaygenGroupIndex(context->vkrt);
+    const VkStridedDeviceAddressRegionKHR* raygenRegion = &context->vkrt->core.mainRaygenRegions[raygenGroupIndex];
+
     beginDebugLabel(context->vkrt, context->commandBuffer, "Main TraceRays", 0.91f, 0.47f, 0.20f);
     vkCmdBindPipeline(
         context->commandBuffer,
@@ -464,9 +467,13 @@ static void recordMainTracePass(const RecordCommandContext* context) {
         0,
         NULL
     );
+    context->vkrt->core.procs.vkCmdSetRayTracingPipelineStackSizeKHR(
+        context->commandBuffer,
+        context->vkrt->core.mainRayTracingStackSizes[raygenGroupIndex]
+    );
     context->vkrt->core.procs.vkCmdTraceRaysKHR(
         context->commandBuffer,
-        &context->vkrt->core.shaderBindingTables[0],
+        raygenRegion,
         &context->vkrt->core.shaderBindingTables[1],
         &context->vkrt->core.shaderBindingTables[2],
         &context->vkrt->core.shaderBindingTables[3],
@@ -496,6 +503,10 @@ static void recordSelectionTracePass(const RecordCommandContext* context) {
         &context->vkrt->core.descriptorSets[context->vkrt->runtime.currentFrame],
         0,
         NULL
+    );
+    context->vkrt->core.procs.vkCmdSetRayTracingPipelineStackSizeKHR(
+        context->commandBuffer,
+        context->vkrt->core.selectionRayTracingStackSize
     );
     context->vkrt->core.procs.vkCmdTraceRaysKHR(
         context->commandBuffer,

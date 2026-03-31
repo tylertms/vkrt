@@ -39,6 +39,10 @@ VKRT_Result loadDeviceProcs(VKRT* vkrt) {
          "vkCmdBuildAccelerationStructuresKHR"},
         {(PFN_vkVoidFunction*)&vkrt->core.procs.vkGetBufferDeviceAddressKHR, "vkGetBufferDeviceAddressKHR"},
         {(PFN_vkVoidFunction*)&vkrt->core.procs.vkCmdTraceRaysKHR, "vkCmdTraceRaysKHR"},
+        {(PFN_vkVoidFunction*)&vkrt->core.procs.vkGetRayTracingShaderGroupStackSizeKHR,
+         "vkGetRayTracingShaderGroupStackSizeKHR"},
+        {(PFN_vkVoidFunction*)&vkrt->core.procs.vkCmdSetRayTracingPipelineStackSizeKHR,
+         "vkCmdSetRayTracingPipelineStackSizeKHR"},
     };
 
     for (size_t i = 0; i < sizeof(requiredProcs) / sizeof(requiredProcs[0]); i++) {

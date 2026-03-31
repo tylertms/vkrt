@@ -5,6 +5,7 @@
 #include "constants.h"
 #include "debug.h"
 #include "descriptor.h"
+#include "packing.h"
 #include "rebuild.h"
 #include "scene.h"
 #include "state.h"
@@ -508,7 +509,7 @@ static VKRT_Result createGeometryBuffers(
     if (vertexCapacity > 0) {
         VKRT_Result result = createBuffer(
             vkrt,
-            (VkDeviceSize)vertexCapacity * sizeof(Vertex),
+            (VkDeviceSize)vertexCapacity * sizeof(ShaderVertex),
             VK_BUFFER_USAGE_TRANSFER_DST_BIT | verticesUsage(),
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
             &outState->vertexData.buffer,
@@ -523,7 +524,7 @@ static VKRT_Result createGeometryBuffers(
     } else {
         VKRT_Result result = createZeroInitializedDeviceBuffer(
             vkrt,
-            sizeof(Vertex),
+            sizeof(ShaderVertex),
             VK_BUFFER_USAGE_TRANSFER_DST_BIT | verticesUsage(),
             &outState->vertexData
         );
@@ -664,7 +665,7 @@ VKRT_Result vkrtScenePreparePendingGeometryUploads(VKRT* vkrt) {
         Mesh* mesh = &vkrt->core.meshes[i];
         if (!mesh->ownsGeometry || !mesh->geometryUploadPending) continue;
 
-        VkDeviceSize vertexBytes = (VkDeviceSize)mesh->info.vertexCount * sizeof(Vertex);
+        VkDeviceSize vertexBytes = (VkDeviceSize)mesh->info.vertexCount * sizeof(ShaderVertex);
         VkDeviceSize indexBytes = (VkDeviceSize)mesh->info.indexCount * sizeof(uint32_t);
         VkDeviceSize stagingSize = vertexBytes + indexBytes;
 
@@ -689,7 +690,10 @@ VKRT_Result vkrtScenePreparePendingGeometryUploads(VKRT* vkrt) {
             update->geometryUploadCount = writeIndex + 1u;
             return VKRT_ERROR_OPERATION_FAILED;
         }
-        memcpy(mapped, mesh->vertices, (size_t)vertexBytes);
+        ShaderVertex* mappedVertices = (ShaderVertex*)mapped;
+        for (uint32_t vertexIndex = 0; vertexIndex < mesh->info.vertexCount; vertexIndex++) {
+            mappedVertices[vertexIndex] = packShaderVertex(&mesh->vertices[vertexIndex]);
+        }
         memcpy((char*)mapped + vertexBytes, mesh->indices, (size_t)indexBytes);
         vkUnmapMemory(vkrt->core.device, upload->stagingMemory);
 

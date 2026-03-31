@@ -4,10 +4,8 @@
 struct SelectionPayload {
     uint didHit;
 
-    static SelectionPayload make() {
-        SelectionPayload payload;
-        payload.didHit = 0u;
-        return payload;
+    __init() {
+        didHit = 0u;
     }
 
     [mutating] void setMiss() { didHit = 0u; }

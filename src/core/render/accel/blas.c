@@ -22,7 +22,7 @@ static void buildBLASGeometryInfo(
     trianglesData.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
     trianglesData.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
     trianglesData.vertexData.deviceAddress = vertexDataAddress;
-    trianglesData.vertexStride = sizeof(Vertex);
+    trianglesData.vertexStride = sizeof(ShaderVertex);
     trianglesData.maxVertex = meshInfo->vertexBase + meshInfo->vertexCount - 1;
     trianglesData.indexType = VK_INDEX_TYPE_UINT32;
     trianglesData.indexData.deviceAddress = indexDataAddress;

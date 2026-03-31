@@ -9,6 +9,7 @@ Checks: >-
   readability-*,
   -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,
   -bugprone-easily-swappable-parameters,
+  -performance-no-int-to-ptr,
   -readability-magic-numbers,
   -readability-qualified-auto,
   -readability-redundant-access-specifiers,

@@ -6,9 +6,7 @@
 #include "vulkan/vulkan_core.h"
 
 #include <stdint.h>
-#include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
 VKRT_Result createInstance(VKRT* vkrt, VkBool32 requirePresentation) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;

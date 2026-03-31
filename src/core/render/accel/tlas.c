@@ -313,6 +313,14 @@ static VkGeometryInstanceFlagsKHR queryTLASInstanceFlags(const VKRT* vkrt, const
     return flags;
 }
 
+static uint32_t queryTLASInstanceHitGroupVariant(const VKRT* vkrt, const Mesh* mesh) {
+    if (!vkrt || !mesh) return VKRT_HIT_GROUP_VARIANT_ALPHA_TESTED;
+
+    const Material* material = vkrtGetSceneMaterialData(vkrt, mesh->info.materialIndex);
+    return materialMayRejectRayHit(material, mesh->info.opacity) ? VKRT_HIT_GROUP_VARIANT_ALPHA_TESTED
+                                                                 : VKRT_HIT_GROUP_VARIANT_OPAQUE;
+}
+
 static VkBool32 buildTLASInstanceForMesh(
     const VKRT* vkrt,
     uint32_t meshIndex,
@@ -330,6 +338,7 @@ static VkBool32 buildTLASInstanceForMesh(
     *outInstance = (VkAccelerationStructureInstanceKHR){0};
     outInstance->transform = getMeshWorldTransform(mesh);
     outInstance->instanceCustomIndex = meshIndex;
+    outInstance->instanceShaderBindingTableRecordOffset = queryTLASInstanceHitGroupVariant(vkrt, mesh);
     outInstance->mask = 0xFF;
     outInstance->flags = queryTLASInstanceFlags(vkrt, mesh);
     outInstance->accelerationStructureReference = mesh->bottomLevelAccelerationStructure.deviceAddress;
@@ -341,7 +350,12 @@ static VkBool32 buildSelectionTLASInstance(const VKRT* vkrt, VkAccelerationStruc
         return VK_FALSE;
     }
 
-    return buildTLASInstanceForMesh(vkrt, vkrt->sceneSettings.selectedMeshIndex, outInstance);
+    if (!buildTLASInstanceForMesh(vkrt, vkrt->sceneSettings.selectedMeshIndex, outInstance)) {
+        return VK_FALSE;
+    }
+
+    outInstance->instanceShaderBindingTableRecordOffset = 0u;
+    return VK_TRUE;
 }
 
 static VKRT_Result allocateSceneTLASInstances(
