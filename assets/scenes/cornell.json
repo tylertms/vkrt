@@ -190,10 +190,13 @@
 		"rrMinDepth":	4,
 		"rrMaxDepth":	8,
 		"toneMappingMode":	1,
+		"renderMode":	0,
+		"spectralSamplingMode":	1,
 		"exposure":	1,
 		"autoExposureEnabled":	false,
 		"environmentColor":	[0.25, 0.25, 0.25],
 		"environmentStrength":	1,
+		"environmentRotation":	0,
 		"misNeeEnabled":	true
 	}
 }

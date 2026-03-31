@@ -13,6 +13,11 @@
 
 static const float3x3 VKRT_XYZ_TO_LINEAR_SRGB =
     float3x3(3.2404542, -1.5371385, -0.4985314, -0.9692660, 1.8760108, 0.0415560, 0.0556434, -0.2040259, 1.0572252);
+static const float3x3 VKRT_BRADFORD =
+    float3x3(0.8951, 0.2664, -0.1614, -0.7502, 1.7135, 0.0367, 0.0389, -0.0685, 1.0296);
+static const float3x3 VKRT_BRADFORD_INVERSE =
+    float3x3(0.9869929, -0.1470543, 0.1599627, 0.4323053, 0.5183603, 0.0492912, -0.0085287, 0.0400428, 0.9684867);
+static const float3 VKRT_BRADFORD_EQUAL_ENERGY_TO_D65_SCALE = float3(0.9413344, 1.0404175, 1.0895327);
 static const float VKRT_CIE_Y_INTEGRAL_1931_FIT = 106.9461715;
 
 static const float VKRT_FRAUNHOFER_C_UM = 0.6562725;
@@ -81,8 +86,14 @@ float3 spectralXYZ1931(float lambdaNm) {
     return max(float3(spectralXFit1931(lambdaNm), spectralYFit1931(lambdaNm), spectralZFit1931(lambdaNm)), float3(0.0));
 }
 
+float3 adaptEqualEnergyXYZToD65(float3 xyz) {
+    float3 lms = mul(VKRT_BRADFORD, xyz);
+    float3 adaptedLms = lms * VKRT_BRADFORD_EQUAL_ENERGY_TO_D65_SCALE;
+    return mul(VKRT_BRADFORD_INVERSE, adaptedLms);
+}
+
 float3 xyzToLinearSrgb(float3 xyz) {
-    return mul(VKRT_XYZ_TO_LINEAR_SRGB, xyz);
+    return mul(VKRT_XYZ_TO_LINEAR_SRGB, adaptEqualEnergyXYZToD65(xyz));
 }
 
 float3 spectralSampleToXYZ(float scalarValue, WavelengthSample wavelength) {

@@ -14,6 +14,7 @@ typedef enum RenderImageFormat {
 typedef enum RenderImageBufferFormat {
     RENDER_IMAGE_BUFFER_FORMAT_RGBA32F = 0,
     RENDER_IMAGE_BUFFER_FORMAT_RGBA16F,
+    RENDER_IMAGE_BUFFER_FORMAT_RGBA16_UNORM,
 } RenderImageBufferFormat;
 
 typedef struct RenderImageBuffer {

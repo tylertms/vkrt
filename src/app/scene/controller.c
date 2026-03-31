@@ -16,6 +16,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <types.h>
+#ifndef _WIN32
+#include <unistd.h>
+#endif
 
 enum {
     K_SCENE_FILE_VERSION = 1,
@@ -245,15 +248,34 @@ static int copyStringToPath(char outPath[VKRT_PATH_MAX], const char* value) {
     return snprintf(outPath, VKRT_PATH_MAX, "%s", value) < VKRT_PATH_MAX;
 }
 
+static int canonicalizePathForStorage(const char* path, char outPath[VKRT_PATH_MAX]) {
+    if (!path || !path[0] || !outPath) return 0;
+#ifdef _WIN32
+    return _fullpath(outPath, path, VKRT_PATH_MAX) != NULL;
+#else
+    if (pathIsAbsolute(path)) return copyStringToPath(outPath, path);
+
+    char currentDirectory[VKRT_PATH_MAX];
+    if (!getcwd(currentDirectory, sizeof(currentDirectory))) return 0;
+    return joinPath(outPath, VKRT_PATH_MAX, currentDirectory, path);
+#endif
+}
+
+static int canonicalizeSceneDirectoryForStorage(const char* scenePath, char outDirectory[VKRT_PATH_MAX]) {
+    char sceneDirectory[VKRT_PATH_MAX];
+    if (!scenePath || !scenePath[0] || !outDirectory) return 0;
+    if (!copyParentDirectory(scenePath, sceneDirectory)) return 0;
+    return canonicalizePathForStorage(sceneDirectory, outDirectory);
+}
+
 static int normalizeSceneAndSourcePaths(
     const char* scenePath,
     const char* sourcePath,
     char outSceneNormalized[VKRT_PATH_MAX],
     char outSourceNormalized[VKRT_PATH_MAX]
 ) {
-    char sceneDirectory[VKRT_PATH_MAX];
-    if (!copyParentDirectory(scenePath, sceneDirectory) || !copyStringToPath(outSceneNormalized, sceneDirectory) ||
-        !copyStringToPath(outSourceNormalized, sourcePath)) {
+    if (!canonicalizeSceneDirectoryForStorage(scenePath, outSceneNormalized) ||
+        !canonicalizePathForStorage(sourcePath, outSourceNormalized)) {
         return 0;
     }
 
@@ -320,22 +342,24 @@ static int buildRelativeStoredPath(
 static int copyPortableStoredPath(const char* scenePath, const char* sourcePath, char outStoredPath[VKRT_PATH_MAX]) {
     if (!sourcePath || !sourcePath[0] || !outStoredPath) return 0;
 
-    char resolvedSource[VKRT_PATH_MAX];
-    const char* sourceForStorage = sourcePath;
-    if (!pathIsAbsolute(sourcePath) && resolveExistingPath(sourcePath, resolvedSource, sizeof(resolvedSource)) == 0) {
-        sourceForStorage = resolvedSource;
-    }
-
-    if (!copyStringToPath(outStoredPath, sourceForStorage)) return 0;
+    if (!copyStringToPath(outStoredPath, sourcePath)) return 0;
     normalizePathSeparators(outStoredPath);
 
-    if (!scenePath || !scenePath[0] || !pathIsAbsolute(outStoredPath)) return 1;
+    if (!scenePath || !scenePath[0]) return 1;
 
     char sceneNormalized[VKRT_PATH_MAX];
     char sourceNormalized[VKRT_PATH_MAX];
-    if (!normalizeSceneAndSourcePaths(scenePath, outStoredPath, sceneNormalized, sourceNormalized)) return 1;
+    if (!normalizeSceneAndSourcePaths(scenePath, sourcePath, sceneNormalized, sourceNormalized)) {
+        if (!pathIsAbsolute(outStoredPath)) return 1;
+        return canonicalizePathForStorage(sourcePath, outStoredPath);
+    }
     if (!pathIsAbsolute(sceneNormalized) || !pathIsAbsolute(sourceNormalized)) return 1;
-    if (!pathsShareSameRoot(sceneNormalized, sourceNormalized)) return 1;
+    if (!pathsShareSameRoot(sceneNormalized, sourceNormalized)) {
+        if (!pathIsAbsolute(outStoredPath)) return 1;
+        if (!copyStringToPath(outStoredPath, sourceNormalized)) return 0;
+        normalizePathSeparators(outStoredPath);
+        return 1;
+    }
     return buildRelativeStoredPath(outStoredPath, sceneNormalized, sourceNormalized);
 }
 

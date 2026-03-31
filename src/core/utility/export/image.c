@@ -60,6 +60,7 @@ int queryRenderImageBufferByteCount(
         case RENDER_IMAGE_BUFFER_FORMAT_RGBA32F:
             return tryComputeRGBAByteCount(width, height, sizeof(float), outByteCount);
         case RENDER_IMAGE_BUFFER_FORMAT_RGBA16F:
+        case RENDER_IMAGE_BUFFER_FORMAT_RGBA16_UNORM:
             return tryComputeRGBAByteCount(width, height, sizeof(uint16_t), outByteCount);
         default:
             return 0;
@@ -375,6 +376,50 @@ static float clampf(float value, float minValue, float maxValue) {
     if (value < minValue) return minValue;
     if (value > maxValue) return maxValue;
     return value;
+}
+
+static void mulMat3Vec3(const float matrix[9], const float input[3], float output[3]) {
+    if (!matrix || !input || !output) return;
+    output[0] = (matrix[0] * input[0]) + (matrix[1] * input[1]) + (matrix[2] * input[2]);
+    output[1] = (matrix[3] * input[0]) + (matrix[4] * input[1]) + (matrix[5] * input[2]);
+    output[2] = (matrix[6] * input[0]) + (matrix[7] * input[1]) + (matrix[8] * input[2]);
+}
+
+static void adaptEqualEnergyXYZToD65(const float xyz[3], float adapted[3]) {
+    static const float kBradford[9] = {
+        0.8951f,
+        0.2664f,
+        -0.1614f,
+        -0.7502f,
+        1.7135f,
+        0.0367f,
+        0.0389f,
+        -0.0685f,
+        1.0296f,
+    };
+    static const float kBradfordInverse[9] = {
+        0.9869929f,
+        -0.1470543f,
+        0.1599627f,
+        0.4323053f,
+        0.5183603f,
+        0.0492912f,
+        -0.0085287f,
+        0.0400428f,
+        0.9684867f,
+    };
+    static const float kEqualEnergyToD65Scale[3] = {0.9413344f, 1.0404175f, 1.0895327f};
+
+    float lms[3] = {0.0f, 0.0f, 0.0f};
+    float adaptedLms[3] = {0.0f, 0.0f, 0.0f};
+
+    mulMat3Vec3(kBradford, xyz, lms);
+
+    for (uint32_t channel = 0u; channel < 3u; channel++) {
+        adaptedLms[channel] = lms[channel] * kEqualEnergyToD65Scale[channel];
+    }
+
+    mulMat3Vec3(kBradfordInverse, adaptedLms, adapted);
 }
 
 static void sanitizeLinearRGBA32FInPlace(
@@ -884,12 +929,11 @@ static int prepareLinearRenderOutput(const LinearRenderOutputRequest* request, f
 
         for (size_t pixelIndex = 0u; pixelIndex < pixelCount; pixelIndex++) {
             float* pixel = beauty + (pixelIndex * 4u);
-            float x = pixel[0];
-            float y = pixel[1];
-            float z = pixel[2];
-            pixel[0] = (3.2404542f * x) + (-1.5371385f * y) + (-0.4985314f * z);
-            pixel[1] = (-0.9692660f * x) + (1.8760108f * y) + (0.0415560f * z);
-            pixel[2] = (0.0556434f * x) + (-0.2040259f * y) + (1.0572252f * z);
+            float adaptedXYZ[3] = {0.0f, 0.0f, 0.0f};
+            adaptEqualEnergyXYZToD65(pixel, adaptedXYZ);
+            pixel[0] = (3.2404542f * adaptedXYZ[0]) + (-1.5371385f * adaptedXYZ[1]) + (-0.4985314f * adaptedXYZ[2]);
+            pixel[1] = (-0.9692660f * adaptedXYZ[0]) + (1.8760108f * adaptedXYZ[1]) + (0.0415560f * adaptedXYZ[2]);
+            pixel[2] = (0.0556434f * adaptedXYZ[0]) + (-0.2040259f * adaptedXYZ[1]) + (1.0572252f * adaptedXYZ[2]);
         }
     }
 
@@ -917,6 +961,10 @@ cleanup:
 
 int processRenderImageExportJob(RenderImageExportJob* job) {
     if (!job || !job->path || !job->beauty.pixels || job->width == 0u || job->height == 0u) return -1;
+
+    if (job->beauty.format == RENDER_IMAGE_BUFFER_FORMAT_RGBA16_UNORM && job->format != RENDER_IMAGE_FORMAT_EXR) {
+        return writeRenderImageFile(job->path, job->beauty.pixels, job->width, job->height, job->format);
+    }
 
     float* linearOutput = NULL;
     uint16_t* displayPixels = NULL;

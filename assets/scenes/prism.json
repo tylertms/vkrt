@@ -115,6 +115,7 @@
 		"rrMaxDepth":	8,
 		"toneMappingMode":	1,
 		"renderMode":	1,
+		"spectralSamplingMode":	1,
 		"exposure":	1,
 		"autoExposureEnabled":	false,
 		"environmentColor":	[0.25, 0.25, 0.25],
