@@ -284,7 +284,7 @@ uint buildSceneRayCoherenceHint(SpectralSinglePathState pathState) {
 }
 
 uint buildSceneRayCoherenceHint(SpectralHeroPathState pathState) {
-    return buildCommonSceneRayCoherenceHint(pathState.common, spectralHeroPathActive(pathState) ? 12u : 4u);
+    return buildCommonSceneRayCoherenceHint(pathState.common, 4u);
 }
 
 bool runSelectionMaskDebug(RaygenPixelState pixelState, inout RaygenFrameState frameState) {

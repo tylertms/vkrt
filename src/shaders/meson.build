@@ -10,7 +10,7 @@ shader_common_spirv_capabilities = [
 shader_programs = [
   ['rgen',                  'path/raygen.slang',                    'rgen.spv',                     'raygeneration', ['rt'],        'shaderRgen'                    ],
   ['rgenSpectralSingle',    'path/raygen_spectral_single.slang',    'rgenSpectralSingle.spv',       'raygeneration', ['rt'],        'shaderRgenSpectralSingle'      ],
-  ['rgenSpectralHero',      'path/raygen_spectral_hero.slang',   '  rgenSpectralHero.spv',          'raygeneration', ['rt'],        'shaderRgenSpectralHero'        ],
+  ['rgenSpectralHero',      'path/raygen_spectral_hero.slang',      'rgenSpectralHero.spv',         'raygeneration', ['rt'],        'shaderRgenSpectralHero'        ],
   ['rchit',                 'path/hit.slang',                       'rchit.spv',                    'closesthit',    ['rt'],        'shaderRchit'                   ],
   ['rmiss',                 'path/miss.slang',                      'rmiss.spv',                    'miss',          ['rt'],        'shaderRmiss'                   ],
   ['shadowRchit',           'path/shadow_hit.slang',                'shadowRchit.spv',              'closesthit',    ['rt'],        'shaderShadowRchit'             ],
