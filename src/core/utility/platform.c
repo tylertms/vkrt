@@ -6,6 +6,10 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#ifdef __APPLE__
+#include <mach/mach_time.h>
+#endif
+
 #ifdef _WIN32
 #include <handleapi.h>
 #include <minwindef.h>

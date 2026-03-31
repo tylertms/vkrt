@@ -1,9 +1,9 @@
 #ifndef VKRT_UTILITY_SPECTRAL_SLANG
 #define VKRT_UTILITY_SPECTRAL_SLANG
 
-#include "../sample/wavelength.slang"
+#include "../sampling/wavelength.slang"
 #include "../scene/resources.slang"
-#include "rgb2spec.slang"
+#include "./rgb2spec.slang"
 
 // References:
 // CIE XYZ fits: Wyman, Sloan, Shirley, 2013 - https://jcgt.org/published/0002/02/01/

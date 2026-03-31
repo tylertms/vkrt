@@ -1,7 +1,10 @@
 #ifndef VKRT_INTEGRATOR_PATH_WRITEBACK_SLANG
 #define VKRT_INTEGRATOR_PATH_WRITEBACK_SLANG
 
-#include "common.slang"
+#include "../../camera/viewport.slang"
+#include "../../film/tonemap.slang"
+#include "../../utility/spectral.slang"
+#include "./state.slang"
 
 void finalizeFrameAccumulation(RaygenPixelState pixelState, inout RaygenFrameState frameState) {
     if (raygenFrameDebugEarlyOut(frameState)) {
@@ -52,16 +55,9 @@ void applyFrameDebugOverrides(
     }
 }
 
-float3 mapAccumulatedRadiance(float3 accumulated, RgbPathMode mode) {
-    return mapSceneColorToDisplay(accumulated);
-}
-
-float3 mapAccumulatedRadiance(float3 accumulated, SpectralSinglePathMode mode) {
-    return mapSceneColorToDisplay(xyzToLinearSrgb(accumulated));
-}
-
-float3 mapAccumulatedRadiance(float3 accumulated, SpectralHeroPathMode mode) {
-    return mapAccumulatedRadiance(accumulated, SpectralSinglePathMode());
+float3 mapAccumulatedRadiance(float3 accumulated, uint spectralOutput) {
+    return spectralOutput != 0u ? mapSceneColorToDisplay(xyzToLinearSrgb(accumulated))
+                                : mapSceneColorToDisplay(accumulated);
 }
 
 void writeDebugFrameOutputs(RaygenPixelState pixelState, RaygenFrameState frameState) {
@@ -73,97 +69,79 @@ void writeDebugFrameOutputs(RaygenPixelState pixelState, RaygenFrameState frameS
     }
 }
 
-void writeAccumulatedFrameOutputs(RaygenPixelState pixelState, RaygenFrameState frameState, RgbPathMode mode) {
+float3 blendAccumulatedValue(float3 previousValue, float previousWeight, float3 currentValue, float currentWeight) {
+    float totalWeight = previousWeight + currentWeight;
+    if (totalWeight <= 0.0) return float3(0.0);
+    return (previousValue * previousWeight + currentValue * currentWeight) / totalWeight;
+}
+
+float3 accumulatedFrameRadiance(RaygenPixelState pixelState, RaygenFrameState frameState) {
+    return blendAccumulatedValue(
+        pixelState.previousAccumulation.xyz,
+        float(pixelState.previousSamples),
+        frameState.radiance,
+        float(pixelState.spp)
+    );
+}
+
+void writeAccumulatedFrameOutputs(RaygenPixelState pixelState, RaygenFrameState frameState, uint spectralOutput) {
     float4 previousAlbedo = albedoReadImage[pixelState.pixel];
     float4 previousNormal = normalReadImage[pixelState.pixel];
     float previousWeight = float(pixelState.previousSamples);
-    float newWeight = float(pixelState.spp);
-    float totalWeight = previousWeight + newWeight;
+    float totalWeight = previousWeight + float(pixelState.spp);
     float previousAlbedoWeight = previousAlbedo.w;
     float previousNormalWeight = previousNormal.w;
     float totalAlbedoWeight = previousAlbedoWeight + frameState.featureWeight;
     float totalNormalWeight = previousNormalWeight + frameState.featureWeight;
-    float3 accumulated = (pixelState.previousAccumulation.xyz * previousWeight + frameState.radiance * newWeight) /
-                         max(totalWeight, 1.0);
+    float3 accumulated = accumulatedFrameRadiance(pixelState, frameState);
     float3 accumulatedAlbedo =
-        totalAlbedoWeight > 0.0
-            ? (previousAlbedo.xyz * previousAlbedoWeight + frameState.albedo * frameState.featureWeight) /
-                  totalAlbedoWeight
-            : float3(0.0);
+        blendAccumulatedValue(previousAlbedo.xyz, previousAlbedoWeight, frameState.albedo, frameState.featureWeight);
     float3 accumulatedNormal =
-        totalNormalWeight > 0.0
-            ? (previousNormal.xyz * previousNormalWeight + frameState.normal * frameState.featureWeight) /
-                  totalNormalWeight
-            : float3(0.0);
+        blendAccumulatedValue(previousNormal.xyz, previousNormalWeight, frameState.normal, frameState.featureWeight);
 
     accumulationWriteImage[pixelState.pixel] = float4(accumulated, totalWeight);
     albedoWriteImage[pixelState.pixel] = float4(accumulatedAlbedo, totalAlbedoWeight);
     normalWriteImage[pixelState.pixel] = float4(accumulatedNormal, totalNormalWeight);
-    outputImage[pixelState.pixel] = float4(mapAccumulatedRadiance(accumulated, mode), 1.0);
+    outputImage[pixelState.pixel] = float4(mapAccumulatedRadiance(accumulated, spectralOutput), 1.0);
 }
 
-void writeAccumulatedFrameOutputs(
-    RaygenPixelState pixelState,
-    RaygenFrameState frameState,
-    SpectralSinglePathMode mode
-) {
-    float4 previousAlbedo = albedoReadImage[pixelState.pixel];
-    float4 previousNormal = normalReadImage[pixelState.pixel];
-    float previousWeight = float(pixelState.previousSamples);
-    float newWeight = float(pixelState.spp);
-    float totalWeight = previousWeight + newWeight;
-    float previousAlbedoWeight = previousAlbedo.w;
-    float previousNormalWeight = previousNormal.w;
-    float totalAlbedoWeight = previousAlbedoWeight + frameState.featureWeight;
-    float totalNormalWeight = previousNormalWeight + frameState.featureWeight;
-    float3 accumulated = (pixelState.previousAccumulation.xyz * previousWeight + frameState.radiance * newWeight) /
-                         max(totalWeight, 1.0);
-    float3 accumulatedAlbedo =
-        totalAlbedoWeight > 0.0
-            ? (previousAlbedo.xyz * previousAlbedoWeight + frameState.albedo * frameState.featureWeight) /
-                  totalAlbedoWeight
-            : float3(0.0);
-    float3 accumulatedNormal =
-        totalNormalWeight > 0.0
-            ? (previousNormal.xyz * previousNormalWeight + frameState.normal * frameState.featureWeight) /
-                  totalNormalWeight
-            : float3(0.0);
-
-    accumulationWriteImage[pixelState.pixel] = float4(accumulated, totalWeight);
-    albedoWriteImage[pixelState.pixel] = float4(accumulatedAlbedo, totalAlbedoWeight);
-    normalWriteImage[pixelState.pixel] = float4(accumulatedNormal, totalNormalWeight);
-    outputImage[pixelState.pixel] = float4(mapAccumulatedRadiance(accumulated, mode), 1.0);
+void writeRgbAccumulatedFrameOutputs(RaygenPixelState pixelState, RaygenFrameState frameState) {
+    writeAccumulatedFrameOutputs(pixelState, frameState, 0u);
 }
 
-void writeAccumulatedFrameOutputs(RaygenPixelState pixelState, RaygenFrameState frameState, SpectralHeroPathMode mode) {
-    writeAccumulatedFrameOutputs(pixelState, frameState, SpectralSinglePathMode());
+void writeSpectralSingleAccumulatedFrameOutputs(RaygenPixelState pixelState, RaygenFrameState frameState) {
+    writeAccumulatedFrameOutputs(pixelState, frameState, 1u);
 }
 
-void writeFrameOutputs(RaygenPixelState pixelState, RaygenFrameState frameState, RgbPathMode mode) {
+void writeSpectralHeroAccumulatedFrameOutputs(RaygenPixelState pixelState, RaygenFrameState frameState) {
+    writeAccumulatedFrameOutputs(pixelState, frameState, 1u);
+}
+
+void writeRgbFrameOutputs(RaygenPixelState pixelState, RaygenFrameState frameState) {
     if (raygenFrameDebugEarlyOut(frameState)) {
         writeDebugFrameOutputs(pixelState, frameState);
         return;
     }
 
-    writeAccumulatedFrameOutputs(pixelState, frameState, mode);
+    writeRgbAccumulatedFrameOutputs(pixelState, frameState);
 }
 
-void writeFrameOutputs(RaygenPixelState pixelState, RaygenFrameState frameState, SpectralSinglePathMode mode) {
+void writeSpectralSingleFrameOutputs(RaygenPixelState pixelState, RaygenFrameState frameState) {
     if (raygenFrameDebugEarlyOut(frameState)) {
         writeDebugFrameOutputs(pixelState, frameState);
         return;
     }
 
-    writeAccumulatedFrameOutputs(pixelState, frameState, mode);
+    writeSpectralSingleAccumulatedFrameOutputs(pixelState, frameState);
 }
 
-void writeFrameOutputs(RaygenPixelState pixelState, RaygenFrameState frameState, SpectralHeroPathMode mode) {
+void writeSpectralHeroFrameOutputs(RaygenPixelState pixelState, RaygenFrameState frameState) {
     if (raygenFrameDebugEarlyOut(frameState)) {
         writeDebugFrameOutputs(pixelState, frameState);
         return;
     }
 
-    writeAccumulatedFrameOutputs(pixelState, frameState, mode);
+    writeSpectralHeroAccumulatedFrameOutputs(pixelState, frameState);
 }
 
 #endif

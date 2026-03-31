@@ -1,7 +1,7 @@
 #include "IconsFontAwesome6.h"
 #include "common.h"
 #include "config.h"
-#include "debug.h"
+#include "platform.h"
 #include "sections.h"
 #include "session.h"
 #include "vkrt.h"

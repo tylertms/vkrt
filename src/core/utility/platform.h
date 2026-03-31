@@ -46,6 +46,8 @@ enum {
     VKRT_MUTEX_PLAIN = 0,
 };
 
+uint64_t getMicroseconds(void);
+
 int vkrtMutexInit(VKRT_Mutex* mutex, int type);
 void vkrtMutexDestroy(VKRT_Mutex* mutex);
 int vkrtMutexLock(VKRT_Mutex* mutex);

@@ -1,5 +1,6 @@
 #include "config.h"
 #include "debug.h"
+#include "platform.h"
 #include "scene.h"
 #include "vkrt_types.h"
 #include "vulkan/vulkan_core.h"

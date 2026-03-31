@@ -9,6 +9,7 @@
 #include "images.h"
 #include "instance.h"
 #include "pipeline.h"
+#include "platform.h"
 #include "procs.h"
 #include "rebuild.h"
 #include "scene.h"
@@ -21,12 +22,12 @@
 #include "validation.h"
 #include "vkrt_internal.h"
 #include "vkrt_types.h"
-#include "vulkan/vulkan_core.h"
 
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <vulkan/vulkan_core.h>
 
 #ifdef _WIN32
 #define GLFW_EXPOSE_NATIVE_WIN32

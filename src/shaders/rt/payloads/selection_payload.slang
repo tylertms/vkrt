@@ -1,0 +1,18 @@
+#ifndef VKRT_RT_PAYLOAD_SELECTION_SLANG
+#define VKRT_RT_PAYLOAD_SELECTION_SLANG
+
+struct SelectionPayload {
+    uint didHit;
+
+    __init() {
+        didHit = 0u;
+    }
+
+    [mutating] void setMiss() { didHit = 0u; }
+
+        [mutating] void setHit() {
+        didHit = 1u;
+    }
+};
+
+#endif

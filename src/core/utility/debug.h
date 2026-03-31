@@ -46,8 +46,6 @@ void vkrtSetInfoLoggingEnabled(int enabled);
     } while (0)
 #define LOG_ERROR(...) VKRT_LOG_LINE(stderr, "[ERROR]", __VA_ARGS__)
 
-uint64_t getMicroseconds(void);
-
 #if defined(__GNUC__) || defined(__clang__)
 #undef VKRT_PRINTF_ATTRIBUTE
 #endif

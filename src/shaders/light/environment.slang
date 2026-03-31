@@ -4,7 +4,7 @@
 #include "../bsdf/base.slang"
 #include "../scene/resources.slang"
 
-static const uint kEnvironmentSamplerRepeatUClampV = 1u;
+static const uint VKRT_ENVIRONMENT_SAMPLER_REPEAT_U_CLAMP_V = 1u;
 
 float2 environmentLatLongUV(float3 worldDir) {
     float3 dir = normalize(worldDir);
@@ -21,7 +21,7 @@ float3 sampleEnvironmentRadiance(float3 worldDir) {
     uint textureIndex = NonUniformResourceIndex(scene.environmentTextureIndex);
     float3 radiance =
         sceneTextures[textureIndex]
-            .SampleLevel(textureSamplers[kEnvironmentSamplerRepeatUClampV], environmentLatLongUV(worldDir), 0.0)
+            .SampleLevel(textureSamplers[VKRT_ENVIRONMENT_SAMPLER_REPEAT_U_CLAMP_V], environmentLatLongUV(worldDir), 0.0)
             .xyz;
     return radiance * scene.environmentLight.w;
 }

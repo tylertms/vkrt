@@ -2,6 +2,7 @@
 
 #include "cli/cli.h"
 #include "debug.h"
+#include "platform.h"
 #include "vkrt.h"
 #include "vkrt_types.h"
 
