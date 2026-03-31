@@ -122,9 +122,12 @@ static void drawSceneWindowContent(VKRT* vkrt, Session* session) {
     inspectorDrawSceneOverviewSection(vkrt);
     ImGui_Dummy((ImVec2){0.0f, kInspectorControlSpacing});
     ImGui_SeparatorText(ICON_FA_CUBES " Scene");
+    VKRT_RenderStatusSnapshot status = {0};
+    VKRT_getRenderStatus(vkrt, &status);
     const char* currentScenePath = sessionGetCurrentScenePath(session);
     bool hasCurrentScenePath = (bool)((currentScenePath != NULL) && (currentScenePath[0] != '\0'));
-    ImGui_BeginDisabled((bool)!hasCurrentScenePath);
+    bool renderModeActive = VKRT_renderStatusIsActive(&status) != 0;
+    ImGui_BeginDisabled((bool)!hasCurrentScenePath || renderModeActive);
     if (inspectorPaddedButton("Reset Scene")) {
         sessionQueueSceneOpen(session, currentScenePath);
     }

@@ -333,8 +333,33 @@ typedef enum EditorMenuAction {
     EDITOR_MENU_ACTION_RESET_ACCUMULATION,
 } EditorMenuAction;
 
-static void queueEditorMenuAction(Session* session, EditorMenuAction action, const char* currentScenePath) {
+static bool editorMenuActionRequiresInactiveRender(EditorMenuAction action) {
+    switch (action) {
+        case EDITOR_MENU_ACTION_OPEN_SCENE:
+        case EDITOR_MENU_ACTION_RESET_SCENE:
+        case EDITOR_MENU_ACTION_SAVE_SCENE:
+        case EDITOR_MENU_ACTION_SAVE_SCENE_AS:
+        case EDITOR_MENU_ACTION_IMPORT_MESH:
+        case EDITOR_MENU_ACTION_LOAD_ENVIRONMENT:
+        case EDITOR_MENU_ACTION_CLEAR_ENVIRONMENT:
+        case EDITOR_MENU_ACTION_RESET_ACCUMULATION:
+            return true;
+        case EDITOR_MENU_ACTION_SAVE_RENDER:
+        default:
+            return false;
+    }
+}
+
+static void queueEditorMenuAction(
+    Session* session,
+    const VKRT_RenderStatusSnapshot* status,
+    EditorMenuAction action,
+    const char* currentScenePath
+) {
     if (!session) return;
+    if (status && VKRT_renderStatusIsActive(status) && editorMenuActionRequiresInactiveRender(action)) {
+        return;
+    }
 
     switch (action) {
         case EDITOR_MENU_ACTION_OPEN_SCENE:
@@ -388,30 +413,31 @@ static void applyMainMenuShortcuts(
 
     bool haveCurrentScenePath = (currentScenePath && currentScenePath[0]) != 0;
     bool canSaveRender = (status && VKRT_renderStatusIsComplete(status)) != 0;
+    bool renderModeActive = (status && VKRT_renderStatusIsActive(status)) != 0;
 
-    if (ImGui_IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_O)) {
-        queueEditorMenuAction(session, EDITOR_MENU_ACTION_OPEN_SCENE, currentScenePath);
+    if (!renderModeActive && ImGui_IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_O)) {
+        queueEditorMenuAction(session, status, EDITOR_MENU_ACTION_OPEN_SCENE, currentScenePath);
     }
-    if (haveCurrentScenePath && ImGui_IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_S)) {
-        queueEditorMenuAction(session, EDITOR_MENU_ACTION_SAVE_SCENE, currentScenePath);
+    if (!renderModeActive && haveCurrentScenePath && ImGui_IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_S)) {
+        queueEditorMenuAction(session, status, EDITOR_MENU_ACTION_SAVE_SCENE, currentScenePath);
     }
-    if (ImGui_IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S)) {
-        queueEditorMenuAction(session, EDITOR_MENU_ACTION_SAVE_SCENE_AS, currentScenePath);
+    if (!renderModeActive && ImGui_IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S)) {
+        queueEditorMenuAction(session, status, EDITOR_MENU_ACTION_SAVE_SCENE_AS, currentScenePath);
     }
-    if (ImGui_IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_I)) {
-        queueEditorMenuAction(session, EDITOR_MENU_ACTION_IMPORT_MESH, currentScenePath);
+    if (!renderModeActive && ImGui_IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_I)) {
+        queueEditorMenuAction(session, status, EDITOR_MENU_ACTION_IMPORT_MESH, currentScenePath);
     }
-    if (ImGui_IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_E)) {
-        queueEditorMenuAction(session, EDITOR_MENU_ACTION_LOAD_ENVIRONMENT, currentScenePath);
+    if (!renderModeActive && ImGui_IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_E)) {
+        queueEditorMenuAction(session, status, EDITOR_MENU_ACTION_LOAD_ENVIRONMENT, currentScenePath);
     }
-    if (canClearEnvironment && ImGui_IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiMod_Alt | ImGuiKey_E)) {
-        queueEditorMenuAction(session, EDITOR_MENU_ACTION_CLEAR_ENVIRONMENT, currentScenePath);
+    if (!renderModeActive && canClearEnvironment && ImGui_IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiMod_Alt | ImGuiKey_E)) {
+        queueEditorMenuAction(session, status, EDITOR_MENU_ACTION_CLEAR_ENVIRONMENT, currentScenePath);
     }
     if (canSaveRender && ImGui_IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_R)) {
-        queueEditorMenuAction(session, EDITOR_MENU_ACTION_SAVE_RENDER, currentScenePath);
+        queueEditorMenuAction(session, status, EDITOR_MENU_ACTION_SAVE_RENDER, currentScenePath);
     }
     if (status && ImGui_IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_R)) {
-        queueEditorMenuAction(session, EDITOR_MENU_ACTION_RESET_ACCUMULATION, currentScenePath);
+        queueEditorMenuAction(session, status, EDITOR_MENU_ACTION_RESET_ACCUMULATION, currentScenePath);
     }
 }
 
@@ -423,40 +449,42 @@ static void drawFileMenu(
 ) {
     bool haveCurrentScenePath = (currentScenePath && currentScenePath[0]) != 0;
     bool canSaveRender = (status && VKRT_renderStatusIsComplete(status)) != 0;
+    bool renderModeActive = (status && VKRT_renderStatusIsActive(status)) != 0;
+    bool canModifyScene = !renderModeActive;
 
     if (!ImGui_BeginMenu("File")) return;
 
-    if (ImGui_MenuItemEx("Open", "\tCtrl+O", false, true)) {
-        queueEditorMenuAction(session, EDITOR_MENU_ACTION_OPEN_SCENE, currentScenePath);
+    if (ImGui_MenuItemEx("Open", "\tCtrl+O", false, canModifyScene)) {
+        queueEditorMenuAction(session, status, EDITOR_MENU_ACTION_OPEN_SCENE, currentScenePath);
     }
-    if (ImGui_MenuItemEx("Reset Scene", NULL, false, haveCurrentScenePath)) {
-        queueEditorMenuAction(session, EDITOR_MENU_ACTION_RESET_SCENE, currentScenePath);
+    if (ImGui_MenuItemEx("Reset Scene", NULL, false, canModifyScene && haveCurrentScenePath)) {
+        queueEditorMenuAction(session, status, EDITOR_MENU_ACTION_RESET_SCENE, currentScenePath);
     }
-    if (ImGui_MenuItemEx("Save", "\tCtrl+S", false, haveCurrentScenePath)) {
-        queueEditorMenuAction(session, EDITOR_MENU_ACTION_SAVE_SCENE, currentScenePath);
+    if (ImGui_MenuItemEx("Save", "\tCtrl+S", false, canModifyScene && haveCurrentScenePath)) {
+        queueEditorMenuAction(session, status, EDITOR_MENU_ACTION_SAVE_SCENE, currentScenePath);
     }
-    if (ImGui_MenuItemEx("Save As", "\tCtrl+Shift+S", false, true)) {
-        queueEditorMenuAction(session, EDITOR_MENU_ACTION_SAVE_SCENE_AS, currentScenePath);
+    if (ImGui_MenuItemEx("Save As", "\tCtrl+Shift+S", false, canModifyScene)) {
+        queueEditorMenuAction(session, status, EDITOR_MENU_ACTION_SAVE_SCENE_AS, currentScenePath);
     }
 
     ImGui_Separator();
     if (ImGui_BeginMenu("Import")) {
-        if (ImGui_MenuItemEx("Mesh", "\tCtrl+I", false, true)) {
-            queueEditorMenuAction(session, EDITOR_MENU_ACTION_IMPORT_MESH, currentScenePath);
+        if (ImGui_MenuItemEx("Mesh", "\tCtrl+I", false, canModifyScene)) {
+            queueEditorMenuAction(session, status, EDITOR_MENU_ACTION_IMPORT_MESH, currentScenePath);
         }
         ImGui_EndMenu();
     }
     if (ImGui_BeginMenu("Environment")) {
-        if (ImGui_MenuItemEx("Load", "\tCtrl+Shift+E", false, true)) {
-            queueEditorMenuAction(session, EDITOR_MENU_ACTION_LOAD_ENVIRONMENT, currentScenePath);
+        if (ImGui_MenuItemEx("Load", "\tCtrl+Shift+E", false, canModifyScene)) {
+            queueEditorMenuAction(session, status, EDITOR_MENU_ACTION_LOAD_ENVIRONMENT, currentScenePath);
         }
-        if (ImGui_MenuItemEx("Clear", "\tCtrl+Alt+E", false, canClearEnvironment)) {
-            queueEditorMenuAction(session, EDITOR_MENU_ACTION_CLEAR_ENVIRONMENT, currentScenePath);
+        if (ImGui_MenuItemEx("Clear", "\tCtrl+Alt+E", false, canModifyScene && canClearEnvironment)) {
+            queueEditorMenuAction(session, status, EDITOR_MENU_ACTION_CLEAR_ENVIRONMENT, currentScenePath);
         }
         ImGui_EndMenu();
     }
     if (ImGui_MenuItemEx("Save Render", "\tCtrl+Shift+R", false, canSaveRender)) {
-        queueEditorMenuAction(session, EDITOR_MENU_ACTION_SAVE_RENDER, currentScenePath);
+        queueEditorMenuAction(session, status, EDITOR_MENU_ACTION_SAVE_RENDER, currentScenePath);
     }
     ImGui_EndMenu();
 }
@@ -465,7 +493,7 @@ static void drawViewMenu(Session* session, const VKRT_RenderStatusSnapshot* stat
     if (!ImGui_BeginMenu("View")) return;
 
     if (ImGui_MenuItemEx("Reset Accumulation", "\tCtrl+R", false, status != NULL)) {
-        queueEditorMenuAction(session, EDITOR_MENU_ACTION_RESET_ACCUMULATION, currentScenePath);
+        queueEditorMenuAction(session, status, EDITOR_MENU_ACTION_RESET_ACCUMULATION, currentScenePath);
     }
     ImGui_Separator();
     ImGui_MenuItemEx("Panels", NULL, false, false);
