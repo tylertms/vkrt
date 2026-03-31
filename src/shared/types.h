@@ -32,12 +32,12 @@ VKRT_SHARED_STRUCT(Vertex, {
 })
 
 VKRT_SHARED_STRUCT(ShaderVertex, {
-    float3 position;
+    float4 position;
+    float2 texcoord0;
+    float2 texcoord1;
     uint packedNormal;
     uint packedTangent;
     uint packedColor;
-    uint texcoord0;
-    uint texcoord1;
 })
 
 VKRT_SHARED_STRUCT(MeshInfo, {

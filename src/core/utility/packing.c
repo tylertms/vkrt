@@ -149,8 +149,8 @@ ShaderVertex packShaderVertex(const Vertex* vertex) {
     packed.packedNormal = packOctNormal32(vertex->normal);
     packed.packedTangent = packTangent32(vertex->tangent);
     packed.packedColor = packColorRGBA8(vertex->color);
-    packed.texcoord0 = packHalf2(vertex->texcoord0);
-    packed.texcoord1 = packHalf2(vertex->texcoord1);
+    memcpy(packed.texcoord0, vertex->texcoord0, sizeof(packed.texcoord0));
+    memcpy(packed.texcoord1, vertex->texcoord1, sizeof(packed.texcoord1));
 
     return packed;
 }

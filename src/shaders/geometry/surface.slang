@@ -140,18 +140,8 @@ SurfaceTextureData evaluateSurfaceTextureData(MeshInfo mesh, uint primitiveIndex
             unpackColorRGBA8(vertex2.packedColor),
             barycentrics
         ),
-        interpolateTriangleFloat2(
-            unpackHalf2(vertex0.texcoord0),
-            unpackHalf2(vertex1.texcoord0),
-            unpackHalf2(vertex2.texcoord0),
-            barycentrics
-        ),
-        interpolateTriangleFloat2(
-            unpackHalf2(vertex0.texcoord1),
-            unpackHalf2(vertex1.texcoord1),
-            unpackHalf2(vertex2.texcoord1),
-            barycentrics
-        )
+        interpolateTriangleFloat2(vertex0.texcoord0, vertex1.texcoord0, vertex2.texcoord0, barycentrics),
+        interpolateTriangleFloat2(vertex0.texcoord1, vertex1.texcoord1, vertex2.texcoord1, barycentrics)
     );
 }
 
@@ -214,18 +204,8 @@ SurfaceShadingData reconstructSurfaceShading(
             unpackColorRGBA8(vertex2.packedColor),
             barycentrics
         ),
-        interpolateTriangleFloat2(
-            unpackHalf2(vertex0.texcoord0),
-            unpackHalf2(vertex1.texcoord0),
-            unpackHalf2(vertex2.texcoord0),
-            barycentrics
-        ),
-        interpolateTriangleFloat2(
-            unpackHalf2(vertex0.texcoord1),
-            unpackHalf2(vertex1.texcoord1),
-            unpackHalf2(vertex2.texcoord1),
-            barycentrics
-        )
+        interpolateTriangleFloat2(vertex0.texcoord0, vertex1.texcoord0, vertex2.texcoord0, barycentrics),
+        interpolateTriangleFloat2(vertex0.texcoord1, vertex1.texcoord1, vertex2.texcoord1, barycentrics)
     );
 
     return hit;
