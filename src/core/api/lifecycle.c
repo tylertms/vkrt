@@ -449,6 +449,10 @@ static VKRT_Result createPipelineBackendResources(VKRT* vkrt) {
     uint64_t stepStartTime = 0u;
 
     stepStartTime = getMicroseconds();
+    if (createCommandPool(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    logStepTime("Command pool created", stepStartTime);
+
+    stepStartTime = getMicroseconds();
     if (vkrtEnsureTextureBindings(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
     logStepTime("Texture bindings ensured", stepStartTime);
 
