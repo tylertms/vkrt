@@ -429,28 +429,78 @@ static VKRT_Result createInstanceAndDevice(VKRT* vkrt, const VKRT_CreateInfo* cr
 
 static VKRT_Result createRenderBackendResources(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+    uint64_t stepStartTime = 0u;
 
     if (!vkrt->runtime.headless) {
         glfwPollEvents();
+        stepStartTime = getMicroseconds();
         if (createSwapChain(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+        logStepTime("Swapchain created", stepStartTime);
+
+        stepStartTime = getMicroseconds();
         if (createImageViews(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+        logStepTime("Swapchain image views created", stepStartTime);
     }
 
+    stepStartTime = getMicroseconds();
     if (createCommandPool(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    logStepTime("Command pool created", stepStartTime);
+
+    stepStartTime = getMicroseconds();
     if (vkrtEnsureTextureBindings(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    logStepTime("Texture bindings ensured", stepStartTime);
+
+    stepStartTime = getMicroseconds();
     if (createDescriptorSetLayout(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    logStepTime("Descriptor set layout created", stepStartTime);
+
+    stepStartTime = getMicroseconds();
     if (createRayTracingPipeline(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    logStepTime("Main RT pipeline created", stepStartTime);
+
+    stepStartTime = getMicroseconds();
     if (createSelectionRayTracingPipeline(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    logStepTime("Selection RT pipeline created", stepStartTime);
+
+    stepStartTime = getMicroseconds();
     if (createComputePipeline(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    logStepTime("Compute pipeline created", stepStartTime);
+
+    stepStartTime = getMicroseconds();
     if (createGPUImages(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    logStepTime("GPU images created", stepStartTime);
+
+    stepStartTime = getMicroseconds();
     if (createSceneUniform(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    logStepTime("Scene uniform created", stepStartTime);
+
+    stepStartTime = getMicroseconds();
     if (createRGB2SpecResources(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    logStepTime("RGB2Spec resources created", stepStartTime);
+
+    stepStartTime = getMicroseconds();
     if (createDescriptorPool(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    logStepTime("Descriptor pool created", stepStartTime);
+
+    stepStartTime = getMicroseconds();
     if (createDescriptorSet(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    logStepTime("Descriptor set created", stepStartTime);
+
+    stepStartTime = getMicroseconds();
     if (createShaderBindingTable(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    logStepTime("Main shader binding table created", stepStartTime);
+
+    stepStartTime = getMicroseconds();
     if (createSelectionShaderBindingTable(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    logStepTime("Selection shader binding table created", stepStartTime);
+
+    stepStartTime = getMicroseconds();
     if (createCommandBuffers(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    logStepTime("Command buffers created", stepStartTime);
+
+    stepStartTime = getMicroseconds();
     if (createSyncObjects(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    logStepTime("Synchronization objects created", stepStartTime);
 
     return VKRT_SUCCESS;
 }

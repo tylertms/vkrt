@@ -2,6 +2,7 @@
 #include "buffer.h"
 #include "debug.h"
 #include "device.h"
+#include "platform.h"
 #include "vkrt_internal.h"
 #include "vkrt_types.h"
 #include "vulkan/vulkan_core.h"
@@ -178,6 +179,7 @@ static void buildMainRaygenRegions(VKRT* vkrt) {
 
 static VKRT_Result createShaderBindingTableForPipeline(
     VKRT* vkrt,
+    const char* label,
     VkPipeline pipeline,
     uint32_t raygenGroupCount,
     uint32_t missGroupCount,
@@ -193,6 +195,7 @@ static VKRT_Result createShaderBindingTableForPipeline(
     }
 
     const uint32_t groupCount = raygenGroupCount + missGroupCount + hitGroupCount;
+    uint64_t handlesStartTime = getMicroseconds();
 
     VkPhysicalDeviceRayTracingPipelinePropertiesKHR rayTracingPipelineProperties = {0};
     rayTracingPipelineProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
@@ -219,7 +222,16 @@ static VKRT_Result createShaderBindingTableForPipeline(
         ) != VKRT_SUCCESS) {
         return VKRT_ERROR_OPERATION_FAILED;
     }
+    LOG_TRACE(
+        "%s SBT handles fetched and staged in %.3f ms (%u groups, stride %llu, size %llu bytes)",
+        label ? label : "RT",
+        (double)(getMicroseconds() - handlesStartTime) / 1e3,
+        groupCount,
+        (unsigned long long)stride,
+        (unsigned long long)sbtSize
+    );
 
+    uint64_t uploadStartTime = getMicroseconds();
     if (createShaderBindingTableDeviceBuffer(vkrt, sbtSize, &output) != VKRT_SUCCESS) {
         destroyShaderBindingTableStageResources(vkrt, stageBuffer, stageMemory);
         return VKRT_ERROR_OPERATION_FAILED;
@@ -243,6 +255,11 @@ static VKRT_Result createShaderBindingTableForPipeline(
         hitGroupCount,
         output.tables
     );
+    LOG_TRACE(
+        "%s SBT uploaded in %.3f ms",
+        label ? label : "RT",
+        (double)(getMicroseconds() - uploadStartTime) / 1e3
+    );
 
     return VKRT_SUCCESS;
 }
@@ -252,6 +269,7 @@ VKRT_Result createShaderBindingTable(VKRT* vkrt) {
 
     VKRT_Result result = createShaderBindingTableForPipeline(
         vkrt,
+        "Main RT",
         vkrt->core.rayTracingPipeline,
         VKRT_MAIN_RAYGEN_GROUP_COUNT,
         2u,
@@ -275,6 +293,7 @@ VKRT_Result createSelectionShaderBindingTable(VKRT* vkrt) {
 
     VKRT_Result result = createShaderBindingTableForPipeline(
         vkrt,
+        "Selection RT",
         vkrt->core.selectionRayTracingPipeline,
         1u,
         1u,

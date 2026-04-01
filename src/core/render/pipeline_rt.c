@@ -1,7 +1,6 @@
 #include "debug.h"
 #include "pipeline.h"
 #include "pipeline_internal.h"
-#include "platform.h"
 #include "shaders.h"
 #include "vkrt_internal.h"
 #include "vkrt_types.h"
@@ -9,6 +8,33 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <vulkan/vulkan_core.h>
+
+static VkResult createRayTracingPipelineTracked(
+    VKRT* vkrt,
+    const char* label,
+    const VkRayTracingPipelineCreateInfoKHR* pipelineCreateInfo,
+    VkPipeline* outPipeline
+) {
+    if (!vkrt || !label || !pipelineCreateInfo || !outPipeline) return VK_ERROR_INITIALIZATION_FAILED;
+
+    uint64_t createStartTime = getMicroseconds();
+    VkResult result = vkrt->core.procs.vkCreateRayTracingPipelinesKHR(
+        vkrt->core.device,
+        VK_NULL_HANDLE,
+        VK_NULL_HANDLE,
+        1,
+        pipelineCreateInfo,
+        NULL,
+        outPipeline
+    );
+    LOG_TRACE(
+        "%s vkCreateRayTracingPipelinesKHR returned %d in %.3f ms (synchronous)",
+        label,
+        (int)result,
+        (double)(getMicroseconds() - createStartTime) / 1e3
+    );
+    return result;
+}
 
 VKRT_Result createRayTracingPipeline(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
@@ -20,9 +46,11 @@ VKRT_Result createRayTracingPipeline(VKRT* vkrt) {
     if (createRayTracingPipelineLayout(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
 
     RayTracingShaderModules modules = {0};
+    uint64_t shaderModuleStartTime = getMicroseconds();
     if (createRayTracingShaderModules(vkrt, &shaderVariant, &modules) != VKRT_SUCCESS) {
         return VKRT_ERROR_SHADER_COMPILATION_FAILED;
     }
+    LOG_TRACE("Main RT shader modules created in %.3f ms", (double)(getMicroseconds() - shaderModuleStartTime) / 1e3);
 
     VkPipelineShaderStageCreateInfo shaderStages[] = {
         makePipelineShaderStageInfo(VK_SHADER_STAGE_RAYGEN_BIT_KHR, modules.rayGen[VKRT_MAIN_RAYGEN_GROUP_RGB]),
@@ -66,13 +94,10 @@ VKRT_Result createRayTracingPipeline(VKRT* vkrt) {
         .pDynamicState = &dynamicStateInfo,
     };
 
-    if (vkrt->core.procs.vkCreateRayTracingPipelinesKHR(
-            vkrt->core.device,
-            VK_NULL_HANDLE,
-            VK_NULL_HANDLE,
-            1,
+    if (createRayTracingPipelineTracked(
+            vkrt,
+            "Main RT",
             &pipelineCreateInfo,
-            NULL,
             &vkrt->core.rayTracingPipeline
         ) != VK_SUCCESS) {
         LOG_ERROR("Failed to create ray tracing pipeline");
@@ -80,16 +105,18 @@ VKRT_Result createRayTracingPipeline(VKRT* vkrt) {
         return VKRT_ERROR_OPERATION_FAILED;
     }
 
+    uint64_t stackSizeStartTime = getMicroseconds();
     if (storeMainRayTracingStackSizes(vkrt, vkrt->core.rayTracingPipeline) != VKRT_SUCCESS) {
         destroyRayTracingShaderModules(vkrt, &modules);
         vkDestroyPipeline(vkrt->core.device, vkrt->core.rayTracingPipeline, NULL);
         vkrt->core.rayTracingPipeline = VK_NULL_HANDLE;
         return VKRT_ERROR_OPERATION_FAILED;
     }
+    LOG_TRACE("Main RT stack sizes queried in %.3f ms", (double)(getMicroseconds() - stackSizeStartTime) / 1e3);
 
     destroyRayTracingShaderModules(vkrt, &modules);
-    LOG_INFO(
-        "Ray tracing pipeline created. Variant: %s, SER hint: %s, Shader Stages: %u, Shader Groups: %u, in %.3f ms",
+    LOG_TRACE(
+        "Main RT pipeline created. Variant: %s, SER hint: %s, Shader Stages: %u, Shader Groups: %u, in %.3f ms",
         useSerShaders ? "SER" : "default",
         vkrt->core.serReorderingHintMode == VK_RAY_TRACING_INVOCATION_REORDER_MODE_REORDER_EXT ? "reorder" : "none",
         (uint32_t)VKRT_ARRAY_COUNT(shaderStages),
@@ -110,12 +137,17 @@ VKRT_Result createSelectionRayTracingPipeline(VKRT* vkrt) {
     VkShaderModule closestHitModule = VK_NULL_HANDLE;
     VkShaderModule anyHitModule = VK_NULL_HANDLE;
 
+    uint64_t shaderModuleStartTime = getMicroseconds();
     if (createShaderModule(vkrt, shaderSelectRgenData, shaderSelectRgenSize, &rayGenModule) != VKRT_SUCCESS ||
         createShaderModule(vkrt, shaderSelectRmissData, shaderSelectRmissSize, &missModule) != VKRT_SUCCESS ||
         createShaderModule(vkrt, shaderSelectRchitData, shaderSelectRchitSize, &closestHitModule) != VKRT_SUCCESS ||
         createShaderModule(vkrt, shaderSelectRahitData, shaderSelectRahitSize, &anyHitModule) != VKRT_SUCCESS) {
         goto cleanup;
     }
+    LOG_TRACE(
+        "Selection RT shader modules created in %.3f ms",
+        (double)(getMicroseconds() - shaderModuleStartTime) / 1e3
+    );
 
     VkPipelineShaderStageCreateInfo shaderStages[] = {
         makePipelineShaderStageInfo(VK_SHADER_STAGE_RAYGEN_BIT_KHR, rayGenModule),
@@ -142,27 +174,26 @@ VKRT_Result createSelectionRayTracingPipeline(VKRT* vkrt) {
         .pDynamicState = &dynamicStateInfo,
     };
 
-    if (vkrt->core.procs.vkCreateRayTracingPipelinesKHR(
-            vkrt->core.device,
-            VK_NULL_HANDLE,
-            VK_NULL_HANDLE,
-            1,
+    if (createRayTracingPipelineTracked(
+            vkrt,
+            "Selection RT",
             &pipelineCreateInfo,
-            NULL,
             &vkrt->core.selectionRayTracingPipeline
         ) != VK_SUCCESS) {
         LOG_ERROR("Failed to create selection ray tracing pipeline");
         goto cleanup;
     }
 
+    uint64_t stackSizeStartTime = getMicroseconds();
     if (storeSelectionRayTracingStackSize(vkrt, vkrt->core.selectionRayTracingPipeline) != VKRT_SUCCESS) {
         vkDestroyPipeline(vkrt->core.device, vkrt->core.selectionRayTracingPipeline, NULL);
         vkrt->core.selectionRayTracingPipeline = VK_NULL_HANDLE;
         goto cleanup;
     }
+    LOG_TRACE("Selection RT stack size queried in %.3f ms", (double)(getMicroseconds() - stackSizeStartTime) / 1e3);
 
     result = VKRT_SUCCESS;
-    LOG_INFO("Selection ray tracing pipeline created in %.3f ms", (double)(getMicroseconds() - startTime) / 1e3);
+    LOG_TRACE("Selection RT pipeline created in %.3f ms", (double)(getMicroseconds() - startTime) / 1e3);
 
 cleanup:
     if (rayGenModule != VK_NULL_HANDLE) vkDestroyShaderModule(vkrt->core.device, rayGenModule, NULL);
