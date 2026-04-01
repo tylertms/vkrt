@@ -17,6 +17,27 @@ typedef struct ShaderBindingTableBuildOutput {
     VkStridedDeviceAddressRegionKHR* tables;
 } ShaderBindingTableBuildOutput;
 
+static void logShaderBindingTableHandlesReady(
+    const char* label,
+    uint64_t startTime,
+    uint32_t groupCount,
+    VkDeviceSize stride,
+    VkDeviceSize sbtSize
+) {
+    LOG_TRACE(
+        "%s SBT handles fetched and staged in %.3f ms (%u groups, stride %llu, size %llu bytes)",
+        label ? label : "RT",
+        (double)(getMicroseconds() - startTime) / 1e3,
+        groupCount,
+        (unsigned long long)stride,
+        (unsigned long long)sbtSize
+    );
+}
+
+static void logShaderBindingTableUploaded(const char* label, uint64_t startTime) {
+    LOG_TRACE("%s SBT uploaded in %.3f ms", label ? label : "RT", (double)(getMicroseconds() - startTime) / 1e3);
+}
+
 static void destroyShaderBindingTableStageResources(VKRT* vkrt, VkBuffer buffer, VkDeviceMemory memory) {
     if (!vkrt) return;
     if (buffer != VK_NULL_HANDLE) vkDestroyBuffer(vkrt->core.device, buffer, NULL);
@@ -222,14 +243,7 @@ static VKRT_Result createShaderBindingTableForPipeline(
         ) != VKRT_SUCCESS) {
         return VKRT_ERROR_OPERATION_FAILED;
     }
-    LOG_TRACE(
-        "%s SBT handles fetched and staged in %.3f ms (%u groups, stride %llu, size %llu bytes)",
-        label ? label : "RT",
-        (double)(getMicroseconds() - handlesStartTime) / 1e3,
-        groupCount,
-        (unsigned long long)stride,
-        (unsigned long long)sbtSize
-    );
+    logShaderBindingTableHandlesReady(label, handlesStartTime, groupCount, stride, sbtSize);
 
     uint64_t uploadStartTime = getMicroseconds();
     if (createShaderBindingTableDeviceBuffer(vkrt, sbtSize, &output) != VKRT_SUCCESS) {
@@ -255,11 +269,7 @@ static VKRT_Result createShaderBindingTableForPipeline(
         hitGroupCount,
         output.tables
     );
-    LOG_TRACE(
-        "%s SBT uploaded in %.3f ms",
-        label ? label : "RT",
-        (double)(getMicroseconds() - uploadStartTime) / 1e3
-    );
+    logShaderBindingTableUploaded(label, uploadStartTime);
 
     return VKRT_SUCCESS;
 }

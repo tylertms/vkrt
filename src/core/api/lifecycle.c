@@ -427,24 +427,26 @@ static VKRT_Result createInstanceAndDevice(VKRT* vkrt, const VKRT_CreateInfo* cr
     return VKRT_SUCCESS;
 }
 
-static VKRT_Result createRenderBackendResources(VKRT* vkrt) {
+static VKRT_Result createSwapChainBackendResources(VKRT* vkrt) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
     uint64_t stepStartTime = 0u;
 
-    if (!vkrt->runtime.headless) {
-        glfwPollEvents();
-        stepStartTime = getMicroseconds();
-        if (createSwapChain(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
-        logStepTime("Swapchain created", stepStartTime);
+    if (vkrt->runtime.headless) return VKRT_SUCCESS;
 
-        stepStartTime = getMicroseconds();
-        if (createImageViews(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
-        logStepTime("Swapchain image views created", stepStartTime);
-    }
+    glfwPollEvents();
+    stepStartTime = getMicroseconds();
+    if (createSwapChain(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    logStepTime("Swapchain created", stepStartTime);
 
     stepStartTime = getMicroseconds();
-    if (createCommandPool(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
-    logStepTime("Command pool created", stepStartTime);
+    if (createImageViews(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    logStepTime("Swapchain image views created", stepStartTime);
+    return VKRT_SUCCESS;
+}
+
+static VKRT_Result createPipelineBackendResources(VKRT* vkrt) {
+    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+    uint64_t stepStartTime = 0u;
 
     stepStartTime = getMicroseconds();
     if (vkrtEnsureTextureBindings(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
@@ -465,6 +467,12 @@ static VKRT_Result createRenderBackendResources(VKRT* vkrt) {
     stepStartTime = getMicroseconds();
     if (createComputePipeline(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
     logStepTime("Compute pipeline created", stepStartTime);
+    return VKRT_SUCCESS;
+}
+
+static VKRT_Result createSceneBackendResources(VKRT* vkrt) {
+    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+    uint64_t stepStartTime = 0u;
 
     stepStartTime = getMicroseconds();
     if (createGPUImages(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
@@ -485,6 +493,12 @@ static VKRT_Result createRenderBackendResources(VKRT* vkrt) {
     stepStartTime = getMicroseconds();
     if (createDescriptorSet(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
     logStepTime("Descriptor set created", stepStartTime);
+    return VKRT_SUCCESS;
+}
+
+static VKRT_Result createExecutionBackendResources(VKRT* vkrt) {
+    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+    uint64_t stepStartTime = 0u;
 
     stepStartTime = getMicroseconds();
     if (createShaderBindingTable(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
@@ -501,6 +515,27 @@ static VKRT_Result createRenderBackendResources(VKRT* vkrt) {
     stepStartTime = getMicroseconds();
     if (createSyncObjects(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
     logStepTime("Synchronization objects created", stepStartTime);
+    return VKRT_SUCCESS;
+}
+
+static VKRT_Result createRenderBackendResources(VKRT* vkrt) {
+    if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
+
+    uint64_t stepStartTime = getMicroseconds();
+    if (createSwapChainBackendResources(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    logStepTime("Swapchain backend resources ready", stepStartTime);
+
+    stepStartTime = getMicroseconds();
+    if (createPipelineBackendResources(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    logStepTime("Pipeline backend resources ready", stepStartTime);
+
+    stepStartTime = getMicroseconds();
+    if (createSceneBackendResources(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    logStepTime("Scene backend resources ready", stepStartTime);
+
+    stepStartTime = getMicroseconds();
+    if (createExecutionBackendResources(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    logStepTime("Execution backend resources ready", stepStartTime);
 
     return VKRT_SUCCESS;
 }
