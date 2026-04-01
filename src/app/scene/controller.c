@@ -101,27 +101,6 @@ static int readTextFile(const char* path, char** outText) {
     return 1;
 }
 
-static int copyParentDirectory(const char* path, char outDirectory[VKRT_PATH_MAX]) {
-    if (!path || !path[0] || !outDirectory) return 0;
-    if (snprintf(outDirectory, VKRT_PATH_MAX, "%s", path) >= VKRT_PATH_MAX) return 0;
-
-    char* slash = strrchr(outDirectory, '/');
-    char* backslash = strrchr(outDirectory, '\\');
-    char* separator = slash > backslash ? slash : backslash;
-    if (!separator) {
-        outDirectory[0] = '.';
-        outDirectory[1] = '\0';
-        return 1;
-    }
-
-    if (separator == outDirectory) {
-        separator[1] = '\0';
-    } else {
-        *separator = '\0';
-    }
-    return 1;
-}
-
 static int joinPath(char* outPath, size_t outPathSize, const char* base, const char* value) {
     if (!outPath || outPathSize == 0u || !base || !base[0] || !value || !value[0]) return 0;
 
@@ -153,7 +132,7 @@ static int resolveSceneAssetPath(const char* scenePath, const char* storedPath, 
     if (scenePath && scenePath[0]) {
         char parentDirectory[VKRT_PATH_MAX];
         char candidate[VKRT_PATH_MAX];
-        if (copyParentDirectory(scenePath, parentDirectory) &&
+        if (copyParentDirectoryPath(scenePath, parentDirectory, sizeof(parentDirectory)) == 0 &&
             joinPath(candidate, sizeof(candidate), parentDirectory, storedPath) &&
             resolveExistingPath(candidate, outResolvedPath, VKRT_PATH_MAX) == 0) {
             return 1;
@@ -264,7 +243,7 @@ static int canonicalizePathForStorage(const char* path, char outPath[VKRT_PATH_M
 static int canonicalizeSceneDirectoryForStorage(const char* scenePath, char outDirectory[VKRT_PATH_MAX]) {
     char sceneDirectory[VKRT_PATH_MAX];
     if (!scenePath || !scenePath[0] || !outDirectory) return 0;
-    if (!copyParentDirectory(scenePath, sceneDirectory)) return 0;
+    if (copyParentDirectoryPath(scenePath, sceneDirectory, sizeof(sceneDirectory)) != 0) return 0;
     return canonicalizePathForStorage(sceneDirectory, outDirectory);
 }
 

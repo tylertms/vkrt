@@ -1,6 +1,8 @@
 #ifndef VKRT_INTEGRATOR_PATH_MODES_SPECTRAL_SINGLE_TRANSPORT_SLANG
 #define VKRT_INTEGRATOR_PATH_MODES_SPECTRAL_SINGLE_TRANSPORT_SLANG
 
+#include "../transport_common.slang"
+
 void accumulateSpectralSingleEnvironment(
     inout SpectralSingleSampleState sampleState,
     SpectralSinglePathState pathState,
@@ -34,17 +36,14 @@ bool sampleSpectralSingleNextDirection(
     out uint sampleIsTransmission,
     out float3 sampleWi
 ) {
-    BSDFSample sample = sampleBSDF(state, basis, pathState.common.rng);
-    if (!sample.isUsable()) {
-        sampleIsTransmission = 0u;
-        sampleWi = float3(0.0);
+    BSDFSample sample = BSDFSample();
+    if (!sampleScalarDirection(state, basis, pathState.common.rng, sample, sampleIsTransmission, sampleWi)) {
         return false;
     }
 
     pathState.spectralThroughput *= sample.weight.x;
     if (pathState.spectralThroughput <= 0.0) {
-        sampleIsTransmission = 0u;
-        sampleWi = float3(0.0);
+        clearSampleDirection(sampleIsTransmission, sampleWi);
         return false;
     }
 
@@ -88,11 +87,14 @@ void accumulateResolvedSpectralSingleSample(
     }
 
     frameState.radiance += spectralSampleToXYZ(sampleState.spectralRadiance, pathState.wavelength);
-    frameState.albedo += sampleState.albedo;
-    frameState.normal += sampleState.normal;
-    frameState.featureWeight += sampleState.featureWeight;
-    frameState.featureDepth += sampleState.featureDepth;
-    frameState.followSpecular += sampleState.followSpecular;
+    accumulateResolvedSampleFeatures(
+        frameState,
+        sampleState.albedo,
+        sampleState.normal,
+        sampleState.featureWeight,
+        sampleState.featureDepth,
+        sampleState.followSpecular
+    );
 }
 
 #endif

@@ -105,43 +105,13 @@ void writeAccumulatedFrameOutputs(RaygenPixelState pixelState, RaygenFrameState 
     outputImage[pixelState.pixel] = float4(mapAccumulatedRadiance(accumulated, spectralOutput), 1.0);
 }
 
-void writeRgbAccumulatedFrameOutputs(RaygenPixelState pixelState, RaygenFrameState frameState) {
-    writeAccumulatedFrameOutputs(pixelState, frameState, 0u);
-}
-
-void writeSpectralSingleAccumulatedFrameOutputs(RaygenPixelState pixelState, RaygenFrameState frameState) {
-    writeAccumulatedFrameOutputs(pixelState, frameState, 1u);
-}
-
-void writeSpectralHeroAccumulatedFrameOutputs(RaygenPixelState pixelState, RaygenFrameState frameState) {
-    writeAccumulatedFrameOutputs(pixelState, frameState, 1u);
-}
-
-void writeRgbFrameOutputs(RaygenPixelState pixelState, RaygenFrameState frameState) {
+void writeFrameOutputs(RaygenPixelState pixelState, RaygenFrameState frameState, uint spectralOutput) {
     if (raygenFrameDebugEarlyOut(frameState)) {
         writeDebugFrameOutputs(pixelState, frameState);
         return;
     }
 
-    writeRgbAccumulatedFrameOutputs(pixelState, frameState);
-}
-
-void writeSpectralSingleFrameOutputs(RaygenPixelState pixelState, RaygenFrameState frameState) {
-    if (raygenFrameDebugEarlyOut(frameState)) {
-        writeDebugFrameOutputs(pixelState, frameState);
-        return;
-    }
-
-    writeSpectralSingleAccumulatedFrameOutputs(pixelState, frameState);
-}
-
-void writeSpectralHeroFrameOutputs(RaygenPixelState pixelState, RaygenFrameState frameState) {
-    if (raygenFrameDebugEarlyOut(frameState)) {
-        writeDebugFrameOutputs(pixelState, frameState);
-        return;
-    }
-
-    writeSpectralHeroAccumulatedFrameOutputs(pixelState, frameState);
+    writeAccumulatedFrameOutputs(pixelState, frameState, spectralOutput);
 }
 
 #endif

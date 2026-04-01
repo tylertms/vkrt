@@ -359,27 +359,6 @@ static int collectImportedTextureReferences(
     return 1;
 }
 
-static int copyParentDirectory(const char* path, char outDirectory[VKRT_PATH_MAX]) {
-    if (!path || !outDirectory) return 0;
-    if (snprintf(outDirectory, VKRT_PATH_MAX, "%s", path) >= VKRT_PATH_MAX) return 0;
-
-    char* slash = strrchr(outDirectory, '/');
-    char* backslash = strrchr(outDirectory, '\\');
-    char* separator = slash > backslash ? slash : backslash;
-    if (!separator) {
-        outDirectory[0] = '.';
-        outDirectory[1] = '\0';
-        return 1;
-    }
-
-    if (separator == outDirectory) {
-        separator[1] = '\0';
-    } else {
-        *separator = '\0';
-    }
-    return 1;
-}
-
 static uint32_t packTextureWrapModes(cgltf_wrap_mode wrapModeS, cgltf_wrap_mode wrapModeT) {
     uint32_t wrapS = wrapModeS != 0 ? (uint32_t)wrapModeS : VKRT_TEXTURE_WRAP_REPEAT;
     uint32_t wrapT = wrapModeT != 0 ? (uint32_t)wrapModeT : VKRT_TEXTURE_WRAP_REPEAT;
@@ -439,7 +418,7 @@ static int resolveTextureImagePath(const char* resolvedPath, const cgltf_image* 
     }
 
     char sceneDirectory[VKRT_PATH_MAX];
-    if (!copyParentDirectory(resolvedPath, sceneDirectory)) return 0;
+    if (copyParentDirectoryPath(resolvedPath, sceneDirectory, sizeof(sceneDirectory)) != 0) return 0;
 
     char combinedPath[VKRT_PATH_MAX];
     if (snprintf(combinedPath, sizeof(combinedPath), "%s/%s", sceneDirectory, decodedUri) >=

@@ -2,16 +2,14 @@
 #define VKRT_RT_PAYLOAD_SELECTION_SLANG
 
 struct SelectionPayload {
-    uint didHit;
+    uint hasHit;
 
     __init() {
-        didHit = 0u;
+        hasHit = 0u;
     }
 
-    [mutating] void setMiss() { didHit = 0u; }
-
-        [mutating] void setHit() {
-        didHit = 1u;
+    bool hit() {
+        return hasHit != 0u;
     }
 };
 

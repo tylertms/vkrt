@@ -1,34 +1,13 @@
 #ifndef VKRT_RT_QUERY_SHADOW_SLANG
 #define VKRT_RT_QUERY_SHADOW_SLANG
 
+#include "../../camera/ray.slang"
 #include "../../scene/resources.slang"
 #include "../layout.slang"
-#include "../payloads/scene_payload.slang"
+#include "../payloads/shadow_payload.slang"
 
-struct ShadowRayResult {
-    uint flags;
-
-    __init() {
-        flags = 0u;
-    }
-
-    bool visible() {
-        return (flags & 1u) != 0u;
-    }
-
-    bool neeSupported() {
-        return (flags & 2u) != 0u;
-    }
-};
-
-ShadowRayResult traceShadowRay(float3 origin, float3 direction, float tMax, inout uint rng) {
+ShadowPayload traceShadowRay(RayDesc ray, inout uint rng) {
     ShadowPayload payload = ShadowPayload(rng);
-
-    RayDesc ray;
-    ray.Origin = origin;
-    ray.Direction = direction;
-    ray.TMin = VKRT_RAY_T_MIN;
-    ray.TMax = tMax;
 
     TraceRay(
         topLevelAS,
@@ -42,15 +21,11 @@ ShadowRayResult traceShadowRay(float3 origin, float3 direction, float tMax, inou
     );
 
     rng = payload.rng;
+    return payload;
+}
 
-    ShadowRayResult result = ShadowRayResult();
-    if (payload.visibility == VKRT_SHADOW_VISIBILITY_VISIBLE) {
-        result.flags |= 1u;
-    }
-    if (payload.visibility != VKRT_SHADOW_VISIBILITY_UNSUPPORTED_TRANSMISSION) {
-        result.flags |= 2u;
-    }
-    return result;
+ShadowPayload traceShadowRay(float3 origin, float3 direction, float tMax, inout uint rng) {
+    return traceShadowRay(makeRay(origin, direction, VKRT_RAY_T_MIN, tMax), rng);
 }
 
 #endif

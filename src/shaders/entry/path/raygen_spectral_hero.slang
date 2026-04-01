@@ -31,5 +31,5 @@
         selection[0].hitMeshIndex = pixelState.firstHitInstance;
     }
 
-    writeSpectralHeroFrameOutputs(pixelState, frameState);
+    writeFrameOutputs(pixelState, frameState, 1u);
 }

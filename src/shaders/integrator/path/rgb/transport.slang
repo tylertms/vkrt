@@ -1,6 +1,8 @@
 #ifndef VKRT_INTEGRATOR_PATH_MODES_RGB_TRANSPORT_SLANG
 #define VKRT_INTEGRATOR_PATH_MODES_RGB_TRANSPORT_SLANG
 
+#include "../transport_common.slang"
+
 void accumulateRgbEnvironment(inout RgbSampleState sampleState, RgbPathState pathState, float3 environmentRadiance) {
     sampleState.radiance += pathState.throughput * environmentRadiance;
 }
@@ -25,17 +27,14 @@ bool sampleRgbNextDirection(
     out uint sampleIsTransmission,
     out float3 sampleWi
 ) {
-    BSDFSample sample = sampleBSDF(state, basis, pathState.common.rng);
-    if (!sample.isUsable()) {
-        sampleIsTransmission = 0u;
-        sampleWi = float3(0.0);
+    BSDFSample sample = BSDFSample();
+    if (!sampleScalarDirection(state, basis, pathState.common.rng, sample, sampleIsTransmission, sampleWi)) {
         return false;
     }
 
     pathState.throughput *= sample.weight;
     if (!any(pathState.throughput > 0.0)) {
-        sampleIsTransmission = 0u;
-        sampleWi = float3(0.0);
+        clearSampleDirection(sampleIsTransmission, sampleWi);
         return false;
     }
 
@@ -68,11 +67,14 @@ void accumulateResolvedRgbSample(inout RaygenFrameState frameState, RgbSampleSta
     }
 
     frameState.radiance += sampleState.radiance;
-    frameState.albedo += sampleState.albedo;
-    frameState.normal += sampleState.normal;
-    frameState.featureWeight += sampleState.featureWeight;
-    frameState.featureDepth += sampleState.featureDepth;
-    frameState.followSpecular += sampleState.followSpecular;
+    accumulateResolvedSampleFeatures(
+        frameState,
+        sampleState.albedo,
+        sampleState.normal,
+        sampleState.featureWeight,
+        sampleState.featureDepth,
+        sampleState.followSpecular
+    );
 }
 
 #endif

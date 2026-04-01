@@ -6,8 +6,6 @@
 #include "vkrt.h"
 #include "vkrt_types.h"
 
-#include <affine-pre.h>
-#include <affine.h>
 #include <mat3.h>
 #include <mat4.h>
 #include <math.h>
@@ -16,7 +14,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <util.h>
 #include <vec3.h>
 
 static const uint32_t kDefaultRenderTargetSamples = 1024u;
@@ -42,22 +39,6 @@ static void clearTextureRecord(SessionTextureRecord* record) {
     if (!record) return;
     free(record->sourcePath);
     memset(record, 0, sizeof(*record));
-}
-
-static void buildLocalTransformMatrix(
-    const vec3 position,
-    const vec3 rotationDegrees,
-    const vec3 scale,
-    mat4 outMatrix
-) {
-    if (!position || !rotationDegrees || !scale || !outMatrix) return;
-
-    glm_mat4_identity(outMatrix);
-    glm_translate(outMatrix, (vec3){position[0], position[1], position[2]});
-    glm_rotate(outMatrix, glm_rad(rotationDegrees[2]), (vec3){0.0f, 0.0f, 1.0f});
-    glm_rotate(outMatrix, glm_rad(rotationDegrees[1]), (vec3){0.0f, 1.0f, 0.0f});
-    glm_rotate(outMatrix, glm_rad(rotationDegrees[0]), (vec3){1.0f, 0.0f, 0.0f});
-    glm_scale(outMatrix, (vec3){scale[0], scale[1], scale[2]});
 }
 
 static int sceneObjectTransformMatrixValid(mat4 transform) {
@@ -758,7 +739,7 @@ int sessionAddSceneObject(Session* session, const SessionSceneObjectCreateInfo* 
         memcpy(object->localRotation, *createInfo->localRotation, sizeof(object->localRotation));
     }
     if (createInfo->localScale) memcpy(object->localScale, *createInfo->localScale, sizeof(object->localScale));
-    buildLocalTransformMatrix(object->localPosition, object->localRotation, object->localScale, object->localTransform);
+    buildMeshTransformMatrix(object->localPosition, object->localRotation, object->localScale, object->localTransform);
     (void)snprintf(
         object->name,
         sizeof(object->name),
@@ -816,7 +797,7 @@ int sessionSetSceneObjectLocalTransform(
     glm_vec3_copy(position, object->localPosition);
     glm_vec3_copy(rotation, object->localRotation);
     glm_vec3_copy(scale, object->localScale);
-    buildLocalTransformMatrix(object->localPosition, object->localRotation, object->localScale, object->localTransform);
+    buildMeshTransformMatrix(object->localPosition, object->localRotation, object->localScale, object->localTransform);
     return 1;
 }
 

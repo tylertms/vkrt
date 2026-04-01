@@ -1,7 +1,7 @@
 #ifndef VKRT_BSDF_SUBSURFACE_SLANG
 #define VKRT_BSDF_SUBSURFACE_SLANG
 
-#include "./oren_nayar.slang"
+#include "./diffuse.slang"
 
 // Disney fake subsurface: Hanrahan-Krueger approximation for thin diffuse scattering.
 //
@@ -26,7 +26,7 @@ BSDFEval evalFakeSubsurface(float3 diffuseColor, float roughness, float3 wo, flo
     float ss = 1.25 * (fss * (1.0 / max(cosTheta(wi) + cosTheta(wo), 1e-6) - 0.5) + 0.5);
 
     eval.value = diffuseColor * (VKRT_INV_PI * ss);
-    eval.pdf = orenNayarPdf(wi);
+    eval.pdf = cosineHemispherePdf(wi);
     return eval;
 }
 

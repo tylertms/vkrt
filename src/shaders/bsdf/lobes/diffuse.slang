@@ -1,16 +1,24 @@
-#ifndef VKRT_BSDF_OREN_NAYAR_SLANG
-#define VKRT_BSDF_OREN_NAYAR_SLANG
+#ifndef VKRT_BSDF_DIFFUSE_SLANG
+#define VKRT_BSDF_DIFFUSE_SLANG
 
 #include "../base.slang"
 
-// Oren-Nayar rough diffuse reflection.
+// Diffuse reflection lobes.
 //
 // References:
-// Oren, Nayar, 1994 - http://www1.cs.columbia.edu/CAVE/publications/pdfs/Oren_SIGGRAPH94.pdf
+// Lambertian: Pharr, Jakob, Humphreys, 2023 - https://www.pbr-book.org/4ed/Reflection_Models/Diffuse_Reflection
+// Oren-Nayar: Oren, Nayar, 1994 - http://www1.cs.columbia.edu/CAVE/publications/pdfs/Oren_SIGGRAPH94.pdf
 // Implementation summary: Pharr, Jakob, Humphreys, 2023 - https://www.pbr-book.org/4ed/Reflection_Models/Diffuse_Reflection
 
-float orenNayarPdf(float3 wi) {
-    return cosTheta(wi) > 0.0 ? cosTheta(wi) * VKRT_INV_PI : 0.0;
+BSDFEval evalLambertian(float3 diffuseColor, float3 wi) {
+    BSDFEval eval;
+    eval.value = cosTheta(wi) > 0.0 ? diffuseColor * VKRT_INV_PI : float3(0.0);
+    eval.pdf = cosineHemispherePdf(wi);
+    return eval;
+}
+
+float3 sampleLambertian(inout uint rng) {
+    return sampleCosineHemisphere(rng);
 }
 
 BSDFEval evalOrenNayar(float3 diffuseColor, float roughness, float3 wo, float3 wi) {
@@ -44,16 +52,12 @@ BSDFEval evalOrenNayar(float3 diffuseColor, float roughness, float3 wo, float3 w
     }
 
     eval.value = diffuseColor * (VKRT_INV_PI * (A + B * maxCos * sinAlpha * tanBeta));
-    eval.pdf = orenNayarPdf(wi);
+    eval.pdf = cosineHemispherePdf(wi);
     return eval;
 }
 
 float3 sampleOrenNayar(inout uint rng) {
-    float u1 = rand(rng);
-    float u2 = rand(rng);
-    float r = sqrt(u1);
-    float phi = 2.0 * VKRT_PI * u2;
-    return float3(r * cos(phi), r * sin(phi), sqrt(max(0.0, 1.0 - u1)));
+    return sampleCosineHemisphere(rng);
 }
 
 #endif

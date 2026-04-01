@@ -2,11 +2,6 @@
 #define VKRT_RT_PAYLOAD_SCENE_SLANG
 
 #include "../../scene/constants.slang"
-#include "../../scene/resources.slang"
-
-static const uint VKRT_SHADOW_VISIBILITY_OCCLUDED = 0u;
-static const uint VKRT_SHADOW_VISIBILITY_VISIBLE = 1u;
-static const uint VKRT_SHADOW_VISIBILITY_UNSUPPORTED_TRANSMISSION = 2u;
 
 struct SceneRayPayload {
     uint rng;
@@ -44,16 +39,6 @@ struct SceneRayPayload {
         primitiveIndex = hitPrimitiveIndex;
         hitDistance = distance;
         barycentrics = hitBarycentrics;
-    }
-};
-
-struct ShadowPayload {
-    uint visibility;
-    uint rng;
-
-    __init(uint seed) {
-        visibility = VKRT_SHADOW_VISIBILITY_OCCLUDED;
-        rng = seed;
     }
 };
 

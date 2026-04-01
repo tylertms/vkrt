@@ -31,5 +31,5 @@
         selection[0].hitMeshIndex = pixelState.firstHitInstance;
     }
 
-    writeRgbFrameOutputs(pixelState, frameState);
+    writeFrameOutputs(pixelState, frameState, 0u);
 }

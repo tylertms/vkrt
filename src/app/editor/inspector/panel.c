@@ -4,6 +4,7 @@
 #include "common.h"
 #include "sections.h"
 #include "session.h"
+#include "vkrt.h"
 #include "vkrt_types.h"
 
 #include <dcimgui.h>
@@ -127,7 +128,11 @@ static void drawSceneWindowContent(VKRT* vkrt, Session* session) {
     const char* currentScenePath = sessionGetCurrentScenePath(session);
     bool hasCurrentScenePath = (bool)((currentScenePath != NULL) && (currentScenePath[0] != '\0'));
     bool renderModeActive = VKRT_renderStatusIsActive(&status) != 0;
-    ImGui_BeginDisabled((bool)!hasCurrentScenePath || renderModeActive);
+    bool disableResetScene = false;
+    if (!hasCurrentScenePath || renderModeActive) {
+        disableResetScene = true;
+    }
+    ImGui_BeginDisabled(disableResetScene);
     if (inspectorPaddedButton("Reset Scene")) {
         sessionQueueSceneOpen(session, currentScenePath);
     }

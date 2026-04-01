@@ -23,8 +23,8 @@ void captureSelectionHit(inout RaygenPixelState pixelState) {
         return;
     }
 
-    SceneRayPayload pickPayload = SceneRayPayload(0u);
-    traceSceneRay(pickPayload, makePrimaryRay(pixelState.pixel, float2(0.0)), 0u, 0u, 0u);
+    uint rng = 0u;
+    SceneRayPayload pickPayload = traceSceneRay(makePrimaryRay(pixelState.pixel, float2(0.0)), 0u, 0u, 0u, rng);
     pixelState.firstHitInstance = pickPayload.instanceIndex;
 }
 

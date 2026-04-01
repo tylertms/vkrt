@@ -23,15 +23,8 @@ void traceSpectralHeroPathSample(
     SpectralHeroPathState pathState = SpectralHeroPathState(pixelState, sampleIndex);
 
     for (uint depth = 0u; depth < scene.rrMaxDepth; depth++) {
-        SceneRayPayload payload = SceneRayPayload(pathState.common.rng);
-        traceSceneRay(
-            payload,
-            pathState.common.ray,
-            depth,
-            buildSceneRayCoherenceHint(pathState),
-            VKRT_SCENE_SER_HINT_BITS
-        );
-        pathState.common.rng = payload.rng;
+        SceneRayPayload payload =
+            tracePathSceneRay(pathState.common, depth, buildSceneRayCoherenceHint(pathState), VKRT_SCENE_SER_HINT_BITS);
         recordPrimaryHitInstance(pixelState, sampleIndex, depth, payload);
 
         if (!payload.hit()) {
@@ -49,27 +42,25 @@ void traceSpectralHeroPathSample(
             break;
         }
 
-        PathSurfaceState surfaceState = PathSurfaceState(payload, pathState.common.ray);
-        if (handlePrimarySurfaceDebug(
+        PathSurfaceState surfaceState;
+        BSDFMaterial bsdfMaterial;
+        if (!preparePathSurfaceVertex(
                 modeState,
                 sampleIndex,
                 depth,
-                surfaceState.material,
-                surfaceState.surface.textureData,
-                surfaceState.surface.shadingNormal,
-                payload.hitDistance,
-                frameState
+                payload,
+                pathState.common.ray,
+                frameState,
+                surfaceState,
+                bsdfMaterial
             )) {
             break;
         }
-
-        BSDFMaterial bsdfMaterial = BSDFMaterial(surfaceState.material);
         resolveSampleDenoiserFeatures(sampleState, bsdfMaterial, surfaceState, depth);
 
-        float3 wo = worldToLocal(-pathState.common.ray.Direction, surfaceState.basis);
         float stateWavelengthNm =
             spectralHeroPathActive(pathState) ? pathState.wavelengthsNm.x : pathState.scalarWavelength.lambdaNm;
-        BSDFState state = BSDFState(bsdfMaterial, wo, surfaceState.surface.frontFace, stateWavelengthNm, 1u);
+        BSDFState state = makePathBSDFState(pathState.common, surfaceState, bsdfMaterial, stateWavelengthNm, 1u);
         bool currentVertexNeeAllowed = !pathState.common.medium.refractiveActive();
         bool vertexNeeSupported = currentVertexNeeAllowed;
 
@@ -127,17 +118,7 @@ void traceSpectralHeroPathSample(
                     spectralContribution +=
                         spectralScalarFromLinearSrgb4(emission, pathState.wavelengthsNm) * misWeight;
                 } else {
-                    if (raygenModeHas(modeState, VKRT_RAYGEN_MODE_FLAG_NEE_ENABLED) &&
-                        pathPrevVertexNeeAllowed(pathState.common) && depth > 0u &&
-                        pathState.common.prevBsdfPdf > 0.0) {
-                        misWeight = computeBSDFEmitterMISWeight(
-                            pathState.common.prevBsdfPdf,
-                            meshInfos[payload.instanceIndex].lightPdfArea,
-                            surfaceState.surface.geometricNormal,
-                            pathState.common.ray.Direction,
-                            payload.hitDistance
-                        );
-                    }
+                    misWeight = bsdfEmitterMisWeight(modeState, pathState.common, payload, surfaceState, depth);
                     spectralContributionScalar +=
                         spectralScalarFromLinearSrgb(emission, pathState.scalarWavelength.lambdaNm) * misWeight;
                 }

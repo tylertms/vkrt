@@ -1,5 +1,5 @@
 #include "../../rt/alpha_test.slang"
-#include "../../rt/payloads/scene_payload.slang"
+#include "../../rt/payloads/shadow_payload.slang"
 
 [shader("anyhit")] void main(inout ShadowPayload payload, in BuiltInTriangleIntersectionAttributes attr) {
     MeshInfo mesh = meshInfos[InstanceIndex()];

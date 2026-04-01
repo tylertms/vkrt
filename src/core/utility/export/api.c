@@ -210,13 +210,14 @@ int saveCurrentRenderImageEx(VKRT* vkrt, const char* path, const VKRT_RenderExpo
     job->path = resolvedPath;
     job->format = requestedFormat;
 
-    int canUseGpuDisplayExport =
-        requestedFormat != RENDER_IMAGE_FORMAT_EXR && exportSettings.denoiseEnabled == 0u &&
-        !VKRT_renderPhaseIsDenoised(vkrt->renderStatus.renderPhase) && vkrt->core.outputImage != VK_NULL_HANDLE;
+    int canUseGpuDisplayExport = requestedFormat != RENDER_IMAGE_FORMAT_EXR && exportSettings.denoiseEnabled == 0u &&
+                                 !VKRT_renderPhaseIsDenoised(vkrt->renderStatus.renderPhase) &&
+                                 vkrt->core.outputImage != VK_NULL_HANDLE;
 
     if (canUseGpuDisplayExport) {
         job->beauty.format = RENDER_IMAGE_BUFFER_FORMAT_RGBA16_UNORM;
-        if (readbackImagePixels(vkrt, vkrt->core.outputImage, width, height, job->beauty.format, &job->beauty.pixels) != 0) {
+        if (readbackImagePixels(vkrt, vkrt->core.outputImage, width, height, job->beauty.format, &job->beauty.pixels) !=
+            0) {
             LOG_ERROR("Failed to read back display buffer for '%s'", resolvedPath);
             freeRenderImageExportJob(job);
             return -1;

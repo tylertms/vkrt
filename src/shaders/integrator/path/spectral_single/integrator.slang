@@ -22,15 +22,8 @@ void traceSpectralSinglePathSample(
     SpectralSinglePathState pathState = SpectralSinglePathState(pixelState, sampleIndex);
 
     for (uint depth = 0u; depth < scene.rrMaxDepth; depth++) {
-        SceneRayPayload payload = SceneRayPayload(pathState.common.rng);
-        traceSceneRay(
-            payload,
-            pathState.common.ray,
-            depth,
-            buildSceneRayCoherenceHint(pathState),
-            VKRT_SCENE_SER_HINT_BITS
-        );
-        pathState.common.rng = payload.rng;
+        SceneRayPayload payload =
+            tracePathSceneRay(pathState.common, depth, buildSceneRayCoherenceHint(pathState), VKRT_SCENE_SER_HINT_BITS);
         recordPrimaryHitInstance(pixelState, sampleIndex, depth, payload);
 
         if (!payload.hit()) {
@@ -48,26 +41,24 @@ void traceSpectralSinglePathSample(
             break;
         }
 
-        PathSurfaceState surfaceState = PathSurfaceState(payload, pathState.common.ray);
-        if (handlePrimarySurfaceDebug(
+        PathSurfaceState surfaceState;
+        BSDFMaterial bsdfMaterial;
+        if (!preparePathSurfaceVertex(
                 modeState,
                 sampleIndex,
                 depth,
-                surfaceState.material,
-                surfaceState.surface.textureData,
-                surfaceState.surface.shadingNormal,
-                payload.hitDistance,
-                frameState
+                payload,
+                pathState.common.ray,
+                frameState,
+                surfaceState,
+                bsdfMaterial
             )) {
             break;
         }
-
-        BSDFMaterial bsdfMaterial = BSDFMaterial(surfaceState.material);
         resolveSampleDenoiserFeatures(sampleState, bsdfMaterial, surfaceState, depth);
 
-        float3 wo = worldToLocal(-pathState.common.ray.Direction, surfaceState.basis);
         BSDFState state =
-            BSDFState(bsdfMaterial, wo, surfaceState.surface.frontFace, pathState.wavelength.lambdaNm, 1u);
+            makePathBSDFState(pathState.common, surfaceState, bsdfMaterial, pathState.wavelength.lambdaNm, 1u);
         bool currentVertexNeeAllowed = !pathState.common.medium.refractiveActive();
         bool vertexNeeSupported = currentVertexNeeAllowed;
 
@@ -89,17 +80,7 @@ void traceSpectralSinglePathSample(
         if (!raygenModeHas(modeState, VKRT_RAYGEN_MODE_FLAG_NEE_ONLY_DEBUG)) {
             float3 emission = surfaceState.material.emissionColor * surfaceState.material.emissionLuminance;
             if (any(emission > 0.0)) {
-                float misWeight = 1.0;
-                if (raygenModeHas(modeState, VKRT_RAYGEN_MODE_FLAG_NEE_ENABLED) &&
-                    pathPrevVertexNeeAllowed(pathState.common) && depth > 0u && pathState.common.prevBsdfPdf > 0.0) {
-                    misWeight = computeBSDFEmitterMISWeight(
-                        pathState.common.prevBsdfPdf,
-                        meshInfos[payload.instanceIndex].lightPdfArea,
-                        surfaceState.surface.geometricNormal,
-                        pathState.common.ray.Direction,
-                        payload.hitDistance
-                    );
-                }
+                float misWeight = bsdfEmitterMisWeight(modeState, pathState.common, payload, surfaceState, depth);
                 spectralContribution +=
                     spectralScalarFromLinearSrgb(emission, pathState.wavelength.lambdaNm) * misWeight;
             }

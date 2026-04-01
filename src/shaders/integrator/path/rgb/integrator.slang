@@ -22,15 +22,8 @@ void traceRgbPathSample(
     RgbPathState pathState = RgbPathState(pixelState, sampleIndex);
 
     for (uint depth = 0u; depth < scene.rrMaxDepth; depth++) {
-        SceneRayPayload payload = SceneRayPayload(pathState.common.rng);
-        traceSceneRay(
-            payload,
-            pathState.common.ray,
-            depth,
-            buildSceneRayCoherenceHint(pathState),
-            VKRT_SCENE_SER_HINT_BITS
-        );
-        pathState.common.rng = payload.rng;
+        SceneRayPayload payload =
+            tracePathSceneRay(pathState.common, depth, buildSceneRayCoherenceHint(pathState), VKRT_SCENE_SER_HINT_BITS);
         recordPrimaryHitInstance(pixelState, sampleIndex, depth, payload);
 
         if (!payload.hit()) {
@@ -48,25 +41,23 @@ void traceRgbPathSample(
             break;
         }
 
-        PathSurfaceState surfaceState = PathSurfaceState(payload, pathState.common.ray);
-        if (handlePrimarySurfaceDebug(
+        PathSurfaceState surfaceState;
+        BSDFMaterial bsdfMaterial;
+        if (!preparePathSurfaceVertex(
                 modeState,
                 sampleIndex,
                 depth,
-                surfaceState.material,
-                surfaceState.surface.textureData,
-                surfaceState.surface.shadingNormal,
-                payload.hitDistance,
-                frameState
+                payload,
+                pathState.common.ray,
+                frameState,
+                surfaceState,
+                bsdfMaterial
             )) {
             break;
         }
-
-        BSDFMaterial bsdfMaterial = BSDFMaterial(surfaceState.material);
         resolveSampleDenoiserFeatures(sampleState, bsdfMaterial, surfaceState, depth);
 
-        float3 wo = worldToLocal(-pathState.common.ray.Direction, surfaceState.basis);
-        BSDFState state = BSDFState(bsdfMaterial, wo, surfaceState.surface.frontFace, 0.0, 0u);
+        BSDFState state = makePathBSDFState(pathState.common, surfaceState, bsdfMaterial, 0.0, 0u);
         bool currentVertexNeeAllowed = !pathState.common.medium.refractiveActive();
         bool vertexNeeSupported = currentVertexNeeAllowed;
 
@@ -88,17 +79,7 @@ void traceRgbPathSample(
         if (!raygenModeHas(modeState, VKRT_RAYGEN_MODE_FLAG_NEE_ONLY_DEBUG)) {
             float3 emission = surfaceState.material.emissionColor * surfaceState.material.emissionLuminance;
             if (any(emission > 0.0)) {
-                float misWeight = 1.0;
-                if (raygenModeHas(modeState, VKRT_RAYGEN_MODE_FLAG_NEE_ENABLED) &&
-                    pathPrevVertexNeeAllowed(pathState.common) && depth > 0u && pathState.common.prevBsdfPdf > 0.0) {
-                    misWeight = computeBSDFEmitterMISWeight(
-                        pathState.common.prevBsdfPdf,
-                        meshInfos[payload.instanceIndex].lightPdfArea,
-                        surfaceState.surface.geometricNormal,
-                        pathState.common.ray.Direction,
-                        payload.hitDistance
-                    );
-                }
+                float misWeight = bsdfEmitterMisWeight(modeState, pathState.common, payload, surfaceState, depth);
                 contribution += emission * misWeight;
             }
         }

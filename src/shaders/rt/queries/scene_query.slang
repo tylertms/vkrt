@@ -8,7 +8,8 @@
 static const uint VKRT_SCENE_RAY_MASK = 0xffu;
 static const uint VKRT_SCENE_RAY_FLAGS = RAY_FLAG_NONE;
 
-void traceSceneRay(inout SceneRayPayload payload, RayDesc ray, uint depth, uint coherenceHint, uint coherenceHintBits) {
+SceneRayPayload traceSceneRay(RayDesc ray, uint depth, uint coherenceHint, uint coherenceHintBits, inout uint rng) {
+    SceneRayPayload payload = SceneRayPayload(rng);
 #ifdef VKRT_SER_ENABLED
     if (depth > 0u) {
         HitObject hitObject = HitObject::TraceRay(
@@ -23,7 +24,8 @@ void traceSceneRay(inout SceneRayPayload payload, RayDesc ray, uint depth, uint 
         );
         ReorderThread(hitObject, coherenceHint, coherenceHintBits);
         HitObject::Invoke(topLevelAS, hitObject, payload);
-        return;
+        rng = payload.rng;
+        return payload;
     }
 #endif
     TraceRay(
@@ -36,6 +38,8 @@ void traceSceneRay(inout SceneRayPayload payload, RayDesc ray, uint depth, uint 
         ray,
         payload
     );
+    rng = payload.rng;
+    return payload;
 }
 
 #endif

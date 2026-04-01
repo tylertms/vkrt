@@ -115,6 +115,28 @@ char* pathTrimTrailingSeparators(char* path) {
     return path;
 }
 
+int copyParentDirectoryPath(const char* path, char* outDirectory, size_t outDirectorySize) {
+    if (!path || !path[0] || !outDirectory || outDirectorySize == 0u) return -1;
+    if (copyPathString(outDirectory, outDirectorySize, path) != 0) return -1;
+
+    char* separator = pathFindLastSeparator(outDirectory);
+    if (!separator) {
+        if (outDirectorySize < 2u) return -1;
+        outDirectory[0] = '.';
+        outDirectory[1] = '\0';
+        return 0;
+    }
+
+    if (separator == outDirectory) {
+        if (outDirectorySize < 2u) return -1;
+        separator[1] = '\0';
+    } else {
+        *separator = '\0';
+    }
+
+    return 0;
+}
+
 static char* pathFindLastSeparator(char* path) {
     if (!path) return NULL;
 

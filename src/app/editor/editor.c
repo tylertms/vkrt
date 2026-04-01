@@ -430,7 +430,8 @@ static void applyMainMenuShortcuts(
     if (!renderModeActive && ImGui_IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_E)) {
         queueEditorMenuAction(session, status, EDITOR_MENU_ACTION_LOAD_ENVIRONMENT, currentScenePath);
     }
-    if (!renderModeActive && canClearEnvironment && ImGui_IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiMod_Alt | ImGuiKey_E)) {
+    if (!renderModeActive && canClearEnvironment &&
+        ImGui_IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiMod_Alt | ImGuiKey_E)) {
         queueEditorMenuAction(session, status, EDITOR_MENU_ACTION_CLEAR_ENVIRONMENT, currentScenePath);
     }
     if (canSaveRender && ImGui_IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_R)) {
@@ -450,17 +451,31 @@ static void drawFileMenu(
     bool haveCurrentScenePath = (currentScenePath && currentScenePath[0]) != 0;
     bool canSaveRender = (status && VKRT_renderStatusIsComplete(status)) != 0;
     bool renderModeActive = (status && VKRT_renderStatusIsActive(status)) != 0;
-    bool canModifyScene = !renderModeActive;
+    bool canModifyScene = false;
+    bool canResetScene = false;
+    bool canSaveScene = false;
+    bool canClearEnvironmentMenu = false;
+
+    if (!renderModeActive) {
+        canModifyScene = true;
+    }
+    if (canModifyScene && haveCurrentScenePath) {
+        canResetScene = true;
+        canSaveScene = true;
+    }
+    if (canModifyScene && canClearEnvironment) {
+        canClearEnvironmentMenu = true;
+    }
 
     if (!ImGui_BeginMenu("File")) return;
 
     if (ImGui_MenuItemEx("Open", "\tCtrl+O", false, canModifyScene)) {
         queueEditorMenuAction(session, status, EDITOR_MENU_ACTION_OPEN_SCENE, currentScenePath);
     }
-    if (ImGui_MenuItemEx("Reset Scene", NULL, false, canModifyScene && haveCurrentScenePath)) {
+    if (ImGui_MenuItemEx("Reset Scene", NULL, false, canResetScene)) {
         queueEditorMenuAction(session, status, EDITOR_MENU_ACTION_RESET_SCENE, currentScenePath);
     }
-    if (ImGui_MenuItemEx("Save", "\tCtrl+S", false, canModifyScene && haveCurrentScenePath)) {
+    if (ImGui_MenuItemEx("Save", "\tCtrl+S", false, canSaveScene)) {
         queueEditorMenuAction(session, status, EDITOR_MENU_ACTION_SAVE_SCENE, currentScenePath);
     }
     if (ImGui_MenuItemEx("Save As", "\tCtrl+Shift+S", false, canModifyScene)) {
@@ -478,7 +493,7 @@ static void drawFileMenu(
         if (ImGui_MenuItemEx("Load", "\tCtrl+Shift+E", false, canModifyScene)) {
             queueEditorMenuAction(session, status, EDITOR_MENU_ACTION_LOAD_ENVIRONMENT, currentScenePath);
         }
-        if (ImGui_MenuItemEx("Clear", "\tCtrl+Alt+E", false, canModifyScene && canClearEnvironment)) {
+        if (ImGui_MenuItemEx("Clear", "\tCtrl+Alt+E", false, canClearEnvironmentMenu)) {
             queueEditorMenuAction(session, status, EDITOR_MENU_ACTION_CLEAR_ENVIRONMENT, currentScenePath);
         }
         ImGui_EndMenu();
