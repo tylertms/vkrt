@@ -59,17 +59,4 @@ SurfaceTextureData evaluateSurfaceTextureData(MeshInfo mesh, uint primitiveIndex
     );
 }
 
-float2 evaluateSurfaceTexcoordSet(MeshInfo mesh, uint primitiveIndex, float2 barycentrics, uint texcoordSet) {
-    SurfaceTextureData surface = evaluateSurfaceTextureData(mesh, primitiveIndex, barycentrics);
-    return texcoordSet == 1u ? surface.texcoord1 : surface.texcoord0;
-}
-
-float2 evaluateSurfaceTexcoord(MeshInfo mesh, uint primitiveIndex, float2 barycentrics) {
-    return evaluateSurfaceTexcoordSet(mesh, primitiveIndex, barycentrics, 0u);
-}
-
-float4 evaluateSurfaceColor(MeshInfo mesh, uint primitiveIndex, float2 barycentrics) {
-    return evaluateSurfaceTextureData(mesh, primitiveIndex, barycentrics).color;
-}
-
 #endif

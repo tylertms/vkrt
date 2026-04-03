@@ -3,17 +3,16 @@
 
 #include "./state.slang"
 
+static const uint VKRT_COHERENCE_HINT_REFRACTIVE = 1u;
+static const uint VKRT_COHERENCE_HINT_ABSORPTION = 2u;
+static const uint VKRT_COHERENCE_HINT_SPECTRAL = 4u;
+static const uint VKRT_COHERENCE_HINT_NEE_ALLOWED = 16u;
+
 uint buildCommonSceneRayCoherenceHint(PathCommonState pathState, uint modeBits) {
     uint hint = modeBits;
-    if (pathState.medium.refractiveActive()) {
-        hint |= 1u;
-    }
-    if (pathState.medium.absorptionActive()) {
-        hint |= 2u;
-    }
-    if (pathPrevVertexNeeAllowed(pathState)) {
-        hint |= 16u;
-    }
+    if (pathState.medium.refractiveActive()) hint |= VKRT_COHERENCE_HINT_REFRACTIVE;
+    if (pathState.medium.absorptionActive()) hint |= VKRT_COHERENCE_HINT_ABSORPTION;
+    if (pathPrevVertexNeeAllowed(pathState)) hint |= VKRT_COHERENCE_HINT_NEE_ALLOWED;
     return hint;
 }
 
@@ -22,11 +21,11 @@ uint buildSceneRayCoherenceHint(RgbPathState pathState) {
 }
 
 uint buildSceneRayCoherenceHint(SpectralSinglePathState pathState) {
-    return buildCommonSceneRayCoherenceHint(pathState.common, 4u);
+    return buildCommonSceneRayCoherenceHint(pathState.common, VKRT_COHERENCE_HINT_SPECTRAL);
 }
 
 uint buildSceneRayCoherenceHint(SpectralHeroPathState pathState) {
-    return buildCommonSceneRayCoherenceHint(pathState.common, 4u);
+    return buildCommonSceneRayCoherenceHint(pathState.common, VKRT_COHERENCE_HINT_SPECTRAL);
 }
 
 #endif

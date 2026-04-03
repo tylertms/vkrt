@@ -29,7 +29,7 @@ DirectLightSample sampleDirectLight(
     inout uint rng
 ) {
     DirectLightSample light = DirectLightSample();
-    if (absCosTheta(state.wo) <= 0.0) return light;
+    if (cosTheta(state.wo) <= 0.0) return light;
 
     light.surface = sampleDirectLightSurface(hitPoint, geometricNormal, rng);
     if (light.surface.valid == 0u) return light;

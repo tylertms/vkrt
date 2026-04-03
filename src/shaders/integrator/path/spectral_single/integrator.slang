@@ -55,7 +55,7 @@ void traceSpectralSinglePathSample(
             )) {
             break;
         }
-        resolveSampleDenoiserFeatures(sampleState, bsdfMaterial, surfaceState, depth);
+        resolveDenoiserFeatures(sampleState.features, bsdfMaterial, surfaceState, depth);
 
         BSDFState state =
             makePathBSDFState(pathState.common, surfaceState, bsdfMaterial, pathState.wavelength.lambdaNm, 1u);

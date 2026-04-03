@@ -2,7 +2,6 @@
 #define VKRT_RT_QUERY_SCENE_SLANG
 
 #include "../../scene/resources.slang"
-#include "../layout.slang"
 #include "../payloads/scene_payload.slang"
 
 static const uint VKRT_SCENE_RAY_MASK = 0xffu;

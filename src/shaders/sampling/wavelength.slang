@@ -46,8 +46,4 @@ float4 sampleHeroWavelengths4(inout uint rng, uint sampleIndex) {
     return VKRT_WAVELENGTH_MIN_NM + frac(unitSample + VKRT_HERO_WAVELENGTH_OFFSETS) * VKRT_WAVELENGTH_RANGE_NM;
 }
 
-float4 heroWavelengthInvPdf4() {
-    return VKRT_WAVELENGTH_RANGE_NM.xxxx;
-}
-
 #endif

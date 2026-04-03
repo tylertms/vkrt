@@ -30,8 +30,4 @@ BSDFEval evalFakeSubsurface(float3 diffuseColor, float roughness, float3 wo, flo
     return eval;
 }
 
-float3 sampleFakeSubsurface(inout uint rng) {
-    return sampleOrenNayar(rng);
-}
-
 #endif

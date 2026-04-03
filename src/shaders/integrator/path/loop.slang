@@ -80,103 +80,34 @@ float bsdfEmitterMisWeight(
     );
 }
 
-void resolveDenoiserFeatureState(
-    inout float3 albedo,
-    inout float3 normal,
-    inout float featureWeight,
-    inout float featureDepth,
-    inout float followSpecular,
-    inout uint flags,
+void resolveDenoiserFeatures(
+    inout DenoiserFeatures features,
     BSDFMaterial material,
     PathSurfaceState surfaceState,
     uint depth
 ) {
     bool shouldFollowSpecularHit = materialDenoiserShouldFollowSpecularHit(material, surfaceState.surface.frontFace);
     if (depth == 0u) {
-        followSpecular = shouldFollowSpecularHit ? 1.0 : 0.0;
+        features.followSpecular = shouldFollowSpecularHit ? 1.0 : 0.0;
     }
 
-    if (raygenSampleFeaturesResolved(flags) || shouldFollowSpecularHit) {
+    if (features.resolved() || shouldFollowSpecularHit) {
         return;
     }
 
-    albedo = materialDenoiserAlbedo(material);
-    normal = surfaceState.surface.shadingNormal;
-    featureWeight = 1.0;
-    featureDepth = float(depth + 1u);
-    setRaygenSampleFeaturesResolved(flags);
+    features.albedo = materialDenoiserAlbedo(material);
+    features.normal = surfaceState.surface.shadingNormal;
+    features.weight = 1.0;
+    features.depth = float(depth + 1u);
+    features.setResolved();
 }
 
-void resolveSampleDenoiserFeatures(
-    inout RgbSampleState sampleState,
-    BSDFMaterial material,
-    PathSurfaceState surfaceState,
-    uint depth
-) {
-    resolveDenoiserFeatureState(
-        sampleState.albedo,
-        sampleState.normal,
-        sampleState.featureWeight,
-        sampleState.featureDepth,
-        sampleState.followSpecular,
-        sampleState.flags,
-        material,
-        surfaceState,
-        depth
-    );
-}
-
-void resolveSampleDenoiserFeatures(
-    inout SpectralSingleSampleState sampleState,
-    BSDFMaterial material,
-    PathSurfaceState surfaceState,
-    uint depth
-) {
-    resolveDenoiserFeatureState(
-        sampleState.albedo,
-        sampleState.normal,
-        sampleState.featureWeight,
-        sampleState.featureDepth,
-        sampleState.followSpecular,
-        sampleState.flags,
-        material,
-        surfaceState,
-        depth
-    );
-}
-
-void resolveSampleDenoiserFeatures(
-    inout SpectralHeroSampleState sampleState,
-    BSDFMaterial material,
-    PathSurfaceState surfaceState,
-    uint depth
-) {
-    resolveDenoiserFeatureState(
-        sampleState.albedo,
-        sampleState.normal,
-        sampleState.featureWeight,
-        sampleState.featureDepth,
-        sampleState.followSpecular,
-        sampleState.flags,
-        material,
-        surfaceState,
-        depth
-    );
-}
-
-void accumulateResolvedSampleFeatures(
-    inout RaygenFrameState frameState,
-    float3 albedo,
-    float3 normal,
-    float featureWeight,
-    float featureDepth,
-    float followSpecular
-) {
-    frameState.albedo += albedo;
-    frameState.normal += normal;
-    frameState.featureWeight += featureWeight;
-    frameState.featureDepth += featureDepth;
-    frameState.followSpecular += followSpecular;
+void accumulateDenoiserFeatures(inout DenoiserFeatures target, DenoiserFeatures source) {
+    target.albedo += source.albedo;
+    target.normal += source.normal;
+    target.weight += source.weight;
+    target.depth += source.depth;
+    target.followSpecular += source.followSpecular;
 }
 
 void advancePathRay(inout PathCommonState common, PathSurfaceState surfaceState, uint sampleIsTransmission, float3 wi) {

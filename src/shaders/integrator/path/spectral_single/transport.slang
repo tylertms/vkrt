@@ -87,14 +87,7 @@ void accumulateResolvedSpectralSingleSample(
     }
 
     frameState.radiance += spectralSampleToXYZ(sampleState.spectralRadiance, pathState.wavelength);
-    accumulateResolvedSampleFeatures(
-        frameState,
-        sampleState.albedo,
-        sampleState.normal,
-        sampleState.featureWeight,
-        sampleState.featureDepth,
-        sampleState.followSpecular
-    );
+    accumulateDenoiserFeatures(frameState.features, sampleState.features);
 }
 
 #endif

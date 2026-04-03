@@ -1,6 +1,8 @@
 #ifndef VKRT_LIGHT_DIRECT_LIGHT_TYPES_SLANG
 #define VKRT_LIGHT_DIRECT_LIGHT_TYPES_SLANG
 
+static const uint VKRT_LIGHT_FLAG_VALID = 1u;
+
 struct LightSample {
     float3 position;
     float3 normal;
@@ -17,7 +19,7 @@ struct LightSample {
     }
 
     bool valid() {
-        return (flags & 1u) != 0u;
+        return (flags & VKRT_LIGHT_FLAG_VALID) != 0u;
     }
 };
 

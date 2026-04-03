@@ -30,7 +30,7 @@ LightSample sampleDirectLight(inout uint rng) {
     lightSample.emission = emissiveMesh.emission;
     lightSample.pdf = emissiveMesh.pmfMesh * emissiveMesh.invTotalArea;
     if (lightSample.pdf > 0.0) {
-        lightSample.flags |= 1u;
+        lightSample.flags |= VKRT_LIGHT_FLAG_VALID;
     }
 
     return lightSample;

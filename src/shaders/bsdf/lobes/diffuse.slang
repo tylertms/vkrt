@@ -17,10 +17,6 @@ BSDFEval evalLambertian(float3 diffuseColor, float3 wi) {
     return eval;
 }
 
-float3 sampleLambertian(inout uint rng) {
-    return sampleCosineHemisphere(rng);
-}
-
 BSDFEval evalOrenNayar(float3 diffuseColor, float roughness, float3 wo, float3 wi) {
     BSDFEval eval;
     eval.value = float3(0.0);
@@ -54,10 +50,6 @@ BSDFEval evalOrenNayar(float3 diffuseColor, float roughness, float3 wo, float3 w
     eval.value = diffuseColor * (VKRT_INV_PI * (A + B * maxCos * sinAlpha * tanBeta));
     eval.pdf = cosineHemispherePdf(wi);
     return eval;
-}
-
-float3 sampleOrenNayar(inout uint rng) {
-    return sampleCosineHemisphere(rng);
 }
 
 #endif

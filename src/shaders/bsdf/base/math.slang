@@ -1,6 +1,8 @@
 #ifndef VKRT_BSDF_BASE_MATH_SLANG
 #define VKRT_BSDF_BASE_MATH_SLANG
 
+#include "../../sampling/random.slang"
+
 static const float VKRT_PI = 3.14159265358979323846;
 static const float VKRT_INV_PI = 0.31830988618379067154;
 

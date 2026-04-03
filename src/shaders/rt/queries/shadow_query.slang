@@ -3,7 +3,6 @@
 
 #include "../../camera/ray.slang"
 #include "../../scene/resources.slang"
-#include "../layout.slang"
 #include "../payloads/shadow_payload.slang"
 
 ShadowPayload traceShadowRay(RayDesc ray, inout uint rng) {

@@ -12,12 +12,12 @@ void finalizeFrameAccumulation(RaygenPixelState pixelState, inout RaygenFrameSta
     }
 
     frameState.radiance /= float(pixelState.spp);
-    if (frameState.featureWeight > 0.0) {
-        frameState.albedo /= frameState.featureWeight;
-        frameState.normal /= frameState.featureWeight;
+    if (frameState.features.weight > 0.0) {
+        frameState.features.albedo /= frameState.features.weight;
+        frameState.features.normal /= frameState.features.weight;
     } else {
-        frameState.albedo = float3(0.0);
-        frameState.normal = float3(0.0);
+        frameState.features.albedo = float3(0.0);
+        frameState.features.normal = float3(0.0);
     }
 }
 
@@ -31,25 +31,25 @@ void applyFrameDebugOverrides(
     }
 
     if (raygenModeHas(modeState, VKRT_RAYGEN_MODE_FLAG_DENOISER_ALBEDO_DEBUG)) {
-        frameState.radiance = frameState.albedo;
+        frameState.radiance = frameState.features.albedo;
         setRaygenFrameDebugEarlyOut(frameState);
     } else if (raygenModeHas(modeState, VKRT_RAYGEN_MODE_FLAG_DENOISER_NORMAL_DEBUG)) {
-        frameState.radiance = frameState.featureWeight > 0.0 ? frameState.normal * 0.5 + 0.5 : float3(0.0);
+        frameState.radiance = frameState.features.weight > 0.0 ? frameState.features.normal * 0.5 + 0.5 : float3(0.0);
         setRaygenFrameDebugEarlyOut(frameState);
     } else if (raygenModeHas(modeState, VKRT_RAYGEN_MODE_FLAG_DENOISER_FEATURE_VALIDITY_DEBUG)) {
-        float coverage = saturate(frameState.featureWeight / float(pixelState.spp));
+        float coverage = saturate(frameState.features.weight / float(pixelState.spp));
         frameState.radiance = coverage.xxx;
         setRaygenFrameDebugEarlyOut(frameState);
     } else if (raygenModeHas(modeState, VKRT_RAYGEN_MODE_FLAG_DENOISER_FEATURE_DEPTH_DEBUG)) {
         float normalizedDepth = 0.0;
-        if (frameState.featureWeight > 0.0) {
-            float averageFeatureDepth = frameState.featureDepth / frameState.featureWeight;
+        if (frameState.features.weight > 0.0) {
+            float averageFeatureDepth = frameState.features.depth / frameState.features.weight;
             normalizedDepth = saturate((averageFeatureDepth - 1.0) / max(float(scene.rrMaxDepth - 1u), 1.0));
         }
         frameState.radiance = normalizedDepth.xxx;
         setRaygenFrameDebugEarlyOut(frameState);
     } else if (raygenModeHas(modeState, VKRT_RAYGEN_MODE_FLAG_DENOISER_FOLLOW_SPECULAR_DEBUG)) {
-        float followRatio = saturate(frameState.followSpecular / float(pixelState.spp));
+        float followRatio = saturate(frameState.features.followSpecular / float(pixelState.spp));
         frameState.radiance = lerp(float3(0.05), float3(1.0, 0.6, 0.0), followRatio);
         setRaygenFrameDebugEarlyOut(frameState);
     }
@@ -91,13 +91,13 @@ void writeAccumulatedFrameOutputs(RaygenPixelState pixelState, RaygenFrameState 
     float totalWeight = previousWeight + float(pixelState.spp);
     float previousAlbedoWeight = previousAlbedo.w;
     float previousNormalWeight = previousNormal.w;
-    float totalAlbedoWeight = previousAlbedoWeight + frameState.featureWeight;
-    float totalNormalWeight = previousNormalWeight + frameState.featureWeight;
+    float totalAlbedoWeight = previousAlbedoWeight + frameState.features.weight;
+    float totalNormalWeight = previousNormalWeight + frameState.features.weight;
     float3 accumulated = accumulatedFrameRadiance(pixelState, frameState);
     float3 accumulatedAlbedo =
-        blendAccumulatedValue(previousAlbedo.xyz, previousAlbedoWeight, frameState.albedo, frameState.featureWeight);
+        blendAccumulatedValue(previousAlbedo.xyz, previousAlbedoWeight, frameState.features.albedo, frameState.features.weight);
     float3 accumulatedNormal =
-        blendAccumulatedValue(previousNormal.xyz, previousNormalWeight, frameState.normal, frameState.featureWeight);
+        blendAccumulatedValue(previousNormal.xyz, previousNormalWeight, frameState.features.normal, frameState.features.weight);
 
     accumulationWriteImage[pixelState.pixel] = float4(accumulated, totalWeight);
     albedoWriteImage[pixelState.pixel] = float4(accumulatedAlbedo, totalAlbedoWeight);

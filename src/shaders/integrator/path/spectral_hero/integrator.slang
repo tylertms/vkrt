@@ -56,7 +56,7 @@ void traceSpectralHeroPathSample(
             )) {
             break;
         }
-        resolveSampleDenoiserFeatures(sampleState, bsdfMaterial, surfaceState, depth);
+        resolveDenoiserFeatures(sampleState.features, bsdfMaterial, surfaceState, depth);
 
         float stateWavelengthNm =
             spectralHeroPathActive(pathState) ? pathState.wavelengthsNm.x : pathState.scalarWavelength.lambdaNm;

@@ -17,4 +17,10 @@ static const float VKRT_TANGENT_PARALLEL_THRESHOLD = 0.999;
 static const float3 VKRT_OUTLINE_COLOR = float3(1.0, 0.55, 0.1);
 static const float VKRT_OUTLINE_REFERENCE_HEIGHT = 1080.0;
 
+static const uint VKRT_MAIN_SCENE_RAY_SBT_OFFSET = 0u;
+static const uint VKRT_SHADOW_RAY_SBT_OFFSET = 2u;
+static const uint VKRT_SCENE_HIT_GROUP_STRIDE = 2u;
+static const uint VKRT_MAIN_MISS_INDEX = 0u;
+static const uint VKRT_SHADOW_MISS_INDEX = 1u;
+
 #endif

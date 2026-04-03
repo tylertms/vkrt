@@ -42,11 +42,11 @@ bool sampleBSDFDirection(BSDFState state, inout uint rng, out BSDFDirectionSampl
 
     selector -= state.sampleWeights.dielectric;
     if (selector < state.sampleWeights.diffuse) {
-        sample.wi = state.material.diffuseRoughness <= 0.0 ? sampleLambertian(rng) : sampleOrenNayar(rng);
+        sample.wi = sampleCosineHemisphere(rng);
         return true;
     }
 
-    sample.wi = sampleFakeSubsurface(rng);
+    sample.wi = sampleCosineHemisphere(rng);
     return true;
 }
 

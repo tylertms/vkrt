@@ -67,14 +67,7 @@ void accumulateResolvedRgbSample(inout RaygenFrameState frameState, RgbSampleSta
     }
 
     frameState.radiance += sampleState.radiance;
-    accumulateResolvedSampleFeatures(
-        frameState,
-        sampleState.albedo,
-        sampleState.normal,
-        sampleState.featureWeight,
-        sampleState.featureDepth,
-        sampleState.followSpecular
-    );
+    accumulateDenoiserFeatures(frameState.features, sampleState.features);
 }
 
 #endif

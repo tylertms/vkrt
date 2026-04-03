@@ -26,7 +26,7 @@ struct SpectralBSDFSample {
     uint isTransmission;
 
     bool isUsable() {
-        return any(weight > 0.0);
+        return techniquePdf.x > 0.0 && any(weight > 0.0);
     }
 };
 

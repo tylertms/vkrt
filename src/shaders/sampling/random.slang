@@ -1,8 +1,6 @@
 #ifndef VKRT_UTILITY_RANDOM_SLANG
 #define VKRT_UTILITY_RANDOM_SLANG
 
-#include "../camera/ray.slang"
-
 // References:
 // Integer hash function: Wellons, 2018 - https://nullprogram.com/blog/2018/07/31/
 

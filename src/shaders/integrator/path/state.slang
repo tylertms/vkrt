@@ -21,7 +21,7 @@ static const uint VKRT_RAYGEN_MODE_FLAG_NEE_ENABLED = 1u << 8;
 
 static const uint VKRT_RAYGEN_PIXEL_FLAG_CAPTURE_SELECTION = 1u << 0;
 static const uint VKRT_RAYGEN_FRAME_FLAG_DEBUG_EARLY_OUT = 1u << 0;
-static const uint VKRT_RAYGEN_SAMPLE_FLAG_FEATURES_RESOLVED = 1u << 0;
+static const uint VKRT_DENOISER_FLAG_FEATURES_RESOLVED = 1u << 0;
 static const uint VKRT_PATH_FLAG_PREV_VERTEX_NEE_ALLOWED = 1u << 0;
 static const uint VKRT_HERO_PATH_FLAG_ACTIVE = 1u << 0;
 
@@ -83,13 +83,26 @@ bool raygenPixelCapturesSelection(RaygenPixelState pixelState) {
     return (pixelState.flags & VKRT_RAYGEN_PIXEL_FLAG_CAPTURE_SELECTION) != 0u;
 }
 
-struct RaygenFrameState {
-    float3 radiance = float3(0.0);
+struct DenoiserFeatures {
     float3 albedo = float3(0.0);
     float3 normal = float3(0.0);
-    float featureWeight = 0.0;
-    float featureDepth = 0.0;
+    float weight = 0.0;
+    float depth = 0.0;
     float followSpecular = 0.0;
+    uint flags = 0u;
+
+    bool resolved() {
+        return (flags & VKRT_DENOISER_FLAG_FEATURES_RESOLVED) != 0u;
+    }
+
+    [mutating] void setResolved() {
+        flags |= VKRT_DENOISER_FLAG_FEATURES_RESOLVED;
+    }
+};
+
+struct RaygenFrameState {
+    float3 radiance = float3(0.0);
+    DenoiserFeatures features = DenoiserFeatures();
     uint flags = 0u;
 };
 
@@ -103,43 +116,20 @@ bool raygenFrameDebugEarlyOut(RaygenFrameState frameState) {
 
 struct RgbSampleState {
     float3 radiance = float3(0.0);
-    float3 albedo = float3(0.0);
-    float3 normal = float3(0.0);
-    float featureWeight = 0.0;
-    float featureDepth = 0.0;
-    float followSpecular = 0.0;
-    uint flags = 0u;
+    DenoiserFeatures features = DenoiserFeatures();
 };
 
 struct SpectralSingleSampleState {
     float spectralRadiance = 0.0;
-    float3 albedo = float3(0.0);
-    float3 normal = float3(0.0);
-    float featureWeight = 0.0;
-    float featureDepth = 0.0;
-    float followSpecular = 0.0;
-    uint flags = 0u;
+    DenoiserFeatures features = DenoiserFeatures();
 };
 
 struct SpectralHeroSampleState {
     float3 radiance = float3(0.0);
     float spectralRadianceScalar = 0.0;
     float4 spectralRadiance = float4(0.0);
-    float3 albedo = float3(0.0);
-    float3 normal = float3(0.0);
-    float featureWeight = 0.0;
-    float featureDepth = 0.0;
-    float followSpecular = 0.0;
-    uint flags = 0u;
+    DenoiserFeatures features = DenoiserFeatures();
 };
-
-bool raygenSampleFeaturesResolved(uint flags) {
-    return (flags & VKRT_RAYGEN_SAMPLE_FLAG_FEATURES_RESOLVED) != 0u;
-}
-
-[mutating] void setRaygenSampleFeaturesResolved(inout uint flags) {
-    flags |= VKRT_RAYGEN_SAMPLE_FLAG_FEATURES_RESOLVED;
-}
 
 struct PathCommonState {
     uint rng = 0u;
@@ -193,8 +183,8 @@ struct SpectralHeroPathState {
     float4 wavelengthsNm = float4(0.0);
     float4 invWavelengthPdf = float4(0.0);
     float spectralThroughputScalar = 1.0;
-    float4 spectralThroughput = float4(1.0, 0.0, 0.0, 0.0);
-    float4 techniquePathPdf = float4(1.0, 0.0, 0.0, 0.0);
+    float4 spectralThroughput = float4(1.0);
+    float4 techniquePathPdf = float4(1.0);
     float4 prevVertexTechniquePathPdf = float4(0.0);
     float4 prevBsdfTechniquePdf = float4(0.0);
     uint flags = 0u;
@@ -202,9 +192,7 @@ struct SpectralHeroPathState {
     __init(RaygenPixelState pixelState, uint sampleIndex) {
         common.initCommon(pixelState, sampleIndex);
         wavelengthsNm = sampleHeroWavelengths4(common.rng, pixelState.previousSamples + sampleIndex);
-        invWavelengthPdf = heroWavelengthInvPdf4();
-        spectralThroughput = float4(1.0);
-        techniquePathPdf = float4(1.0);
+        invWavelengthPdf = float4(VKRT_WAVELENGTH_RANGE_NM);
         flags = VKRT_HERO_PATH_FLAG_ACTIVE;
     }
 };

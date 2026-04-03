@@ -55,7 +55,7 @@ void traceRgbPathSample(
             )) {
             break;
         }
-        resolveSampleDenoiserFeatures(sampleState, bsdfMaterial, surfaceState, depth);
+        resolveDenoiserFeatures(sampleState.features, bsdfMaterial, surfaceState, depth);
 
         BSDFState state = makePathBSDFState(pathState.common, surfaceState, bsdfMaterial, 0.0, 0u);
         bool currentVertexNeeAllowed = !pathState.common.medium.refractiveActive();
