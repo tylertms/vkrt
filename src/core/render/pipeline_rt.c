@@ -124,12 +124,8 @@ VKRT_Result createRayTracingPipeline(VKRT* vkrt) {
         .pDynamicState = &dynamicStateInfo,
     };
 
-    if (createRayTracingPipelineTracked(
-            vkrt,
-            "Main RT",
-            &pipelineCreateInfo,
-            &vkrt->core.rayTracingPipeline
-        ) != VK_SUCCESS) {
+    if (createRayTracingPipelineTracked(vkrt, "Main RT", &pipelineCreateInfo, &vkrt->core.rayTracingPipeline) !=
+        VK_SUCCESS) {
         LOG_ERROR("Failed to create ray tracing pipeline");
         destroyRayTracingShaderModules(vkrt, &modules);
         return VKRT_ERROR_OPERATION_FAILED;

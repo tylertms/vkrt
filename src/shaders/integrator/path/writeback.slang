@@ -94,10 +94,18 @@ void writeAccumulatedFrameOutputs(RaygenPixelState pixelState, RaygenFrameState 
     float totalAlbedoWeight = previousAlbedoWeight + frameState.features.weight;
     float totalNormalWeight = previousNormalWeight + frameState.features.weight;
     float3 accumulated = accumulatedFrameRadiance(pixelState, frameState);
-    float3 accumulatedAlbedo =
-        blendAccumulatedValue(previousAlbedo.xyz, previousAlbedoWeight, frameState.features.albedo, frameState.features.weight);
-    float3 accumulatedNormal =
-        blendAccumulatedValue(previousNormal.xyz, previousNormalWeight, frameState.features.normal, frameState.features.weight);
+    float3 accumulatedAlbedo = blendAccumulatedValue(
+        previousAlbedo.xyz,
+        previousAlbedoWeight,
+        frameState.features.albedo,
+        frameState.features.weight
+    );
+    float3 accumulatedNormal = blendAccumulatedValue(
+        previousNormal.xyz,
+        previousNormalWeight,
+        frameState.features.normal,
+        frameState.features.weight
+    );
 
     accumulationWriteImage[pixelState.pixel] = float4(accumulated, totalWeight);
     albedoWriteImage[pixelState.pixel] = float4(accumulatedAlbedo, totalAlbedoWeight);

@@ -95,9 +95,7 @@ struct DenoiserFeatures {
         return (flags & VKRT_DENOISER_FLAG_FEATURES_RESOLVED) != 0u;
     }
 
-    [mutating] void setResolved() {
-        flags |= VKRT_DENOISER_FLAG_FEATURES_RESOLVED;
-    }
+    [mutating] void setResolved() { flags |= VKRT_DENOISER_FLAG_FEATURES_RESOLVED; }
 };
 
 struct RaygenFrameState {
