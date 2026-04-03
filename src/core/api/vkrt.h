@@ -41,22 +41,21 @@ VKRT_Result VKRT_setAutoSPPEnabled(VKRT* vkrt, uint8_t enabled);
 VKRT_Result VKRT_setAutoSPPTargetFPS(VKRT* vkrt, uint32_t targetFPS);
 VKRT_Result VKRT_setToneMappingMode(VKRT* vkrt, VKRT_ToneMappingMode toneMappingMode);
 VKRT_Result VKRT_setRenderMode(VKRT* vkrt, VKRT_RenderMode renderMode);
-VKRT_Result VKRT_setSpectralSamplingMode(VKRT* vkrt, uint32_t spectralSamplingMode);
+VKRT_Result VKRT_setSpectralSamplingMode(VKRT* vkrt, VKRT_SpectralSamplingMode spectralSamplingMode);
 VKRT_Result VKRT_setExposure(VKRT* vkrt, float exposure);
 VKRT_Result VKRT_setAutoExposureEnabled(VKRT* vkrt, uint8_t enabled);
 VKRT_Result VKRT_setEnvironmentLight(VKRT* vkrt, vec3 color, float strength);
 VKRT_Result VKRT_setEnvironmentRotation(VKRT* vkrt, float rotationDegrees);
 VKRT_Result VKRT_setEnvironmentTextureFromFile(VKRT* vkrt, const char* path);
 VKRT_Result VKRT_clearEnvironmentTexture(VKRT* vkrt);
-VKRT_Result VKRT_setDebugMode(VKRT* vkrt, uint32_t mode);
-VKRT_Result VKRT_setMISNEEEnabled(VKRT* vkrt, uint32_t enabled);
+VKRT_Result VKRT_setDebugMode(VKRT* vkrt, VKRT_DebugMode mode);
+VKRT_Result VKRT_setMisNeeEnabled(VKRT* vkrt, uint8_t enabled);
 VKRT_Result VKRT_setTimeRange(VKRT* vkrt, float timeBase, float timeStep);
 void VKRT_defaultRenderExportSettings(VKRT_RenderExportSettings* settings);
 VKRT_Result VKRT_setRenderDenoiseEnabled(VKRT* vkrt, uint8_t enabled);
 VKRT_Result VKRT_denoiseRenderToViewport(VKRT* vkrt);
 VKRT_Result VKRT_saveRenderImageEx(VKRT* vkrt, const char* path, const VKRT_RenderExportSettings* settings);
 VKRT_Result VKRT_saveRenderImage(VKRT* vkrt, const char* path);
-VKRT_Result VKRT_saveRenderPNG(VKRT* vkrt, const char* path);
 VKRT_Result VKRT_startRender(VKRT* vkrt, uint32_t width, uint32_t height, uint32_t targetSamples);
 VKRT_Result VKRT_continueRender(VKRT* vkrt, uint32_t targetSamples);
 VKRT_Result VKRT_stopRenderSampling(VKRT* vkrt);
@@ -112,10 +111,10 @@ VKRT_Result VKRT_setRenderViewport(VKRT* vkrt, uint32_t x, uint32_t y, uint32_t 
 VKRT_Result VKRT_cameraSetPose(VKRT* vkrt, vec3 position, vec3 target, vec3 upVector, float vfov);
 VKRT_Result VKRT_cameraGetPose(const VKRT* vkrt, vec3 position, vec3 target, vec3 upVector, float* vfov);
 
-void buildMeshTransformMatrix(const vec3 position, const vec3 rotationDegrees, const vec3 scale, mat4 outMatrix);
-void buildImportedMeshNodeTransformMatrix(mat4 worldTransform, mat4 outEngineTransform);
-void decomposeImportedMeshTransform(mat4 worldTransform, vec3 outPosition, vec3 outRotation, vec3 outScale);
-void decomposeImportedMeshNodeTransform(mat4 worldTransform, vec3 outPosition, vec3 outRotation, vec3 outScale);
+void VKRT_buildMeshTransformMatrix(const vec3 position, const vec3 rotationDegrees, const vec3 scale, mat4 outMatrix);
+void VKRT_buildImportedNodeTransform(mat4 worldTransform, mat4 outEngineTransform);
+void VKRT_decomposeMeshTransform(mat4 worldTransform, vec3 outPosition, vec3 outRotation, vec3 outScale);
+void VKRT_decomposeMeshNodeTransform(mat4 worldTransform, vec3 outPosition, vec3 outRotation, vec3 outScale);
 
 #ifdef __cplusplus
 }

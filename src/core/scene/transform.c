@@ -23,7 +23,7 @@ static float rotationDeterminant(mat4 rotationMatrix) {
     return glm_vec3_dot(cross01, column2);
 }
 
-void buildMeshTransformMatrix(const vec3 position, const vec3 rotationDegrees, const vec3 scale, mat4 outMatrix) {
+void VKRT_buildMeshTransformMatrix(const vec3 position, const vec3 rotationDegrees, const vec3 scale, mat4 outMatrix) {
     if (!position || !rotationDegrees || !scale || !outMatrix) return;
 
     glm_mat4_identity(outMatrix);
@@ -98,7 +98,7 @@ static void buildImportedMeshBasisTransform(mat4 outTransform) {
     );
 }
 
-void buildImportedMeshNodeTransformMatrix(mat4 worldTransform, mat4 outEngineTransform) {
+void VKRT_buildImportedNodeTransform(mat4 worldTransform, mat4 outEngineTransform) {
     if (!worldTransform || !outEngineTransform) return;
 
     mat4 importBasisTransform = GLM_MAT4_IDENTITY_INIT;
@@ -110,12 +110,12 @@ void buildImportedMeshNodeTransformMatrix(mat4 worldTransform, mat4 outEngineTra
     glm_mat4_mul(basisAdjustedTransform, importBasisInverse, outEngineTransform);
 }
 
-void decomposeImportedMeshNodeTransform(mat4 worldTransform, vec3 outPosition, vec3 outRotation, vec3 outScale) {
+void VKRT_decomposeMeshNodeTransform(mat4 worldTransform, vec3 outPosition, vec3 outRotation, vec3 outScale) {
     if (!outPosition || !outRotation || !outScale) return;
 
     mat4 engineTransform = GLM_MAT4_IDENTITY_INIT;
-    buildImportedMeshNodeTransformMatrix(worldTransform, engineTransform);
-    decomposeImportedMeshTransform(engineTransform, outPosition, outRotation, outScale);
+    VKRT_buildImportedNodeTransform(worldTransform, engineTransform);
+    VKRT_decomposeMeshTransform(engineTransform, outPosition, outRotation, outScale);
 }
 
 static void assignSignedScaleCandidate(
@@ -155,7 +155,7 @@ static float transform3x4Error(mat4 a, mat4 b) {
     return maxError;
 }
 
-void decomposeImportedMeshTransform(mat4 worldTransform, vec3 outPosition, vec3 outRotation, vec3 outScale) {
+void VKRT_decomposeMeshTransform(mat4 worldTransform, vec3 outPosition, vec3 outRotation, vec3 outScale) {
     if (!outPosition || !outRotation || !outScale) return;
 
     outPosition[0] = worldTransform[3][0];
@@ -194,7 +194,7 @@ void decomposeImportedMeshTransform(mat4 worldTransform, vec3 outPosition, vec3 
         };
 
         mat4 recomposedTransform = GLM_MAT4_IDENTITY_INIT;
-        buildMeshTransformMatrix(outPosition, candidateRotationDegrees, candidateScale, recomposedTransform);
+        VKRT_buildMeshTransformMatrix(outPosition, candidateRotationDegrees, candidateScale, recomposedTransform);
         float candidateError = transform3x4Error(worldTransform, recomposedTransform);
         if (candidateError < bestError) {
             bestError = candidateError;

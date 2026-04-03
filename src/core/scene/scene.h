@@ -25,8 +25,8 @@ void recordAutoExposureReadback(
     VkImage accumulationImage,
     VkExtent2D renderExtent
 );
-void buildMeshTransformMatrix(const vec3 position, const vec3 rotationDegrees, const vec3 scale, mat4 outMatrix);
-void buildImportedMeshNodeTransformMatrix(mat4 worldTransform, mat4 outEngineTransform);
-void decomposeImportedMeshNodeTransform(mat4 worldTransform, vec3 outPosition, vec3 outRotation, vec3 outScale);
-void decomposeImportedMeshTransform(mat4 worldTransform, vec3 outPosition, vec3 outRotation, vec3 outScale);
+void VKRT_buildMeshTransformMatrix(const vec3 position, const vec3 rotationDegrees, const vec3 scale, mat4 outMatrix);
+void VKRT_buildImportedNodeTransform(mat4 worldTransform, mat4 outEngineTransform);
+void VKRT_decomposeMeshNodeTransform(mat4 worldTransform, vec3 outPosition, vec3 outRotation, vec3 outScale);
+void VKRT_decomposeMeshTransform(mat4 worldTransform, vec3 outPosition, vec3 outRotation, vec3 outScale);
 VkTransformMatrixKHR getMeshWorldTransform(const Mesh* mesh);

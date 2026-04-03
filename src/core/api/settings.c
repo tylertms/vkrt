@@ -12,34 +12,6 @@
 #include <types.h>
 #include <vulkan/vulkan_core.h>
 
-static uint32_t sanitizeMeshSelection(const VKRT* vkrt, uint32_t meshIndex) {
-    if (!vkrt || meshIndex == VKRT_INVALID_INDEX) return VKRT_INVALID_INDEX;
-    return meshIndex < vkrt->core.meshCount ? meshIndex : VKRT_INVALID_INDEX;
-}
-
-static void cancelPendingSelection(VKRT* vkrt) {
-    if (!vkrt) return;
-    vkrt->core.selectionPending = 0;
-    vkrt->core.selectionSubmitted = 0;
-    vkrt->core.selectionResultReady = 0;
-    vkrt->core.selectionResultMeshIndex = VKRT_INVALID_INDEX;
-    if (vkrt->core.selectionData) {
-        vkrt->core.selectionData->hitMeshIndex = VKRT_INVALID_INDEX;
-    }
-}
-
-static uint32_t sanitizeAutoSPPTargetFPS(const VKRT* vkrt, uint32_t targetFPS) {
-    if (targetFPS == 0) {
-        float refreshHz = vkrt ? vkrt->runtime.displayRefreshHz : 0.0f;
-        if (refreshHz <= 0.0f) refreshHz = 60.0f;
-        targetFPS = (uint32_t)(refreshHz + 0.5f);
-    }
-
-    if (targetFPS < 30u) return 30u;
-    if (targetFPS > 360u) return 360u;
-    return targetFPS;
-}
-
 VKRT_Result VKRT_applyCameraInput(VKRT* vkrt, const VKRT_CameraInput* input) {
     if (!input) return VKRT_ERROR_INVALID_ARGUMENT;
     VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
@@ -93,7 +65,13 @@ VKRT_Result VKRT_setAutoSPPEnabled(VKRT* vkrt, uint8_t enabled) {
 
 VKRT_Result VKRT_setAutoSPPTargetFPS(VKRT* vkrt, uint32_t targetFPS) {
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
-    targetFPS = sanitizeAutoSPPTargetFPS(vkrt, targetFPS);
+    if (targetFPS == 0) {
+        float refreshHz = vkrt->runtime.displayRefreshHz;
+        if (refreshHz <= 0.0f) refreshHz = 60.0f;
+        targetFPS = (uint32_t)(refreshHz + 0.5f);
+    }
+    if (targetFPS < 30u) targetFPS = 30u;
+    if (targetFPS > 360u) targetFPS = 360u;
     vkrt->sceneSettings.autoSPPTargetFPS = targetFPS;
     vkrt->renderControl.autoSPP.targetFrameMs = 1000.0f / (float)targetFPS;
     resetAutoSPPState(vkrt, VK_FALSE);
@@ -128,7 +106,7 @@ VKRT_Result VKRT_setRenderMode(VKRT* vkrt, VKRT_RenderMode renderMode) {
     return VKRT_SUCCESS;
 }
 
-VKRT_Result VKRT_setSpectralSamplingMode(VKRT* vkrt, uint32_t spectralSamplingMode) {
+VKRT_Result VKRT_setSpectralSamplingMode(VKRT* vkrt, VKRT_SpectralSamplingMode spectralSamplingMode) {
     VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
     if (stateReady != VKRT_SUCCESS) return stateReady;
 
@@ -214,7 +192,7 @@ VKRT_Result VKRT_setEnvironmentRotation(VKRT* vkrt, float rotationDegrees) {
     return VKRT_SUCCESS;
 }
 
-VKRT_Result VKRT_setDebugMode(VKRT* vkrt, uint32_t mode) {
+VKRT_Result VKRT_setDebugMode(VKRT* vkrt, VKRT_DebugMode mode) {
     VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
     if (stateReady != VKRT_SUCCESS) return stateReady;
     if (mode >= VKRT_DEBUG_MODE_COUNT) return VKRT_ERROR_INVALID_ARGUMENT;
@@ -224,7 +202,7 @@ VKRT_Result VKRT_setDebugMode(VKRT* vkrt, uint32_t mode) {
     return VKRT_SUCCESS;
 }
 
-VKRT_Result VKRT_setMISNEEEnabled(VKRT* vkrt, uint32_t enabled) {
+VKRT_Result VKRT_setMisNeeEnabled(VKRT* vkrt, uint8_t enabled) {
     VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
     if (stateReady != VKRT_SUCCESS) return stateReady;
     enabled = enabled ? 1u : 0u;
@@ -287,8 +265,17 @@ VKRT_Result VKRT_setSelectedMesh(VKRT* vkrt, uint32_t meshIndex) {
     VKRT_Result stateReady = vkrtRequireSceneStateReady(vkrt);
     if (stateReady != VKRT_SUCCESS) return stateReady;
 
-    uint32_t nextSelectedMesh = sanitizeMeshSelection(vkrt, meshIndex);
-    cancelPendingSelection(vkrt);
+    uint32_t nextSelectedMesh =
+        (meshIndex != VKRT_INVALID_INDEX && meshIndex < vkrt->core.meshCount) ? meshIndex : VKRT_INVALID_INDEX;
+
+    vkrt->core.selectionPending = 0;
+    vkrt->core.selectionSubmitted = 0;
+    vkrt->core.selectionResultReady = 0;
+    vkrt->core.selectionResultMeshIndex = VKRT_INVALID_INDEX;
+    if (vkrt->core.selectionData) {
+        vkrt->core.selectionData->hitMeshIndex = VKRT_INVALID_INDEX;
+    }
+
     if (vkrt->sceneSettings.selectedMeshIndex == nextSelectedMesh) return VKRT_SUCCESS;
 
     vkrt->sceneSettings.selectedMeshIndex = nextSelectedMesh;

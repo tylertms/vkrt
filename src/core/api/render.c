@@ -88,10 +88,6 @@ VKRT_Result VKRT_saveRenderImage(VKRT* vkrt, const char* path) {
     return VKRT_saveRenderImageEx(vkrt, path, NULL);
 }
 
-VKRT_Result VKRT_saveRenderPNG(VKRT* vkrt, const char* path) {
-    return VKRT_saveRenderImage(vkrt, path);
-}
-
 static VkExtent2D queryEffectiveRenderExtent(const VKRT* vkrt) {
     if (!vkrt) return (VkExtent2D){1u, 1u};
 
@@ -317,12 +313,6 @@ VKRT_Result VKRT_setRenderViewport(VKRT* vkrt, uint32_t x, uint32_t y, uint32_t 
     if (!vkrt) return VKRT_ERROR_INVALID_ARGUMENT;
 
     vkrtClampViewportRect(vkrt->runtime.swapChainExtent, &x, &y, &width, &height);
-    if (vkrt->runtime.displayViewportRect[0] == x && vkrt->runtime.displayViewportRect[1] == y &&
-        vkrt->runtime.displayViewportRect[2] == width && vkrt->runtime.displayViewportRect[3] == height) {
-        if (VKRT_renderPhaseIsActive(vkrt->renderStatus.renderPhase)) return VKRT_SUCCESS;
-        applySceneViewport(vkrt, x, y, width, height);
-        return VKRT_SUCCESS;
-    }
 
     vkrt->runtime.displayViewportRect[0] = x;
     vkrt->runtime.displayViewportRect[1] = y;

@@ -29,12 +29,6 @@ static void clearOwnedString(char** value) {
     *value = NULL;
 }
 
-static void clearMeshImportPath(char** path) {
-    if (!path || !*path) return;
-    free(*path);
-    *path = NULL;
-}
-
 static void clearTextureRecord(SessionTextureRecord* record) {
     if (!record) return;
     free(record->sourcePath);
@@ -61,107 +55,54 @@ static int sceneObjectTransformMatrixValid(mat4 transform) {
     return isfinite(determinant) && fabsf(determinant) >= 1e-8f;
 }
 
-static int ensureSceneObjectCapacity(Session* session, uint32_t additionalCount) {
-    if (!session) return 0;
-    if (additionalCount == 0u) return 1;
-    if (session->editor.sceneObjectCount > UINT32_MAX - additionalCount) return 0;
+static int ensureArrayCapacity(
+    void** array, uint32_t currentCount, uint32_t* capacity,
+    uint32_t additional, size_t elemSize, uint32_t initCapacity
+) {
+    if (additional == 0u) return 1;
+    if (currentCount > UINT32_MAX - additional) return 0;
+    uint32_t required = currentCount + additional;
+    if (required <= *capacity) return 1;
 
-    uint32_t requiredCount = session->editor.sceneObjectCount + additionalCount;
-    if (requiredCount <= session->editor.sceneObjectCapacity) return 1;
-
-    uint32_t nextCapacity = session->editor.sceneObjectCapacity > 0u ? session->editor.sceneObjectCapacity : 16u;
-    while (nextCapacity < requiredCount) {
-        if (nextCapacity > UINT32_MAX / 2u) {
-            nextCapacity = requiredCount;
-            break;
-        }
-        nextCapacity *= 2u;
+    uint32_t next = *capacity > 0u ? *capacity : initCapacity;
+    while (next < required) {
+        if (next > UINT32_MAX / 2u) { next = required; break; }
+        next *= 2u;
     }
 
-    SessionSceneObject* resized =
-        (SessionSceneObject*)realloc(session->editor.sceneObjects, (size_t)nextCapacity * sizeof(*resized));
+    void* resized = realloc(*array, (size_t)next * elemSize);
     if (!resized) return 0;
-
-    session->editor.sceneObjects = resized;
-    session->editor.sceneObjectCapacity = nextCapacity;
+    *array = resized;
+    *capacity = next;
     return 1;
 }
 
-static int ensureMeshImportBatchCapacity(Session* session, uint32_t additionalCount) {
+static int ensureSceneObjectCapacity(Session* session, uint32_t additional) {
     if (!session) return 0;
-    if (additionalCount == 0u) return 1;
-    if (session->editor.meshImportBatchCount > UINT32_MAX - additionalCount) return 0;
-
-    uint32_t requiredCount = session->editor.meshImportBatchCount + additionalCount;
-    if (requiredCount <= session->editor.meshImportBatchCapacity) return 1;
-
-    uint32_t nextCapacity = session->editor.meshImportBatchCapacity > 0u ? session->editor.meshImportBatchCapacity : 8u;
-    while (nextCapacity < requiredCount) {
-        if (nextCapacity > UINT32_MAX / 2u) {
-            nextCapacity = requiredCount;
-            break;
-        }
-        nextCapacity *= 2u;
-    }
-
-    char** resized = (char**)realloc((void*)session->editor.meshImportPaths, (size_t)nextCapacity * sizeof(*resized));
-    if (!resized) return 0;
-
-    session->editor.meshImportPaths = resized;
-    session->editor.meshImportBatchCapacity = nextCapacity;
-    return 1;
+    return ensureArrayCapacity(
+        (void**)&session->editor.sceneObjects, session->editor.sceneObjectCount,
+        &session->editor.sceneObjectCapacity, additional, sizeof(SessionSceneObject), 16u);
 }
 
-static int ensureMeshRecordCapacity(Session* session, uint32_t additionalCount) {
+static int ensureMeshImportBatchCapacity(Session* session, uint32_t additional) {
     if (!session) return 0;
-    if (additionalCount == 0u) return 1;
-    if (session->editor.meshRecordCount > UINT32_MAX - additionalCount) return 0;
-
-    uint32_t requiredCount = session->editor.meshRecordCount + additionalCount;
-    if (requiredCount <= session->editor.meshRecordCapacity) return 1;
-
-    uint32_t nextCapacity = session->editor.meshRecordCapacity > 0u ? session->editor.meshRecordCapacity : 16u;
-    while (nextCapacity < requiredCount) {
-        if (nextCapacity > UINT32_MAX / 2u) {
-            nextCapacity = requiredCount;
-            break;
-        }
-        nextCapacity *= 2u;
-    }
-
-    SessionMeshRecord* resized =
-        (SessionMeshRecord*)realloc(session->editor.meshRecords, (size_t)nextCapacity * sizeof(*resized));
-    if (!resized) return 0;
-
-    session->editor.meshRecords = resized;
-    session->editor.meshRecordCapacity = nextCapacity;
-    return 1;
+    return ensureArrayCapacity(
+        (void**)&session->editor.meshImportPaths, session->editor.meshImportBatchCount,
+        &session->editor.meshImportBatchCapacity, additional, sizeof(char*), 8u);
 }
 
-static int ensureTextureRecordCapacity(Session* session, uint32_t additionalCount) {
+static int ensureMeshRecordCapacity(Session* session, uint32_t additional) {
     if (!session) return 0;
-    if (additionalCount == 0u) return 1;
-    if (session->editor.textureRecordCount > UINT32_MAX - additionalCount) return 0;
+    return ensureArrayCapacity(
+        (void**)&session->editor.meshRecords, session->editor.meshRecordCount,
+        &session->editor.meshRecordCapacity, additional, sizeof(SessionMeshRecord), 16u);
+}
 
-    uint32_t requiredCount = session->editor.textureRecordCount + additionalCount;
-    if (requiredCount <= session->editor.textureRecordCapacity) return 1;
-
-    uint32_t nextCapacity = session->editor.textureRecordCapacity > 0u ? session->editor.textureRecordCapacity : 8u;
-    while (nextCapacity < requiredCount) {
-        if (nextCapacity > UINT32_MAX / 2u) {
-            nextCapacity = requiredCount;
-            break;
-        }
-        nextCapacity *= 2u;
-    }
-
-    SessionTextureRecord* resized =
-        (SessionTextureRecord*)realloc(session->editor.textureRecords, (size_t)nextCapacity * sizeof(*resized));
-    if (!resized) return 0;
-
-    session->editor.textureRecords = resized;
-    session->editor.textureRecordCapacity = nextCapacity;
-    return 1;
+static int ensureTextureRecordCapacity(Session* session, uint32_t additional) {
+    if (!session) return 0;
+    return ensureArrayCapacity(
+        (void**)&session->editor.textureRecords, session->editor.textureRecordCount,
+        &session->editor.textureRecordCapacity, additional, sizeof(SessionTextureRecord), 8u);
 }
 
 static void clearSceneAssetState(Session* session) {
@@ -172,7 +113,7 @@ static void clearSceneAssetState(Session* session) {
     session->runtime.lastSyncedSelectedMeshIndex = VKRT_INVALID_INDEX;
 
     for (uint32_t i = 0; i < session->editor.meshImportBatchCount; i++) {
-        clearMeshImportPath(&session->editor.meshImportPaths[i]);
+        clearOwnedString(&session->editor.meshImportPaths[i]);
     }
     session->editor.meshImportBatchCount = 0u;
 
@@ -389,7 +330,7 @@ void sessionDeinit(Session* session) {
     clearOwnedString(&session->editor.environmentTexturePath);
 
     for (uint32_t i = 0; i < session->editor.meshImportBatchCount; i++) {
-        clearMeshImportPath(&session->editor.meshImportPaths[i]);
+        clearOwnedString(&session->editor.meshImportPaths[i]);
     }
     for (uint32_t i = 0; i < session->editor.textureRecordCount; i++) {
         clearTextureRecord(&session->editor.textureRecords[i]);
@@ -739,7 +680,7 @@ int sessionAddSceneObject(Session* session, const SessionSceneObjectCreateInfo* 
         memcpy(object->localRotation, *createInfo->localRotation, sizeof(object->localRotation));
     }
     if (createInfo->localScale) memcpy(object->localScale, *createInfo->localScale, sizeof(object->localScale));
-    buildMeshTransformMatrix(object->localPosition, object->localRotation, object->localScale, object->localTransform);
+    VKRT_buildMeshTransformMatrix(object->localPosition, object->localRotation, object->localScale, object->localTransform);
     (void)snprintf(
         object->name,
         sizeof(object->name),
@@ -797,7 +738,7 @@ int sessionSetSceneObjectLocalTransform(
     glm_vec3_copy(position, object->localPosition);
     glm_vec3_copy(rotation, object->localRotation);
     glm_vec3_copy(scale, object->localScale);
-    buildMeshTransformMatrix(object->localPosition, object->localRotation, object->localScale, object->localTransform);
+    VKRT_buildMeshTransformMatrix(object->localPosition, object->localRotation, object->localScale, object->localTransform);
     return 1;
 }
 
@@ -809,7 +750,7 @@ int sessionSetSceneObjectLocalTransformMatrix(Session* session, uint32_t objectI
 
     SessionSceneObject* object = &session->editor.sceneObjects[objectIndex];
     memcpy(object->localTransform, localTransform, sizeof(object->localTransform));
-    decomposeImportedMeshTransform(
+    VKRT_decomposeMeshTransform(
         object->localTransform,
         object->localPosition,
         object->localRotation,

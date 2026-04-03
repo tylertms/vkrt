@@ -241,21 +241,16 @@ static int meshScaleValid(const vec3 scale) {
 static int meshTransformMatrixValid(mat4 transform) {
     if (!transform) return 0;
 
-    mat4 transformCopy = GLM_MAT4_IDENTITY_INIT;
-    memcpy(transformCopy, transform, sizeof(transformCopy));
-    mat3 linear = GLM_MAT3_IDENTITY_INIT;
-    glm_mat4_pick3(transformCopy, linear);
-    float determinant = glm_mat3_det(linear);
-    if (!isfinite(determinant) || fabsf(determinant) < 1e-8f) {
-        return 0;
-    }
-
     for (int column = 0; column < 4; column++) {
         for (int row = 0; row < 4; row++) {
             if (!isfinite(transform[column][row])) return 0;
         }
     }
-    return 1;
+
+    mat3 linear = GLM_MAT3_IDENTITY_INIT;
+    glm_mat4_pick3(transform, linear);
+    float determinant = glm_mat3_det(linear);
+    return isfinite(determinant) && fabsf(determinant) >= 1e-8f;
 }
 
 static int updateMeshTransformMatrix(mat4 destination, mat4 source) {
@@ -539,7 +534,7 @@ VKRT_Result VKRT_setMeshTransform(VKRT* vkrt, uint32_t meshIndex, vec3 position,
     }
 
     mat4 worldTransform = GLM_MAT4_IDENTITY_INIT;
-    buildMeshTransformMatrix(resolvedPosition, resolvedRotation, resolvedScale, worldTransform);
+    VKRT_buildMeshTransformMatrix(resolvedPosition, resolvedRotation, resolvedScale, worldTransform);
     return VKRT_setMeshTransformMatrix(vkrt, meshIndex, worldTransform);
 }
 
@@ -555,7 +550,7 @@ VKRT_Result VKRT_setMeshTransformMatrix(VKRT* vkrt, uint32_t meshIndex, mat4 wor
         return VKRT_SUCCESS;
     }
 
-    decomposeImportedMeshTransform(mesh->worldTransform, mesh->info.position, mesh->info.rotation, mesh->info.scale);
+    VKRT_decomposeMeshTransform(mesh->worldTransform, mesh->info.position, mesh->info.rotation, mesh->info.scale);
     vkrtMarkSceneResourcesDirty(vkrt);
     const Material* material = vkrtGetSceneMaterialData(vkrt, mesh->info.materialIndex);
     if (material && material->emissionLuminance > 0.0f) {

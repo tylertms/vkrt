@@ -887,7 +887,7 @@ static int applySceneSettings(
            VKRT_setAutoExposureEnabled(vkrt, autoExposureEnabled) == VKRT_SUCCESS &&
            VKRT_setEnvironmentLight(vkrt, environmentColor, environmentStrength) == VKRT_SUCCESS &&
            VKRT_setEnvironmentRotation(vkrt, environmentRotation) == VKRT_SUCCESS &&
-           VKRT_setMISNEEEnabled(vkrt, misNeeEnabled ? 1u : 0u) == VKRT_SUCCESS &&
+           VKRT_setMisNeeEnabled(vkrt, misNeeEnabled ? 1u : 0u) == VKRT_SUCCESS &&
            VKRT_cameraSetPose(vkrt, cameraPosition, cameraTarget, cameraUp, vfov) == VKRT_SUCCESS;
 }
 

@@ -24,7 +24,7 @@ void vkrtClampViewportRect(VkExtent2D extent, uint32_t* x, uint32_t* y, uint32_t
         return;
     }
 
-    if (*width <= 1 || *height <= 1) {
+    if (*width == 0 || *height == 0) {
         *x = 0;
         *y = 0;
         *width = extent.width;

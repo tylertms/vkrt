@@ -156,7 +156,7 @@ static void drawSpectralSamplingControls(VKRT* vkrt, VKRT_SceneSettingsSnapshot*
         return;
     }
 
-    VKRT_Result result = VKRT_setSpectralSamplingMode(vkrt, (uint32_t)spectralSamplingMode);
+    VKRT_Result result = VKRT_setSpectralSamplingMode(vkrt, (VKRT_SpectralSamplingMode)spectralSamplingMode);
     logCameraInspectorFailure("Updating spectral sampling mode failed", result);
     if (result == VKRT_SUCCESS) {
         settings->spectralSamplingMode = (uint32_t)spectralSamplingMode;
@@ -361,13 +361,12 @@ static void drawCameraDebugSection(VKRT* vkrt, const VKRT_SceneSettingsSnapshot*
                 VKRT_DEBUG_MODE_COUNT,
                 VKRT_DEBUG_MODE_COUNT
             )) {
-            logCameraInspectorFailure("Updating debug mode failed", VKRT_setDebugMode(vkrt, (uint32_t)debugModeValue));
+            logCameraInspectorFailure("Updating debug mode failed", VKRT_setDebugMode(vkrt, (VKRT_DebugMode)debugModeValue));
         }
 
         bool neeEnabled = settings->misNeeEnabled != 0;
         if (ImGui_Checkbox("NEE (Direct Light)", &neeEnabled)) {
-            uint32_t neeEnabledFlag = (uint32_t)neeEnabled;
-            logCameraInspectorFailure("Updating NEE toggle failed", VKRT_setMISNEEEnabled(vkrt, neeEnabledFlag));
+            logCameraInspectorFailure("Updating NEE toggle failed", VKRT_setMisNeeEnabled(vkrt, (uint8_t)neeEnabled));
         }
         tooltipOnHover("Samples lights directly to reduce noise from emissive lighting.");
 

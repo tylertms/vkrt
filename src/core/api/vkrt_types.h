@@ -27,6 +27,8 @@ typedef enum VKRT_Result {
 
 typedef uint32_t VKRT_ToneMappingMode;
 typedef uint32_t VKRT_RenderMode;
+typedef uint32_t VKRT_SpectralSamplingMode;
+typedef uint32_t VKRT_DebugMode;
 typedef uint32_t VKRT_MaterialTextureSlot;
 typedef uint32_t VKRT_TextureColorSpace;
 

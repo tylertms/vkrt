@@ -1561,7 +1561,7 @@ static int buildNodeLocalTransformMatrix(const cgltf_node* node, mat4 outTransfo
     cgltf_node_transform_local(node, rawLocalTransform);
     memcpy(outTransform, rawLocalTransform, sizeof(mat4));
     mat4 engineTransform = GLM_MAT4_IDENTITY_INIT;
-    buildImportedMeshNodeTransformMatrix(outTransform, engineTransform);
+    VKRT_buildImportedNodeTransform(outTransform, engineTransform);
     glm_mat4_copy(engineTransform, outTransform);
     return 1;
 }
@@ -1588,7 +1588,7 @@ static int appendNodeEntry(
         }
     }
 
-    decomposeImportedMeshTransform(localTransform, entry.position, entry.rotation, entry.scale);
+    VKRT_decomposeMeshTransform(localTransform, entry.position, entry.rotation, entry.scale);
     if (appendImportNode(importData, &entry, outNodeIndex) != 0) {
         releaseImportNode(&entry);
         return -1;
