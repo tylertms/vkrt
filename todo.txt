@@ -12,3 +12,5 @@
 - clear scene button
 - multi object selection
 - add noise thresholds and batching so the renderer can focus more samples on noisy parts of the image
+- research/implement MNEE, RIS, RESTIR
+- research BPT, VCM, MLT
