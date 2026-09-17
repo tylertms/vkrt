@@ -7,29 +7,37 @@
 			"index":	1,
 			"name":	"wall",
 			"material":	{
-				"baseColor":	[1, 1, 1],
-				"roughness":	1
+				"baseColor":	[0.06, 0.06, 0.06],
+				"roughness":	0.72
 			}
 		}, {
 			"index":	2,
 			"name":	"prism",
 			"material":	{
+				"baseColor":	[1, 1, 1],
 				"roughness":	0,
 				"transmission":	1,
-				"abbeNumber":	25.200000762939453
+				"ior":	1.52,
+				"abbeNumber":	8
 			}
 		}, {
 			"index":	3,
 			"name":	"Cube",
 			"material":	{
 				"roughness":	1,
-				"abbeNumber":	20.100000381469727,
-				"emissionLuminance":	255.10000610351562
+				"emissionLuminance":	12000
+			}
+		}, {
+			"index":	4,
+			"name":	"caustic floor",
+			"material":	{
+				"baseColor":	[0.08, 0.08, 0.08],
+				"roughness":	0.85
 			}
 		}],
 	"meshes":	[{
 			"name":	"cornell_floor",
-			"materialIndex":	1,
+			"materialIndex":	4,
 			"hasMaterialAssignment":	true,
 			"renderBackfaces":	false,
 			"opacity":	1,
@@ -72,54 +80,54 @@
 			"name":	"cornell_floor",
 			"parentIndex":	null,
 			"meshIndex":	0,
-			"localPosition":	[0, 0, -1],
-			"localRotation":	[180, -5.0089556680177338e-06, 89.999992370605469],
-			"localScale":	[1, 1, 0.99999994039535522]
+			"localPosition":	[0, 0, 0],
+			"localRotation":	[0, 0, 0],
+			"localScale":	[100, 100, 1]
 		}, {
 			"name":	"cornell_back_wall",
 			"parentIndex":	null,
 			"meshIndex":	1,
-			"localPosition":	[0, 1, 0],
+			"localPosition":	[0, 50, 0],
 			"localRotation":	[90, 90, 0],
-			"localScale":	[0.99999994039535522, 0.99999994039535522, 1]
+			"localScale":	[1, 1, 1]
 		}, {
 			"name":	"Cube",
 			"parentIndex":	null,
 			"meshIndex":	2,
-			"localPosition":	[0.97000002861022949, 0.0040000001899898052, 0],
-			"localRotation":	[90, 0, 0],
-			"localScale":	[0.0010000000474974513, 1, 0.0010000000474974513]
+			"localPosition":	[4.041, -0.883, 2.121],
+			"localRotation":	[0, 0, 0],
+			"localScale":	[0.03, 0.03, 0.3]
 		}, {
 			"name":	"Cube",
 			"parentIndex":	null,
 			"meshIndex":	3,
-			"localPosition":	[0.19699999690055847, -0.15099999308586121, -0.19900000095367432],
-			"localRotation":	[-20.600000381469727, 90, -60.700000762939453],
-			"localScale":	[0.800000011920929, 0.5, 0.5]
+			"localPosition":	[0, 0, 0.8],
+			"localRotation":	[0, 90, -25],
+			"localScale":	[0.8, 0.5, 0.5]
 		}, {
 			"name":	"Plane",
 			"parentIndex":	null,
 			"meshIndex":	4,
-			"localPosition":	[-1, 0, 0],
+			"localPosition":	[-50, 0, 0],
 			"localRotation":	[0, 90, 0],
 			"localScale":	[1, 1, 1]
 		}],
 	"sceneSettings":	{
 		"camera":	{
-			"position":	[4.2635293006896973, -3.834083080291748, 4.9664497375488281],
-			"target":	[0, 0, 0],
+			"position":	[0.72, 6.27, 2.2],
+			"target":	[-0.18, -0.2, 0.42],
 			"up":	[0, 0, 1],
-			"vfov":	26.899999618530273
+			"vfov":	35
 		},
 		"rrMinDepth":	4,
-		"rrMaxDepth":	8,
+		"rrMaxDepth":	12,
 		"toneMappingMode":	1,
 		"renderMode":	1,
 		"spectralSamplingMode":	1,
-		"exposure":	1,
+		"exposure":	0.5,
 		"autoExposureEnabled":	false,
-		"environmentColor":	[0.25, 0.25, 0.25],
-		"environmentStrength":	0.15999999642372131,
+		"environmentColor":	[1, 1, 1],
+		"environmentStrength":	0.01,
 		"environmentRotation":	0,
 		"misNeeEnabled":	true
 	}
