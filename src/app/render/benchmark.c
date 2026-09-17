@@ -255,12 +255,12 @@ void offlineRenderPrepareLaunchOptions(CLILaunchOptions* options) {
     vkrtSetInfoLoggingEnabled(0);
 }
 
-int offlineRenderSaveOutput(VKRT* vkrt, const char* outputPath) {
+int offlineRenderSaveOutput(VKRT* vkrt, const char* outputPath, uint8_t denoiseEnabled) {
     if (!vkrt || !outputPath) return EXIT_FAILURE;
 
     VKRT_RenderExportSettings exportSettings = {0};
     VKRT_defaultRenderExportSettings(&exportSettings);
-    exportSettings.denoiseEnabled = 0u;
+    exportSettings.denoiseEnabled = denoiseEnabled ? 1u : 0u;
     if (VKRT_saveRenderImageEx(vkrt, outputPath, &exportSettings) == VKRT_SUCCESS) {
         return EXIT_SUCCESS;
     }

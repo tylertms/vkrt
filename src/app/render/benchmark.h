@@ -5,4 +5,4 @@
 
 int offlineRenderRun(VKRT* vkrt, const CLIOfflineRenderOptions* options);
 void offlineRenderPrepareLaunchOptions(CLILaunchOptions* options);
-int offlineRenderSaveOutput(VKRT* vkrt, const char* outputPath);
+int offlineRenderSaveOutput(VKRT* vkrt, const char* outputPath, uint8_t denoiseEnabled);

@@ -198,6 +198,10 @@ static int parseOfflineRenderArgument(
         options->offlineRender.headless = 1u;
         return 1;
     }
+    if (stringsEqual(arg, "--denoise")) {
+        options->offlineRender.denoiseOutput = 1u;
+        return 1;
+    }
     if (optionMatches(arg, "--render-width")) {
         const char* value = requireOptionValue(argc, argv, index, "--render-width", error, errorSize);
         return value && parseUnsignedValue(value, &options->offlineRender.width, "--render-width", error, errorSize);
@@ -206,10 +210,9 @@ static int parseOfflineRenderArgument(
         const char* value = requireOptionValue(argc, argv, index, "--render-height", error, errorSize);
         return value && parseUnsignedValue(value, &options->offlineRender.height, "--render-height", error, errorSize);
     }
-    if (optionMatches(arg, "--render-samples")) {
-        const char* value = requireOptionValue(argc, argv, index, "--render-samples", error, errorSize);
-        return value &&
-               parseUnsignedValue(value, &options->offlineRender.targetSamples, "--render-samples", error, errorSize);
+    if (optionMatches(arg, "--samples")) {
+        const char* value = requireOptionValue(argc, argv, index, "--samples", error, errorSize);
+        return value && parseUnsignedValue(value, &options->offlineRender.targetSamples, "--samples", error, errorSize);
     }
     return -1;
 }
@@ -240,9 +243,9 @@ static int parseSceneArgument(
         options->startupImportPath = value;
         return 1;
     }
-    if (optionMatches(arg, "--render-output")) {
-        const char* value = requireOptionValue(argc, argv, index, "--render-output", error, errorSize);
-        if (!value || !value[0]) return setCLIError(error, errorSize, "Invalid value for --render-output", NULL);
+    if (optionMatches(arg, "--output")) {
+        const char* value = requireOptionValue(argc, argv, index, "--output", error, errorSize);
+        if (!value || !value[0]) return setCLIError(error, errorSize, "Invalid value for --output", NULL);
         options->renderOutputPath = value;
         return 1;
     }
@@ -250,6 +253,13 @@ static int parseSceneArgument(
 }
 
 static int validateCLIArgumentCombination(const CLILaunchOptions* options, char* error, size_t errorSize) {
+    if (options->offlineRender.denoiseOutput &&
+        (!options->offlineRender.enabled || !options->offlineRender.headless)) {
+        return setCLIError(error, errorSize, "--denoise requires --render-headless", NULL);
+    }
+    if (options->offlineRender.denoiseOutput && !options->renderOutputPath) {
+        return setCLIError(error, errorSize, "--denoise requires --output", NULL);
+    }
     if (!options->offlineRender.enabled) return 1;
     if (options->startupImportPath) {
         return setCLIError(error, errorSize, "--render cannot be combined with --import", NULL);
@@ -258,7 +268,7 @@ static int validateCLIArgumentCombination(const CLILaunchOptions* options, char*
         return setCLIError(error, errorSize, "--render requires either the default scene or --scene", NULL);
     }
     if (options->renderOutputPath && !options->offlineRender.headless) {
-        return setCLIError(error, errorSize, "--render-output currently requires --render-headless", NULL);
+        return setCLIError(error, errorSize, "--output currently requires --render-headless", NULL);
     }
     return 1;
 }
@@ -369,9 +379,10 @@ void CLIPrintHelp(void) {
     );
     printf("  --render-width <px>       Override offline render width (default: 3840)\n");
     printf("  --render-height <px>      Override offline render height (default: 2160)\n");
-    printf("  --render-samples <n>      Override offline render target samples (default: 16384)\n");
+    printf("  --samples <n>             Override offline render target samples (default: 16384)\n");
+    printf("  --denoise                 Denoise the saved offline render with OIDN\n");
     printf("  --import <path>           Import a mesh on startup\n");
-    printf("  --render-output <path>    Save the --render-headless image after completion\n");
+    printf("  --output <path>           Save the --render-headless image after completion\n");
     printf("  --benchmark               Alias for --render\n");
     printf("\nViewport Controls:\n");
     printf("  Middle mouse drag          Orbit camera\n");
