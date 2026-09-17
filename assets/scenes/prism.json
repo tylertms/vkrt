@@ -7,7 +7,7 @@
 			"index":	1,
 			"name":	"wall",
 			"material":	{
-				"baseColor":	[0.06, 0.06, 0.06],
+				"baseColor":	[0.08, 0.08, 0.08],
 				"roughness":	0.72
 			}
 		}, {
@@ -18,21 +18,22 @@
 				"roughness":	0,
 				"transmission":	1,
 				"ior":	1.52,
-				"abbeNumber":	8
+				"abbeNumber":	4
 			}
 		}, {
 			"index":	3,
 			"name":	"Cube",
 			"material":	{
 				"roughness":	1,
-				"emissionLuminance":	12000
+				"emissionLuminance":	100000
 			}
 		}, {
 			"index":	4,
 			"name":	"caustic floor",
 			"material":	{
-				"baseColor":	[0.08, 0.08, 0.08],
-				"roughness":	0.85
+				"baseColor":	[0, 0, 0],
+				"roughness":	1,
+				"ior":	1.1
 			}
 		}],
 	"meshes":	[{
@@ -87,22 +88,22 @@
 			"name":	"cornell_back_wall",
 			"parentIndex":	null,
 			"meshIndex":	1,
-			"localPosition":	[0, 50, 0],
+			"localPosition":	[0, -3, 1.8],
 			"localRotation":	[90, 90, 0],
-			"localScale":	[1, 1, 1]
+			"localScale":	[5, 2.5, 1]
 		}, {
 			"name":	"Cube",
 			"parentIndex":	null,
 			"meshIndex":	2,
-			"localPosition":	[4.041, -0.883, 2.121],
+			"localPosition":	[1.5, 4.041, 2.121],
 			"localRotation":	[0, 0, 0],
-			"localScale":	[0.03, 0.03, 0.3]
+			"localScale":	[0.04, 0.04, 0.04]
 		}, {
 			"name":	"Cube",
 			"parentIndex":	null,
 			"meshIndex":	3,
 			"localPosition":	[0, 0, 0.8],
-			"localRotation":	[0, 90, -25],
+			"localRotation":	[0, 90, 65],
 			"localScale":	[0.8, 0.5, 0.5]
 		}, {
 			"name":	"Plane",
@@ -114,20 +115,20 @@
 		}],
 	"sceneSettings":	{
 		"camera":	{
-			"position":	[0.72, 6.27, 2.2],
-			"target":	[-0.18, -0.2, 0.42],
+			"position":	[0, 6, 2.2],
+			"target":	[0, -0.8, 0.9],
 			"up":	[0, 0, 1],
-			"vfov":	35
+			"vfov":	30
 		},
 		"rrMinDepth":	4,
-		"rrMaxDepth":	12,
+		"rrMaxDepth":	8,
 		"toneMappingMode":	1,
 		"renderMode":	1,
 		"spectralSamplingMode":	1,
 		"exposure":	0.5,
 		"autoExposureEnabled":	false,
 		"environmentColor":	[1, 1, 1],
-		"environmentStrength":	0.01,
+		"environmentStrength":	0.02,
 		"environmentRotation":	0,
 		"misNeeEnabled":	true
 	}
