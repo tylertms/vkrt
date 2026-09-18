@@ -7,8 +7,8 @@
 			"index":	1,
 			"name":	"projection screen",
 			"material":	{
-				"baseColor":	[0.08, 0.08, 0.08],
-				"roughness":	0.72
+				"baseColor":	[0.079999998211860657, 0.079999998211860657, 0.079999998211860657],
+				"roughness":	0.72000002861022949
 			}
 		}, {
 			"index":	2,
@@ -16,9 +16,9 @@
 			"material":	{
 				"baseColor":	[1, 1, 1],
 				"roughness":	0,
+				"ior":	1.7847199440002441,
 				"transmission":	1,
-				"ior":	1.78472,
-				"abbeNumber":	25.68
+				"abbeNumber":	25.680000305175781
 			}
 		}, {
 			"index":	3,
@@ -31,7 +31,7 @@
 			"index":	4,
 			"name":	"black velvet floor",
 			"material":	{
-				"baseColor":	[0.005, 0.005, 0.005],
+				"baseColor":	[0.00499999988824129, 0.00499999988824129, 0.00499999988824129],
 				"roughness":	1,
 				"diffuseRoughness":	1,
 				"specular":	0
@@ -81,28 +81,28 @@
 			"name":	"projection_screen",
 			"parentIndex":	null,
 			"meshIndex":	1,
-			"localPosition":	[0, -3, 1.8],
+			"localPosition":	[0, -3, 1.7999999523162842],
 			"localRotation":	[90, 90, 0],
 			"localScale":	[5, 2.5, 1]
 		}, {
 			"name":	"slit_source",
 			"parentIndex":	null,
 			"meshIndex":	2,
-			"localPosition":	[1.5, 4.041, 1.2],
+			"localPosition":	[1.5, 4.04099988937378, 1.2000000476837158],
 			"localRotation":	[0, 0, 0],
-			"localScale":	[0.02, 0.02, 0.25]
+			"localScale":	[0.019999999552965164, 0.019999999552965164, 0.25]
 		}, {
 			"name":	"prism",
 			"parentIndex":	null,
 			"meshIndex":	3,
-			"localPosition":	[0, 0, 0.8],
+			"localPosition":	[0, 0, 0.800000011920929],
 			"localRotation":	[0, 90, 103],
-			"localScale":	[0.8, 0.5, 0.5]
+			"localScale":	[0.800000011920929, 0.5, 0.5]
 		}],
 	"sceneSettings":	{
 		"camera":	{
-			"position":	[0, 6, 2.2],
-			"target":	[0, -0.8, 0.9],
+			"position":	[0, 6, 2.2000000476837158],
+			"target":	[0, -0.800000011920929, 0.899999976158142],
 			"up":	[0, 0, 1],
 			"vfov":	30
 		},
@@ -110,11 +110,11 @@
 		"rrMaxDepth":	8,
 		"toneMappingMode":	1,
 		"renderMode":	1,
-		"spectralSamplingMode":	1,
+		"spectralSamplingMode":	0,
 		"exposure":	0.5,
 		"autoExposureEnabled":	false,
 		"environmentColor":	[1, 1, 1],
-		"environmentStrength":	0.1,
+		"environmentStrength":	0.10000000149011612,
 		"environmentRotation":	0,
 		"misNeeEnabled":	true
 	}
