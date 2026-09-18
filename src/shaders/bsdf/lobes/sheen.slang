@@ -2,15 +2,9 @@
 #define VKRT_BSDF_SHEEN_SLANG
 
 #include "../base.slang"
-#include "../data/sheen_ltc.slang"
 
-// Microfiber sheen using the LTC-based multiple-scattering model used by Blender 4 Cycles.
-//
-// References:
-// Zeltner, Burley, Chiang, 2022 - https://tizianzeltner.com/projects/Zeltner2022Practical/
-// Blender Cycles sheen closure - https://github.com/blender/blender/blob/main/intern/cycles/kernel/closure/bsdf_sheen.h
-
-static const float SHEEN_EPSILON = 1e-6;
+static const uint SHEEN_LTC_SIZE = 32u;
+static const uint SHEEN_LTC_LAYER_SIZE = SHEEN_LTC_SIZE * SHEEN_LTC_SIZE;
 
 struct SheenParams {
     ShadingBasis basis;
@@ -28,10 +22,10 @@ float sheenLtcLookup(float cosThetaValue, float roughness, uint layer) {
     float tx = frac(uv.x);
     float ty = frac(uv.y);
     uint offset = layer * SHEEN_LTC_LAYER_SIZE;
-    float e00 = SHEEN_LTC_TABLE[offset + y0 * SHEEN_LTC_SIZE + x0];
-    float e10 = SHEEN_LTC_TABLE[offset + y0 * SHEEN_LTC_SIZE + x1];
-    float e01 = SHEEN_LTC_TABLE[offset + y1 * SHEEN_LTC_SIZE + x0];
-    float e11 = SHEEN_LTC_TABLE[offset + y1 * SHEEN_LTC_SIZE + x1];
+    float e00 = sheenLtcTable[offset + y0 * SHEEN_LTC_SIZE + x0];
+    float e10 = sheenLtcTable[offset + y0 * SHEEN_LTC_SIZE + x1];
+    float e01 = sheenLtcTable[offset + y1 * SHEEN_LTC_SIZE + x0];
+    float e11 = sheenLtcTable[offset + y1 * SHEEN_LTC_SIZE + x1];
     return lerp(lerp(e00, e10, tx), lerp(e01, e11, tx), ty);
 }
 
@@ -63,7 +57,7 @@ float sheenDistributionValue(float3 localWi, SheenParams params) {
     float axbz = params.transformA * localWi.x + params.transformB * localWi.z;
     float lenSqr =
         axbz * axbz + (params.transformA * localWi.y) * (params.transformA * localWi.y) + localWi.z * localWi.z;
-    if (lenSqr <= SHEEN_EPSILON) {
+    if (lenSqr <= 0.0) {
         return 0.0;
     }
 
@@ -76,6 +70,7 @@ float sheenDirectionalAlbedo(float cosThetaValue, float sheenRoughness) {
 }
 
 float sheenLayerAttenuation(float sheenWeight, float cosThetaValue, float sheenRoughness) {
+    if (sheenWeight <= 0.0) return 1.0;
     return saturate(1.0 - sheenWeight * sheenDirectionalAlbedo(cosThetaValue, sheenRoughness));
 }
 
@@ -91,7 +86,7 @@ BSDFEval evalSheen(float3 sheenColor, float sheenRoughness, float3 wo, float3 wi
     SheenParams params = makeSheenParams(wo, sheenRoughness);
     float3 localWi = worldToLocal(wi, params.basis);
     float value = sheenDistributionValue(localWi, params);
-    eval.value = sheenColor * (params.albedo * value);
+    eval.value = sheenColor * (params.albedo * value / cosTheta(wi));
     eval.pdf = value;
     return eval;
 }

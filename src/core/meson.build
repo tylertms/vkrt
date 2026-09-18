@@ -17,6 +17,7 @@ vkrt_sources = files(
   'scene/geometry.c',
   'scene/lighting.c',
   'scene/rgb2spec.c',
+  'scene/sheen.c',
   'scene/rebuild.c',
   'scene/textures.c',
   'scene/timing.c',

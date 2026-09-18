@@ -57,5 +57,7 @@ SamplerState textureSamplers[VKRT_TEXTURE_SAMPLER_VARIANT_COUNT];
 Texture2D<float4> sceneTextures[VKRT_MAX_BINDLESS_TEXTURES];
 [[vk::binding(24, 0)]]
 StructuredBuffer<float> rgb2specSRGBTable;
+[[vk::binding(25, 0)]]
+StructuredBuffer<float> sheenLtcTable;
 
 #endif

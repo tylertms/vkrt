@@ -127,6 +127,7 @@ typedef struct VKRT_Core {
     Buffer sceneTriAliasQ;
     Buffer sceneTriAliasIdx;
     Buffer sceneRGB2SpecSRGBData;
+    Buffer sceneSheenLtcData;
     RGB2SpecTableInfo rgb2specSRGBInfo;
     AccelerationStructure sceneTopLevelAccelerationStructure;
     AccelerationStructure selectionTopLevelAccelerationStructure;

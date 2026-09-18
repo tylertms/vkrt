@@ -1,10 +1,6 @@
-#ifndef VKRT_BSDF_DATA_SHEEN_LTC_SLANG
-#define VKRT_BSDF_DATA_SHEEN_LTC_SLANG
+#ifndef VKRT_SCENE_SHEEN_LTC_H
+#define VKRT_SCENE_SHEEN_LTC_H
 
-// https://github.com/blender/blender/blob/main/intern/cycles/scene/shader.tables
-
-static const uint SHEEN_LTC_SIZE = 32u;
-static const uint SHEEN_LTC_LAYER_SIZE = SHEEN_LTC_SIZE * SHEEN_LTC_SIZE;
 static const float SHEEN_LTC_TABLE[3072] =
     {0.01415f,  0.00000f,  0.00000f,  0.00000f,  0.00000f,  0.00000f,  0.00000f,  0.00000f,  0.00000f,  0.00000f,
      0.00000f,  0.00000f,  0.00000f,  0.00000f,  0.00000f,  0.00000f,  0.00000f,  0.00000f,  0.00000f,  0.00000f,

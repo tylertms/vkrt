@@ -164,6 +164,7 @@ static void cleanupSceneAndAccelerationResources(VKRT* vkrt) {
     destroyBufferAndMemory(vkrt, &vkrt->core.sceneTriAliasQ.buffer, &vkrt->core.sceneTriAliasQ.memory);
     destroyBufferAndMemory(vkrt, &vkrt->core.sceneTriAliasIdx.buffer, &vkrt->core.sceneTriAliasIdx.memory);
     destroyBufferAndMemory(vkrt, &vkrt->core.sceneRGB2SpecSRGBData.buffer, &vkrt->core.sceneRGB2SpecSRGBData.memory);
+    destroyBufferAndMemory(vkrt, &vkrt->core.sceneSheenLtcData.buffer, &vkrt->core.sceneSheenLtcData.memory);
     vkrt->core.rgb2specSRGBInfo = (RGB2SpecTableInfo){0};
 
     for (uint32_t i = 0; i < vkrt->core.meshCount; i++) {
@@ -488,6 +489,7 @@ static VKRT_Result createSceneBackendResources(VKRT* vkrt) {
 
     stepStartTime = getMicroseconds();
     if (createRGB2SpecResources(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
+    if (createSheenResources(vkrt) != VKRT_SUCCESS) return VKRT_ERROR_OPERATION_FAILED;
     logStepTime("RGB2Spec resources created", stepStartTime);
 
     stepStartTime = getMicroseconds();
