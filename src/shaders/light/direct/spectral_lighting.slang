@@ -4,63 +4,57 @@
 #include "./common.slang"
 #include "./mis_weights.slang"
 
-DirectLightSpectralResult sampleDirectLightSpectralSingle(
+float sampleDirectLightSpectralSingle(
     float3 hitPoint,
     float3 geometricNormal,
+    float rayOffset,
     ShadingBasis basis,
     BSDFState state,
     MediumState medium,
+    bool bsdfContinuationAvailable,
     inout uint rng
 ) {
-    DirectLightSpectralResult result = DirectLightSpectralResult();
-    DirectLightSample light = sampleDirectLight(hitPoint, geometricNormal, basis, state, rng);
-    if (light.neeUnsupported()) {
-        result.setNeeUnsupported();
-        return result;
-    }
-    if (!light.valid()) return result;
+    DirectLightSample light = sampleDirectLight(hitPoint, basis, state, rng);
+    if (!light.valid()) return 0.0;
+    if (!directLightVisible(hitPoint, geometricNormal, rayOffset, light, rng)) return 0.0;
 
     BSDFEval eval = evalSingleWavelengthBSDF(state, light.wiLocal);
-    if (eval.pdf <= 0.0) return result;
+    if (eval.value.x <= 0.0) return 0.0;
 
     float spectralValue = eval.value.x * absCosTheta(light.wiLocal) *
                           spectralScalarFromLinearSrgb(light.surface.light.emission, state.wavelengthNm);
-    float misWeight = powerHeuristic(light.surface.pdfSolidAngle, eval.pdf);
-    result.spectralRadiance = misWeight * mediumTransmittance(medium, light.surface.shadowDistance).x * spectralValue /
-                              light.surface.pdfSolidAngle;
-    return result;
+    float misWeight = powerHeuristic(light.surface.pdfSolidAngle, bsdfContinuationAvailable ? eval.pdf : 0.0);
+    return misWeight * mediumTransmittance(medium, light.surface.shadowDistance).x * spectralValue /
+           light.surface.pdfSolidAngle;
 }
 
-DirectLightHeroResult sampleDirectLightSpectralHero(
+float4 sampleDirectLightSpectralHero(
     float3 hitPoint,
     float3 geometricNormal,
+    float rayOffset,
     ShadingBasis basis,
     BSDFState state,
     MediumState medium,
     float4 techniquePathPdf,
     float4 wavelengthsNm,
+    bool bsdfContinuationAvailable,
     inout uint rng
 ) {
-    DirectLightHeroResult result = DirectLightHeroResult();
-    DirectLightSample light = sampleDirectLight(hitPoint, geometricNormal, basis, state, rng);
-    if (light.neeUnsupported()) {
-        result.setNeeUnsupported();
-        return result;
-    }
-    if (!light.valid()) return result;
+    DirectLightSample light = sampleDirectLight(hitPoint, basis, state, rng);
+    if (!light.valid()) return float4(0.0);
+    if (!directLightVisible(hitPoint, geometricNormal, rayOffset, light, rng)) return float4(0.0);
 
     float4 bsdfLocalTechniquePdf = float4(0.0);
     float4 fCos =
         evalSpectralBSDF(state, light.wiLocal, wavelengthsNm, bsdfLocalTechniquePdf) * absCosTheta(light.wiLocal);
+    if (!any(fCos > 0.0)) return float4(0.0);
     float4 lightTechniquePdf = techniquePathPdf * light.surface.pdfSolidAngle;
-    float4 bsdfTechniquePdf = techniquePathPdf * bsdfLocalTechniquePdf;
+    float4 bsdfTechniquePdf = bsdfContinuationAvailable ? techniquePathPdf * bsdfLocalTechniquePdf : float4(0.0);
     float misWeight = computeSpectralMISWeight(lightTechniquePdf, bsdfTechniquePdf);
-    if (misWeight <= 0.0) return result;
+    if (misWeight <= 0.0) return float4(0.0);
 
-    result.spectralRadiance = misWeight * mediumSpectralTransmittance(medium, light.surface.shadowDistance) * fCos *
-                              spectralScalarFromLinearSrgb4(light.surface.light.emission, wavelengthsNm) /
-                              light.surface.pdfSolidAngle;
-    return result;
+    return misWeight * mediumSpectralTransmittance(medium, light.surface.shadowDistance) * fCos *
+           spectralScalarFromLinearSrgb4(light.surface.light.emission, wavelengthsNm) / light.surface.pdfSolidAngle;
 }
 
 #endif

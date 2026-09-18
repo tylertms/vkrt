@@ -8,6 +8,8 @@ struct LightSample {
     float3 normal;
     float3 emission;
     float pdf;
+    uint instanceIndex = VKRT_INVALID_INDEX;
+    uint primitiveIndex = VKRT_INVALID_INDEX;
     uint flags = 0u;
 
     __init() {
@@ -29,54 +31,6 @@ struct DirectLightSurfaceSample {
     float shadowDistance;
     float pdfSolidAngle;
     uint valid = 0u;
-};
-
-struct DirectLightRgbResult {
-    float3 radiance;
-    uint flags = 1u;
-
-    __init() {
-        radiance = float3(0.0);
-        flags = 1u;
-    }
-
-    bool neeSupported() {
-        return (flags & 1u) != 0u;
-    }
-
-    [mutating] void setNeeUnsupported() { flags = 0u; }
-};
-
-struct DirectLightSpectralResult {
-    float spectralRadiance = 0.0;
-    uint flags = 1u;
-
-    __init() {
-        spectralRadiance = 0.0;
-        flags = 1u;
-    }
-
-    bool neeSupported() {
-        return (flags & 1u) != 0u;
-    }
-
-    [mutating] void setNeeUnsupported() { flags = 0u; }
-};
-
-struct DirectLightHeroResult {
-    float4 spectralRadiance = float4(0.0);
-    uint flags = 1u;
-
-    __init() {
-        spectralRadiance = float4(0.0);
-        flags = 1u;
-    }
-
-    bool neeSupported() {
-        return (flags & 1u) != 0u;
-    }
-
-    [mutating] void setNeeUnsupported() { flags = 0u; }
 };
 
 #endif

@@ -13,7 +13,7 @@ BSDFEval evalDielectricReflection(
     uint spectralMode
 ) {
     BSDFEval eval = {};
-    if (dielectricIsIdentity(material) || cosTheta(wo) <= 0.0 || cosTheta(wi) <= 0.0) {
+    if (dielectricIsIdentity(material, lambdaNm, spectralMode) || cosTheta(wo) <= 0.0 || cosTheta(wi) <= 0.0) {
         return eval;
     }
 
@@ -32,38 +32,23 @@ BSDFEval evalDielectricReflection(
     float Dm = ggxDistribution(wm, params.alpha);
     float G = ggxMasking(wo, wi, params.alpha);
     eval.value = dielectricReflectionColor(material, woDotWm, fresnel, lambdaNm, spectralMode) *
-                 (Dm * G / max(4.0 * cosTheta(wo) * cosTheta(wi), GGX_EPSILON));
+                 (Dm * G / (4.0 * cosTheta(wo) * cosTheta(wi)));
     eval.pdf = reflectionProbability * ggxReflectionPdf(wo, wm, params);
     return eval;
 }
 
-BSDFEval evalDielectricTransmission(
+BSDFEval evalDielectricTransmissionInterface(
     BSDFMaterial material,
     float3 wo,
     float3 wi,
     uint frontFace,
     GGXParams params,
-    float coatAttenuation,
     float lambdaNm,
     uint spectralMode
 ) {
     BSDFEval eval = {};
-    if (material.transmission <= 0.0 || cosTheta(wo) <= 0.0 || cosTheta(wi) >= 0.0) {
-        return eval;
-    }
-
-    float3 transmissionColor = bsdfTransmissionColor(material) * ((1.0 - material.metallic) * material.transmission);
-    if (spectralMode != 0u) {
-        transmissionColor = spectralScalarFromLinearSrgb(saturate(transmissionColor), lambdaNm).xxx;
-    }
-
-    if (dielectricIsIdentity(material)) {
-        if (dot(wi, -wo) < 0.9999) {
-            return eval;
-        }
-
-        eval.value = coatAttenuation * transmissionColor / max(absCosTheta(wi), GGX_EPSILON);
-        eval.pdf = 1.0;
+    if (material.transmission <= 0.0 || dielectricIsIdentity(material, lambdaNm, spectralMode) || cosTheta(wo) <= 0.0 ||
+        cosTheta(wi) >= 0.0) {
         return eval;
     }
 
@@ -85,12 +70,29 @@ BSDFEval evalDielectricTransmission(
     float Dm = ggxDistribution(wm, params.alpha);
     float G = ggxMasking(wo, wi, params.alpha);
     float denom2 = denom * denom;
-    float transportScale = 1.0 / max(etap * etap, GGX_EPSILON);
-    float transmissionTerm = abs((wiDotWm * woDotWm) / max(absCosTheta(wi) * cosTheta(wo) * denom2, GGX_EPSILON));
-    float dwmDwi = abs(wiDotWm) / max(denom2, GGX_EPSILON);
+    float transportScale = 1.0 / (etap * etap);
+    float dwmDwi = abs(wiDotWm) / denom2;
+    float transmissionTerm = dwmDwi * woDotWm / (absCosTheta(wi) * cosTheta(wo));
 
-    eval.value = coatAttenuation * transmissionColor * ((1.0 - fresnel) * Dm * G * transmissionTerm * transportScale);
+    eval.value = ((1.0 - fresnel) * Dm * G * transmissionTerm * transportScale).xxx;
     eval.pdf = transmissionProbability * ggxVisibleNormalPdf(wo, wm, params) * dwmDwi;
+    return eval;
+}
+
+BSDFEval evalDielectricTransmission(
+    BSDFMaterial material,
+    float3 wo,
+    float3 wi,
+    uint frontFace,
+    GGXParams params,
+    float coatAttenuation,
+    float lambdaNm,
+    uint spectralMode
+) {
+    BSDFEval eval = evalDielectricTransmissionInterface(material, wo, wi, frontFace, params, lambdaNm, spectralMode);
+    float3 color = bsdfTransmissionColor(material);
+    if (spectralMode != 0u) color = spectralScalarFromLinearSrgb(saturate(color), lambdaNm).xxx;
+    eval.value *= color * ((1.0 - material.metallic) * material.transmission * coatAttenuation);
     return eval;
 }
 

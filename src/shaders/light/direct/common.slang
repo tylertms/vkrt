@@ -1,11 +1,11 @@
 #ifndef VKRT_LIGHT_DIRECT_COMMON_SLANG
 #define VKRT_LIGHT_DIRECT_COMMON_SLANG
 
+#include "../../geometry/surface/ray_origin.slang"
 #include "../../rt/queries/shadow_query.slang"
 #include "./light_sampling.slang"
 
 static const uint VKRT_DIRECT_LIGHT_VALID = 1u << 0;
-static const uint VKRT_DIRECT_LIGHT_NEE_UNSUPPORTED = 1u << 1;
 
 struct DirectLightSample {
     DirectLightSurfaceSample surface;
@@ -15,41 +15,39 @@ struct DirectLightSample {
     bool valid() {
         return (flags & VKRT_DIRECT_LIGHT_VALID) != 0u;
     }
-
-    bool neeUnsupported() {
-        return (flags & VKRT_DIRECT_LIGHT_NEE_UNSUPPORTED) != 0u;
-    }
 };
 
-DirectLightSample sampleDirectLight(
-    float3 hitPoint,
-    float3 geometricNormal,
-    ShadingBasis basis,
-    BSDFState state,
-    inout uint rng
-) {
+DirectLightSample sampleDirectLight(float3 hitPoint, ShadingBasis basis, BSDFState state, inout uint rng) {
     DirectLightSample light = DirectLightSample();
     if (cosTheta(state.wo) <= 0.0) return light;
 
-    light.surface = sampleDirectLightSurface(hitPoint, geometricNormal, rng);
+    light.surface = sampleDirectLightSurface(hitPoint, rng);
     if (light.surface.valid == 0u) return light;
 
-    float3 shadowOffset = dot(light.surface.wi, geometricNormal) >= 0.0 ? geometricNormal : -geometricNormal;
-    float3 shadowOrigin = hitPoint + shadowOffset * VKRT_SHADOW_ORIGIN_OFFSET;
-    ShadowPayload shadow = traceShadowRay(shadowOrigin, light.surface.wi, light.surface.shadowDistance, rng);
-    if (!shadow.neeSupported()) {
-        light.flags |= VKRT_DIRECT_LIGHT_NEE_UNSUPPORTED;
-        return light;
-    }
-    if (!shadow.visible()) return light;
-
     light.wiLocal = worldToLocal(light.surface.wi, basis);
-    if (materialMediumIsRefractive(state.material) && cosTheta(light.wiLocal) <= 0.0) {
-        return light;
-    }
+    if (cosTheta(light.wiLocal) <= 0.0 || !bsdfDirectionIsValid(state, light.wiLocal)) return light;
 
     light.flags |= VKRT_DIRECT_LIGHT_VALID;
     return light;
+}
+
+bool directLightVisible(
+    float3 hitPoint,
+    float3 geometricNormal,
+    float rayOffset,
+    DirectLightSample light,
+    inout uint rng
+) {
+    float3 shadowOrigin = offsetSurfaceRayOrigin(hitPoint, geometricNormal, rayOffset);
+    float3 toLight = light.surface.light.position - shadowOrigin;
+    if (dot(toLight, toLight) == 0.0) return false;
+    return traceShadowRay(
+               makeRay(shadowOrigin, toLight, 0.0, 1.0),
+               light.surface.light.instanceIndex,
+               light.surface.light.primitiveIndex,
+               rng
+    )
+        .visible();
 }
 
 #endif

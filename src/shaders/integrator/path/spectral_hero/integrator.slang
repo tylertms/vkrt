@@ -62,36 +62,38 @@ void traceSpectralHeroPathSample(
             spectralHeroPathActive(pathState) ? pathState.wavelengthsNm.x : pathState.scalarWavelength.lambdaNm;
         BSDFState state = makePathBSDFState(pathState.common, surfaceState, bsdfMaterial, stateWavelengthNm, 1u);
         bool currentVertexNeeAllowed = !pathState.common.medium.refractiveActive();
-        bool vertexNeeSupported = currentVertexNeeAllowed;
+        bool continuationAvailable = depth + 1u < scene.rrMaxDepth;
+        bool bsdfContinuationAvailable =
+            continuationAvailable && !raygenModeHas(modeState, VKRT_RAYGEN_MODE_FLAG_NEE_ONLY_DEBUG);
 
         float spectralContributionScalar = 0.0;
         float4 spectralContribution = float4(0.0);
         if (!raygenModeHas(modeState, VKRT_RAYGEN_MODE_FLAG_BSDF_ONLY_DEBUG) &&
             raygenModeHas(modeState, VKRT_RAYGEN_MODE_FLAG_NEE_ENABLED) && currentVertexNeeAllowed) {
             if (spectralHeroPathActive(pathState)) {
-                DirectLightHeroResult directLight = sampleDirectLightSpectralHero(
+                spectralContribution += sampleDirectLightSpectralHero(
                     surfaceState.hitPoint,
                     surfaceState.surface.geometricNormal,
+                    surfaceState.rayOffset,
                     surfaceState.basis,
                     state,
                     pathState.common.medium,
                     pathState.techniquePathPdf,
                     pathState.wavelengthsNm,
+                    bsdfContinuationAvailable,
                     pathState.common.rng
                 );
-                spectralContribution += directLight.spectralRadiance;
-                vertexNeeSupported = directLight.neeSupported();
             } else {
-                DirectLightSpectralResult directLight = sampleDirectLightSpectralSingle(
+                spectralContributionScalar += sampleDirectLightSpectralSingle(
                     surfaceState.hitPoint,
                     surfaceState.surface.geometricNormal,
+                    surfaceState.rayOffset,
                     surfaceState.basis,
                     state,
                     pathState.common.medium,
+                    bsdfContinuationAvailable,
                     pathState.common.rng
                 );
-                spectralContributionScalar += directLight.spectralRadiance;
-                vertexNeeSupported = directLight.neeSupported();
             }
         }
 
@@ -132,6 +134,7 @@ void traceSpectralHeroPathSample(
             spectralContribution
         );
         pathState.common.bounceCount = depth + 1u;
+        if (!continuationAvailable) break;
 
         uint sampleIsTransmission = 0u;
         float3 sampleWi = float3(0.0);
@@ -147,7 +150,7 @@ void traceSpectralHeroPathSample(
             break;
         }
 
-        bool sampledPathNeeAllowed = vertexNeeSupported && sampleIsTransmission == 0u;
+        bool sampledPathNeeAllowed = currentVertexNeeAllowed && sampleIsTransmission == 0u;
         updateSpectralHeroMediumAfterScatter(
             pathState,
             bsdfMaterial,
@@ -164,7 +167,7 @@ void traceSpectralHeroPathSample(
             applySpectralHeroContinueProbability(pathState, continueProbability);
         }
 
-        advancePathRay(pathState.common, surfaceState, sampleIsTransmission, sampleWi);
+        advancePathRay(pathState.common, surfaceState, sampleWi);
     }
 
     applyBounceCountDebug(modeState, sampleIndex, pathState.common.bounceCount, frameState);

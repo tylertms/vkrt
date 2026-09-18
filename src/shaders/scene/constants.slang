@@ -3,10 +3,8 @@
 
 #include "../../shared/constants.h"
 
-static const float VKRT_RAY_T_MIN = 0.001;
-static const float VKRT_RAY_T_MAX = 10000.0;
-static const float VKRT_SHADOW_ORIGIN_OFFSET = 0.001;
-static const float VKRT_SHADOW_DISTANCE_OFFSET = 0.002;
+static const float VKRT_RAY_T_MIN = 0.0;
+static const float VKRT_RAY_T_MAX = 3.402823466e38;
 
 static const float VKRT_RR_MIN_CONTINUE_PROB = 0.05;
 static const float VKRT_RR_MAX_CONTINUE_PROB = 0.95;

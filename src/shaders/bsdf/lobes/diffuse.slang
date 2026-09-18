@@ -3,13 +3,6 @@
 
 #include "../base.slang"
 
-// Diffuse reflection lobes.
-//
-// References:
-// Lambertian: Pharr, Jakob, Humphreys, 2023 - https://www.pbr-book.org/4ed/Reflection_Models/Diffuse_Reflection
-// Oren-Nayar: Oren, Nayar, 1994 - http://www1.cs.columbia.edu/CAVE/publications/pdfs/Oren_SIGGRAPH94.pdf
-// Implementation summary: Pharr, Jakob, Humphreys, 2023 - https://www.pbr-book.org/4ed/Reflection_Models/Diffuse_Reflection
-
 BSDFEval evalLambertian(float3 diffuseColor, float3 wi) {
     BSDFEval eval;
     eval.value = cosTheta(wi) > 0.0 ? diffuseColor * VKRT_INV_PI : float3(0.0);
@@ -41,10 +34,10 @@ BSDFEval evalOrenNayar(float3 diffuseColor, float roughness, float3 wo, float3 w
     float tanBeta;
     if (absCosTheta(wi) > absCosTheta(wo)) {
         sinAlpha = sinThetaO;
-        tanBeta = sinThetaI / max(absCosTheta(wi), 1e-6);
+        tanBeta = sinThetaI / absCosTheta(wi);
     } else {
         sinAlpha = sinThetaI;
-        tanBeta = sinThetaO / max(absCosTheta(wo), 1e-6);
+        tanBeta = sinThetaO / absCosTheta(wo);
     }
 
     eval.value = diffuseColor * (VKRT_INV_PI * (A + B * maxCos * sinAlpha * tanBeta));

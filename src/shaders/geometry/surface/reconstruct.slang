@@ -26,7 +26,7 @@ SurfaceShadingData reconstructSurfaceShading(
         unpackOctTangent(vertex2.packedTangent),
         barycentrics
     );
-    float handedness = objectTangent.w < 0.0 ? -1.0 : 1.0;
+    float handedness = (objectTangent.w < 0.0 ? -1.0 : 1.0) * surfaceTransformSign(mesh);
 
     float3 shadingNormalUnoriented = meshTransformNormal(mesh, objectNormal);
     float facing = dot(shadingNormalUnoriented, worldRayDirection) > 0.0 ? -1.0 : 1.0;

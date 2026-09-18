@@ -5,12 +5,14 @@
 #include "../../scene/resources.slang"
 #include "../payloads/shadow_payload.slang"
 
-ShadowPayload traceShadowRay(RayDesc ray, inout uint rng) {
+ShadowPayload traceShadowRay(RayDesc ray, uint targetInstanceIndex, uint targetPrimitiveIndex, inout uint rng) {
     ShadowPayload payload = ShadowPayload(rng);
+    payload.targetInstanceIndex = targetInstanceIndex;
+    payload.targetPrimitiveIndex = targetPrimitiveIndex;
 
     TraceRay(
         topLevelAS,
-        RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH,
+        RAY_FLAG_NONE,
         0xffu,
         VKRT_SHADOW_RAY_SBT_OFFSET,
         VKRT_SCENE_HIT_GROUP_STRIDE,
@@ -21,10 +23,6 @@ ShadowPayload traceShadowRay(RayDesc ray, inout uint rng) {
 
     rng = payload.rng;
     return payload;
-}
-
-ShadowPayload traceShadowRay(float3 origin, float3 direction, float tMax, inout uint rng) {
-    return traceShadowRay(makeRay(origin, direction, VKRT_RAY_T_MIN, tMax), rng);
 }
 
 #endif

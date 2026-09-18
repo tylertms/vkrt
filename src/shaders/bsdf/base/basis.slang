@@ -35,7 +35,22 @@ float3 sanitizeShadingNormal(float3 shadingNormal, float3 geometricNormal, float
         return geometric;
     }
 
-    return normal;
+    float outgoingZ = dot(outgoing, geometric);
+    if (outgoingZ <= 0.0) return geometric;
+    float minimumReflectionZ = min(0.9 * outgoingZ, 0.01);
+    float3 reflection = 2.0 * dot(normal, outgoing) * normal - outgoing;
+    if (dot(reflection, geometric) >= minimumReflectionZ) return normal;
+
+    float3 tangent = safeNormalize(normal - dot(normal, geometric) * geometric);
+    float outgoingX = dot(outgoing, tangent);
+    float projectedLengthSquared = outgoingX * outgoingX + outgoingZ * outgoingZ;
+    float root = abs(outgoingX) * sqrt(max(projectedLengthSquared - minimumReflectionZ * minimumReflectionZ, 0.0));
+    float numerator = projectedLengthSquared + outgoingZ * minimumReflectionZ + root;
+    float normalZSquared = outgoingX < 0.0
+                             ? numerator / (2.0 * projectedLengthSquared)
+                             : (outgoingZ + minimumReflectionZ) * (outgoingZ + minimumReflectionZ) / (2.0 * numerator);
+    float3 corrected = sqrt(saturate(1.0 - normalZSquared)) * tangent + sqrt(saturate(normalZSquared)) * geometric;
+    return dot(2.0 * dot(corrected, outgoing) * corrected - outgoing, geometric) > 0.0 ? corrected : geometric;
 }
 
 float3 localToWorld(float3 localDir, ShadingBasis basis) {

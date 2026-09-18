@@ -3,22 +3,11 @@
 
 #include "../base.slang"
 
-// GGX microfacet specular reflection (conductor/metallic lobe).
-// Sampled using spherical-cap VNDF sampling with Smith height-correlated masking.
-//
-// References:
-// Anisotropic roughness mapping: Burley, 2012 - https://blog.selfshadow.com/publications/s2012-shading-course/burley/s2012_pbs_disney_brdf_notes_v3.pdf
-// Visible GGX normal sampling: Dupuy, Benyoub, 2023 - https://arxiv.org/abs/2306.05044
-// GGX masking/shadowing: Heitz, 2018 - https://jcgt.org/published/0007/04/01/paper.pdf
-// Microfacet theory: Pharr, Jakob, Humphreys, 2023 - https://www.pbr-book.org/4ed/Reflection_Models/Roughness_Using_Microfacet_Theory
-// Conductor Fresnel: Pharr, Jakob, Humphreys, 2023 - https://www.pbr-book.org/4ed/Reflection_Models/Specular_Reflection_and_Transmission
-
 static const float GGX_MIN_ALPHA = 1e-3;
 static const float GGX_EPSILON = 1e-6;
 
 struct GGXParams {
     float2 alpha;
-    float vndfK;
     float projectedWoLength;
 };
 
@@ -29,21 +18,6 @@ float2 ggxAlpha(BSDFMaterial material) {
     return max(float2(a / aspect, a * aspect), float2(GGX_MIN_ALPHA));
 }
 
-float ggxVNDFK(float3 wo, float2 alpha) {
-    float a = saturate(min(alpha.x, alpha.y));
-    float s = 1.0 + length(wo.xy);
-    float a2 = a * a;
-    float s2 = s * s;
-    return (1.0 - a2) * s2 / max(s2 + a2 * wo.z * wo.z, GGX_EPSILON);
-}
-
-float ggxLambda(float3 w, float2 alpha) {
-    float2 alpha2 = alpha * alpha;
-    float z2 = max(w.z * w.z, GGX_EPSILON);
-    float slope2 = dot(alpha2 * w.xy, w.xy) / z2;
-    return 0.5 * (sqrt(1.0 + slope2) - 1.0);
-}
-
 float ggxDistribution(float3 m, float2 alpha) {
     if (m.z <= 0.0) return 0.0;
     float c = (m.x * m.x) / (alpha.x * alpha.x) + (m.y * m.y) / (alpha.y * alpha.y) + m.z * m.z;
@@ -51,11 +25,10 @@ float ggxDistribution(float3 m, float2 alpha) {
 }
 
 float ggxMasking(float3 wo, float3 wi, float2 alpha) {
-    return 1.0 / (1.0 + ggxLambda(wo, alpha) + ggxLambda(wi, alpha));
-}
-
-float ggxMasking1(float3 w, float2 alpha) {
-    return 1.0 / (1.0 + ggxLambda(w, alpha));
+    float cosO = absCosTheta(wo);
+    float cosI = absCosTheta(wi);
+    float denominator = cosO * ggxProjectedLength(wi, alpha) + cosI * ggxProjectedLength(wo, alpha);
+    return denominator > 0.0 ? 2.0 * cosO * cosI / denominator : 0.0;
 }
 
 float ggxProjectedLength(float3 wo, float2 alpha) {
@@ -66,7 +39,6 @@ float ggxProjectedLength(float3 wo, float2 alpha) {
 GGXParams makeGGXParams(BSDFMaterial material, float3 wo) {
     GGXParams params;
     params.alpha = ggxAlpha(material);
-    params.vndfK = ggxVNDFK(wo, params.alpha);
     params.projectedWoLength = ggxProjectedLength(wo, params.alpha);
     return params;
 }
@@ -74,7 +46,7 @@ GGXParams makeGGXParams(BSDFMaterial material, float3 wo) {
 bool ggxHalfVector(float3 wo, float3 wi, out float3 m, out float woDotM) {
     float3 h = wo + wi;
     float h2 = dot(h, h);
-    if (h2 <= GGX_EPSILON) {
+    if (h2 <= 0.0) {
         m = float3(0.0);
         woDotM = 0.0;
         return false;
@@ -92,13 +64,12 @@ float ggxVisibleNormalPdf(float3 wo, float3 m, GGXParams params) {
     }
 
     float Dm = ggxDistribution(m, params.alpha);
-    float G1 = ggxMasking1(wo, params.alpha);
-    return Dm * G1 * woDotM / max(cosTheta(wo), GGX_EPSILON);
+    return 2.0 * Dm * woDotM / (cosTheta(wo) + params.projectedWoLength);
 }
 
 float ggxReflectionPdf(float3 wo, float3 m, GGXParams params) {
-    float visiblePdf = ggxVisibleNormalPdf(wo, m, params);
-    return visiblePdf / max(4.0 * abs(dot(wo, m)), GGX_EPSILON);
+    if (cosTheta(wo) <= 0.0 || m.z <= 0.0 || dot(wo, m) <= 0.0) return 0.0;
+    return ggxDistribution(m, params.alpha) / (2.0 * (cosTheta(wo) + params.projectedWoLength));
 }
 
 float3 ggxConductorFresnel(BSDFMaterial material, float cosTheta, float lambdaNm, uint spectralMode) {
@@ -129,7 +100,7 @@ BSDFEval evalGGXFromHalfVector(
     float G = ggxMasking(wo, wi, params.alpha);
     float3 F = ggxConductorFresnel(material, woDotM, lambdaNm, spectralMode);
     BSDFEval eval;
-    eval.value = F * (Dm * G / max(4.0 * cosTheta(wo) * cosTheta(wi), GGX_EPSILON));
+    eval.value = F * (Dm * G / (4.0 * cosTheta(wo) * cosTheta(wi)));
     eval.pdf = ggxReflectionPdf(wo, m, params);
     return eval;
 }
@@ -173,8 +144,7 @@ float4 evalSpectralGGX(
     float Dm = ggxDistribution(m, params.alpha);
     float G = ggxMasking(wo, wi, params.alpha);
     pdf = ggxReflectionPdf(wo, m, params);
-    return ggxConductorFresnel4(material, woDotM, wavelengthsNm) *
-           (Dm * G / max(4.0 * cosTheta(wo) * cosTheta(wi), GGX_EPSILON));
+    return ggxConductorFresnel4(material, woDotM, wavelengthsNm) * (Dm * G / (4.0 * cosTheta(wo) * cosTheta(wi)));
 }
 
 bool sampleGGXVNDF(float3 wo, GGXParams params, float2 u, out float3 m) {
@@ -185,21 +155,14 @@ bool sampleGGXVNDF(float3 wo, GGXParams params, float2 u, out float3 m) {
 
     float3 woStd = float3(wo.xy * params.alpha, wo.z) / params.projectedWoLength;
     float phi = 2.0 * VKRT_PI * u.x;
-    float b = params.vndfK * woStd.z;
-    float z = (1.0 - u.y) * (1.0 + b) - b;
+    float z = (1.0 - u.y) * (1.0 + woStd.z) - woStd.z;
     float sinTheta = sqrt(saturate(1.0 - z * z));
     float3 wiStd = float3(sinTheta * cos(phi), sinTheta * sin(phi), z);
 
     float3 mStd = woStd + wiStd;
-    float mStd2 = dot(mStd, mStd);
-    if (mStd2 <= GGX_EPSILON) {
-        m = float3(0.0);
-        return false;
-    }
-
     float3 unstretchedM = float3(mStd.xy * params.alpha, mStd.z);
     float unstretchedM2 = dot(unstretchedM, unstretchedM);
-    if (unstretchedM2 <= GGX_EPSILON) {
+    if (unstretchedM2 <= 0.0) {
         m = float3(0.0);
         return false;
     }

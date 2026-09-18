@@ -31,8 +31,11 @@ RayDesc makePrimaryRay(int2 pixel, float2 jitter) {
 
 float3 safeNormalize(float3 value) {
     float lenSq = dot(value, value);
-    if (lenSq <= VKRT_SAFE_NORMALIZE_EPS) {
-        return float3(0.0, 0.0, 1.0);
+    if (lenSq <= VKRT_SAFE_NORMALIZE_EPS || !isfinite(lenSq)) {
+        float scale = max(abs(value.x), max(abs(value.y), abs(value.z)));
+        if (scale == 0.0 || !isfinite(scale)) return float3(0.0, 0.0, 1.0);
+        value /= scale;
+        lenSq = dot(value, value);
     }
 
     return value * rsqrt(lenSq);

@@ -9,6 +9,9 @@ struct SceneRayPayload {
     uint primitiveIndex;
     float hitDistance;
     float2 barycentrics;
+    float3 position = float3(0.0);
+    float3 normal = float3(0.0, 0.0, 1.0);
+    float rayOffset = 0.0;
 
     __init(uint seed) {
         rng = seed;

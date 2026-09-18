@@ -47,7 +47,7 @@ struct RaygenModeState {
         if (debugMode == VKRT_DEBUG_MODE_DENOISER_FOLLOW_SPECULAR) {
             flags |= VKRT_RAYGEN_MODE_FLAG_DENOISER_FOLLOW_SPECULAR_DEBUG;
         }
-        if (scene.misNeeEnabled != 0u && scene.emissiveMeshCount > 0u) {
+        if (scene.misNeeEnabled != 0u && scene.emissiveMeshCount > 0u && debugMode != VKRT_DEBUG_MODE_BSDF_ONLY) {
             flags |= VKRT_RAYGEN_MODE_FLAG_NEE_ENABLED;
         }
     }

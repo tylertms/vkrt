@@ -25,8 +25,10 @@ LightSample sampleDirectLight(inout uint rng) {
     float b1 = u2 * sqrtU1;
     float b2 = (1.0 - u2) * sqrtU1;
 
-    lightSample.position = triangle.v0Area.xyz + b1 * triangle.e1Pad.xyz + b2 * triangle.e2Pad.xyz;
-    lightSample.normal = safeNormalize(cross(triangle.e1Pad.xyz, triangle.e2Pad.xyz));
+    lightSample.position = triangle.v0Area.xyz + mad(b1, triangle.edge1, b2 * triangle.edge2);
+    lightSample.normal = safeNormalize(cross(triangle.edge1, triangle.edge2));
+    lightSample.instanceIndex = triangle.instanceIndex;
+    lightSample.primitiveIndex = triangle.primitiveIndex;
     lightSample.emission = emissiveMesh.emission;
     lightSample.pdf = emissiveMesh.pmfMesh * emissiveMesh.invTotalArea;
     if (lightSample.pdf > 0.0) {
@@ -36,7 +38,7 @@ LightSample sampleDirectLight(inout uint rng) {
     return lightSample;
 }
 
-DirectLightSurfaceSample sampleDirectLightSurface(float3 hitPoint, float3 geometricNormal, inout uint rng) {
+DirectLightSurfaceSample sampleDirectLightSurface(float3 hitPoint, inout uint rng) {
     DirectLightSurfaceSample sample = {};
     sample.light = sampleDirectLight(rng);
     if (!sample.light.valid()) return sample;
@@ -55,7 +57,7 @@ DirectLightSurfaceSample sampleDirectLightSurface(float3 hitPoint, float3 geomet
     sample.pdfSolidAngle = sample.light.pdf * distanceSquared / cosLight;
     if (sample.pdfSolidAngle <= 0.0) return sample;
 
-    sample.shadowDistance = distance - VKRT_SHADOW_DISTANCE_OFFSET;
+    sample.shadowDistance = distance;
     if (sample.shadowDistance <= 0.0) return sample;
 
     sample.valid = 1u;

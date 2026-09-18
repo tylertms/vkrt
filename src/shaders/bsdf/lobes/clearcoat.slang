@@ -3,14 +3,6 @@
 
 #include "../base.slang"
 
-// Disney clearcoat
-//
-// References:
-// Disney clearcoat lobe, GTR1 distribution, gloss remap, and fixed masking term:
-// Burley, 2012 - https://blog.selfshadow.com/publications/s2012-shading-course/burley/s2012_pbs_disney_brdf_notes_v3.pdf
-// Microfacet reflection half-vector Jacobian and PDF conversion:
-// Pharr, Jakob, Humphreys, 2023 - https://www.pbr-book.org/4ed/Reflection_Models/Roughness_Using_Microfacet_Theory
-
 static const float CLEARCOAT_EPSILON = 1e-6;
 
 struct ClearcoatParams {
@@ -28,10 +20,10 @@ ClearcoatParams makeClearcoatParams(BSDFMaterial material) {
 }
 
 float clearcoatSmithG1(float cosThetaValue, float alpha) {
+    if (cosThetaValue <= 0.0) return 0.0;
     float alpha2 = alpha * alpha;
-    float cos2 = max(cosThetaValue * cosThetaValue, CLEARCOAT_EPSILON);
-    float tan2 = max(1.0 - cos2, 0.0) / cos2;
-    return 2.0 / (1.0 + sqrt(1.0 + alpha2 * tan2));
+    float cos2 = cosThetaValue * cosThetaValue;
+    return 2.0 * cosThetaValue / (cosThetaValue + sqrt(alpha2 + (1.0 - alpha2) * cos2));
 }
 
 float clearcoatDistribution(float cosThetaM, float alpha) {
@@ -40,8 +32,9 @@ float clearcoatDistribution(float cosThetaM, float alpha) {
         return VKRT_INV_PI;
     }
 
-    float denom = VKRT_PI * log(alpha2) * (1.0 + (alpha2 - 1.0) * cosThetaM * cosThetaM);
-    return (alpha2 - 1.0) / min(denom, -CLEARCOAT_EPSILON);
+    float cos2 = cosThetaM * cosThetaM;
+    float denom = VKRT_PI * log(alpha2) * ((1.0 - cos2) + alpha2 * cos2);
+    return (alpha2 - 1.0) / denom;
 }
 
 BSDFEval evalClearcoat(float clearcoatWeight, float3 wo, float3 wi, ClearcoatParams params) {
@@ -53,7 +46,10 @@ BSDFEval evalClearcoat(float clearcoatWeight, float3 wo, float3 wi, ClearcoatPar
         return eval;
     }
 
-    float3 h = safeNormalize(wo + wi);
+    float3 h = wo + wi;
+    float h2 = dot(h, h);
+    if (h2 <= 0.0) return eval;
+    h *= rsqrt(h2);
     float woDotH = saturate(dot(wo, h));
     if (woDotH <= 0.0) {
         return eval;
@@ -62,11 +58,11 @@ BSDFEval evalClearcoat(float clearcoatWeight, float3 wo, float3 wi, ClearcoatPar
     float D = clearcoatDistribution(saturate(cosTheta(h)), params.alpha);
     float F = lerp(0.04, 1.0, schlickWeight(woDotH));
     float G = clearcoatSmithG1(cosTheta(wo), 0.25) * clearcoatSmithG1(cosTheta(wi), 0.25);
-    float value = 0.25 * clearcoatWeight * D * F * G / max(4.0 * cosTheta(wo) * cosTheta(wi), CLEARCOAT_EPSILON);
+    float value = 0.25 * clearcoatWeight * D * F * G / (4.0 * cosTheta(wo) * cosTheta(wi));
     float pdfM = D * saturate(cosTheta(h));
 
     eval.value = float3(value);
-    eval.pdf = pdfM / max(4.0 * woDotH, CLEARCOAT_EPSILON);
+    eval.pdf = pdfM / (4.0 * woDotH);
     return eval;
 }
 

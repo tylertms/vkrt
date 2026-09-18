@@ -40,12 +40,6 @@ bool sampleBSDFDirection(BSDFState state, inout uint rng, out BSDFDirectionSampl
         return true;
     }
 
-    selector -= state.sampleWeights.dielectric;
-    if (selector < state.sampleWeights.diffuse) {
-        sample.wi = sampleCosineHemisphere(rng);
-        return true;
-    }
-
     sample.wi = sampleCosineHemisphere(rng);
     return true;
 }

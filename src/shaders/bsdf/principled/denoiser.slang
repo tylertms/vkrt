@@ -5,7 +5,8 @@ static const float VKRT_DENOISER_SPECULAR_FOLLOW_ROUGHNESS = 0.02;
 static const float VKRT_DENOISER_LAYER_EPSILON = 1e-3;
 
 bool materialDenoiserShouldFollowSpecularHit(BSDFMaterial material, uint frontFace) {
-    float diffuseWeight = maxComponent(bsdfDiffuseColor(material)) * (1.0 - material.transmission);
+    float diffuseWeight =
+        maxComponent(bsdfDiffuseColor(material)) * (1.0 - material.metallic) * (1.0 - material.transmission);
     float subsurfaceWeight = diffuseWeight * material.subsurface;
     float sheenLayerWeight = maxComponent(bsdfSheenColor(material)) * (1.0 - material.transmission);
     float clearcoatLayerWeight = frontFace != 0u ? material.clearcoat : 0.0;

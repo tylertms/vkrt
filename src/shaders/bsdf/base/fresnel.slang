@@ -29,6 +29,7 @@ float3 fresnelSchlick(float cosTheta, float3 f0) {
 }
 
 float fresnelDielectric(float cosTheta, float eta) {
+    if (eta == 1.0) return 0.0;
     float cosThetaI = clamp(cosTheta, -1.0, 1.0);
     if (cosThetaI < 0.0) {
         eta = 1.0 / max(eta, 1e-6);

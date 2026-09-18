@@ -27,6 +27,10 @@ float computeBSDFEmitterMISWeight(
 }
 
 float computeSpectralMISWeight(float4 sampledTechniquePdf, float4 alternateTechniquePdf) {
+    float scale = max(maxComponent4(sampledTechniquePdf), maxComponent4(alternateTechniquePdf));
+    if (scale <= 0.0) return 0.0;
+    sampledTechniquePdf /= scale;
+    alternateTechniquePdf /= scale;
     float denominator = dot(sampledTechniquePdf, float4(1.0)) + dot(alternateTechniquePdf, float4(1.0));
     return denominator > 0.0 ? sampledTechniquePdf.x / denominator : 0.0;
 }

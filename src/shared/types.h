@@ -113,8 +113,10 @@ VKRT_SHARED_STRUCT(EmissiveMesh, {
 
 VKRT_SHARED_STRUCT(EmissiveTriangle, {
     float4 v0Area;
-    float4 e1Pad;
-    float4 e2Pad;
+    float3 edge1;
+    uint instanceIndex;
+    float3 edge2;
+    uint primitiveIndex;
 })
 
 VKRT_SHARED_STRUCT(RGB2SpecTableInfo, {

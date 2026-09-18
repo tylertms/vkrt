@@ -3,9 +3,6 @@
 
 #include "../scene/resources.slang"
 
-// References:
-// ACES filmic curve approximation: Narkowicz, 2016 - https://knarkowicz.wordpress.com/2016/01/06/aces-filmic-tone-mapping-curve/
-
 float srgbEncodeScalar(float value) {
     if (value <= 0.0031308) return 12.92 * value;
     return 1.055 * pow(value, 1.0 / 2.4) - 0.055;

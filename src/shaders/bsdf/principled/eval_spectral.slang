@@ -78,8 +78,8 @@ float4 evalSpectralReflectionStack(BSDFState state, float3 wi, float4 wavelength
     }
 
     float viewCoatAttenuation = coatDirectionalAttenuation(state.material, state.wo);
-    float4 viewSheenAttenuation =
-        saturate(1.0 - sheenColor * sheenDirectionalAlbedo(cosTheta(state.wo), state.material.sheenRoughness));
+    float viewSheenAttenuation =
+        sheenDirectionalAttenuation(bsdfSheenColor(state.material), state.wo, state.material.sheenRoughness);
     float4 viewDielectricAttenuation = spectralScalarFromLinearSrgb4(
         saturate(dielectricDirectionalAttenuation(state.material, state.wo)),
         wavelengthsNm
@@ -94,6 +94,8 @@ float4 evalSpectralReflectionStack(BSDFState state, float3 wi, float4 wavelength
 }
 
 float4 evalSpectralBSDF(BSDFState state, float3 wi, float4 wavelengthsNm, out float4 techniquePdf) {
+    techniquePdf = float4(0.0);
+    if (!bsdfDirectionIsValid(state, wi)) return float4(0.0);
     if (cosTheta(wi) > 0.0) {
         return evalSpectralReflectionStack(state, wi, wavelengthsNm, techniquePdf);
     }
@@ -112,6 +114,14 @@ float4 evalSpectralBSDF(BSDFState state, float3 wi, float4 wavelengthsNm, out fl
     );
     techniquePdf *= state.sampleWeights.dielectric;
     return value;
+}
+
+BSDFEval evalSingleWavelengthBSDF(BSDFState state, float3 wi) {
+    BSDFEval eval;
+    float4 techniquePdf;
+    eval.value = evalSpectralBSDF(state, wi, state.wavelengthNm.xxxx, techniquePdf).xxx;
+    eval.pdf = techniquePdf.x;
+    return eval;
 }
 
 #endif

@@ -19,7 +19,7 @@ bool sampleDielectric(
         return false;
     }
 
-    if (dielectricIsIdentity(material)) {
+    if (dielectricIsIdentity(material, lambdaNm, spectralMode)) {
         sample.wi = -wo;
         sample.isTransmission = material.transmission > 0.0 ? 1u : 0u;
         return material.transmission > 0.0;
@@ -45,6 +45,7 @@ bool sampleDielectric(
             sample.isTransmission = 1u;
             return true;
         }
+        return false;
     }
 
     sample.wi = 2.0 * woDotWm * wm - wo;

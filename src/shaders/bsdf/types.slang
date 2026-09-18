@@ -10,7 +10,7 @@ struct BSDFSample {
     uint isTransmission;
 
     bool isUsable() {
-        return pdf > 0.0 && any(weight > 0.0);
+        return pdf > 0.0 && isfinite(pdf) && all(isfinite(weight)) && all(isfinite(wi)) && any(weight > 0.0);
     }
 };
 
@@ -26,7 +26,8 @@ struct SpectralBSDFSample {
     uint isTransmission;
 
     bool isUsable() {
-        return techniquePdf.x > 0.0 && any(weight > 0.0);
+        return techniquePdf.x > 0.0 && all(isfinite(techniquePdf)) && all(isfinite(weight)) && all(isfinite(wi)) &&
+               any(weight > 0.0);
     }
 };
 

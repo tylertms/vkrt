@@ -266,6 +266,7 @@ static void freeLightBuildScratch(LightBuildScratch* scratch) {
 
 static VKRT_Result appendMeshEmissiveTriangles(
     const Mesh* mesh,
+    uint32_t meshIndex,
     LightBuildScratch* scratch,
     uint32_t* outTriangleOffset,
     uint32_t* outValidTriangleCount,
@@ -313,12 +314,14 @@ static VKRT_Result appendMeshEmissiveTriangles(
         triangleGPU.v0Area[1] = position0[1];
         triangleGPU.v0Area[2] = position0[2];
         triangleGPU.v0Area[3] = area;
-        triangleGPU.e1Pad[0] = edge1[0];
-        triangleGPU.e1Pad[1] = edge1[1];
-        triangleGPU.e1Pad[2] = edge1[2];
-        triangleGPU.e2Pad[0] = edge2[0];
-        triangleGPU.e2Pad[1] = edge2[1];
-        triangleGPU.e2Pad[2] = edge2[2];
+        triangleGPU.edge1[0] = edge1[0];
+        triangleGPU.edge1[1] = edge1[1];
+        triangleGPU.edge1[2] = edge1[2];
+        triangleGPU.instanceIndex = meshIndex;
+        triangleGPU.edge2[0] = edge2[0];
+        triangleGPU.edge2[1] = edge2[1];
+        triangleGPU.edge2[2] = edge2[2];
+        triangleGPU.primitiveIndex = triangleIndex;
 
         scratch->emissiveTriangles[scratch->emissiveTriangleCount++] = triangleGPU;
         totalArea += area;
@@ -348,7 +351,8 @@ static VKRT_Result appendEmissiveMesh(
     uint32_t triangleOffset = 0u;
     uint32_t validTriangleCount = 0u;
     float totalArea = 0.0f;
-    VKRT_Result result = appendMeshEmissiveTriangles(mesh, scratch, &triangleOffset, &validTriangleCount, &totalArea);
+    VKRT_Result result =
+        appendMeshEmissiveTriangles(mesh, meshIndex, scratch, &triangleOffset, &validTriangleCount, &totalArea);
     if (result != VKRT_SUCCESS) {
         return result;
     }

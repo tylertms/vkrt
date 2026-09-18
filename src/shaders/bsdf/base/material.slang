@@ -52,7 +52,7 @@ float maxComponent(float3 value) {
 }
 
 float3 bsdfDiffuseColor(BSDFMaterial material) {
-    return material.baseColor * (1.0 - material.metallic);
+    return material.baseColor;
 }
 
 float3 bsdfTintColor(float3 baseColor) {

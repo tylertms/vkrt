@@ -59,21 +59,23 @@ void traceRgbPathSample(
 
         BSDFState state = makePathBSDFState(pathState.common, surfaceState, bsdfMaterial, 0.0, 0u);
         bool currentVertexNeeAllowed = !pathState.common.medium.refractiveActive();
-        bool vertexNeeSupported = currentVertexNeeAllowed;
+        bool continuationAvailable = depth + 1u < scene.rrMaxDepth;
+        bool bsdfContinuationAvailable =
+            continuationAvailable && !raygenModeHas(modeState, VKRT_RAYGEN_MODE_FLAG_NEE_ONLY_DEBUG);
 
         float3 contribution = float3(0.0);
         if (!raygenModeHas(modeState, VKRT_RAYGEN_MODE_FLAG_BSDF_ONLY_DEBUG) &&
             raygenModeHas(modeState, VKRT_RAYGEN_MODE_FLAG_NEE_ENABLED) && currentVertexNeeAllowed) {
-            DirectLightRgbResult directLight = sampleDirectLightRgb(
+            contribution += sampleDirectLightRgb(
                 surfaceState.hitPoint,
                 surfaceState.surface.geometricNormal,
+                surfaceState.rayOffset,
                 surfaceState.basis,
                 state,
                 pathState.common.medium,
+                bsdfContinuationAvailable,
                 pathState.common.rng
             );
-            contribution += directLight.radiance;
-            vertexNeeSupported = directLight.neeSupported();
         }
 
         if (!raygenModeHas(modeState, VKRT_RAYGEN_MODE_FLAG_NEE_ONLY_DEBUG)) {
@@ -86,6 +88,7 @@ void traceRgbPathSample(
 
         accumulateRgbIncomingContribution(sampleState, pathState, contribution);
         pathState.common.bounceCount = depth + 1u;
+        if (!continuationAvailable) break;
 
         uint sampleIsTransmission = 0u;
         float3 sampleWi = float3(0.0);
@@ -93,7 +96,7 @@ void traceRgbPathSample(
             break;
         }
 
-        bool sampledPathNeeAllowed = vertexNeeSupported && sampleIsTransmission == 0u;
+        bool sampledPathNeeAllowed = currentVertexNeeAllowed && sampleIsTransmission == 0u;
         updateRgbMediumAfterScatter(pathState, bsdfMaterial, surfaceState.surface.frontFace, sampleIsTransmission);
         setPathPrevVertexNeeAllowed(pathState.common, sampledPathNeeAllowed);
 
@@ -105,7 +108,7 @@ void traceRgbPathSample(
             applyRgbContinueProbability(pathState, continueProbability);
         }
 
-        advancePathRay(pathState.common, surfaceState, sampleIsTransmission, sampleWi);
+        advancePathRay(pathState.common, surfaceState, sampleWi);
     }
 
     applyBounceCountDebug(modeState, sampleIndex, pathState.common.bounceCount, frameState);

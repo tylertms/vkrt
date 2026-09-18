@@ -60,21 +60,23 @@ void traceSpectralSinglePathSample(
         BSDFState state =
             makePathBSDFState(pathState.common, surfaceState, bsdfMaterial, pathState.wavelength.lambdaNm, 1u);
         bool currentVertexNeeAllowed = !pathState.common.medium.refractiveActive();
-        bool vertexNeeSupported = currentVertexNeeAllowed;
+        bool continuationAvailable = depth + 1u < scene.rrMaxDepth;
+        bool bsdfContinuationAvailable =
+            continuationAvailable && !raygenModeHas(modeState, VKRT_RAYGEN_MODE_FLAG_NEE_ONLY_DEBUG);
 
         float spectralContribution = 0.0;
         if (!raygenModeHas(modeState, VKRT_RAYGEN_MODE_FLAG_BSDF_ONLY_DEBUG) &&
             raygenModeHas(modeState, VKRT_RAYGEN_MODE_FLAG_NEE_ENABLED) && currentVertexNeeAllowed) {
-            DirectLightSpectralResult directLight = sampleDirectLightSpectralSingle(
+            spectralContribution += sampleDirectLightSpectralSingle(
                 surfaceState.hitPoint,
                 surfaceState.surface.geometricNormal,
+                surfaceState.rayOffset,
                 surfaceState.basis,
                 state,
                 pathState.common.medium,
+                bsdfContinuationAvailable,
                 pathState.common.rng
             );
-            spectralContribution += directLight.spectralRadiance;
-            vertexNeeSupported = directLight.neeSupported();
         }
 
         if (!raygenModeHas(modeState, VKRT_RAYGEN_MODE_FLAG_NEE_ONLY_DEBUG)) {
@@ -88,6 +90,7 @@ void traceSpectralSinglePathSample(
 
         accumulateSpectralSingleIncomingContribution(sampleState, pathState, spectralContribution);
         pathState.common.bounceCount = depth + 1u;
+        if (!continuationAvailable) break;
 
         uint sampleIsTransmission = 0u;
         float3 sampleWi = float3(0.0);
@@ -95,7 +98,7 @@ void traceSpectralSinglePathSample(
             break;
         }
 
-        bool sampledPathNeeAllowed = vertexNeeSupported && sampleIsTransmission == 0u;
+        bool sampledPathNeeAllowed = currentVertexNeeAllowed && sampleIsTransmission == 0u;
         updateSpectralSingleMediumAfterScatter(
             pathState,
             bsdfMaterial,
@@ -112,7 +115,7 @@ void traceSpectralSinglePathSample(
             applySpectralSingleContinueProbability(pathState, continueProbability);
         }
 
-        advancePathRay(pathState.common, surfaceState, sampleIsTransmission, sampleWi);
+        advancePathRay(pathState.common, surfaceState, sampleWi);
     }
 
     applyBounceCountDebug(modeState, sampleIndex, pathState.common.bounceCount, frameState);

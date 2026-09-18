@@ -37,7 +37,7 @@ bool materialHasAbsorption(BSDFMaterial material) {
 }
 
 bool materialMediumIsRefractive(BSDFMaterial material) {
-    return material.transmission > 0.0 && interfaceIor(material) > 1.0 + 1e-4;
+    return material.transmission > 0.0 && interfaceIor(material) > 1.0;
 }
 
 float3 materialAbsorptionSigma(BSDFMaterial material) {

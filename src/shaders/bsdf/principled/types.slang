@@ -18,6 +18,7 @@ struct BSDFBranchWeights {
 struct BSDFState {
     BSDFMaterial material;
     float3 wo;
+    float3 geometricNormal;
     GGXParams ggx;
     ClearcoatParams clearcoat;
     uint frontFace;
@@ -25,9 +26,17 @@ struct BSDFState {
     uint spectralMode;
     BSDFBranchWeights sampleWeights;
 
-    __init(BSDFMaterial material, float3 wo, uint frontFace, float wavelengthNm, uint spectralMode) {
+    __init(
+        BSDFMaterial material,
+        float3 wo,
+        float3 geometricNormal,
+        uint frontFace,
+        float wavelengthNm,
+        uint spectralMode
+    ) {
         this.material = material;
         this.wo = wo;
+        this.geometricNormal = geometricNormal;
         this.frontFace = frontFace;
         this.wavelengthNm = wavelengthNm;
         this.spectralMode = spectralMode;
@@ -36,5 +45,10 @@ struct BSDFState {
         sampleWeights = makeBSDFBranchWeights(material, wo, frontFace);
     }
 };
+
+bool bsdfDirectionIsValid(BSDFState state, float3 wi) {
+    return cosTheta(state.wo) > 0.0 && dot(state.wo, state.geometricNormal) > 0.0 &&
+           cosTheta(wi) * dot(wi, state.geometricNormal) > 0.0;
+}
 
 #endif

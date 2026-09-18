@@ -31,10 +31,6 @@ float sin2Theta(float3 w) {
     return saturate(1.0 - cos2Theta(w));
 }
 
-float sinTheta(float3 w) {
-    return sqrt(sin2Theta(w));
-}
-
 float cosineHemispherePdf(float3 wi) {
     return cosTheta(wi) > 0.0 ? cosTheta(wi) * VKRT_INV_PI : 0.0;
 }
@@ -45,16 +41,6 @@ float3 sampleCosineHemisphere(inout uint rng) {
     float r = sqrt(u1);
     float phi = 2.0 * VKRT_PI * u2;
     return float3(r * cos(phi), r * sin(phi), sqrt(max(0.0, 1.0 - u1)));
-}
-
-float sinPhi(float3 w) {
-    float sinTheta2 = sin2Theta(w);
-    return sinTheta2 > 0.0 ? clamp(w.y * rsqrt(sinTheta2), -1.0, 1.0) : 0.0;
-}
-
-float cosPhi(float3 w) {
-    float sinTheta2 = sin2Theta(w);
-    return sinTheta2 > 0.0 ? clamp(w.x * rsqrt(sinTheta2), -1.0, 1.0) : 1.0;
 }
 
 float cosPhiDifference(float3 wi, float3 wo) {

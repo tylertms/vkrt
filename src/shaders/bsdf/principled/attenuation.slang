@@ -38,6 +38,7 @@ float2 dielectricDirectionalAlbedoAB(float roughness, float cosThetaValue) {
 }
 
 float3 dielectricDirectionalAlbedo(BSDFMaterial material, float3 w) {
+    if (dielectricIsIdentity(material)) return float3(0.0);
     if (absCosTheta(w) <= 0.0) {
         return float3(1.0);
     }

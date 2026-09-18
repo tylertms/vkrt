@@ -1,7 +1,7 @@
 #ifndef VKRT_BSDF_DIELECTRIC_EVAL_SPECTRAL_SLANG
 #define VKRT_BSDF_DIELECTRIC_EVAL_SPECTRAL_SLANG
 
-#include "./interface.slang"
+#include "./eval_rgb.slang"
 
 float4 evalSpectralDielectricReflection(
     BSDFMaterial material,
@@ -27,19 +27,21 @@ float4 evalSpectralDielectricReflection(
     float Dm = ggxDistribution(wm, params.alpha);
     float G = ggxMasking(wo, wi, params.alpha);
     float reflectionBasePdf = ggxReflectionPdf(wo, wm, params);
-    techniquePdf = float4(
-                       1.0 - dielectricTransmissionProbability(material, fresnel.x),
-                       1.0 - dielectricTransmissionProbability(material, fresnel.y),
-                       1.0 - dielectricTransmissionProbability(material, fresnel.z),
-                       1.0 - dielectricTransmissionProbability(material, fresnel.w)
-                   ) *
-                   reflectionBasePdf;
+    [unroll] for (uint lane = 0u; lane < 4u; lane++) {
+        techniquePdf[lane] = dielectricIsIdentity(material, wavelengthsNm[lane], 1u)
+                               ? 0.0
+                               : (1.0 - dielectricTransmissionProbability(material, fresnel[lane])) * reflectionBasePdf;
+    }
     if (!any(techniquePdf > 0.0)) {
         return float4(0.0);
     }
 
-    return dielectricReflectionColor4(material, woDotWm, fresnel, wavelengthsNm) *
-           (Dm * G / max(4.0 * cosTheta(wo) * cosTheta(wi), GGX_EPSILON));
+    float4 value = dielectricReflectionColor4(material, woDotWm, fresnel, wavelengthsNm) *
+                   (Dm * G / (4.0 * cosTheta(wo) * cosTheta(wi)));
+    [unroll] for (uint lane = 0u; lane < 4u; lane++) {
+        if (techniquePdf[lane] <= 0.0) value[lane] = 0.0;
+    }
+    return value;
 }
 
 float evalSpectralDielectricTransmissionLane(
@@ -53,44 +55,9 @@ float evalSpectralDielectricTransmissionLane(
     float lambdaNm,
     out float pdf
 ) {
-    pdf = 0.0;
-    if (material.transmission <= 0.0 || cosTheta(wo) <= 0.0 || cosTheta(wi) >= 0.0) {
-        return 0.0;
-    }
-
-    if (dielectricIsIdentity(material)) {
-        if (dot(wi, -wo) < 0.9999) {
-            return 0.0;
-        }
-
-        pdf = 1.0;
-        return coatAttenuation * transmissionColor / max(absCosTheta(wi), GGX_EPSILON);
-    }
-
-    float etap = interfaceEta(material, frontFace, lambdaNm, 1u);
-    float3 wm;
-    float woDotWm;
-    float wiDotWm;
-    float denom;
-    if (!dielectricTransmissionHalfVector(wo, wi, etap, wm, woDotWm, wiDotWm, denom)) {
-        return 0.0;
-    }
-
-    float fresnel = fresnelDielectric(woDotWm, etap);
-    float transmissionProbability = dielectricTransmissionProbability(material, fresnel);
-    if (transmissionProbability <= 0.0) {
-        return 0.0;
-    }
-
-    float Dm = ggxDistribution(wm, params.alpha);
-    float G = ggxMasking(wo, wi, params.alpha);
-    float denom2 = denom * denom;
-    float transportScale = 1.0 / max(etap * etap, GGX_EPSILON);
-    float transmissionTerm = abs((wiDotWm * woDotWm) / max(absCosTheta(wi) * cosTheta(wo) * denom2, GGX_EPSILON));
-    float dwmDwi = abs(wiDotWm) / max(denom2, GGX_EPSILON);
-
-    pdf = transmissionProbability * ggxVisibleNormalPdf(wo, wm, params) * dwmDwi;
-    return coatAttenuation * transmissionColor * ((1.0 - fresnel) * Dm * G * transmissionTerm * transportScale);
+    BSDFEval eval = evalDielectricTransmissionInterface(material, wo, wi, frontFace, params, lambdaNm, 1u);
+    pdf = eval.pdf;
+    return coatAttenuation * transmissionColor * eval.value.x;
 }
 
 float4 evalSpectralDielectricTransmission(

@@ -1,8 +1,8 @@
 #include "../../rt/payloads/shadow_payload.slang"
-#include "../../scene/resources.slang"
 
 [shader("closesthit")] void main(inout ShadowPayload payload, in BuiltInTriangleIntersectionAttributes attr) {
-    Material material = materials[meshInfos[InstanceIndex()].materialIndex];
     payload.visibility =
-        material.transmission > 0.0 ? VKRT_SHADOW_VISIBILITY_UNSUPPORTED_TRANSMISSION : VKRT_SHADOW_VISIBILITY_OCCLUDED;
+        InstanceIndex() == payload.targetInstanceIndex && PrimitiveIndex() == payload.targetPrimitiveIndex
+            ? VKRT_SHADOW_VISIBILITY_VISIBLE
+            : VKRT_SHADOW_VISIBILITY_OCCLUDED;
 }

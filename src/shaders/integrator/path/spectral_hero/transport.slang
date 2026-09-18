@@ -66,7 +66,7 @@ bool sampleSpectralHeroNextDirection(
 
         pathState.prevVertexTechniquePathPdf = pathState.techniquePathPdf;
         pathState.prevBsdfTechniquePdf = sample.techniquePdf;
-        pathState.techniquePathPdf *= sample.techniquePdf;
+        pathState.techniquePathPdf = updateTechniqueWeights(pathState.techniquePathPdf, sample.techniquePdf);
         pathState.spectralThroughput *= sample.weight;
         if (!any(pathState.spectralThroughput > 0.0)) {
             sampleIsTransmission = 0u;
@@ -143,7 +143,6 @@ float computeSpectralHeroContinueProbability(SpectralHeroPathState pathState) {
 
 void applySpectralHeroContinueProbability(inout SpectralHeroPathState pathState, float continueProbability) {
     if (spectralHeroPathActive(pathState)) {
-        pathState.techniquePathPdf *= continueProbability.xxxx;
         pathState.spectralThroughput /= continueProbability;
         return;
     }

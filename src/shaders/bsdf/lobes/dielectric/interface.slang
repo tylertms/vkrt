@@ -3,19 +3,16 @@
 
 #include "../ggx.slang"
 
-// Rough dielectric reflection/transmission interface.
-//
-// References:
-// Walter et al., 2007 - https://www.cs.cornell.edu/~srm/publications/EGSR07-btdf.pdf
-// Burley, 2015 - https://blog.selfshadow.com/publications/s2015-shading-course/burley/s2015_pbs_disney_bsdf_notes.pdf
-// Pharr, Jakob, Humphreys, 2023 - https://www.pbr-book.org/4ed/Reflection_Models/Dielectric_BSDF
-
 bool dielectricIsIdentity(BSDFMaterial material) {
-    return interfaceIor(material) <= 1.0 + 1e-4;
+    return interfaceIor(material) == 1.0;
+}
+
+bool dielectricIsIdentity(BSDFMaterial material, float lambdaNm, uint spectralMode) {
+    return interfaceIor(material, lambdaNm, spectralMode) == 1.0;
 }
 
 float dielectricFresnel(BSDFMaterial material, uint frontFace, float cosThetaI, float lambdaNm, uint spectralMode) {
-    if (dielectricIsIdentity(material)) {
+    if (dielectricIsIdentity(material, lambdaNm, spectralMode)) {
         return 0.0;
     }
 
@@ -84,11 +81,12 @@ bool dielectricTransmissionHalfVector(
     }
 
     float3 h = wo + wi * etap;
-    if (dot(h, h) <= GGX_EPSILON) {
+    float h2 = dot(h, h);
+    if (h2 <= 0.0) {
         return false;
     }
 
-    wm = safeNormalize(h);
+    wm = h * rsqrt(h2);
     if (wm.z < 0.0) {
         wm = -wm;
     }
@@ -96,7 +94,7 @@ bool dielectricTransmissionHalfVector(
     woDotWm = dot(wo, wm);
     wiDotWm = dot(wi, wm);
     denom = wiDotWm + woDotWm / etap;
-    return woDotWm > 0.0 && wiDotWm < 0.0 && abs(denom) > GGX_EPSILON;
+    return woDotWm > 0.0 && wiDotWm < 0.0 && denom != 0.0;
 }
 
 #endif

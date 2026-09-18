@@ -20,11 +20,4 @@
 #include "./principled/types.slang"
 #include "./principled/weights.slang"
 
-// Layered Principled BSDF:
-// Sheen on top, then clearcoat, then the base dielectric/metal/substrate stack.
-//
-// References:
-// Blender Principled node definition - https://github.com/blender/blender/blob/main/source/blender/nodes/shader/nodes/node_shader_bsdf_principled.cc
-// Blender Cycles closure layering - https://github.com/blender/blender/blob/main/intern/cycles/kernel/svm/closure.h
-
 #endif

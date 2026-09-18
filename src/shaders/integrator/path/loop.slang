@@ -56,7 +56,8 @@ BSDFState makePathBSDFState(
     uint wavelengthMode
 ) {
     float3 wo = worldToLocal(-common.ray.Direction, surfaceState.basis);
-    return BSDFState(material, wo, surfaceState.surface.frontFace, wavelengthNm, wavelengthMode);
+    float3 geometricNormal = worldToLocal(surfaceState.surface.geometricNormal, surfaceState.basis);
+    return BSDFState(material, wo, geometricNormal, surfaceState.surface.frontFace, wavelengthNm, wavelengthMode);
 }
 
 float bsdfEmitterMisWeight(
@@ -110,10 +111,10 @@ void accumulateDenoiserFeatures(inout DenoiserFeatures target, DenoiserFeatures 
     target.followSpecular += source.followSpecular;
 }
 
-void advancePathRay(inout PathCommonState common, PathSurfaceState surfaceState, uint sampleIsTransmission, float3 wi) {
-    float3 offsetDirection =
-        sampleIsTransmission != 0u ? -surfaceState.surface.geometricNormal : surfaceState.surface.geometricNormal;
-    common.ray.Origin = surfaceState.hitPoint + offsetDirection * VKRT_SHADOW_ORIGIN_OFFSET;
+void advancePathRay(inout PathCommonState common, PathSurfaceState surfaceState, float3 wi) {
+    float3 offsetDirection = dot(wi, surfaceState.surface.geometricNormal) < 0.0 ? -surfaceState.surface.geometricNormal
+                                                                                 : surfaceState.surface.geometricNormal;
+    common.ray.Origin = offsetSurfaceRayOrigin(surfaceState.hitPoint, offsetDirection, surfaceState.rayOffset);
     common.ray.Direction = wi;
     common.ray.TMin = VKRT_RAY_T_MIN;
     common.ray.TMax = VKRT_RAY_T_MAX;

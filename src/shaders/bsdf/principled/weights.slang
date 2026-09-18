@@ -29,18 +29,22 @@ BSDFBranchWeights makeBSDFBranchWeights(BSDFMaterial material, float3 wo, uint f
     float3 diffuseColor = bsdfDiffuseColor(material);
     float3 sheenColor = bsdfSheenColor(material);
     float nonMetal = 1.0 - material.metallic;
-    float baseColorWeight = max(linearSrgbLuminance(material.baseColor), 1e-3);
+    float metalWeight = max(linearSrgbLuminance(ggxConductorFresnel(material, cosTheta(wo), 550.0, 0u)), 1e-3);
     float diffuseColorWeight = max(linearSrgbLuminance(diffuseColor), 1e-3);
     float baseScatter = nonMetal * (1.0 - material.transmission);
     float transmissionWeight = material.transmission * max(linearSrgbLuminance(bsdfTransmissionColor(material)), 1e-3);
-    float dielectricSpecularWeight =
-        nonMetal * max(bsdfDielectricSpecularF0Luminance(material) + transmissionWeight, 0.0);
-    weights.sheen = linearSrgbLuminance(sheenColor);
+    float dielectricAlbedo = dielectricIsIdentity(material)
+                               ? 0.0
+                               : max(linearSrgbLuminance(dielectricDirectionalAlbedo(material, wo)), 1e-3);
+    float dielectricSpecularWeight = nonMetal * (dielectricAlbedo + transmissionWeight);
+    weights.sheen = any(sheenColor > 0.0)
+                      ? linearSrgbLuminance(sheenColor) * sheenDirectionalAlbedo(cosTheta(wo), material.sheenRoughness)
+                      : 0.0;
 
     if (material.transmission > 0.0 && frontFace == 0u) {
         weights.sheen = 0.0;
         weights.coat = 0.0;
-        weights.metal = material.metallic * baseColorWeight;
+        weights.metal = material.metallic * metalWeight;
         weights.dielectric = dielectricSpecularWeight;
         weights.diffuse = 0.0;
         weights.subsurface = 0.0;
@@ -52,7 +56,7 @@ BSDFBranchWeights makeBSDFBranchWeights(BSDFMaterial material, float3 wo, uint f
     float dielectricWeightAttenuation = linearSrgbLuminance(dielectricDirectionalAttenuation(material, wo));
 
     weights.coat = viewSheenAttenuation * material.clearcoat * 0.25;
-    weights.metal = viewSheenAttenuation * viewCoatAttenuation * material.metallic * baseColorWeight;
+    weights.metal = viewSheenAttenuation * viewCoatAttenuation * material.metallic * metalWeight;
     weights.dielectric = viewSheenAttenuation * viewCoatAttenuation * dielectricSpecularWeight;
     weights.diffuse = viewSheenAttenuation * viewCoatAttenuation * dielectricWeightAttenuation * baseScatter *
                       (1.0 - material.subsurface) * diffuseColorWeight;
