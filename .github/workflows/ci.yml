@@ -134,10 +134,7 @@ jobs:
 
       - name: Package Linux
         if: runner.os == 'Linux'
-        run: |
-          args=()
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then args+=(--appimage); fi
-          python scripts/package.py "${args[@]}"
+        run: python scripts/package.py --appimage
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
