@@ -45,8 +45,7 @@ The renderer is available as the `vkrt_core` library with a [C API](src/core/api
 | Sheen | LTC fiber sheen. | [Zeltner, Burley, and Chiang 2022][sheen-paper], [Cycles implementation][cycles-sheen], [lookup tables][cycles-tables] |
 | Subsurface approximation | Disney local diffuse approximation. | [Disney 2012][disney-2012], [reference implementation][disney-code], [Disney 2015][disney-2015] |
 
-<details>
-<summary>Implementation references</summary>
+## Implementation references
 
 - Material layering: [Disney anisotropy][disney-2012], [Principled BSDF][principled-node], and [Cycles closures][cycles-closure].
 - Spectral rendering: [hero wavelengths][hero], [PBRT sampled spectra][pbrt-spectra], [RGB2Spec][rgb2spec] ([implementation][rgb2spec-code], [API][rgb2spec-api]), and [Abbe dispersion][abbe].
@@ -54,8 +53,6 @@ The renderer is available as the `vkrt_core` library with a [C API](src/core/api
 - Sampling: [MIS][mis], [alias tables][alias], and [integer hashing][hash].
 - Geometry: [orthonormal bases][basis], [Cycles normal correction][cycles-normal], and [ray-origin error bounds][ray-origin].
 - Asset format: [glTF 2.0][gltf].
-
-</details>
 
 ## Usage
 
@@ -72,10 +69,14 @@ Run `vkrt --help` for command-line options.
 
 ## Build
 
+### Requirements
+
 - GPU with Vulkan ray tracing support and a current graphics driver.
 - Git and Python 3.12 or newer.
 - [Vulkan SDK](https://vulkan.lunarg.com/sdk/home) 1.4.357 or newer, with its environment configured and `slangc` on `PATH`.
 - Windows: Visual Studio Build Tools with the C++ desktop workload.
+
+### Get the source
 
 ```sh
 git clone https://github.com/tylertms/vkrt
