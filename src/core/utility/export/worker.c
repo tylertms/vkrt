@@ -53,11 +53,15 @@ static void publishCompletedViewportJob(
     vkrtMutexUnlock(&exporter->stateLock);
 }
 
-static void processRenderImageWorkerJob(RenderImageExporter* exporter, RenderImageExportJob* job) {
+static void processRenderImageWorkerJob(
+    RenderImageExporter* exporter,
+    RenderImageExportJob* job,
+    VKRT_OIDNDenoiser* denoiser
+) {
     if (!exporter || !job) return;
 
     if (job->type == RENDER_IMAGE_JOB_TYPE_SAVE) {
-        int result = processRenderImageExportJob(job);
+        int result = processRenderImageExportJob(job, denoiser);
         if (result == 0) {
             LOG_INFO("Saved render image: %s", job->path);
         }
@@ -66,7 +70,7 @@ static void processRenderImageWorkerJob(RenderImageExporter* exporter, RenderIma
 
     uint16_t* displayPixels = NULL;
     size_t displayByteCount = 0u;
-    int result = processViewportDenoiseJob(job, &displayPixels, &displayByteCount);
+    int result = processViewportDenoiseJob(job, denoiser, &displayPixels, &displayByteCount);
     publishCompletedViewportJob(exporter, job, result, displayPixels, displayByteCount);
 }
 
@@ -83,16 +87,18 @@ static void finishRenderImageWorkerJob(RenderImageExporter* exporter) {
 
 static int renderImageWorkerMain(void* userData) {
     RenderImageExporter* exporter = (RenderImageExporter*)userData;
+    VKRT_OIDNDenoiser* denoiser = vkrtOIDNCreateDenoiser();
 
     for (;;) {
         RenderImageExportJob* job = waitForNextRenderImageExportJob(exporter);
         if (!job) break;
 
-        processRenderImageWorkerJob(exporter, job);
+        processRenderImageWorkerJob(exporter, job, denoiser);
         freeRenderImageExportJob(job);
         finishRenderImageWorkerJob(exporter);
     }
 
+    vkrtOIDNDestroyDenoiser(denoiser);
     return 0;
 }
 

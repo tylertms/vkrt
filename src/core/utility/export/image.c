@@ -22,6 +22,7 @@
 static const int kJPEGQuality = 95;
 
 typedef struct LinearRenderOutputRequest {
+    VKRT_OIDNDenoiser* denoiser;
     const char* label;
     const uint8_t* deviceUUID;
     const RenderImageBuffer* beautyBuffer;
@@ -747,7 +748,7 @@ static int denoiseLinearRenderOutput(
         .deviceUUID = request->deviceUUID,
     };
 
-    if (vkrtOIDNDenoise(&input, denoised, &errorMessage)) {
+    if (vkrtOIDNDenoise(request->denoiser, &input, denoised, &errorMessage)) {
         sanitizeLinearRGBA32FInPlace(denoised, request->width, request->height, 1.0f, 1);
         free(*inOutLinearOutput);
         *inOutLinearOutput = denoised;
@@ -820,7 +821,7 @@ cleanup:
     return result;
 }
 
-int processRenderImageExportJob(RenderImageExportJob* job) {
+int processRenderImageExportJob(RenderImageExportJob* job, VKRT_OIDNDenoiser* denoiser) {
     if (!job || !job->path || !job->beauty.pixels || job->width == 0u || job->height == 0u) return -1;
 
     if (job->beauty.format == RENDER_IMAGE_BUFFER_FORMAT_RGBA16_UNORM && job->format != RENDER_IMAGE_FORMAT_EXR) {
@@ -832,6 +833,7 @@ int processRenderImageExportJob(RenderImageExportJob* job) {
     size_t linearByteCount = 0u;
     int result = -1;
     LinearRenderOutputRequest request = {
+        .denoiser = denoiser,
         .label = job->path,
         .deviceUUID = job->deviceUUID,
         .beautyBuffer = &job->beauty,
@@ -877,7 +879,12 @@ cleanup:
     return result;
 }
 
-int processViewportDenoiseJob(RenderImageExportJob* job, uint16_t** outPixels, size_t* outByteCount) {
+int processViewportDenoiseJob(
+    RenderImageExportJob* job,
+    VKRT_OIDNDenoiser* denoiser,
+    uint16_t** outPixels,
+    size_t* outByteCount
+) {
     if (outPixels) *outPixels = NULL;
     if (outByteCount) *outByteCount = 0u;
     if (!job || !job->beauty.pixels || !outPixels || !outByteCount || job->width == 0u || job->height == 0u) {
@@ -890,6 +897,7 @@ int processViewportDenoiseJob(RenderImageExportJob* job, uint16_t** outPixels, s
     size_t linearByteCount = 0u;
     int result = -1;
     LinearRenderOutputRequest request = {
+        .denoiser = denoiser,
         .label = "viewport denoise",
         .deviceUUID = job->deviceUUID,
         .beautyBuffer = &job->beauty,

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "denoise.h"
 #include "vkrt_internal.h"
 
 #include <stddef.h>
@@ -58,8 +59,13 @@ RenderImageExportJob* createRenderImageJob(
     const VKRT_RenderExportSettings* settings
 );
 void freeRenderImageExportJob(RenderImageExportJob* job);
-int processRenderImageExportJob(RenderImageExportJob* job);
-int processViewportDenoiseJob(RenderImageExportJob* job, uint16_t** outPixels, size_t* outByteCount);
+int processRenderImageExportJob(RenderImageExportJob* job, VKRT_OIDNDenoiser* denoiser);
+int processViewportDenoiseJob(
+    RenderImageExportJob* job,
+    VKRT_OIDNDenoiser* denoiser,
+    uint16_t** outPixels,
+    size_t* outByteCount
+);
 int queueRenderImageJob(VKRT* vkrt, RenderImageExportJob* job);
 int readbackImagePixels(
     VKRT* vkrt,

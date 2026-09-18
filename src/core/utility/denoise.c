@@ -6,9 +6,38 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
+struct VKRT_OIDNDenoiser {
+    OIDNDevice device;
+    OIDNBuffer buffers[3];
+    OIDNFilter filters[3];
+    int physicalDevice;
+    uint32_t width;
+    uint32_t height;
+};
+
 static _Thread_local char oidnErrorStorage[256];
+
+VKRT_OIDNDenoiser* vkrtOIDNCreateDenoiser(void) {
+    return (VKRT_OIDNDenoiser*)calloc(1u, sizeof(VKRT_OIDNDenoiser));
+}
+
+static void resetOIDNDenoiser(VKRT_OIDNDenoiser* denoiser) {
+    for (size_t index = 0u; index < 3u; index++) {
+        if (denoiser->filters[index]) oidnReleaseFilter(denoiser->filters[index]);
+        if (denoiser->buffers[index]) oidnReleaseBuffer(denoiser->buffers[index]);
+    }
+    if (denoiser->device) oidnReleaseDevice(denoiser->device);
+    memset(denoiser, 0, sizeof(*denoiser));
+}
+
+void vkrtOIDNDestroyDenoiser(VKRT_OIDNDenoiser* denoiser) {
+    if (!denoiser) return;
+    resetOIDNDenoiser(denoiser);
+    free(denoiser);
+}
 
 static int reportOIDNError(const char** outErrorMessage, const char* message) {
     (void)snprintf(oidnErrorStorage, sizeof(oidnErrorStorage), "%s", message);
@@ -52,57 +81,48 @@ static void setOIDNImage(OIDNFilter filter, const char* name, OIDNBuffer buffer,
     );
 }
 
-static int executeOIDNFilter(OIDNDevice device, OIDNFilter filter, const char** outErrorMessage) {
-    oidnSetFilterInt(filter, "quality", OIDN_QUALITY_HIGH);
-    oidnCommitFilter(filter);
-    if (!checkOIDNError(device, outErrorMessage)) return 0;
-    oidnExecuteFilter(filter);
-    return checkOIDNError(device, outErrorMessage);
-}
-
-static int denoiseOnOIDNDevice(
+static int prepareOIDNDenoiser(
+    VKRT_OIDNDenoiser* denoiser,
     const VKRT_OIDNFilterInput* input,
     int physicalDevice,
     size_t byteCount,
-    float* output,
     const char** outErrorMessage
 ) {
-    OIDNDevice device = physicalDevice >= 0 ? oidnNewDeviceByID(physicalDevice) : oidnNewDevice(OIDN_DEVICE_TYPE_CPU);
+    if (denoiser->device && denoiser->physicalDevice == physicalDevice && denoiser->width == input->width &&
+        denoiser->height == input->height) {
+        return 1;
+    }
+    resetOIDNDenoiser(denoiser);
+    denoiser->physicalDevice = physicalDevice;
+    denoiser->width = input->width;
+    denoiser->height = input->height;
+    denoiser->device = physicalDevice >= 0 ? oidnNewDeviceByID(physicalDevice) : oidnNewDevice(OIDN_DEVICE_TYPE_CPU);
+    OIDNDevice device = denoiser->device;
     if (!device) {
         if (!checkOIDNError(NULL, outErrorMessage)) return 0;
         return reportOIDNError(outErrorMessage, "Failed to create OIDN device");
     }
 
-    OIDNBuffer buffers[3] = {NULL, NULL, NULL};
-    OIDNFilter filters[3] = {NULL, NULL, NULL};
+    OIDNBuffer* buffers = denoiser->buffers;
+    OIDNFilter* filters = denoiser->filters;
     const char* names[3] = {"color", "albedo", "normal"};
-    const float* sources[3] = {input->color, input->albedo, input->normal};
-    int succeeded = 0;
 
     oidnCommitDevice(device);
-    if (!checkOIDNError(device, outErrorMessage)) goto cleanup;
+    if (!checkOIDNError(device, outErrorMessage)) return 0;
 
     for (size_t index = 0u; index < 3u; index++) {
         buffers[index] = oidnNewBufferWithStorage(device, byteCount, OIDN_STORAGE_DEVICE);
-        if (!checkOIDNError(device, outErrorMessage)) goto cleanup;
+        if (!checkOIDNError(device, outErrorMessage)) return 0;
         if (!buffers[index]) {
-            reportOIDNError(outErrorMessage, "Failed to allocate OIDN buffer");
-            goto cleanup;
+            return reportOIDNError(outErrorMessage, "Failed to allocate OIDN buffer");
         }
-        oidnWriteBuffer(buffers[index], 0u, byteCount, sources[index]);
-        if (!checkOIDNError(device, outErrorMessage)) goto cleanup;
         filters[index] = oidnNewFilter(device, "RT");
-        if (!checkOIDNError(device, outErrorMessage)) goto cleanup;
+        if (!checkOIDNError(device, outErrorMessage)) return 0;
         if (!filters[index]) {
-            reportOIDNError(outErrorMessage, "Failed to create OIDN filter");
-            goto cleanup;
+            return reportOIDNError(outErrorMessage, "Failed to create OIDN filter");
         }
         setOIDNImage(filters[index], names[index], buffers[index], input);
         setOIDNImage(filters[index], "output", buffers[index], input);
-    }
-
-    for (size_t index = 1u; index < 3u; index++) {
-        if (!executeOIDNFilter(device, filters[index], outErrorMessage)) goto cleanup;
     }
 
     setOIDNImage(filters[0], "albedo", buffers[1], input);
@@ -110,28 +130,57 @@ static int denoiseOnOIDNDevice(
     oidnSetFilterBool(filters[0], "hdr", true);
     oidnSetFilterBool(filters[0], "srgb", false);
     oidnSetFilterBool(filters[0], "cleanAux", true);
-    if (!executeOIDNFilter(device, filters[0], outErrorMessage)) goto cleanup;
-    oidnReadBuffer(buffers[0], 0u, byteCount, output);
-    if (!checkOIDNError(device, outErrorMessage)) goto cleanup;
+    for (size_t index = 0u; index < 3u; index++) {
+        oidnSetFilterInt(filters[index], "quality", OIDN_QUALITY_HIGH);
+        oidnCommitFilter(filters[index]);
+        if (!checkOIDNError(device, outErrorMessage)) return 0;
+    }
+    return 1;
+}
+
+static int denoiseOnOIDNDevice(
+    VKRT_OIDNDenoiser* denoiser,
+    const VKRT_OIDNFilterInput* input,
+    int physicalDevice,
+    size_t byteCount,
+    float* output,
+    const char** outErrorMessage
+) {
+    if (!prepareOIDNDenoiser(denoiser, input, physicalDevice, byteCount, outErrorMessage)) goto failure;
+    OIDNDevice device = denoiser->device;
+    const float* sources[3] = {input->color, input->albedo, input->normal};
+    for (size_t index = 0u; index < 3u; index++) {
+        oidnWriteBuffer(denoiser->buffers[index], 0u, byteCount, sources[index]);
+        if (!checkOIDNError(device, outErrorMessage)) goto failure;
+    }
+    const size_t order[3] = {1u, 2u, 0u};
+    for (size_t index = 0u; index < 3u; index++) {
+        oidnExecuteFilter(denoiser->filters[order[index]]);
+        if (!checkOIDNError(device, outErrorMessage)) goto failure;
+    }
+    oidnReadBuffer(denoiser->buffers[0], 0u, byteCount, output);
+    if (!checkOIDNError(device, outErrorMessage)) goto failure;
 
     LOG_INFO(
         "OIDN high-quality denoise completed on %s: %s",
         physicalDevice >= 0 ? "GPU" : "CPU",
         physicalDevice >= 0 ? oidnGetPhysicalDeviceString(physicalDevice, "name") : "CPU fallback"
     );
-    succeeded = 1;
+    return 1;
 
-cleanup:
-    for (size_t index = 0u; index < 3u; index++) {
-        if (filters[index]) oidnReleaseFilter(filters[index]);
-        if (buffers[index]) oidnReleaseBuffer(buffers[index]);
-    }
-    oidnReleaseDevice(device);
-    return succeeded;
+failure:
+    resetOIDNDenoiser(denoiser);
+    return 0;
 }
 
-int vkrtOIDNDenoise(const VKRT_OIDNFilterInput* input, float* output, const char** outErrorMessage) {
+int vkrtOIDNDenoise(
+    VKRT_OIDNDenoiser* denoiser,
+    const VKRT_OIDNFilterInput* input,
+    float* output,
+    const char** outErrorMessage
+) {
     if (outErrorMessage) *outErrorMessage = NULL;
+    if (!denoiser) return reportOIDNError(outErrorMessage, "Failed to allocate OIDN denoiser");
     if (!input || !output || !input->color || !input->albedo || !input->normal || input->width == 0u ||
         input->height == 0u) {
         return reportOIDNError(outErrorMessage, "OIDN requires color, albedo, and normal images");
@@ -147,9 +196,9 @@ int vkrtOIDNDenoise(const VKRT_OIDNFilterInput* input, float* output, const char
         physicalDevice = -1;
     }
     if (physicalDevice >= 0) {
-        if (denoiseOnOIDNDevice(input, physicalDevice, byteCount, output, outErrorMessage)) return 1;
+        if (denoiseOnOIDNDevice(denoiser, input, physicalDevice, byteCount, output, outErrorMessage)) return 1;
         LOG_ERROR("OIDN GPU denoise failed: %s; retrying on CPU", oidnErrorStorage);
     }
     if (outErrorMessage) *outErrorMessage = NULL;
-    return denoiseOnOIDNDevice(input, -1, byteCount, output, outErrorMessage);
+    return denoiseOnOIDNDevice(denoiser, input, -1, byteCount, output, outErrorMessage);
 }

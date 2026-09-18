@@ -2,6 +2,8 @@
 
 #include <stdint.h>
 
+typedef struct VKRT_OIDNDenoiser VKRT_OIDNDenoiser;
+
 typedef struct VKRT_OIDNFilterInput {
     const float* color;
     const float* albedo;
@@ -11,4 +13,11 @@ typedef struct VKRT_OIDNFilterInput {
     uint32_t height;
 } VKRT_OIDNFilterInput;
 
-int vkrtOIDNDenoise(const VKRT_OIDNFilterInput* input, float* output, const char** outErrorMessage);
+VKRT_OIDNDenoiser* vkrtOIDNCreateDenoiser(void);
+void vkrtOIDNDestroyDenoiser(VKRT_OIDNDenoiser* denoiser);
+int vkrtOIDNDenoise(
+    VKRT_OIDNDenoiser* denoiser,
+    const VKRT_OIDNFilterInput* input,
+    float* output,
+    const char** outErrorMessage
+);
