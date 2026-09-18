@@ -1549,6 +1549,8 @@ static Material buildMaterial(
     } else if (sourceMaterial->alpha_mode == cgltf_alpha_mode_blend) {
         material.alphaMode = VKRT_MATERIAL_ALPHA_MODE_BLEND;
         material.alphaCutoff = kAlphaBlendMaskCutoff;
+    } else {
+        material.opacity = 1.0f;
     }
 
     return material;

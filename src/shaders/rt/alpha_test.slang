@@ -19,7 +19,7 @@ bool materialUsesAlphaBlend(Material material, float meshOpacity) {
 
 float evaluateMaterialTextureAlpha(Material material, SurfaceTextureData surface) {
     if (material.alphaMode == VKRT_MATERIAL_ALPHA_MODE_OPAQUE) {
-        return surface.color.a;
+        return 1.0;
     }
 
     return sampleBaseColorTexture(material, surface).a * surface.color.a;
@@ -31,10 +31,10 @@ float evaluateMaterialOpacity(Material material, float meshOpacity, SurfaceTextu
 
 bool alphaPass(Material material, float meshOpacity, SurfaceTextureData surface, inout uint rng) {
     if (materialUsesAlphaMask(material)) {
-        if (evaluateMaterialTextureAlpha(material, surface) < material.alphaCutoff) {
+        if (material.opacity * evaluateMaterialTextureAlpha(material, surface) < material.alphaCutoff) {
             return false;
         }
-        float maskOpacity = saturate(meshOpacity * material.opacity * surface.color.a);
+        float maskOpacity = saturate(meshOpacity);
         if (maskOpacity >= 1.0) {
             return true;
         }
@@ -71,7 +71,7 @@ bool selectionAlphaHitAccepted(MeshInfo mesh, Material material, uint primitiveI
     }
 
     SurfaceTextureData surface = evaluateSurfaceTextureData(mesh, primitiveIndex, barycentrics);
-    return evaluateMaterialTextureAlpha(material, surface) >= material.alphaCutoff;
+    return material.opacity * evaluateMaterialTextureAlpha(material, surface) >= material.alphaCutoff;
 }
 
 #endif
