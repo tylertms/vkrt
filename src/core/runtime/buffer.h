@@ -10,6 +10,7 @@ VKRT_Result createBuffer(
     VkBuffer* buffer,
     VkDeviceMemory* bufferMemory
 );
+VKRT_Result createReadbackBuffer(VKRT* vkrt, VkDeviceSize size, VkBuffer* buffer, VkDeviceMemory* bufferMemory);
 VKRT_Result copyBuffer(VKRT* vkrt, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
 VKRT_Result createHostBufferFromData(
     VKRT* vkrt,

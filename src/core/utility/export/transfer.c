@@ -32,14 +32,7 @@ int readbackImagePixels(
     void* mapped = NULL;
     int result = -1;
 
-    if (createBuffer(
-            vkrt,
-            (VkDeviceSize)readbackBytes,
-            VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            &stagingBuffer,
-            &stagingMemory
-        ) != VKRT_SUCCESS) {
+    if (createReadbackBuffer(vkrt, (VkDeviceSize)readbackBytes, &stagingBuffer, &stagingMemory) != VKRT_SUCCESS) {
         return -1;
     }
 

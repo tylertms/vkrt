@@ -96,11 +96,34 @@ VkDeviceAddress queryBufferDeviceAddress(VKRT* vkrt, VkBuffer buffer) {
     return vkrt->core.procs.vkGetBufferDeviceAddressKHR(vkrt->core.device, &addrInfo);
 }
 
-VKRT_Result createBuffer(
+static VKRT_Result findPreferredBufferMemoryType(
+    VKRT* vkrt,
+    uint32_t typeFilter,
+    VkMemoryPropertyFlags required,
+    VkMemoryPropertyFlags preferred,
+    uint32_t* outMemoryTypeIndex
+) {
+    if (preferred != 0u) {
+        VkPhysicalDeviceMemoryProperties memoryProperties;
+        vkGetPhysicalDeviceMemoryProperties(vkrt->core.physicalDevice, &memoryProperties);
+        VkMemoryPropertyFlags combined = required | preferred;
+        for (uint32_t index = 0u; index < memoryProperties.memoryTypeCount; index++) {
+            if ((typeFilter & (1u << index)) != 0u &&
+                (memoryProperties.memoryTypes[index].propertyFlags & combined) == combined) {
+                *outMemoryTypeIndex = index;
+                return VKRT_SUCCESS;
+            }
+        }
+    }
+    return findMemoryType(vkrt, typeFilter, required, outMemoryTypeIndex);
+}
+
+static VKRT_Result createBufferWithPreferredMemory(
     VKRT* vkrt,
     VkDeviceSize size,
     VkBufferUsageFlags usage,
     VkMemoryPropertyFlags properties,
+    VkMemoryPropertyFlags preferredProperties,
     VkBuffer* buffer,
     VkDeviceMemory* bufferMemory
 ) {
@@ -124,7 +147,13 @@ VKRT_Result createBuffer(
     memoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     memoryAllocateInfo.allocationSize = memoryRequirements.size;
     uint32_t memoryTypeIndex = 0;
-    if (findMemoryType(vkrt, memoryRequirements.memoryTypeBits, properties, &memoryTypeIndex) != VKRT_SUCCESS) {
+    if (findPreferredBufferMemoryType(
+            vkrt,
+            memoryRequirements.memoryTypeBits,
+            properties,
+            preferredProperties,
+            &memoryTypeIndex
+        ) != VKRT_SUCCESS) {
         vkDestroyBuffer(vkrt->core.device, *buffer, NULL);
         *buffer = VK_NULL_HANDLE;
         return VKRT_ERROR_OPERATION_FAILED;
@@ -154,6 +183,29 @@ VKRT_Result createBuffer(
     }
 
     return VKRT_SUCCESS;
+}
+
+VKRT_Result createBuffer(
+    VKRT* vkrt,
+    VkDeviceSize size,
+    VkBufferUsageFlags usage,
+    VkMemoryPropertyFlags properties,
+    VkBuffer* buffer,
+    VkDeviceMemory* bufferMemory
+) {
+    return createBufferWithPreferredMemory(vkrt, size, usage, properties, 0u, buffer, bufferMemory);
+}
+
+VKRT_Result createReadbackBuffer(VKRT* vkrt, VkDeviceSize size, VkBuffer* buffer, VkDeviceMemory* bufferMemory) {
+    return createBufferWithPreferredMemory(
+        vkrt,
+        size,
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        VK_MEMORY_PROPERTY_HOST_CACHED_BIT,
+        buffer,
+        bufferMemory
+    );
 }
 
 VKRT_Result copyBuffer(VKRT* vkrt, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
