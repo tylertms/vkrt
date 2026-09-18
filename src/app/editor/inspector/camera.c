@@ -361,7 +361,10 @@ static void drawCameraDebugSection(VKRT* vkrt, const VKRT_SceneSettingsSnapshot*
                 VKRT_DEBUG_MODE_COUNT,
                 VKRT_DEBUG_MODE_COUNT
             )) {
-            logCameraInspectorFailure("Updating debug mode failed", VKRT_setDebugMode(vkrt, (VKRT_DebugMode)debugModeValue));
+            logCameraInspectorFailure(
+                "Updating debug mode failed",
+                VKRT_setDebugMode(vkrt, (VKRT_DebugMode)debugModeValue)
+            );
         }
 
         bool neeEnabled = settings->misNeeEnabled != 0;

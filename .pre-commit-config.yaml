@@ -1,0 +1,25 @@
+repos:
+  - repo: local
+    hooks:
+      - id: ruff
+        name: Ruff lint
+        entry: ruff check
+        language: python
+        additional_dependencies: [ruff==0.16.8]
+        types: [python]
+        files: ^scripts/
+
+      - id: ruff-format
+        name: Ruff format
+        entry: ruff format
+        language: python
+        additional_dependencies: [ruff==0.16.8]
+        types: [python]
+        files: ^scripts/
+
+      - id: clang-format
+        name: C, C++, and Slang format
+        entry: clang-format -i --assume-filename=source.cpp
+        language: python
+        additional_dependencies: [clang-format==22.1.8]
+        files: ^src/.*\.(c|h|cpp|hpp|slang)$

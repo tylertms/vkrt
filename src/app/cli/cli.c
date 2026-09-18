@@ -253,8 +253,7 @@ static int parseSceneArgument(
 }
 
 static int validateCLIArgumentCombination(const CLILaunchOptions* options, char* error, size_t errorSize) {
-    if (options->offlineRender.denoiseOutput &&
-        (!options->offlineRender.enabled || !options->offlineRender.headless)) {
+    if (options->offlineRender.denoiseOutput && (!options->offlineRender.enabled || !options->offlineRender.headless)) {
         return setCLIError(error, errorSize, "--denoise requires --render-headless", NULL);
     }
     if (options->offlineRender.denoiseOutput && !options->renderOutputPath) {

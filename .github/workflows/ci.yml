@@ -124,7 +124,7 @@ jobs:
       - name: Lint
         if: runner.os == 'Linux'
         run: |
-          ruff check scripts
+          pre-commit run --all-files --show-diff-on-failure
           run-clang-tidy -p build "$PWD/src/"
 
       - name: Package Windows

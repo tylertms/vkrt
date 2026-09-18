@@ -69,11 +69,8 @@ int main(int argc, char* argv[]) {
     if (offlineRenderMode) {
         exitCode = offlineRenderRun(vkrt, &launchOptions.offlineRender);
         if (exitCode == EXIT_SUCCESS && launchOptions.renderOutputPath) {
-            exitCode = offlineRenderSaveOutput(
-                vkrt,
-                launchOptions.renderOutputPath,
-                launchOptions.offlineRender.denoiseOutput
-            );
+            exitCode =
+                offlineRenderSaveOutput(vkrt, launchOptions.renderOutputPath, launchOptions.offlineRender.denoiseOutput);
         }
         goto cleanup;
     }
