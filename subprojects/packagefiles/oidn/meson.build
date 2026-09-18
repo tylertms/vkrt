@@ -1,13 +1,14 @@
 project(
   'oidn',
   'c',
-  version: '2.4.1',
+  version: '2.5.1',
 )
 
 cc = meson.get_compiler('c')
 sys = host_machine.system()
 cpu = host_machine.cpu_family()
-python = find_program('python3', 'python', required: true)
+python = import('python').find_installation()
+oidn_root = meson.current_source_dir()
 
 oidn_include = include_directories('include', is_system: true)
 oidn_lib = cc.find_library('OpenImageDenoise', dirs: [meson.current_source_dir() / 'lib'], required: true)

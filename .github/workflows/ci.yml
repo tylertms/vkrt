@@ -2,167 +2,17 @@ name: CI
 
 on:
   push:
-    branches:
-      - "**"
-    tags-ignore:
-      - "*"
+    branches: ['**']
   pull_request:
+  workflow_dispatch:
 
-env:
-  VULKAN_SDK_VERSION: 1.4.341.1
-  VULKAN_SDK_WINDOWS_SHA256: bcf2d75aa9556889ab974858666e20b3655b6055a0db704ccb47279ff33b5bfe
-  VULKAN_SDK_LINUX_SHA256: 17c8b7e872d8038fbd4e1239aa8483b495f862ad16b1c58644f7ecd8041d20cc
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
-    name: ${{ matrix.name }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Windows MSVC
-            os: windows-latest
-            archive_name: vkrt-windows-x64
-            meson_args: --buildtype=release -Db_vscrt=static_from_buildtype
-          - name: Ubuntu Linux
-            os: ubuntu-22.04
-            archive_name: vkrt-linux-x64
-            meson_args: --buildtype=release -Dlinux_window_backend=both -Dnfd_backend=portal
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.13"
-          cache: pip
-          cache-dependency-path: .github/workflows/ci.yml
-
-      - name: Setup MSVC
-        if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1.13.0
-
-      - name: Cache Vulkan SDK
-        if: runner.os == 'Windows'
-        id: vulkan-cache-windows
-        uses: actions/cache@v5
-        with:
-          path: VULKAN_SDK
-          key: ${{ runner.os }}-vulkan-${{ env.VULKAN_SDK_VERSION }}
-
-      - name: Cache Vulkan SDK
-        if: runner.os == 'Linux'
-        id: vulkan-cache-linux
-        uses: actions/cache@v5
-        with:
-          path: VULKAN_SDK
-          key: ${{ runner.os }}-vulkan-${{ env.VULKAN_SDK_VERSION }}
-
-      - name: Cache Meson Wrap Downloads
-        uses: actions/cache@v5
-        with:
-          path: subprojects/packagecache
-          key: ${{ runner.os }}-meson-wraps-${{ hashFiles('subprojects/*.wrap', 'subprojects/packagefiles/**') }}
-
-      - name: Install Vulkan SDK
-        if: runner.os == 'Windows' && steps.vulkan-cache-windows.outputs.cache-hit != 'true'
-        shell: pwsh
-        run: |
-          $version = '${{ env.VULKAN_SDK_VERSION }}'
-          $expectedHash = '${{ env.VULKAN_SDK_WINDOWS_SHA256 }}'
-          $sdkDir = Join-Path $PWD 'VULKAN_SDK'
-          $installer = Join-Path $PWD 'vulkan_sdk.exe'
-          Invoke-WebRequest -Uri "https://sdk.lunarg.com/sdk/download/$version/windows/vulkan_sdk.exe?Human=true" -OutFile $installer
-          $actualHash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToLower()
-          if ($actualHash -ne $expectedHash) {
-            throw "Vulkan SDK hash mismatch: expected $expectedHash, got $actualHash"
-          }
-          Start-Process -FilePath $installer -ArgumentList @('--root', $sdkDir, '--accept-licenses', '--default-answer', '--confirm-command', 'install', 'copy_only=1') -Wait -NoNewWindow
-
-      - name: Install Vulkan SDK
-        if: runner.os == 'Linux' && steps.vulkan-cache-linux.outputs.cache-hit != 'true'
-        shell: bash
-        run: |
-          curl -fsSL "https://sdk.lunarg.com/sdk/download/${{ env.VULKAN_SDK_VERSION }}/linux/vulkan_sdk.tar.xz?Human=true" -o vulkan_sdk.tar.xz
-          echo "${{ env.VULKAN_SDK_LINUX_SHA256 }}  vulkan_sdk.tar.xz" | sha256sum -c -
-          tar -xJf vulkan_sdk.tar.xz
-          mkdir -p VULKAN_SDK
-          cp -a "${{ env.VULKAN_SDK_VERSION }}/x86_64/." VULKAN_SDK/
-
-      - name: Set Vulkan SDK Environment
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $sdkDir = Join-Path $PWD 'VULKAN_SDK'
-          "VULKAN_SDK=$sdkDir" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "VK_SDK_PATH=$sdkDir" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          (Join-Path $sdkDir 'Bin') | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
-
-      - name: Set Vulkan SDK Environment
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          echo "VULKAN_SDK=$PWD/VULKAN_SDK" >> "$GITHUB_ENV"
-          echo "$PWD/VULKAN_SDK/bin" >> "$GITHUB_PATH"
-
-      - name: Install Linux Packages
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y clang-tidy clang-tools libdbus-1-dev libturbojpeg0-dev pkg-config libwayland-dev libxkbcommon-dev wayland-protocols libx11-dev libxrandr-dev libxinerama-dev libxi-dev libxcursor-dev libxext-dev
-
-      - name: Install Meson and Ninja
-        run: python -m pip install meson ninja
-
-      - name: Configure
-        run: meson setup build ${{ matrix.meson_args }} -Dvkrt_version='${{ github.sha }}'
-
-      - name: Lint
-        if: runner.os == 'Linux'
-        run: meson compile -C build clang-tidy
-
-      - name: Build
-        run: meson compile -C build
-
-      - name: Test
-        run: |
-          if [[ "$RUNNER_OS" == "Windows" ]]; then
-            ./build/vkrt.exe --help
-            ./build/vkrt.exe --version
-          else
-            ./build/vkrt --help
-            ./build/vkrt --version
-          fi
-        shell: bash
-
-      - name: Package Windows Artifact
-        if: runner.os == 'Windows'
-        run: |
-          python scripts/stage_release.py windows dist
-
-      - name: Test Windows Package
-        if: runner.os == 'Windows'
-        shell: bash
-        run: ./dist/${{ matrix.archive_name }}/bin/vkrt.exe --help && ./dist/${{ matrix.archive_name }}/bin/vkrt.exe --version
-
-      - name: Package Linux Artifact
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          python scripts/build_appimage.py dist
-
-      - name: Test Linux Package
-        if: runner.os == 'Linux'
-        shell: bash
-        run: ./dist/${{ matrix.archive_name }}/bin/vkrt --help && ./dist/${{ matrix.archive_name }}/bin/vkrt --version
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v6
-        with:
-          name: ${{ matrix.archive_name }}
-          path: |
-            dist/${{ matrix.archive_name }}
-            dist/${{ matrix.archive_name }}.tar.gz
+    uses: ./.github/workflows/build.yml

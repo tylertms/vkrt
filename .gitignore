@@ -12,3 +12,10 @@ subprojects/*
 .vscode/
 .cache/
 imgui.ini
+
+build-*/
+dist/
+AppDir/
+appimagetool
+__pycache__/
+.venv/

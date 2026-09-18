@@ -1,8 +1,12 @@
 #ifdef _WIN32
 #define GLFW_EXPOSE_NATIVE_WIN32
 #else
+#if VKRT_GLFW_X11
 #define GLFW_EXPOSE_NATIVE_X11
+#endif
+#if VKRT_GLFW_WAYLAND
 #define GLFW_EXPOSE_NATIVE_WAYLAND
+#endif
 #endif
 
 #include "GLFW/glfw3.h"

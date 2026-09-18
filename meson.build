@@ -1,5 +1,6 @@
 project('vkrt', ['c', 'cpp'],
   version: '1.0',
+  meson_version: '>=1.6.0',
   default_options: [
     'c_std=c11',
     'cpp_std=c++17',
@@ -20,36 +21,9 @@ cc = meson.get_compiler('c')
 cpp = meson.get_compiler('cpp')
 cmake = import('cmake')
 fs = import('fs')
-python = find_program('python3')
-embed_data = find_program(meson.project_source_root() / 'scripts' / 'embed_data.py')
-llvm_program_dirs = []
-if is_darwin
-  llvm_program_dirs += [
-    '/opt/homebrew/opt/llvm/bin',
-    '/usr/local/opt/llvm/bin',
-    '/opt/homebrew/bin',
-    '/usr/local/bin',
-  ]
-else
-  llvm_program_dirs += [
-    '/usr/local/opt/llvm/bin',
-    '/opt/homebrew/opt/llvm/bin',
-    '/usr/local/bin',
-    '/opt/homebrew/bin',
-  ]
-endif
-
-clang_tidy = find_program(
-  'clang-tidy',
-  dirs: llvm_program_dirs,
-  required: true,
-)
-run_clang_tidy = find_program(
-  'run-clang-tidy',
-  'run-clang-tidy.py',
-  dirs: llvm_program_dirs,
-  required: true,
-)
+python = import('python').find_installation()
+embed_data = files('scripts/embed_data.py')
+clang_tidy = find_program('clang-tidy', required: get_option('static_analysis'))
 
 buildtype = get_option('buildtype')
 profiling_enabled = get_option('profiling')
@@ -58,6 +32,9 @@ linux_window_backend = get_option('linux_window_backend')
 c_args = []
 cpp_args = []
 app_link_args = []
+if is_windows and cc.get_id() == 'gcc'
+  app_link_args += ['-static']
+endif
 cc_is_msvc = cc.get_argument_syntax() == 'msvc'
 cpp_is_msvc = cpp.get_argument_syntax() == 'msvc'
 is_debug_build = buildtype == 'debug' or buildtype == 'debugoptimized'
@@ -132,7 +109,6 @@ project_includes = include_directories(
 )
 
 external_includes = include_directories(
-  'external/glfw3/include',
   'external/imgui/include',
   'external/cglm/include',
   'external/cgltf/include',
@@ -181,360 +157,16 @@ core_internal_includes = include_directories(
   'src/core/internal',
 )
 
-vulkan_dep = dependency('vulkan', required: true)
-windows_system_deps = []
-darwin_system_deps = []
-
-if is_windows
-  windows_system_deps += cc.find_library('dwmapi', required: true)
-endif
-
-if is_darwin
-  darwin_system_deps += dependency(
-    'appleframeworks',
-    modules: [
-      'Cocoa',
-      'CoreFoundation',
-      'IOKit',
-      'QuartzCore',
-    ],
-  )
-endif
-
-linux_glfw_backend = 'auto'
-linux_x11_probe_deps = []
-linux_wayland_probe_deps = []
-linux_wayland_scanner = disabler()
-linux_has_x11 = false
-linux_has_wayland = false
-
-if is_linux
-  linux_x11_probe_deps = [
-    dependency('x11', required: false, method: 'pkg-config'),
-    dependency('xrandr', required: false, method: 'pkg-config'),
-    dependency('xinerama', required: false, method: 'pkg-config'),
-    dependency('xcursor', required: false, method: 'pkg-config'),
-    dependency('xi', required: false, method: 'pkg-config'),
-    dependency('xext', required: false, method: 'pkg-config'),
-  ]
-  linux_wayland_probe_deps = [
-    dependency('wayland-client', required: false, method: 'pkg-config'),
-    dependency('wayland-cursor', required: false, method: 'pkg-config'),
-    dependency('wayland-egl', required: false, method: 'pkg-config'),
-    dependency('xkbcommon', required: false, method: 'pkg-config'),
-  ]
-  linux_wayland_scanner = find_program('wayland-scanner', required: false, native: true)
-
-  linux_has_x11 = true
-  foreach dep : linux_x11_probe_deps
-    linux_has_x11 = linux_has_x11 and dep.found()
-  endforeach
-
-  linux_has_wayland = linux_wayland_scanner.found()
-  foreach dep : linux_wayland_probe_deps
-    linux_has_wayland = linux_has_wayland and dep.found()
-  endforeach
-
-  if linux_window_backend == 'auto'
-    if linux_has_x11 and linux_has_wayland
-      linux_glfw_backend = 'both'
-    elif linux_has_wayland
-      linux_glfw_backend = 'wayland'
-    elif linux_has_x11
-      linux_glfw_backend = 'x11'
-    else
-      error('No supported Linux GLFW backend was detected. Install X11 development files, or Wayland development files plus wayland-scanner, or set -Dlinux_window_backend explicitly.')
-    endif
-  else
-    linux_glfw_backend = linux_window_backend
-  endif
-
-  if linux_glfw_backend == 'x11'
-    if not linux_has_x11
-      error('linux_window_backend=x11 requires x11, xrandr, xinerama, xcursor, xi, and xext development files.')
-    endif
-  elif linux_glfw_backend == 'wayland'
-    if not linux_has_wayland
-      error('linux_window_backend=wayland requires wayland-client, wayland-cursor, wayland-egl, xkbcommon, and wayland-scanner.')
-    endif
-  elif linux_glfw_backend == 'both'
-    if not linux_has_x11 or not linux_has_wayland
-      error('linux_window_backend=both requires both the X11 and Wayland development stacks, plus wayland-scanner.')
-    endif
-  else
-    error('Invalid linux_window_backend option: ' + linux_glfw_backend)
-  endif
-elif linux_window_backend != 'auto'
-  message('Ignoring linux_window_backend=' + linux_window_backend + ' on ' + sys)
-endif
-
-glfw_build_win32 = is_windows
-glfw_build_cocoa = is_darwin
-glfw_build_x11 = is_linux and (linux_glfw_backend == 'x11' or linux_glfw_backend == 'both')
-glfw_build_wayland = is_linux and (linux_glfw_backend == 'wayland' or linux_glfw_backend == 'both')
-
-glfw_msvc_runtime = ''
-if cc_is_msvc or cpp_is_msvc
-  vscrt = get_option('b_vscrt')
-  if vscrt == 'from_buildtype'
-    glfw_msvc_runtime = buildtype == 'debug' ? 'MultiThreadedDebugDLL' : 'MultiThreadedDLL'
-  elif vscrt == 'static_from_buildtype'
-    glfw_msvc_runtime = buildtype == 'debug' ? 'MultiThreadedDebug' : 'MultiThreaded'
-  elif vscrt == 'md'
-    glfw_msvc_runtime = 'MultiThreadedDLL'
-  elif vscrt == 'mdd'
-    glfw_msvc_runtime = 'MultiThreadedDebugDLL'
-  elif vscrt == 'mt'
-    glfw_msvc_runtime = 'MultiThreaded'
-  elif vscrt == 'mtd'
-    glfw_msvc_runtime = 'MultiThreadedDebug'
-  endif
-endif
-
-threads_dep = dependency('threads')
-rt_dep = dependency('rt', required: false)
-glfw_dep = dependency('glfw3', required: false, method: 'pkg-config')
-if not glfw_dep.found()
-  glfw_options = cmake.subproject_options()
-  glfw_options.set_override_option('warning_level', '0')
-  glfw_options.add_cmake_defines({
-    'BUILD_SHARED_LIBS': 'OFF',
-    'GLFW_BUILD_DOCS': 'OFF',
-    'GLFW_BUILD_EXAMPLES': 'OFF',
-    'GLFW_BUILD_TESTS': 'OFF',
-    'GLFW_INSTALL': 'OFF',
-    'GLFW_BUILD_WIN32': glfw_build_win32 ? 'ON' : 'OFF',
-    'GLFW_BUILD_COCOA': glfw_build_cocoa ? 'ON' : 'OFF',
-    'GLFW_BUILD_X11': glfw_build_x11 ? 'ON' : 'OFF',
-    'GLFW_BUILD_WAYLAND': glfw_build_wayland ? 'ON' : 'OFF',
-    'GLFW_ENABLE_WARNINGS': 'OFF',
-    'CMAKE_SUPPRESS_DEVELOPER_WARNINGS': 'TRUE',
-  })
-  if glfw_msvc_runtime != ''
-    glfw_options.add_cmake_defines({
-      'CMAKE_MSVC_RUNTIME_LIBRARY': glfw_msvc_runtime,
-    })
-  endif
-  glfw_project = cmake.subproject('glfw', options: glfw_options)
-  glfw_dep = glfw_project.dependency('glfw')
-endif
-
-zlib_dep = dependency('zlib', required: false)
-zlib_compile_dep = disabler()
-if not zlib_dep.found()
-  zlib_project = subproject('zlib', default_options: ['default_library=static'])
-  zlib_dep = zlib_project.get_variable('zlib_dep')
-endif
-zlib_compile_dep = zlib_dep.partial_dependency(
-  compile_args: true,
-  includes: true,
-)
-
-spng_from_system = false
-spng_dep = dependency('spng', required: false, method: 'pkg-config')
-if not spng_dep.found()
-  spng_dep = dependency('libspng', required: false, method: 'pkg-config')
-endif
-spng_from_system = spng_dep.found()
-if not spng_dep.found()
-  spng_project = subproject(
-    'spng',
-    default_options: [
-      'default_library=static',
-      'static_zlib=false',
-      'build_examples=false',
-      'warning_level=0',
-    ]
-  )
-  spng_dep = spng_project.get_variable('spng_dep')
-endif
-
-turbojpeg_dep = dependency('libturbojpeg', required: false, method: 'pkg-config')
-if not turbojpeg_dep.found()
-  turbojpeg_project = subproject(
-    'libjpeg-turbo',
-    default_options: [
-      'default_library=static',
-      'tests=disabled',
-      'warning_level=0',
-    ] + (is_linux ? ['c_args=-D_DEFAULT_SOURCE -include strings.h'] : [])
-  )
-  turbojpeg_dep = turbojpeg_project.get_variable('turbojpeg_dep')
-endif
-
-oidn_runtime_files = []
-oidn_subproject_name = ''
-oidn_cpu = host_machine.cpu_family()
-
-if is_windows and oidn_cpu == 'x86_64'
-  oidn_subproject_name = 'oidn_windows_x86_64'
-elif is_linux and oidn_cpu == 'x86_64'
-  oidn_subproject_name = 'oidn_linux_x86_64'
-elif is_darwin and oidn_cpu == 'aarch64'
-  oidn_subproject_name = 'oidn_macos_arm64'
-elif is_darwin and oidn_cpu == 'x86_64'
-  oidn_subproject_name = 'oidn_macos_x86_64'
-else
-  error('OIDN is required but no packaged build is available for ' + sys + ' ' + oidn_cpu)
-endif
-
-oidn_project = subproject(oidn_subproject_name, required: true)
-oidn_dep = oidn_project.get_variable('oidn_dep')
-oidn_runtime_files = oidn_project.get_variable('oidn_runtime_files')
-oidn_version = oidn_project.get_variable('oidn_version')
-
-c_args += [c_define_prefix + 'VKRT_GLFW_VERSION="' + glfw_dep.version() + '"']
-c_args += [c_define_prefix + 'VKRT_SPNG_VERSION="' + spng_dep.version() + '"']
-c_args += [c_define_prefix + 'VKRT_TURBOJPEG_VERSION="' + turbojpeg_dep.version() + '"']
-c_args += [c_define_prefix + 'VKRT_OIDN_VERSION="' + oidn_version + '"']
-
-core_cpp_args = cpp_args
-if is_windows and cpp_is_msvc
-  core_cpp_args += ['/wd4245', '/wd4702']
-endif
-
-core_dependencies = [
-  vulkan_dep,
-  glfw_dep,
-  threads_dep,
-  rt_dep,
-  spng_dep,
-  turbojpeg_dep,
-  spng_from_system ? zlib_dep : zlib_compile_dep,
-  windows_system_deps,
-  darwin_system_deps,
-]
-
-core_dependencies += [oidn_dep]
-
-app_dependencies = [
-  vulkan_dep,
-  glfw_dep,
-  threads_dep,
-  rt_dep,
-  windows_system_deps,
-  darwin_system_deps,
-]
-
-imgui_dependencies = [
-  vulkan_dep,
-  glfw_dep,
-]
-
-dcimgui = static_library('dcimgui',
-  include_directories: [external_includes],
-  dependencies: imgui_dependencies,
-  cpp_args: cpp_args,
-  sources: files(
-    'external/imgui/src/dcimgui.cpp',
-    'external/imgui/src/dcimgui_impl_glfw.cpp',
-    'external/imgui/src/dcimgui_impl_vulkan.cpp',
-    'external/imgui/src/dcimgui_internal.cpp',
-    'external/imgui/src/imgui.cpp',
-    'external/imgui/src/imgui_demo.cpp',
-    'external/imgui/src/imgui_draw.cpp',
-    'external/imgui/src/imgui_impl_glfw.cpp',
-    'external/imgui/src/imgui_impl_vulkan.cpp',
-    'external/imgui/src/imgui_tables.cpp',
-    'external/imgui/src/imgui_widgets.cpp',
-  ),
-  override_options: ['warning_level=0'],
-)
-
-cjson = static_library('cjson',
-  include_directories: include_directories('external/cjson'),
-  sources: files('external/cjson/cJSON.c'),
-  override_options: ['warning_level=0'],
-)
+subdir('external')
 
 subdir('src')
 
-file_dialogs_opt = get_option('file_dialogs')
-file_dialogs_enabled = false
-file_dialogs_backend = 'disabled'
-app_dialog_source = files('src/app/editor/dialogs_stub.c')
-app_link_with = [vkrt, dcimgui, cjson]
+subdir('external/nfd')
 
-if not file_dialogs_opt.disabled()
-  nfd_source = []
-  nfd_deps = []
-  nfd_cpp_args = []
-
-  if is_windows
-    nfd_source = files('external/nfd/src/nfd_win.cpp')
-    file_dialogs_enabled = true
-    file_dialogs_backend = 'win32'
-  elif is_linux
-    nfd_backend = get_option('nfd_backend')
-
-    dbus_dep = dependency('dbus-1', required: false, method: 'pkg-config')
-    gtk3_dep = dependency('gtk+-3.0', required: false, method: 'pkg-config')
-
-    if nfd_backend == 'portal'
-      if not dbus_dep.found()
-        if file_dialogs_opt.enabled()
-          error('file_dialogs enabled with nfd_backend=portal requires dbus-1 development files')
-        endif
-      else
-        nfd_source = files('external/nfd/src/nfd_portal.cpp')
-        nfd_deps += dbus_dep
-        nfd_cpp_args += ['-DNFD_PORTAL']
-        file_dialogs_enabled = true
-        file_dialogs_backend = 'portal'
-      endif
-    elif nfd_backend == 'gtk'
-      if not gtk3_dep.found()
-        if file_dialogs_opt.enabled()
-          error('file_dialogs enabled with nfd_backend=gtk requires gtk+-3.0 development files')
-        endif
-      else
-        nfd_source = files('external/nfd/src/nfd_gtk.cpp')
-        nfd_deps += gtk3_dep
-        file_dialogs_enabled = true
-        file_dialogs_backend = 'gtk'
-      endif
-    elif nfd_backend == 'auto'
-      if dbus_dep.found()
-        nfd_source = files('external/nfd/src/nfd_portal.cpp')
-        nfd_deps += dbus_dep
-        nfd_cpp_args += ['-DNFD_PORTAL']
-        file_dialogs_enabled = true
-        file_dialogs_backend = 'portal'
-        message('NFD backend: portal (dbus-1)')
-      elif gtk3_dep.found()
-        nfd_source = files('external/nfd/src/nfd_gtk.cpp')
-        nfd_deps += gtk3_dep
-        file_dialogs_enabled = true
-        file_dialogs_backend = 'gtk'
-        message('NFD backend: gtk (gtk+-3.0)')
-      elif file_dialogs_opt.enabled()
-        error('file_dialogs enabled but no Linux NFD backend was found. Install dbus-1 or gtk+-3.0 development files.')
-      endif
-    else
-      error('Invalid nfd_backend option: ' + nfd_backend)
-    endif
-  elif file_dialogs_opt.enabled()
-    error('file_dialogs is currently only supported by this Meson build on Windows and Linux.')
-  endif
-
-  if file_dialogs_enabled
-    nfd = static_library('nfd',
-      include_directories: include_directories('external/nfd/src/include'),
-      sources: nfd_source,
-      dependencies: nfd_deps,
-      cpp_args: nfd_cpp_args,
-      override_options: ['warning_level=0'],
-    )
-    app_dialog_source = files('src/app/editor/dialogs.c')
-    app_link_with += [nfd]
-  else
-    message('Native file dialogs disabled for this build')
-  endif
-else
-  message('Native file dialogs disabled by option')
-endif
-
-app_c_args = c_args + [c_define_prefix + 'VKRT_FILE_DIALOGS_ENABLED=' + (file_dialogs_enabled ? '1' : '0')]
+app_c_args = c_args + [
+  c_define_prefix + 'VKRT_GLFW_X11=' + (glfw_build_x11 ? '1' : '0'),
+  c_define_prefix + 'VKRT_GLFW_WAYLAND=' + (glfw_build_wayland ? '1' : '0'),
+] + [c_define_prefix + 'VKRT_FILE_DIALOGS_ENABLED=' + (file_dialogs_enabled ? '1' : '0')]
 
 executable('vkrt',
   c_args: app_c_args,
@@ -543,6 +175,16 @@ executable('vkrt',
   dependencies: app_dependencies,
   include_directories: app_includes,
   link_with: app_link_with,
+)
+
+configure_file(
+  input: 'scripts/release.json.in',
+  output: 'release.json',
+  configuration: {
+    'OIDN_ROOT': oidn_project.get_variable('oidn_root').replace('\\', '/'),
+    'PLATFORM': sys,
+    'CPU': host_machine.cpu_family(),
+  },
 )
 
 foreach oidn_runtime_file : oidn_runtime_files
@@ -573,18 +215,13 @@ summary({
   'Profiling': profiling_enabled,
 }, section: 'vkrt')
 
-run_target('clang-tidy',
-  command: [python, files('scripts/run_clang_tidy.py')],
-  env: {
-    'CLANG_TIDY': clang_tidy.full_path(),
-    'RUN_CLANG_TIDY': run_clang_tidy.full_path(),
-  },
-)
-
-run_target('clang-tidy-fix',
-  command: [python, files('scripts/run_clang_tidy.py'), '--fix'],
-  env: {
-    'CLANG_TIDY': clang_tidy.full_path(),
-    'RUN_CLANG_TIDY': run_clang_tidy.full_path(),
-  },
-)
+if clang_tidy.found()
+  foreach mode : ['', '-fix']
+    run_target('clang-tidy' + mode,
+      command: [python, files('scripts/run_clang_tidy.py'), '--build-dir', meson.project_build_root()] + (mode == '-fix' ? ['--fix'] : []),
+      env: {
+        'CLANG_TIDY': clang_tidy.full_path(),
+      },
+    )
+  endforeach
+endif

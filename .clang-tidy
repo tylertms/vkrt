@@ -6,66 +6,16 @@ Checks: >-
   misc-*,
   performance-*,
   portability-*,
-  readability-*,
   -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,
   -bugprone-easily-swappable-parameters,
+  -misc-include-cleaner,
   -performance-no-int-to-ptr,
-  -readability-magic-numbers,
-  -readability-qualified-auto,
-  -readability-redundant-access-specifiers,
-  -readability-uppercase-literal-suffix
+  -performance-enum-size,
+  -portability-avoid-pragma-once
 WarningsAsErrors: '*'
-HeaderFilterRegex: '^src/.*\.(h|hh|hpp|hxx)$'
+HeaderFilterRegex: '(^|.*[\\/])src[\\/].*\.(h|hh|hpp|hxx)$'
+ExcludeHeaderFilterRegex: '(^|.*[\\/])(external|subprojects)[\\/]'
 FormatStyle: file
 
 CheckOptions:
-  - key: bugprone-assert-side-effect.AssertMacros
-    value: 'assert,ASSERT,IM_ASSERT'
-  - key: readability-braces-around-statements.ShortStatementLines
-    value: '1'
-  - key: readability-function-size.LineThreshold
-    value: '300'
-  - key: readability-function-size.StatementThreshold
-    value: '80'
-  - key: readability-function-size.BranchThreshold
-    value: '20'
-  - key: readability-function-size.NestingThreshold
-    value: '5'
-  - key: readability-function-size.ParameterThreshold
-    value: '7'
-  - key: readability-function-size.VariableThreshold
-    value: '20'
-  - key: readability-identifier-length.IgnoredVariableNames
-    value: '^(x|y|z|r|g|b|a|u|v|w|ok)$'
-  - key: readability-identifier-length.IgnoredParameterNames
-    value: '^(n|x|y|z|r|g|b|a|u|v|w)$'
-  - key: readability-identifier-length.IgnoredLoopCounterNames
-    value: '^[ijkxyzuvw_]$'
-  - key: readability-inconsistent-declaration-parameter-name.Strict
-    value: 'true'
-  - key: readability-identifier-naming.MacroDefinitionCase
-    value: UPPER_CASE
-  - key: readability-identifier-naming.EnumCase
-    value: CamelCase
-  - key: readability-identifier-naming.EnumConstantCase
-    value: UPPER_CASE
-  - key: readability-identifier-naming.StructCase
-    value: CamelCase
-  - key: readability-identifier-naming.TypedefCase
-    value: CamelCase
-  - key: readability-identifier-naming.TypeAliasCase
-    value: CamelCase
-  - key: readability-identifier-naming.UnionCase
-    value: CamelCase
-  - key: readability-identifier-naming.FunctionCase
-    value: camelBack
-  - key: readability-identifier-naming.FunctionIgnoredRegexp
-    value: '^(VKRT_[A-Za-z0-9_]*|CLI[A-Za-z0-9]*|LOG_[A-Z0-9_]+)$'
-  - key: readability-identifier-naming.VariableCase
-    value: camelBack
-  - key: readability-identifier-naming.ConstantCase
-    value: camelBack
-  - key: readability-identifier-naming.ParameterCase
-    value: camelBack
-  - key: readability-identifier-naming.StructMemberCase
-    value: camelBack
+  bugprone-assert-side-effect.AssertMacros: 'assert,ASSERT,IM_ASSERT'

@@ -8,10 +8,14 @@
 #include <stdio.h>
 
 // Wrap this in a namespace to keep it separate from the C++ API
+// This define prevents #defines in the header getting defined again (as they are already in the normal header above),
+// and thus generating redefinition warnings
+#define DEAR_BINDINGS_INTERNAL_GLUE_CODE
 namespace cimgui
 {
 #include "dcimgui_impl_vulkan.h"
 }
+#undef DEAR_BINDINGS_INTERNAL_GLUE_CODE
 
 // By-value struct conversions
 
@@ -131,15 +135,24 @@ CIMGUI_IMPL_API void cimgui::cImGui_ImplVulkan_UpdateTexture(cimgui::ImTextureDa
     ::ImGui_ImplVulkan_UpdateTexture(reinterpret_cast<::ImTextureData*>(tex));
 }
 
-CIMGUI_IMPL_API VkDescriptorSet cimgui::cImGui_ImplVulkan_AddTexture(VkSampler sampler, VkImageView image_view, VkImageLayout image_layout)
+CIMGUI_IMPL_API VkDescriptorSet cimgui::cImGui_ImplVulkan_AddTexture(VkImageView image_view, VkImageLayout image_layout)
 {
-    return ::ImGui_ImplVulkan_AddTexture(sampler, image_view, image_layout);
+    return ::ImGui_ImplVulkan_AddTexture(image_view, image_layout);
 }
 
 CIMGUI_IMPL_API void       cimgui::cImGui_ImplVulkan_RemoveTexture(VkDescriptorSet descriptor_set)
 {
     ::ImGui_ImplVulkan_RemoveTexture(descriptor_set);
 }
+
+#ifndef IMGUI_DISABLE_OBSOLETE_FUNCTIONS
+
+CIMGUI_IMPL_API VkDescriptorSet cimgui::cImGui_ImplVulkan_AddTextureVkSampler(VkSampler sampler, VkImageView image_view, VkImageLayout image_layout)
+{
+    return ::ImGui_ImplVulkan_AddTexture(sampler, image_view, image_layout);
+}
+
+#endif // #ifndef IMGUI_DISABLE_OBSOLETE_FUNCTIONS
 
 CIMGUI_IMPL_API bool cimgui::cImGui_ImplVulkan_LoadFunctions(uint32_t api_version, PFN_vkVoidFunction (*loader_func)(const char* function_name, void* user_data))
 {

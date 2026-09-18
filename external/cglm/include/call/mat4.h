@@ -125,10 +125,6 @@ CGLM_EXPORT
 void
 glmc_mat4_make(const float * __restrict src, mat4 dest);
 
-CGLM_EXPORT
-void
-glmc_mat4_textrans(float sx, float sy, float rot, float tx, float ty, mat4 dest);
-
 #ifdef __cplusplus
 }
 #endif

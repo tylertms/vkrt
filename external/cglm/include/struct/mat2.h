@@ -13,20 +13,21 @@
    GLM_MAT2_ZERO
 
  Functions:
-   CGLM_INLINE mat2s glms_mat2_make(const float * __restrict src);
-   CGLM_INLINE mat2s glms_mat2_identity(void)
-   CGLM_INLINE void  glms_mat2_identity_array(mat2 * restrict mats, size_t count)
-   CGLM_INLINE mat2s glms_mat2_zero(void)
-   CGLM_INLINE mat2s glms_mat2_mul(mat2 m1, mat2 m2)
-   CGLM_INLINE vec2s glms_mat2_mulv(mat2 m, vec2 v)
-   CGLM_INLINE mat2s glms_mat2_transpose(mat2 m)
-   CGLM_INLINE mat2s glms_mat2_scale(mat2 m, float s)
-   CGLM_INLINE mat2s glms_mat2_inv(mat2 m)
-   CGLM_INLINE mat2s glms_mat2_swap_col(mat2 mat, int col1, int col2)
-   CGLM_INLINE mat2s glms_mat2_swap_row(mat2 mat, int row1, int row2)
-   CGLM_INLINE float glms_mat2_det(mat2 m)
+   CGLM_INLINE void  glms_mat2_identity(mat2 mat)
+   CGLM_INLINE void  glms_mat2_identity_array(mat2 * restrict mat, size_t count)
+   CGLM_INLINE void  glms_mat2_zero(mat2 mat)
+   CGLM_INLINE void  glms_mat2_mul(mat2 m1, mat2 m2, mat2 dest)
+   CGLM_INLINE void  glms_mat2_transpose_to(mat2 m, mat2 dest)
+   CGLM_INLINE void  glms_mat2_transpose(mat2 m)
+   CGLM_INLINE void  glms_mat2_mulv(mat2 m, vec2 v, vec2 dest)
    CGLM_INLINE float glms_mat2_trace(mat2 m)
+   CGLM_INLINE void  glms_mat2_scale(mat2 m, float s)
+   CGLM_INLINE float glms_mat2_det(mat2 mat)
+   CGLM_INLINE void  glms_mat2_inv(mat2 mat, mat2 dest)
+   CGLM_INLINE void  glms_mat2_swap_col(mat2 mat, int col1, int col2)
+   CGLM_INLINE void  glms_mat2_swap_row(mat2 mat, int row1, int row2)
    CGLM_INLINE float glms_mat2_rmc(vec2 r, mat2 m, vec2 c)
+   CGLM_INLINE mat2s glms_mat2_make(const float * __restrict src);
  */
 
 #ifndef cglms_mat2_h
@@ -47,23 +48,7 @@
 #define GLMS_MAT2_ZERO     ((mat2s)GLMS_MAT2_ZERO_INIT)
 
 /*!
- * @brief Returns mat2s (r) from pointer (src).
- *
- * @param[in]   src pointer to an array of floats
- * @return[out] r   constructed mat2s from raw pointer
- */
-CGLM_INLINE
-mat2s
-glms_mat2_(make)(const float * __restrict src) {
-  mat2s r;
-  glm_mat2_make(src, r.raw);
-  return r;
-}
-
-/*!
- * @brief Return a identity mat2s (r).
- *
- *        The same thing may be achieved with either of bellow methods,
+ * @brief make given matrix identity. It is identical with below,
  *        but it is more easy to do that with this func especially for members
  *        e.g. glm_mat2_identity(aStruct->aMatrix);
  *
@@ -74,7 +59,7 @@ glms_mat2_(make)(const float * __restrict src) {
  * mat2 mat = GLM_MAT2_IDENTITY_INIT;
  * @endcode
  *
- * @return[out] r constructed mat2s from raw pointer
+ * @returns identity matrix
  */
 CGLM_INLINE
 mat2s
@@ -85,26 +70,28 @@ glms_mat2_(identity)(void) {
 }
 
 /*!
- * @brief Given an array of mat2s’s (mats) make each matrix an identity matrix.
+ * @brief make given matrix array's each element identity matrix
  *
- * @param[in, out] mats  Array of mat2s’s (must be aligned (16/32) if alignment is not disabled)
- * @param[in]      count Array size of mats or number of matrices
+ * @param[in, out]  mat   matrix array (must be aligned (16)
+ *                        if alignment is not disabled)
+ *
+ * @param[in]       count count of matrices
  */
 CGLM_INLINE
 void
-glms_mat2_(identity_array)(mat2s * __restrict mats, size_t count) {
+glms_mat2_(identity_array)(mat2s * __restrict mat, size_t count) {
   CGLM_ALIGN_MAT mat2s t = GLMS_MAT2_IDENTITY_INIT;
   size_t i;
 
   for (i = 0; i < count; i++) {
-    glm_mat2_copy(t.raw, mats[i].raw);
+    glm_mat2_copy(t.raw, mat[i].raw);
   }
 }
 
 /*!
- * @brief Return zero'd out mat2 (r).
+ * @brief make given matrix zero.
  *
- * @return[out] r constructed mat2s from raw pointer
+ * @returns  matrix
  */
 CGLM_INLINE
 mat2s
@@ -115,18 +102,19 @@ glms_mat2_(zero)(void) {
 }
 
 /*!
- * @brief Multiply mat2 (m1) by mat2 (m2) and return in mat2s (r)
+ * @brief multiply m1 and m2 to dest
  *
- *        m1 and m2 matrices can be the same matrix, it is possible to write this:
+ * m1, m2 and dest matrices can be same matrix, it is possible to write this:
  *
  * @code
  * mat2 m = GLM_MAT2_IDENTITY_INIT;
- * mat2s r = glms_mat2_mul(m, m);
+ * r = glms_mat2_mul(m, m);
  * @endcode
  *
- * @param[in]   m1 mat2s (left)
- * @param[in]   m2 mat2s (right)
- * @return[out] r  constructed mat2s from raw pointers
+ * @param[in]  m1   left matrix
+ * @param[in]  m2   right matrix
+ *
+ * @returns destination matrix
  */
 CGLM_INLINE
 mat2s
@@ -136,12 +124,26 @@ glms_mat2_(mul)(mat2s m1, mat2s m2) {
   return r;
 }
 
-/*
- * @brief Multiply mat2s (m) by vec2s (v) and return in vec2s (r).
+/*!
+ * @brief transpose mat2
  *
- * @param[in]   m mat2s (left)
- * @param[in]   v vec2s (right, column vector)
- * @return[out] r constructed vec2s from raw pointers
+ * @param[in] m matrix to transpose
+ *
+ * @returns transposed matrix
+ */
+CGLM_INLINE
+mat2s
+glms_mat2_(transpose)(mat2s m) {
+  glm_mat2_transpose(m.raw);
+  return m;
+}
+
+/*!
+ * @brief multiply mat2 with vec2 (column vector) and store in dest vector
+ *
+ * @param[in]  m    mat2 (left)
+ * @param[in]  v    vec2 (right, column vector)
+ * @returns         vec2 (result, column vector)
  */
 CGLM_INLINE
 vec2s
@@ -152,24 +154,26 @@ glms_mat2_(mulv)(mat2s m, vec2s v) {
 }
 
 /*!
- * @brief Transpose mat2s (m) and store result in the same matrix.
+ * @brief trace of matrix
  *
- * @param[in]   m mat2s (src)
- * @return[out] m constructed mat2s from raw pointers
+ * sum of the elements on the main diagonal from upper left to the lower right
+ *
+ * @param[in]  m matrix
  */
 CGLM_INLINE
-mat2s
-glms_mat2_(transpose)(mat2s m) {
-  glm_mat2_transpose(m.raw);
-  return m;
+float
+glms_mat2_(trace)(mat2s m) {
+  return glm_mat2_trace(m.raw);
 }
 
 /*!
- * @brief Multiply mat2s (m) by scalar constant (s)
+ * @brief scale (multiply with scalar) matrix
  *
- * @param[in]   m mat2s (src)
- * @param[in]   s scalar value
- * @return[out] m constructed mat2s from raw pointers
+ * multiply matrix with scalar
+ *
+ * @param[in, out] m matrix
+ * @param[in]      s scalar
+ * @returns matrix
  */
 CGLM_INLINE
 mat2s
@@ -179,26 +183,39 @@ glms_mat2_(scale)(mat2s m, float s) {
 }
 
 /*!
- * @brief Inverse mat2s (m) and return in mat2s (r).
+ * @brief mat2 determinant
  *
- * @param[in]   m mat2s (left, src)
- * @return[out] r constructed mat2s from raw pointers
+ * @param[in] mat matrix
+ *
+ * @return determinant
+ */
+CGLM_INLINE
+float
+glms_mat2_(det)(mat2s mat) {
+  return glm_mat2_det(mat.raw);
+}
+
+/*!
+ * @brief inverse mat2 and store in dest
+ *
+ * @param[in]  mat  matrix
+ * @returns matrix
  */
 CGLM_INLINE
 mat2s
-glms_mat2_(inv)(mat2s m) {
+glms_mat2_(inv)(mat2s mat) {
   mat2s r;
-  glm_mat2_inv(m.raw, r.raw);
+  glm_mat2_inv(mat.raw, r.raw);
   return r;
 }
 
 /*!
- * @brief Swap two columns in mat2s (mat) and store in same matrix.
+ * @brief swap two matrix columns
  *
- * @param[in]   mat  mat2s
- * @param[in]   col1 column 1 array index
- * @param[in]   col2 column 2 array index
- * @return[out] mat  constructed mat2s from raw pointers columns swapped
+ * @param[in] mat  matrix
+ * @param[in] col1 col1
+ * @param[in] col2 col2
+ * @returns matrix
  */
 CGLM_INLINE
 mat2s
@@ -208,12 +225,12 @@ glms_mat2_(swap_col)(mat2s mat, int col1, int col2) {
 }
 
 /*!
- * @brief Swap two rows in mat2s (mat) and store in same matrix.
+ * @brief swap two matrix rows
  *
- * @param[in]   mat  mat2s
- * @param[in]   row1 row 1 array index
- * @param[in]   row2 row 2 array index
- * @return[out] mat  constructed mat2s from raw pointers rows swapped
+ * @param[in] mat  matrix
+ * @param[in] row1 row1
+ * @param[in] row2 row2
+ * @returns matrix
  */
 CGLM_INLINE
 mat2s
@@ -223,52 +240,37 @@ glms_mat2_(swap_row)(mat2s mat, int row1, int row2) {
 }
 
 /*!
- * @brief Returns mat2 determinant.
+ * @brief helper for  R (row vector) * M (matrix) * C (column vector)
  *
- * @param[in] m mat2 (src)
+ * rmc stands for Row * Matrix * Column
  *
- * @return[out] mat2s raw pointers determinant (float)
- */
-CGLM_INLINE
-float
-glms_mat2_(det)(mat2s m) {
-  return glm_mat2_det(m.raw);
-}
-
-/*!
- * @brief Returns trace of matrix. Which is:
+ * the result is scalar because R * M = Matrix1x2 (row vector),
+ * then Matrix1x2 * Vec2 (column vector) = Matrix1x1 (Scalar)
  *
- *        The sum of the elements on the main diagonal from
- *        upper left corner to the bottom right corner.
+ * @param[in]  r   row vector or matrix1x2
+ * @param[in]  m   matrix2x2
+ * @param[in]  c   column vector or matrix2x1
  *
- * @param[in] m mat2 (m)
- *
- * @return[out] mat2s raw pointers trace (float)
- */
-CGLM_INLINE
-float
-glms_mat2_(trace)(mat2s m) {
-  return glm_mat2_trace(m.raw);
-}
-
-/*!
- * @brief Helper for  R (row vector) * M (matrix) * C (column vector)
- *
- *        rmc stands for Row * Matrix * Column
- *
- *        the result is scalar because M * C = ResC (1x2, column vector),
- *        then if you take the dot_product(R (2x1), ResC (1x2)) = scalar value.
- *
- * @param[in] r vec2s (2x1, row vector)
- * @param[in] m mat2s (2x2, matrix)
- * @param[in] c vec2s (1x2, column vector)
- *
- * @return[out] Scalar value (float, 1x1)
+ * @return scalar value e.g. Matrix1x1
  */
 CGLM_INLINE
 float
 glms_mat2_(rmc)(vec2s r, mat2s m, vec2s c) {
   return glm_mat2_rmc(r.raw, m.raw, c.raw);
+}
+
+/*!
+ * @brief Create mat2 matrix from pointer
+ *
+ * @param[in]  src  pointer to an array of floats
+ * @return constructed matrix from raw pointer
+ */
+CGLM_INLINE
+mat2s
+glms_mat2_(make)(const float * __restrict src) {
+  mat2s r;
+  glm_mat2_make(src, r.raw);
+  return r;
 }
 
 #endif /* cglms_mat2_h */

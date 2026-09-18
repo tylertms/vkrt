@@ -34,3 +34,10 @@ option(
   value: 'dev',
   description: 'Version string embedded in the binary.',
 )
+
+option(
+  'static_analysis',
+  type: 'feature',
+  value: 'auto',
+  description: 'Require clang-tidy when enabled.',
+)

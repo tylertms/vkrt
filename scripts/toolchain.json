@@ -1,0 +1,24 @@
+{
+  "vulkan": {
+    "windows": {
+      "version": "1.4.357.0",
+      "url": "https://sdk.lunarg.com/sdk/download/1.4.357.0/windows/vulkan_sdk.exe?Human=true",
+      "sha256": "81f474711e9042f4cd22b31b2f7a8870db2e428b21586fb43dd80150be97310d"
+    },
+    "linux": {
+      "version": "1.4.357.1",
+      "url": "https://sdk.lunarg.com/sdk/download/1.4.357.1/linux/vulkan_sdk.tar.xz?Human=true",
+      "sha256": "4b41e3b30e8aedaa5dac7c136561ab463eb316a25a54e2c6245f2c299ea1fb85"
+    }
+  },
+  "appimagetool": {
+    "version": "1.9.1",
+    "url": "https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage",
+    "sha256": "ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0"
+  },
+  "appimage_runtime": {
+    "version": "20251108",
+    "url": "https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-x86_64",
+    "sha256": "2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d"
+  }
+}

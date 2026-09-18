@@ -23,12 +23,8 @@ def main() -> int:
     src_root = repo_root / "src"
     source_extensions = {".c", ".h", ".cpp", ".hpp"}
     shader_extensions = {".slang"}
-    source_files = sorted(
-        path for path in src_root.rglob("*") if path.suffix in source_extensions
-    )
-    shader_files = sorted(
-        path for path in src_root.rglob("*") if path.suffix in shader_extensions
-    )
+    source_files = sorted(path for path in src_root.rglob("*") if path.suffix in source_extensions)
+    shader_files = sorted(path for path in src_root.rglob("*") if path.suffix in shader_extensions)
 
     if not source_files and not shader_files:
         return 0
@@ -37,7 +33,7 @@ def main() -> int:
 
     if source_files:
         command = [clang_format, "-i", *[str(path) for path in source_files]]
-        completed = subprocess.run(command, cwd=repo_root)
+        completed = subprocess.run(command, cwd=repo_root, check=False)
         if completed.returncode != 0:
             return completed.returncode
 
@@ -48,7 +44,7 @@ def main() -> int:
             f"--assume-filename={path.with_suffix('.cpp')}",
             str(path),
         ]
-        completed = subprocess.run(command, cwd=repo_root)
+        completed = subprocess.run(command, cwd=repo_root, check=False)
         if completed.returncode != 0:
             return completed.returncode
 

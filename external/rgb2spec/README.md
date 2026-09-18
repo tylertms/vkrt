@@ -5,5 +5,5 @@ and Johannes Hanika.
 
 In comparison to the supplemental material of the original paper that optimized
 polynomial coefficients using Google's CEPHES solver, the code here relies on a
-much simpler and self-contained Gauss-Newton solver. Mitsuba and PBRT use a
+much simpler and self-contained Levenberg–Marquardt solver. Mitsuba and PBRT use a
 variant of this code that is simply executed as part of the CMake build system.

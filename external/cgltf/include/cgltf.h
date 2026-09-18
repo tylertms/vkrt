@@ -2638,10 +2638,7 @@ cgltf_size cgltf_accessor_unpack_indices(const cgltf_accessor* accessor, void* o
 		return accessor->count;
 	}
 
-	cgltf_size numbers_per_element = cgltf_num_components(accessor->type);
-	cgltf_size available_numbers = accessor->count * numbers_per_element;
-
-	index_count = available_numbers < index_count ? available_numbers : index_count;
+	index_count = accessor->count < index_count ? accessor->count : index_count;
 	cgltf_size index_component_size = cgltf_component_size(accessor->component_type);
 
 	if (accessor->is_sparse)
@@ -2663,23 +2660,15 @@ cgltf_size cgltf_accessor_unpack_indices(const cgltf_accessor* accessor, void* o
 	}
 	element += accessor->offset;
 
-	if (index_component_size == out_component_size && accessor->stride == out_component_size * numbers_per_element)
+	if (index_component_size == out_component_size && accessor->stride == out_component_size)
 	{
 		memcpy(out, element, index_count * index_component_size);
 		return index_count;
 	}
 
-	// Data couldn't be copied with memcpy due to stride being larger than the component size.
-	// OR
 	// The component size of the output array is larger than the component size of the index data, so index data will be padded.
 	switch (out_component_size)
 	{
-	case 1:
-		for (cgltf_size index = 0; index < index_count; index++, element += accessor->stride)
-		{
-			((uint8_t*)out)[index] = (uint8_t)cgltf_component_read_index(element, accessor->component_type);
-		}
-		break;
 	case 2:
 		for (cgltf_size index = 0; index < index_count; index++, element += accessor->stride)
 		{
@@ -2693,7 +2682,7 @@ cgltf_size cgltf_accessor_unpack_indices(const cgltf_accessor* accessor, void* o
 		}
 		break;
 	default:
-		return 0;
+		break;
 	}
 
 	return index_count;

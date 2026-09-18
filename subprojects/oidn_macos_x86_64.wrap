@@ -1,6 +1,6 @@
 [wrap-file]
-directory = oidn-2.4.1.x86_64.macos
-source_url = https://github.com/RenderKit/oidn/releases/download/v2.4.1/oidn-2.4.1.x86_64.macos.tar.gz
-source_filename = oidn-2.4.1.x86_64.macos.tar.gz
-source_hash = b9addf2855ee36d7768fd02d4d540e64612096487bad302e608d04e639ae1584
+directory = oidn-2.5.1.x86_64.macos
+source_url = https://github.com/RenderKit/oidn/releases/download/v2.5.1/oidn-2.5.1.x86_64.macos.tar.gz
+source_filename = oidn-2.5.1.x86_64.macos.tar.gz
+source_hash = a4341639005a33ce0d944bd7c771ce34de1465be7eb3189b7c3b5b0064429832
 patch_directory = oidn

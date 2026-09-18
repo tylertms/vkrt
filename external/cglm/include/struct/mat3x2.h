@@ -35,85 +35,87 @@
 #define GLMS_MAT3X2_ZERO ((mat3x2s)GLMS_MAT3X2_ZERO_INIT)
 
 /*!
- * @brief Zero out the mat3x2s (dest).
+ * @brief make given matrix zero.
  *
- * @return[out] dest constructed mat3x2s from raw pointer
+ * @param[in, out]  mat  matrix
  */
 CGLM_INLINE
 mat3x2s
 glms_mat3x2_(zero)(void) {
-  mat3x2s dest;
-  glm_mat3x2_zero(dest.raw);
-  return dest;
+  mat3x2s r;
+  glm_mat3x2_zero(r.raw);
+  return r;
 }
 
 /*!
- * @brief Create mat3x2s (dest) from pointer (src).
+ * @brief Create mat3x2 matrix from pointer
  *
- * @param[in]   src  pointer to an array of floats
- * @return[out] dest constructed mat3x2s from raw pointer
+ * @param[in]  src  pointer to an array of floats
+ * @return constructed matrix from raw pointer
  */
 CGLM_INLINE
 mat3x2s
 glms_mat3x2_(make)(const float * __restrict src) {
-  mat3x2s dest;
-  glm_mat3x2_make(src, dest.raw);
-  return dest;
+  mat3x2s r;
+  glm_mat3x2_make(src, r.raw);
+  return r;
 }
 
 /*!
- * @brief Multiply mat3x2s (m1) by mat2x3s (m2) and store in mat2s (dest).
+ * @brief multiply m1 and m2 to dest
  *
  * @code
  * r = glms_mat3x2_mul(mat3x2s, mat2x3s);
  * @endcode
  *
- * @param[in]   m1   mat3x2s (left)
- * @param[in]   m2   mat2x3s (right)
- * @return[out] dest constructed mat2s from raw pointers
+ * @param[in]  m1   left matrix (mat3x2s)
+ * @param[in]  m2   right matrix (mat2x3s)
+ * @returns destination matrix (mat3s)
  */
 CGLM_INLINE
 mat2s
 glms_mat3x2_(mul)(mat3x2s m1, mat2x3s m2) {
-  mat2s dest;
-  glm_mat3x2_mul(m1.raw, m2.raw, dest.raw);
-  return dest;
+  mat2s r;
+  glm_mat3x2_mul(m1.raw, m2.raw, r.raw);
+  return r;
 }
 
 /*!
- * @brief Multiply mat3x2s (m) by vec3s (v) and store in vec2s (dest).
+ * @brief multiply matrix with column vector and store in dest vector
  *
- * @param[in]   m    mat3x2s (left)
- * @param[in]   v    vec3s (right, column vector)
- * @return[out] dest constructed vec2s from raw pointers
+ * @param[in]  m    matrix (left)
+ * @param[in]  v    vector (right, column vector)
+ * @param[out] dest result vector
  */
 CGLM_INLINE
 vec2s
 glms_mat3x2_(mulv)(mat3x2s m, vec3s v) {
-  vec2s dest;
-  glm_mat3x2_mulv(m.raw, v.raw, dest.raw);
-  return dest;
+  vec2s r;
+  glm_mat3x2_mulv(m.raw, v.raw, r.raw);
+  return r;
 }
 
 /*!
- * @brief Transpose mat3x2s (m) and store in mat2x3s (dest).
+ * @brief transpose matrix and store in dest
  *
- * @param[in]   m    mat3x2s (left)
- * @return[out] dest constructed mat2x3s from raw pointers
+ * @param[in]  m     matrix
+ * @param[out] dest  result
  */
 CGLM_INLINE
 mat2x3s
 glms_mat3x2_(transpose)(mat3x2s m) {
-  mat2x3s dest;
-  glm_mat3x2_transpose(m.raw, dest.raw);
-  return dest;
+  mat2x3s r;
+  glm_mat3x2_transpose(m.raw, r.raw);
+  return r;
 }
 
 /*!
- * @brief Multiply mat3x2s (m) by scalar constant (s).
+ * @brief scale (multiply with scalar) matrix
  *
- * @param[in, out] m mat3x2s (src, dest)
- * @param[in]      s float (scalar)
+ * multiply matrix with scalar
+ *
+ * @param[in, out] m matrix
+ * @param[in]    s scalar
  */
 CGLM_INLINE
 mat3x2s

@@ -95,7 +95,7 @@ foreach shader_program : shader_programs
     'embed_shader_' + stage_name,
     input: shader_target,
     output: 'shader_' + stage_name + '.c',
-    command: [embed_data, '--format', 'u32le', '@INPUT@', '@OUTPUT@', shader_symbol_name],
+    command: [python, embed_data, '--format', 'u32le', '@INPUT@', '@OUTPUT@', shader_symbol_name],
   )
   embedded_shader_sources += embed_target
 endforeach

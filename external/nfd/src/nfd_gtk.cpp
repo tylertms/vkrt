@@ -54,71 +54,12 @@ filters to be case-insensitive.
 
 namespace {
 
-template <typename T>
-struct Free_Guard {
-    T* data;
-    Free_Guard(T* freeable) noexcept : data(freeable) {}
-    ~Free_Guard() { NFDi_Free(data); }
-};
-
-template <typename T>
-struct FreeCheck_Guard {
-    T* data;
-    FreeCheck_Guard(T* freeable = nullptr) noexcept : data(freeable) {}
-    ~FreeCheck_Guard() {
-        if (data) NFDi_Free(data);
-    }
-};
-
 /* current error */
 const char* g_errorstr = nullptr;
 
 void NFDi_SetError(const char* msg) {
     g_errorstr = msg;
 }
-
-template <typename T = void>
-T* NFDi_Malloc(size_t bytes) {
-    void* ptr = malloc(bytes);
-    if (!ptr) NFDi_SetError("NFDi_Malloc failed.");
-
-    return static_cast<T*>(ptr);
-}
-
-template <typename T>
-void NFDi_Free(T* ptr) {
-    assert(ptr);
-    free(static_cast<void*>(ptr));
-}
-
-template <typename T>
-T* copy(const T* begin, const T* end, T* out) {
-    for (; begin != end; ++begin) {
-        *out++ = *begin;
-    }
-    return out;
-}
-
-#ifndef NFD_CASE_SENSITIVE_FILTER
-nfdnchar_t* emit_case_insensitive_glob(const nfdnchar_t* begin,
-                                       const nfdnchar_t* end,
-                                       nfdnchar_t* out) {
-    // this code will only make regular Latin characters case-insensitive; other
-    // characters remain case sensitive
-    for (; begin != end; ++begin) {
-        if ((*begin >= 'A' && *begin <= 'Z') || (*begin >= 'a' && *begin <= 'z')) {
-            *out++ = '[';
-            *out++ = *begin;
-            // invert the case of the original character
-            *out++ = *begin ^ static_cast<nfdnchar_t>(0x20);
-            *out++ = ']';
-        } else {
-            *out++ = *begin;
-        }
-    }
-    return out;
-}
-#endif
 
 // Does not own the filter and extension.
 struct Pair_GtkFileFilter_FileExtension {
@@ -377,6 +318,33 @@ void SetDefaultName(GtkFileChooser* chooser, const char* defaultName) {
     gtk_file_chooser_set_current_name(chooser, defaultName);
 }
 
+// Returns `str` if it is non-null and non-empty, otherwise returns `fallback`.
+// Used to fall back to the hardcoded default text when the user did not specify a custom string.
+const char* Coalesce(const char* str, const char* fallback) {
+    return (str && *str) ? str : fallback;
+}
+
+// The title, acceptLabel and cancelLabel fields were added to the args structs in interface
+// version 2.  Callers compiled against an older header have structs that do not contain these
+// fields, so we must only read them when the caller's interface version is new enough.  Anything
+// not present (or left null by the caller) is reported as null.
+template <typename Args>
+void GetLabels(nfdversion_t version,
+               const Args* args,
+               const char*& title,
+               const char*& acceptLabel,
+               const char*& cancelLabel) {
+    if (version >= 2) {
+        title = args->title;
+        acceptLabel = args->acceptLabel;
+        cancelLabel = args->cancelLabel;
+    } else {
+        title = nullptr;
+        acceptLabel = nullptr;
+        cancelLabel = nullptr;
+    }
+}
+
 void WaitForCleanup() {
     while (gtk_events_pending()) gtk_main_iteration();
 }
@@ -474,9 +442,8 @@ void zxdg_exported_v1_handle(void* context, struct zxdg_exported_v1*, const char
     gdk_wayland_window_set_transient_for_exported(childWindow, const_cast<char*>(handle));
 }
 
-constexpr struct zxdg_exported_v1_listener wayland_xdg_exported_v1_listener {
-    &zxdg_exported_v1_handle
-};
+constexpr struct zxdg_exported_v1_listener wayland_xdg_exported_v1_listener{
+    &zxdg_exported_v1_handle};
 #endif
 
 // This is an RAII class that wraps the parenting of a GtkWidget (the file dialog).
@@ -767,15 +734,17 @@ nfdresult_t NFD_OpenDialogN(nfdnchar_t** outPath,
 nfdresult_t NFD_OpenDialogN_With_Impl(nfdversion_t version,
                                       nfdnchar_t** outPath,
                                       const nfdopendialognargs_t* args) {
-    // We haven't needed to bump the interface version yet.
-    (void)version;
+    const char* title;
+    const char* acceptLabel;
+    const char* cancelLabel;
+    GetLabels(version, args, title, acceptLabel, cancelLabel);
 
-    GtkWidget* widget = gtk_file_chooser_dialog_new("Open File",
+    GtkWidget* widget = gtk_file_chooser_dialog_new(Coalesce(title, "Open File"),
                                                     nullptr,
                                                     GTK_FILE_CHOOSER_ACTION_OPEN,
-                                                    "_Cancel",
+                                                    Coalesce(cancelLabel, "_Cancel"),
                                                     GTK_RESPONSE_CANCEL,
-                                                    "_Open",
+                                                    Coalesce(acceptLabel, "_Open"),
                                                     GTK_RESPONSE_ACCEPT,
                                                     nullptr);
 
@@ -832,15 +801,17 @@ nfdresult_t NFD_OpenDialogMultipleN(const nfdpathset_t** outPaths,
 nfdresult_t NFD_OpenDialogMultipleN_With_Impl(nfdversion_t version,
                                               const nfdpathset_t** outPaths,
                                               const nfdopendialognargs_t* args) {
-    // We haven't needed to bump the interface version yet.
-    (void)version;
+    const char* title;
+    const char* acceptLabel;
+    const char* cancelLabel;
+    GetLabels(version, args, title, acceptLabel, cancelLabel);
 
-    GtkWidget* widget = gtk_file_chooser_dialog_new("Open Files",
+    GtkWidget* widget = gtk_file_chooser_dialog_new(Coalesce(title, "Open Files"),
                                                     nullptr,
                                                     GTK_FILE_CHOOSER_ACTION_OPEN,
-                                                    "_Cancel",
+                                                    Coalesce(cancelLabel, "_Cancel"),
                                                     GTK_RESPONSE_CANCEL,
-                                                    "_Open",
+                                                    Coalesce(acceptLabel, "_Open"),
                                                     GTK_RESPONSE_ACCEPT,
                                                     nullptr);
 
@@ -903,20 +874,23 @@ nfdresult_t NFD_SaveDialogN(nfdnchar_t** outPath,
 nfdresult_t NFD_SaveDialogN_With_Impl(nfdversion_t version,
                                       nfdnchar_t** outPath,
                                       const nfdsavedialognargs_t* args) {
-    // We haven't needed to bump the interface version yet.
-    (void)version;
+    const char* title;
+    const char* acceptLabel;
+    const char* cancelLabel;
+    GetLabels(version, args, title, acceptLabel, cancelLabel);
 
-    GtkWidget* widget = gtk_file_chooser_dialog_new("Save File",
+    GtkWidget* widget = gtk_file_chooser_dialog_new(Coalesce(title, "Save File"),
                                                     nullptr,
                                                     GTK_FILE_CHOOSER_ACTION_SAVE,
-                                                    "_Cancel",
+                                                    Coalesce(cancelLabel, "_Cancel"),
                                                     GTK_RESPONSE_CANCEL,
                                                     nullptr);
 
     // guard to destroy the widget when returning from this function
     Widget_Guard widgetGuard(widget);
 
-    GtkWidget* saveButton = gtk_dialog_add_button(GTK_DIALOG(widget), "_Save", GTK_RESPONSE_ACCEPT);
+    GtkWidget* saveButton = gtk_dialog_add_button(
+        GTK_DIALOG(widget), Coalesce(acceptLabel, "_Save"), GTK_RESPONSE_ACCEPT);
 
     // Prompt on overwrite
     gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(widget), TRUE);
@@ -985,15 +959,17 @@ nfdresult_t NFD_PickFolderN(nfdnchar_t** outPath, const nfdnchar_t* defaultPath)
 nfdresult_t NFD_PickFolderN_With_Impl(nfdversion_t version,
                                       nfdnchar_t** outPath,
                                       const nfdpickfoldernargs_t* args) {
-    // We haven't needed to bump the interface version yet.
-    (void)version;
+    const char* title;
+    const char* acceptLabel;
+    const char* cancelLabel;
+    GetLabels(version, args, title, acceptLabel, cancelLabel);
 
-    GtkWidget* widget = gtk_file_chooser_dialog_new("Select Folder",
+    GtkWidget* widget = gtk_file_chooser_dialog_new(Coalesce(title, "Select Folder"),
                                                     nullptr,
                                                     GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
-                                                    "_Cancel",
+                                                    Coalesce(cancelLabel, "_Cancel"),
                                                     GTK_RESPONSE_CANCEL,
-                                                    "_Select",
+                                                    Coalesce(acceptLabel, "_Select"),
                                                     GTK_RESPONSE_ACCEPT,
                                                     nullptr);
 
@@ -1039,15 +1015,17 @@ nfdresult_t NFD_PickFolderMultipleN(const nfdpathset_t** outPaths, const nfdncha
 nfdresult_t NFD_PickFolderMultipleN_With_Impl(nfdversion_t version,
                                               const nfdpathset_t** outPaths,
                                               const nfdpickfoldernargs_t* args) {
-    // We haven't needed to bump the interface version yet.
-    (void)version;
+    const char* title;
+    const char* acceptLabel;
+    const char* cancelLabel;
+    GetLabels(version, args, title, acceptLabel, cancelLabel);
 
-    GtkWidget* widget = gtk_file_chooser_dialog_new("Select Folders",
+    GtkWidget* widget = gtk_file_chooser_dialog_new(Coalesce(title, "Select Folders"),
                                                     nullptr,
                                                     GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
-                                                    "_Cancel",
+                                                    Coalesce(cancelLabel, "_Cancel"),
                                                     GTK_RESPONSE_CANCEL,
-                                                    "_Select",
+                                                    Coalesce(acceptLabel, "_Select"),
                                                     GTK_RESPONSE_ACCEPT,
                                                     nullptr);
 

@@ -1,0 +1,95 @@
+name: Build
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        default: ''
+      appimage:
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows MSVC
+            os: windows-2025
+            platform: windows
+            meson_args: -Db_vscrt=static_from_buildtype -Dstatic_analysis=disabled
+          - name: Linux GCC and static analysis
+            os: ubuntu-24.04
+            platform: linux
+            meson_args: -Dlinux_window_backend=both -Dnfd_backend=portal -Dstatic_analysis=enabled
+    defaults:
+      run:
+        shell: bash
+    env:
+      VKRT_BUILD_VERSION: ${{ inputs.version || github.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-build
+
+      - name: Install analysis tools
+        if: runner.os == 'Linux'
+        run: python -m pip install --requirement scripts/requirements-lint.txt
+
+      - name: Check Python
+        if: runner.os == 'Linux'
+        run: ruff check scripts
+
+      - name: Configure
+        run: meson setup build --buildtype=release -Dfile_dialogs=enabled ${{ matrix.meson_args }} "-Dvkrt_version=$VKRT_BUILD_VERSION"
+
+      - name: Build
+        run: meson compile -C build
+
+      - name: Static analysis
+        if: runner.os == 'Linux'
+        run: meson compile -C build clang-tidy
+
+      - name: Package Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: python scripts/package_windows.py dist --msvc-redist "$env:VCToolsRedistDir"
+
+      - name: Package Linux
+        if: runner.os == 'Linux'
+        env:
+          BUILD_APPIMAGE: ${{ inputs.appimage }}
+        run: |
+          args=()
+          if [[ "$BUILD_APPIMAGE" == 'true' ]]; then args+=(--appimage); fi
+          python scripts/package_linux.py dist "${args[@]}"
+
+      - name: Upload packages
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: vkrt-${{ matrix.platform }}-x64
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+          path: |
+            dist/*.zip
+            dist/*.tar.gz
+            dist/*.AppImage
+
+      - name: Upload failure logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: logs-${{ matrix.platform }}
+          retention-days: 7
+          path: build/meson-logs/

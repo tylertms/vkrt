@@ -57,7 +57,7 @@ rgb2spec_embedded_sources = [
     'embed_rgb2spec_srgb_coeff',
     input: files('../../external/rgb2spec/srgb.coeff'),
     output: 'rgb2spec_srgb_coeff.c',
-    command: [embed_data, '@INPUT@', '@OUTPUT@', 'rgb2specSrgbCoeff'],
+    command: [python, embed_data, '@INPUT@', '@OUTPUT@', 'rgb2specSrgbCoeff'],
   ),
 ]
 

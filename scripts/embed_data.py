@@ -18,9 +18,7 @@ def write_u32le(handle, variable_name: str, data: bytes) -> None:
         chunk = data[i : i + 16]
         words = []
         for word_start in range(0, len(chunk), 4):
-            words.append(
-                int.from_bytes(chunk[word_start : word_start + 4], byteorder="little")
-            )
+            words.append(int.from_bytes(chunk[word_start : word_start + 4], byteorder="little"))
         handle.write("    " + ", ".join(f"0x{word:08x}u" for word in words) + ",\n")
 
     handle.write("};\n")
@@ -41,9 +39,7 @@ def write_bytes(handle, variable_name: str, data: bytes) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Embed binary data in a C source file."
-    )
+    parser = argparse.ArgumentParser(description="Embed binary data in a C source file.")
     parser.add_argument(
         "--format",
         choices=("bytes", "u32le"),
