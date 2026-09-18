@@ -279,28 +279,28 @@ static uint32_t queryGPUImageSlots(GPUImageState* state, GPUImageSlot slots[8]) 
         .image = &state->albedoImages[0],
         .view = &state->albedoImageViews[0],
         .memory = &state->albedoImageMemories[0],
-        .format = VK_FORMAT_R16G16B16A16_SFLOAT,
+        .format = VK_FORMAT_R32G32B32A32_SFLOAT,
         .usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
     };
     slots[3] = (GPUImageSlot){
         .image = &state->albedoImages[1],
         .view = &state->albedoImageViews[1],
         .memory = &state->albedoImageMemories[1],
-        .format = VK_FORMAT_R16G16B16A16_SFLOAT,
+        .format = VK_FORMAT_R32G32B32A32_SFLOAT,
         .usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
     };
     slots[4] = (GPUImageSlot){
         .image = &state->normalImages[0],
         .view = &state->normalImageViews[0],
         .memory = &state->normalImageMemories[0],
-        .format = VK_FORMAT_R16G16B16A16_SFLOAT,
+        .format = VK_FORMAT_R32G32B32A32_SFLOAT,
         .usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
     };
     slots[5] = (GPUImageSlot){
         .image = &state->normalImages[1],
         .view = &state->normalImageViews[1],
         .memory = &state->normalImageMemories[1],
-        .format = VK_FORMAT_R16G16B16A16_SFLOAT,
+        .format = VK_FORMAT_R32G32B32A32_SFLOAT,
         .usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
     };
     slots[6] = (GPUImageSlot){

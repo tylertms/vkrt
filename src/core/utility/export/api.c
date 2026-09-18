@@ -21,19 +21,11 @@ static void readbackCurrentRenderFeatureBuffers(VKRT* vkrt, RenderImageExportJob
 
     if (albedoImage != VK_NULL_HANDLE &&
         readbackImagePixels(vkrt, albedoImage, job->width, job->height, job->albedo.format, &job->albedo.pixels) != 0) {
-        LOG_INFO(
-            "Failed to read back albedo feature buffer for '%s'; denoising will fall back to "
-            "beauty-only",
-            label
-        );
+        LOG_ERROR("Failed to read back albedo feature buffer for '%s'", label);
     }
     if (normalImage != VK_NULL_HANDLE &&
         readbackImagePixels(vkrt, normalImage, job->width, job->height, job->normal.format, &job->normal.pixels) != 0) {
-        LOG_INFO(
-            "Failed to read back normal feature buffer for '%s'; denoising will fall back to "
-            "beauty-only",
-            label
-        );
+        LOG_ERROR("Failed to read back normal feature buffer for '%s'", label);
     }
 }
 

@@ -30,6 +30,7 @@ typedef enum RenderImageJobType {
 typedef struct RenderImageExportJob {
     struct RenderImageExportJob* next;
     RenderImageJobType type;
+    uint8_t deviceUUID[VK_UUID_SIZE];
     uint64_t renderSequence;
     char* path;
     uint32_t width;

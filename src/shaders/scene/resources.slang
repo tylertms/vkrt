@@ -18,13 +18,13 @@ RaytracingAccelerationStructure selectionTopLevelAS;
 [[vk::binding(5, 0)]]
 [vk::image_format("r32ui")] RWTexture2D<uint> selectionMaskImage;
 [[vk::binding(6, 0)]]
-[vk::image_format("rgba16f")] RWTexture2D<float4> albedoReadImage;
+[vk::image_format("rgba32f")] RWTexture2D<float4> albedoReadImage;
 [[vk::binding(7, 0)]]
-[vk::image_format("rgba16f")] RWTexture2D<float4> albedoWriteImage;
+[vk::image_format("rgba32f")] RWTexture2D<float4> albedoWriteImage;
 [[vk::binding(8, 0)]]
-[vk::image_format("rgba16f")] RWTexture2D<float4> normalReadImage;
+[vk::image_format("rgba32f")] RWTexture2D<float4> normalReadImage;
 [[vk::binding(9, 0)]]
-[vk::image_format("rgba16f")] RWTexture2D<float4> normalWriteImage;
+[vk::image_format("rgba32f")] RWTexture2D<float4> normalWriteImage;
 
 [[vk::binding(10, 0)]]
 StructuredBuffer<ShaderVertex> vertices;

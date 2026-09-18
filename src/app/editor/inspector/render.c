@@ -148,7 +148,7 @@ static void drawFinalImageControls(Session* session, const VKRT_RenderStatusSnap
             sessionQueueRenderSetDenoise(session, session->editor.renderExportSettings.denoiseEnabled);
         }
     }
-    tooltipOnHover("CPU denoiser using color, albedo, and normal buffers.");
+    tooltipOnHover("High-quality GPU denoising with CPU fallback, using color, albedo, and normal buffers.");
 }
 
 static void drawIdleRenderState(Session* session, const SessionRenderTimer* timer) {

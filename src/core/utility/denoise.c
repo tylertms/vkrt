@@ -1,340 +1,155 @@
 #include "denoise.h"
 
+#include "debug.h"
+
 #include <OpenImageDenoise/oidn.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
-static void setOIDNErrorMessage(const char** outErrorMessage, const char* message) {
-    if (outErrorMessage) *outErrorMessage = message;
-}
-
 static _Thread_local char oidnErrorStorage[256];
 
-typedef struct OIDNBufferSet {
-    OIDNBuffer color;
-    OIDNBuffer albedo;
-    OIDNBuffer normal;
-    OIDNBuffer output;
-} OIDNBufferSet;
-
-typedef struct OIDNFilterConfig {
-    const char* mainImageName;
-    uint8_t hdr;
-    uint8_t srgb;
-    uint8_t cleanAux;
-} OIDNFilterConfig;
-
-static int createOIDNBuffer(
-    OIDNDevice device,
-    const float* input,
-    size_t byteCount,
-    OIDNBuffer* outBuffer,
-    const char** outErrorMessage,
-    const char* label
-) {
-    if (!device || !input || !outBuffer || !label || !label[0]) return 0;
-
-    OIDNBuffer buffer = oidnNewBuffer(device, byteCount);
-    if (!buffer) {
-        (void)snprintf(oidnErrorStorage, sizeof(oidnErrorStorage), "failed to allocate OIDN %s buffer", label);
-        setOIDNErrorMessage(outErrorMessage, oidnErrorStorage);
-        return 0;
-    }
-
-    oidnWriteBuffer(buffer, 0u, byteCount, input);
-    *outBuffer = buffer;
-    return 1;
-}
-
-static int createOIDNOutputBuffer(
-    OIDNDevice device,
-    const float* seedInput,
-    size_t byteCount,
-    OIDNBuffer* outBuffer,
-    const char** outErrorMessage
-) {
-    if (!device || !seedInput || !outBuffer) return 0;
-
-    OIDNBuffer buffer = oidnNewBuffer(device, byteCount);
-    if (!buffer) {
-        setOIDNErrorMessage(outErrorMessage, "failed to allocate OIDN output buffer");
-        return 0;
-    }
-
-    oidnWriteBuffer(buffer, 0u, byteCount, seedInput);
-    *outBuffer = buffer;
-    return 1;
-}
-
-static void releaseOIDNBuffer(OIDNBuffer* buffer) {
-    if (!buffer || !*buffer) return;
-    oidnReleaseBuffer(*buffer);
-    *buffer = NULL;
-}
-
-static void releaseOIDNResources(
-    OIDNDevice* device,
-    OIDNFilter* filter,
-    OIDNBuffer* colorBuffer,
-    OIDNBuffer* albedoBuffer,
-    OIDNBuffer* normalBuffer,
-    OIDNBuffer* outputBuffer
-) {
-    releaseOIDNBuffer(outputBuffer);
-    releaseOIDNBuffer(normalBuffer);
-    releaseOIDNBuffer(albedoBuffer);
-    releaseOIDNBuffer(colorBuffer);
-    if (filter && *filter) {
-        oidnReleaseFilter(*filter);
-        *filter = NULL;
-    }
-    if (device && *device) {
-        oidnReleaseDevice(*device);
-        *device = NULL;
-    }
-}
-
-static int createOIDNFilterContext(OIDNDevice* outDevice, OIDNFilter* outFilter, const char** outErrorMessage) {
-    *outDevice = oidnNewDevice(OIDN_DEVICE_TYPE_CPU);
-    if (!*outDevice) {
-        setOIDNErrorMessage(outErrorMessage, "failed to create OIDN device");
-        return 0;
-    }
-    oidnCommitDevice(*outDevice);
-
-    *outFilter = oidnNewFilter(*outDevice, "RT");
-    if (!*outFilter) {
-        setOIDNErrorMessage(outErrorMessage, "failed to create OIDN RT filter");
-        return 0;
-    }
-
-    return 1;
-}
-
-static int createOIDNInputBuffers(
-    OIDNDevice device,
-    const VKRT_OIDNFilterInput* input,
-    size_t imageByteCount,
-    OIDNBufferSet* buffers,
-    const float* outputSeed,
-    const char** outErrorMessage
-) {
-    if (!buffers) return 0;
-
-    if (!createOIDNBuffer(device, input->color, imageByteCount, &buffers->color, outErrorMessage, "color")) {
-        return 0;
-    }
-
-    if (!createOIDNOutputBuffer(device, outputSeed, imageByteCount, &buffers->output, outErrorMessage)) {
-        return 0;
-    }
-
-    if (input->albedo &&
-        !createOIDNBuffer(device, input->albedo, imageByteCount, &buffers->albedo, outErrorMessage, "albedo")) {
-        return 0;
-    }
-    if (input->normal &&
-        !createOIDNBuffer(device, input->normal, imageByteCount, &buffers->normal, outErrorMessage, "normal")) {
-        return 0;
-    }
-
-    return 1;
-}
-
-static void configureOIDNFilterImages(
-    OIDNFilter filter,
-    const OIDNFilterConfig* config,
-    const VKRT_OIDNFilterInput* input,
-    OIDNBuffer colorBuffer,
-    OIDNBuffer albedoBuffer,
-    OIDNBuffer normalBuffer,
-    OIDNBuffer outputBuffer
-) {
-    if (!config || !config->mainImageName || !config->mainImageName[0]) return;
-
-    const size_t pixelStride = sizeof(float) * 4u;
-    const size_t rowStride = pixelStride * (size_t)input->width;
-
-    oidnSetFilterImage(
-        filter,
-        config->mainImageName,
-        colorBuffer,
-        OIDN_FORMAT_FLOAT3,
-        input->width,
-        input->height,
-        0u,
-        pixelStride,
-        rowStride
-    );
-    if (input->albedo && strcmp(config->mainImageName, "albedo") != 0) {
-        oidnSetFilterImage(
-            filter,
-            "albedo",
-            albedoBuffer,
-            OIDN_FORMAT_FLOAT3,
-            input->width,
-            input->height,
-            0u,
-            pixelStride,
-            rowStride
-        );
-    }
-    if (input->normal && strcmp(config->mainImageName, "normal") != 0) {
-        oidnSetFilterImage(
-            filter,
-            "normal",
-            normalBuffer,
-            OIDN_FORMAT_FLOAT3,
-            input->width,
-            input->height,
-            0u,
-            pixelStride,
-            rowStride
-        );
-    }
-    oidnSetFilterImage(
-        filter,
-        "output",
-        outputBuffer,
-        OIDN_FORMAT_FLOAT3,
-        input->width,
-        input->height,
-        0u,
-        pixelStride,
-        rowStride
-    );
-    oidnSetFilterBool(filter, "hdr", config->hdr != 0);
-    oidnSetFilterBool(filter, "srgb", config->srgb != 0);
-    oidnSetFilterBool(filter, "cleanAux", config->cleanAux != 0);
-    oidnSetFilterInt(filter, "quality", OIDN_QUALITY_HIGH);
-}
-
-static int executeOIDNFilter(
-    OIDNDevice device,
-    OIDNFilter filter,
-    OIDNBuffer outputBuffer,
-    size_t imageByteCount,
-    float* output,
-    const char** outErrorMessage
-) {
-    oidnCommitFilter(filter);
-    oidnExecuteFilter(filter);
-    oidnSyncDevice(device);
-
-    const char* errorMessage = NULL;
-    OIDNError error = oidnGetDeviceError(device, &errorMessage);
-    if (error == OIDN_ERROR_NONE) {
-        oidnReadBuffer(outputBuffer, 0u, imageByteCount, output);
-        error = oidnGetDeviceError(device, &errorMessage);
-    }
-    if (error == OIDN_ERROR_NONE) {
-        return 1;
-    }
-
-    if (errorMessage && errorMessage[0]) {
-        (void)snprintf(oidnErrorStorage, sizeof(oidnErrorStorage), "%s", errorMessage);
-        setOIDNErrorMessage(outErrorMessage, oidnErrorStorage);
-    } else {
-        setOIDNErrorMessage(outErrorMessage, "OIDN filtering failed");
-    }
+static int reportOIDNError(const char** outErrorMessage, const char* message) {
+    (void)snprintf(oidnErrorStorage, sizeof(oidnErrorStorage), "%s", message);
+    if (outErrorMessage) *outErrorMessage = oidnErrorStorage;
     return 0;
 }
 
-static int runOIDNFilter(
+static int checkOIDNError(OIDNDevice device, const char** outErrorMessage) {
+    const char* message = NULL;
+    if (oidnGetDeviceError(device, &message) == OIDN_ERROR_NONE) return 1;
+    return reportOIDNError(outErrorMessage, message ? message : "OIDN operation failed");
+}
+
+static int findOIDNGPU(const uint8_t* deviceUUID) {
+    int fallback = -1;
+    int count = oidnGetNumPhysicalDevices();
+    for (int index = 0; index < count; index++) {
+        if (oidnGetPhysicalDeviceInt(index, "type") == OIDN_DEVICE_TYPE_CPU) continue;
+        if (fallback < 0) fallback = index;
+        if (deviceUUID && oidnGetPhysicalDeviceBool(index, "uuidSupported")) {
+            size_t size = 0u;
+            const void* uuid = oidnGetPhysicalDeviceData(index, "uuid", &size);
+            if (uuid && size == OIDN_UUID_SIZE && memcmp(uuid, deviceUUID, size) == 0) return index;
+        }
+    }
+    return fallback;
+}
+
+static void setOIDNImage(OIDNFilter filter, const char* name, OIDNBuffer buffer, const VKRT_OIDNFilterInput* input) {
+    const size_t pixelStride = sizeof(float) * 4u;
+    oidnSetFilterImage(
+        filter,
+        name,
+        buffer,
+        OIDN_FORMAT_FLOAT3,
+        input->width,
+        input->height,
+        0u,
+        pixelStride,
+        pixelStride * (size_t)input->width
+    );
+}
+
+static int executeOIDNFilter(OIDNDevice device, OIDNFilter filter, const char** outErrorMessage) {
+    oidnSetFilterInt(filter, "quality", OIDN_QUALITY_HIGH);
+    oidnCommitFilter(filter);
+    if (!checkOIDNError(device, outErrorMessage)) return 0;
+    oidnExecuteFilter(filter);
+    return checkOIDNError(device, outErrorMessage);
+}
+
+static int denoiseOnOIDNDevice(
     const VKRT_OIDNFilterInput* input,
-    const OIDNFilterConfig* config,
+    int physicalDevice,
+    size_t byteCount,
     float* output,
     const char** outErrorMessage
 ) {
-    if (!input || !config || !output || !input->color || input->width == 0u || input->height == 0u) {
-        setOIDNErrorMessage(outErrorMessage, "invalid OIDN input");
-        return 0;
+    OIDNDevice device = physicalDevice >= 0 ? oidnNewDeviceByID(physicalDevice) : oidnNewDevice(OIDN_DEVICE_TYPE_CPU);
+    if (!device) {
+        if (!checkOIDNError(NULL, outErrorMessage)) return 0;
+        return reportOIDNError(outErrorMessage, "Failed to create OIDN device");
     }
 
-    OIDNBufferSet buffers = {0};
-    OIDNFilter filter = NULL;
-    OIDNDevice device = NULL;
+    OIDNBuffer buffers[3] = {NULL, NULL, NULL};
+    OIDNFilter filters[3] = {NULL, NULL, NULL};
+    const char* names[3] = {"color", "albedo", "normal"};
+    const float* sources[3] = {input->color, input->albedo, input->normal};
     int succeeded = 0;
 
-    if (!createOIDNFilterContext(&device, &filter, outErrorMessage)) {
-        goto cleanup;
+    oidnCommitDevice(device);
+    if (!checkOIDNError(device, outErrorMessage)) goto cleanup;
+
+    for (size_t index = 0u; index < 3u; index++) {
+        buffers[index] = oidnNewBufferWithStorage(device, byteCount, OIDN_STORAGE_DEVICE);
+        if (!checkOIDNError(device, outErrorMessage)) goto cleanup;
+        if (!buffers[index]) {
+            reportOIDNError(outErrorMessage, "Failed to allocate OIDN buffer");
+            goto cleanup;
+        }
+        oidnWriteBuffer(buffers[index], 0u, byteCount, sources[index]);
+        if (!checkOIDNError(device, outErrorMessage)) goto cleanup;
+        filters[index] = oidnNewFilter(device, "RT");
+        if (!checkOIDNError(device, outErrorMessage)) goto cleanup;
+        if (!filters[index]) {
+            reportOIDNError(outErrorMessage, "Failed to create OIDN filter");
+            goto cleanup;
+        }
+        setOIDNImage(filters[index], names[index], buffers[index], input);
+        setOIDNImage(filters[index], "output", buffers[index], input);
     }
 
-    const size_t imageByteCount = (sizeof(float) * 4u * (size_t)input->width) * (size_t)input->height;
-    if (!createOIDNInputBuffers(device, input, imageByteCount, &buffers, input->color, outErrorMessage)) {
-        goto cleanup;
+    for (size_t index = 1u; index < 3u; index++) {
+        if (!executeOIDNFilter(device, filters[index], outErrorMessage)) goto cleanup;
     }
 
-    configureOIDNFilterImages(filter, config, input, buffers.color, buffers.albedo, buffers.normal, buffers.output);
-    if (!executeOIDNFilter(device, filter, buffers.output, imageByteCount, output, outErrorMessage)) {
-        goto cleanup;
-    }
+    setOIDNImage(filters[0], "albedo", buffers[1], input);
+    setOIDNImage(filters[0], "normal", buffers[2], input);
+    oidnSetFilterBool(filters[0], "hdr", true);
+    oidnSetFilterBool(filters[0], "srgb", false);
+    oidnSetFilterBool(filters[0], "cleanAux", true);
+    if (!executeOIDNFilter(device, filters[0], outErrorMessage)) goto cleanup;
+    oidnReadBuffer(buffers[0], 0u, byteCount, output);
+    if (!checkOIDNError(device, outErrorMessage)) goto cleanup;
 
+    LOG_INFO(
+        "OIDN high-quality denoise completed on %s: %s",
+        physicalDevice >= 0 ? "GPU" : "CPU",
+        physicalDevice >= 0 ? oidnGetPhysicalDeviceString(physicalDevice, "name") : "CPU fallback"
+    );
     succeeded = 1;
 
 cleanup:
-    releaseOIDNResources(&device, &filter, &buffers.color, &buffers.albedo, &buffers.normal, &buffers.output);
+    for (size_t index = 0u; index < 3u; index++) {
+        if (filters[index]) oidnReleaseFilter(filters[index]);
+        if (buffers[index]) oidnReleaseBuffer(buffers[index]);
+    }
+    oidnReleaseDevice(device);
     return succeeded;
 }
 
 int vkrtOIDNDenoise(const VKRT_OIDNFilterInput* input, float* output, const char** outErrorMessage) {
-    setOIDNErrorMessage(outErrorMessage, NULL);
-    if (!input || !output || !input->color || input->width == 0u || input->height == 0u) {
-        setOIDNErrorMessage(outErrorMessage, "invalid OIDN input");
-        return 0;
+    if (outErrorMessage) *outErrorMessage = NULL;
+    if (!input || !output || !input->color || !input->albedo || !input->normal || input->width == 0u ||
+        input->height == 0u) {
+        return reportOIDNError(outErrorMessage, "OIDN requires color, albedo, and normal images");
+    }
+    if ((size_t)input->width > SIZE_MAX / (4u * sizeof(float)) / (size_t)input->height) {
+        return reportOIDNError(outErrorMessage, "OIDN image size overflow");
     }
 
-    const OIDNFilterConfig config = {
-        .mainImageName = "color",
-        .hdr = 1u,
-        .srgb = 0u,
-        .cleanAux = input->cleanAux,
-    };
-    return runOIDNFilter(input, &config, output, outErrorMessage);
-}
-
-int vkrtOIDNPrefilterAux(
-    VKRT_OIDNAuxImage auxImage,
-    const float* input,
-    uint32_t width,
-    uint32_t height,
-    float* output,
-    const char** outErrorMessage
-) {
-    setOIDNErrorMessage(outErrorMessage, NULL);
-    if (!input || !output || width == 0u || height == 0u) {
-        setOIDNErrorMessage(outErrorMessage, "invalid OIDN auxiliary input");
-        return 0;
+    const size_t byteCount = (size_t)input->width * (size_t)input->height * 4u * sizeof(float);
+    int physicalDevice = findOIDNGPU(input->deviceUUID);
+    if (!checkOIDNError(NULL, outErrorMessage)) {
+        LOG_ERROR("OIDN GPU discovery failed: %s; using CPU", oidnErrorStorage);
+        physicalDevice = -1;
     }
-
-    const char* mainImageName = NULL;
-    switch (auxImage) {
-        case VKRT_OIDN_AUX_IMAGE_ALBEDO:
-            mainImageName = "albedo";
-            break;
-        case VKRT_OIDN_AUX_IMAGE_NORMAL:
-            mainImageName = "normal";
-            break;
-        default:
-            setOIDNErrorMessage(outErrorMessage, "invalid OIDN auxiliary image kind");
-            return 0;
+    if (physicalDevice >= 0) {
+        if (denoiseOnOIDNDevice(input, physicalDevice, byteCount, output, outErrorMessage)) return 1;
+        LOG_ERROR("OIDN GPU denoise failed: %s; retrying on CPU", oidnErrorStorage);
     }
-
-    const VKRT_OIDNFilterInput filterInput = {
-        .color = input,
-        .albedo = NULL,
-        .normal = NULL,
-        .width = width,
-        .height = height,
-        .cleanAux = 0u,
-    };
-    const OIDNFilterConfig config = {
-        .mainImageName = mainImageName,
-        .hdr = 0u,
-        .srgb = 0u,
-        .cleanAux = 0u,
-    };
-    return runOIDNFilter(&filterInput, &config, output, outErrorMessage);
+    if (outErrorMessage) *outErrorMessage = NULL;
+    return denoiseOnOIDNDevice(input, -1, byteCount, output, outErrorMessage);
 }
