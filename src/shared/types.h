@@ -55,6 +55,8 @@ VKRT_SHARED_STRUCT(MeshInfo, {
     uint reserved0;
     uint reserved1;
     uint reserved2;
+    float4x4 objectToWorld;
+    float4x4 worldToObject;
 })
 
 VKRT_SHARED_STRUCT(Material, {

@@ -51,13 +51,22 @@ static int sceneObjectTransformMatrixValid(mat4 transform) {
         }
     }
 
+    for (int column = 0; column < 3; column++) {
+        float scale = fmaxf(fabsf(linear[column][0]), fmaxf(fabsf(linear[column][1]), fabsf(linear[column][2])));
+        if (scale < 1e-6f) return 0;
+        glm_vec3_scale(linear[column], 1.0f / scale, linear[column]);
+    }
     float determinant = glm_mat3_det(linear);
     return isfinite(determinant) && fabsf(determinant) >= 1e-8f;
 }
 
 static int ensureArrayCapacity(
-    void** array, uint32_t currentCount, uint32_t* capacity,
-    uint32_t additional, size_t elemSize, uint32_t initCapacity
+    void** array,
+    uint32_t currentCount,
+    uint32_t* capacity,
+    uint32_t additional,
+    size_t elemSize,
+    uint32_t initCapacity
 ) {
     if (additional == 0u) return 1;
     if (currentCount > UINT32_MAX - additional) return 0;
@@ -66,7 +75,10 @@ static int ensureArrayCapacity(
 
     uint32_t next = *capacity > 0u ? *capacity : initCapacity;
     while (next < required) {
-        if (next > UINT32_MAX / 2u) { next = required; break; }
+        if (next > UINT32_MAX / 2u) {
+            next = required;
+            break;
+        }
         next *= 2u;
     }
 
@@ -80,29 +92,49 @@ static int ensureArrayCapacity(
 static int ensureSceneObjectCapacity(Session* session, uint32_t additional) {
     if (!session) return 0;
     return ensureArrayCapacity(
-        (void**)&session->editor.sceneObjects, session->editor.sceneObjectCount,
-        &session->editor.sceneObjectCapacity, additional, sizeof(SessionSceneObject), 16u);
+        (void**)&session->editor.sceneObjects,
+        session->editor.sceneObjectCount,
+        &session->editor.sceneObjectCapacity,
+        additional,
+        sizeof(SessionSceneObject),
+        16u
+    );
 }
 
 static int ensureMeshImportBatchCapacity(Session* session, uint32_t additional) {
     if (!session) return 0;
     return ensureArrayCapacity(
-        (void**)&session->editor.meshImportPaths, session->editor.meshImportBatchCount,
-        &session->editor.meshImportBatchCapacity, additional, sizeof(char*), 8u);
+        (void**)&session->editor.meshImportPaths,
+        session->editor.meshImportBatchCount,
+        &session->editor.meshImportBatchCapacity,
+        additional,
+        sizeof(char*),
+        8u
+    );
 }
 
 static int ensureMeshRecordCapacity(Session* session, uint32_t additional) {
     if (!session) return 0;
     return ensureArrayCapacity(
-        (void**)&session->editor.meshRecords, session->editor.meshRecordCount,
-        &session->editor.meshRecordCapacity, additional, sizeof(SessionMeshRecord), 16u);
+        (void**)&session->editor.meshRecords,
+        session->editor.meshRecordCount,
+        &session->editor.meshRecordCapacity,
+        additional,
+        sizeof(SessionMeshRecord),
+        16u
+    );
 }
 
 static int ensureTextureRecordCapacity(Session* session, uint32_t additional) {
     if (!session) return 0;
     return ensureArrayCapacity(
-        (void**)&session->editor.textureRecords, session->editor.textureRecordCount,
-        &session->editor.textureRecordCapacity, additional, sizeof(SessionTextureRecord), 8u);
+        (void**)&session->editor.textureRecords,
+        session->editor.textureRecordCount,
+        &session->editor.textureRecordCapacity,
+        additional,
+        sizeof(SessionTextureRecord),
+        8u
+    );
 }
 
 static void clearSceneAssetState(Session* session) {
@@ -680,7 +712,12 @@ int sessionAddSceneObject(Session* session, const SessionSceneObjectCreateInfo* 
         memcpy(object->localRotation, *createInfo->localRotation, sizeof(object->localRotation));
     }
     if (createInfo->localScale) memcpy(object->localScale, *createInfo->localScale, sizeof(object->localScale));
-    VKRT_buildMeshTransformMatrix(object->localPosition, object->localRotation, object->localScale, object->localTransform);
+    VKRT_buildMeshTransformMatrix(
+        object->localPosition,
+        object->localRotation,
+        object->localScale,
+        object->localTransform
+    );
     (void)snprintf(
         object->name,
         sizeof(object->name),
@@ -738,7 +775,12 @@ int sessionSetSceneObjectLocalTransform(
     glm_vec3_copy(position, object->localPosition);
     glm_vec3_copy(rotation, object->localRotation);
     glm_vec3_copy(scale, object->localScale);
-    VKRT_buildMeshTransformMatrix(object->localPosition, object->localRotation, object->localScale, object->localTransform);
+    VKRT_buildMeshTransformMatrix(
+        object->localPosition,
+        object->localRotation,
+        object->localScale,
+        object->localTransform
+    );
     return 1;
 }
 

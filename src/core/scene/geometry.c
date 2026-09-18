@@ -67,6 +67,8 @@ VKRT_Result vkrtSceneBuildMeshInfoBuffer(VKRT* vkrt, Buffer* outBuffer) {
 
     for (uint32_t i = 0; i < instanceCount; i++) {
         meshInfos[i] = vkrt->core.meshes[i].info;
+        glm_mat4_copy(vkrt->core.meshes[i].worldTransform, meshInfos[i].objectToWorld);
+        glm_mat4_inv(vkrt->core.meshes[i].worldTransform, meshInfos[i].worldToObject);
     }
 
     VKRT_Result result = createDeviceBufferFromData(

@@ -249,6 +249,11 @@ static int meshTransformMatrixValid(mat4 transform) {
 
     mat3 linear = GLM_MAT3_IDENTITY_INIT;
     glm_mat4_pick3(transform, linear);
+    for (int column = 0; column < 3; column++) {
+        float scale = fmaxf(fabsf(linear[column][0]), fmaxf(fabsf(linear[column][1]), fabsf(linear[column][2])));
+        if (scale < 1e-6f) return 0;
+        glm_vec3_scale(linear[column], 1.0f / scale, linear[column]);
+    }
     float determinant = glm_mat3_det(linear);
     return isfinite(determinant) && fabsf(determinant) >= 1e-8f;
 }
