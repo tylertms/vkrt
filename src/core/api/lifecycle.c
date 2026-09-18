@@ -282,7 +282,7 @@ void VKRT_defaultCreateInfo(VKRT_CreateInfo* createInfo) {
     *createInfo = (VKRT_CreateInfo){
         .width = 0,
         .height = 0,
-        .title = "VKRT",
+        .title = "vkrt",
         .startMaximized = 1,
         .startFullscreen = 0,
         .headless = 0,
@@ -548,7 +548,7 @@ static void runInitializationSteps(VKRT* vkrt, const VKRT_CreateInfo* createInfo
     if (!vkrt || !createInfo) return;
 
     uint64_t stepStartTime = initStartTime;
-    const char* title = createInfo->title ? createInfo->title : "VKRT";
+    const char* title = createInfo->title ? createInfo->title : "vkrt";
     uint32_t width = 0u;
     uint32_t height = 0u;
 

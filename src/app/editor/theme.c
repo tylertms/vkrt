@@ -62,6 +62,7 @@ static void applyThemeColors(ImGuiStyle* style) {
     colors[ImGuiCol_ScrollbarGrabHovered] = base4;
     colors[ImGuiCol_ScrollbarGrabActive] = accentSoft;
     colors[ImGuiCol_CheckMark] = accent;
+    colors[ImGuiCol_CheckboxSelectedBg] = colors[ImGuiCol_FrameBg];
     colors[ImGuiCol_SliderGrab] = accentSoft;
     colors[ImGuiCol_SliderGrabActive] = accent;
     colors[ImGuiCol_Button] = (ImVec4){0.14f, 0.16f, 0.20f, 1.00f};
