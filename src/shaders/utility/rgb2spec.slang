@@ -3,13 +3,7 @@
 
 #include "../../shared/types.h"
 
-// References:
-// Jakob, Hanika, 2019 - https://rgl.epfl.ch/publications/Jakob2019Spectral
-// Supplemental runtime implementation: https://github.com/mitsuba-renderer/rgb2spec/blob/master/rgb2spec.c
-// Supplemental API definition: https://github.com/mitsuba-renderer/rgb2spec/blob/master/rgb2spec.h
-
 static const uint VKRT_RGB2SPEC_N_COEFFS = 3u;
-static const float VKRT_RGB2SPEC_EPSILON = 1e-8;
 
 uint rgb2specFindInterval(RGB2SpecTableInfo info, StructuredBuffer<float> table, float x) {
     int left = 0;
@@ -31,9 +25,14 @@ uint rgb2specFindInterval(RGB2SpecTableInfo info, StructuredBuffer<float> table,
 }
 
 float3 rgb2specFetch(RGB2SpecTableInfo info, StructuredBuffer<float> table, float3 rgb) {
+    rgb = saturate(rgb);
     float z = max(rgb.x, max(rgb.y, rgb.z));
-    if (z <= VKRT_RGB2SPEC_EPSILON) {
-        return float3(0.0);
+    if (z <= 0.0) {
+        return float3(0.0, 0.0, -8192.0);
+    }
+    if (all(rgb == rgb.xxx)) {
+        float coefficient = z >= 1.0 ? 8192.0 : (z - 0.5) / sqrt(z * (1.0 - z));
+        return float3(0.0, 0.0, coefficient);
     }
 
     uint dominantChannel = 0u;
@@ -63,7 +62,7 @@ float3 rgb2specFetch(RGB2SpecTableInfo info, StructuredBuffer<float> table, floa
 
     float scale0 = table[info.scaleOffset + zi];
     float scale1 = table[info.scaleOffset + zi + 1u];
-    float z1 = (z - scale0) / max(scale1 - scale0, VKRT_RGB2SPEC_EPSILON);
+    float z1 = (z - scale0) / (scale1 - scale0);
     float z0 = 1.0 - z1;
 
     float3 coeff = float3(0.0);

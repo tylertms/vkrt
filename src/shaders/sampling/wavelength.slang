@@ -3,10 +3,6 @@
 
 #include "./random.slang"
 
-// References:
-// Hero wavelengths: Wilkie et al., 2014 - https://cgg.mff.cuni.cz/publications/hero-wavelength-spectral-sampling/
-// Fixed-size sampled wavelengths: Pharr, Jakob, Humphreys, 2023 - https://www.pbr-book.org/4ed/Radiometry%2C_Spectra%2C_and_Color/Representing_Spectral_Distributions
-
 static const float VKRT_WAVELENGTH_MIN_NM = 360.0;
 static const float VKRT_WAVELENGTH_MAX_NM = 830.0;
 static const float VKRT_WAVELENGTH_RANGE_NM = VKRT_WAVELENGTH_MAX_NM - VKRT_WAVELENGTH_MIN_NM;

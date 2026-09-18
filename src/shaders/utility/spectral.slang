@@ -5,12 +5,6 @@
 #include "../scene/resources.slang"
 #include "./rgb2spec.slang"
 
-// References:
-// CIE XYZ fits: Wyman, Sloan, Shirley, 2013 - https://jcgt.org/published/0002/02/01/
-// Hero wavelengths: Wilkie et al., 2014 - https://cgg.mff.cuni.cz/publications/hero-wavelength-spectral-sampling/
-// Fixed-size sampled wavelengths: Pharr, Jakob, Humphreys, 2023 - https://www.pbr-book.org/4ed/Radiometry%2C_Spectra%2C_and_Color/Representing_Spectral_Distributions
-// Fraunhofer line wavelengths / Abbe number relation: https://en.wikipedia.org/wiki/Abbe_number
-
 static const float3x3 VKRT_XYZ_TO_LINEAR_SRGB =
     float3x3(3.2404542, -1.5371385, -0.4985314, -0.9692660, 1.8760108, 0.0415560, 0.0556434, -0.2040259, 1.0572252);
 static const float3x3 VKRT_BRADFORD =
@@ -34,17 +28,19 @@ bool heroWavelengthSamplingEnabled() {
                VKRT_SPECTRAL_SAMPLING_MODE_HERO;
 }
 
+float spectralReconstructionScale(float maxValue) {
+    return maxValue / clamp(maxValue, 0.01, 1.0);
+}
+
 float spectralScalarFromLinearSrgb(float3 rgb, float lambdaNm) {
     float maxValue = max(rgb.x, max(rgb.y, rgb.z));
     if (maxValue <= 0.0) {
         return 0.0;
     }
+    if (all(rgb == rgb.xxx)) return maxValue;
 
-    if (maxValue <= 1.0) {
-        return rgb2specEval(scene.rgb2specSRGB, rgb2specSRGBTable, rgb, lambdaNm);
-    }
-
-    return maxValue * rgb2specEval(scene.rgb2specSRGB, rgb2specSRGBTable, rgb / maxValue, lambdaNm);
+    float scale = spectralReconstructionScale(maxValue);
+    return scale * rgb2specEval(scene.rgb2specSRGB, rgb2specSRGBTable, rgb / scale, lambdaNm);
 }
 
 float4 spectralScalarFromLinearSrgb4(float3 rgb, float4 lambdaNm) {
@@ -52,8 +48,9 @@ float4 spectralScalarFromLinearSrgb4(float3 rgb, float4 lambdaNm) {
     if (maxValue <= 0.0) {
         return float4(0.0);
     }
+    if (all(rgb == rgb.xxx)) return maxValue.xxxx;
 
-    float scale = maxValue <= 1.0 ? 1.0 : maxValue;
+    float scale = spectralReconstructionScale(maxValue);
     float3 coeff = rgb2specFetch(scene.rgb2specSRGB, rgb2specSRGBTable, rgb / scale);
     return scale * float4(
                        rgb2specEvalCoeffs(coeff, lambdaNm.x),
@@ -113,8 +110,18 @@ float3 spectralSample4ToXYZ(float4 scalarValue, float4 lambdaNm, float4 invPdf) 
 }
 
 float heroWavelengthBalanceWeight(float4 techniquePathPdf) {
+    techniquePathPdf = normalizeTechniqueWeights(techniquePathPdf);
     float combinedPdf = dot(techniquePathPdf, float4(1.0));
     return combinedPdf > 0.0 ? techniquePathPdf.x / combinedPdf : 0.0;
+}
+
+float4 normalizeTechniqueWeights(float4 weights) {
+    float scale = maxComponent4(weights);
+    return scale > 0.0 ? weights / scale : float4(0.0);
+}
+
+float4 updateTechniqueWeights(float4 weights, float4 localPdf) {
+    return normalizeTechniqueWeights(normalizeTechniqueWeights(weights) * normalizeTechniqueWeights(localPdf));
 }
 
 float maxComponent4(float4 value) {
@@ -122,7 +129,7 @@ float maxComponent4(float4 value) {
 }
 
 float dispersiveIor(float ior, float abbeNumber, float lambdaNm) {
-    if (ior <= 1.0 + 1e-4 || abbeNumber <= 0.0) {
+    if (ior <= 1.0 || abbeNumber <= 0.0) {
         return max(ior, 1.0);
     }
 
