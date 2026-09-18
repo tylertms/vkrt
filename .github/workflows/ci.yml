@@ -26,14 +26,10 @@ jobs:
             platform: windows
             sdk: '1.4.357.0'
             sdk_hash: 81f474711e9042f4cd22b31b2f7a8870db2e428b21586fb43dd80150be97310d
-            sdk_bin: Bin
-            meson_args: -Db_vscrt=static_from_buildtype
           - os: ubuntu-24.04
             platform: linux
             sdk: '1.4.357.1'
             sdk_hash: 4b41e3b30e8aedaa5dac7c136561ab463eb316a25a54e2c6245f2c299ea1fb85
-            sdk_bin: bin
-            meson_args: ''
     defaults:
       run:
         shell: bash
@@ -72,7 +68,7 @@ jobs:
         id: sdk
         with:
           path: .cache/vulkan-sdk
-          key: sdk-${{ runner.os }}-${{ runner.arch }}-${{ matrix.sdk_hash }}
+          key: sdk-${{ runner.os }}-${{ runner.arch }}-${{ matrix.sdk_hash }}-2
 
       - name: Install Windows Vulkan SDK
         if: runner.os == 'Windows' && steps.sdk.outputs.cache-hit != 'true'
@@ -90,19 +86,39 @@ jobs:
           curl --fail --location --retry 3 --connect-timeout 30 --max-time 900 --output vulkan-sdk.tar.xz "https://sdk.lunarg.com/sdk/download/$SDK_VERSION/linux/vulkan_sdk.tar.xz?Human=true"
           echo "$SDK_SHA256  vulkan-sdk.tar.xz" | sha256sum --check
           mkdir -p "$VULKAN_SDK"
-          tar -xJf vulkan-sdk.tar.xz -C "$VULKAN_SDK" --strip-components=2 "$SDK_VERSION/x86_64"
+          tar -xJf vulkan-sdk.tar.xz -C "$VULKAN_SDK" --strip-components=1 "$SDK_VERSION/x86_64" "$SDK_VERSION/setup-env.sh"
 
-      - name: Set SDK path
-        run: echo "$VULKAN_SDK/${{ matrix.sdk_bin }}" >> "$GITHUB_PATH"
+      - name: Set Windows SDK path
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: '"$env:VULKAN_SDK/Bin" >> $env:GITHUB_PATH'
+
+      - name: Set Linux SDK environment
+        if: runner.os == 'Linux'
+        run: |
+          source "$VULKAN_SDK/setup-env.sh"
+          echo "VULKAN_SDK=$VULKAN_SDK" >> "$GITHUB_ENV"
+          echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH" >> "$GITHUB_ENV"
+          echo "$VULKAN_SDK/bin" >> "$GITHUB_PATH"
 
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: subprojects/packagecache
           key: wraps-${{ runner.os }}-${{ hashFiles('subprojects/*.wrap') }}
 
-      - name: Build
+      - name: Build Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
         run: |
-          meson setup build --buildtype=release -Dfile_dialogs=enabled ${{ matrix.meson_args }} "-Dvkrt_version=$VKRT_VERSION"
+          meson setup build --buildtype=release -Dfile_dialogs=enabled -Db_vscrt=static_from_buildtype "-Dvkrt_version=$env:VKRT_VERSION"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          meson compile -C build
+
+      - name: Build Linux
+        if: runner.os == 'Linux'
+        run: |
+          meson setup build --buildtype=release -Dfile_dialogs=enabled "-Dvkrt_version=$VKRT_VERSION"
           meson compile -C build
 
       - name: Lint
@@ -111,10 +127,16 @@ jobs:
           ruff check scripts
           run-clang-tidy -p build "$PWD/src/"
 
-      - name: Package
+      - name: Package Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: python scripts/package.py
+
+      - name: Package Linux
+        if: runner.os == 'Linux'
         run: |
           args=()
-          if [[ "$RUNNER_OS" == Linux && "$GITHUB_REF" == refs/tags/v* ]]; then args+=(--appimage); fi
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then args+=(--appimage); fi
           python scripts/package.py "${args[@]}"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
