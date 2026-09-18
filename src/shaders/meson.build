@@ -19,7 +19,6 @@ main_rt_shader_programs = [
   ['shadowMiss',            'entry/shadow/miss.slang',                  'shadowMiss.spv',               'miss',          ['rt'],        'shaderShadowMiss',            [] ],
   ['rgenSer',               'entry/path/raygen_rgb.slang',              'rgenSer.spv',                  'raygeneration', ['rt', 'ser'], 'shaderRgenSer',               [] ],
   ['rgenSpectralSingleSer', 'entry/path/raygen_spectral_single.slang',  'rgenSpectralSingleSer.spv',    'raygeneration', ['rt', 'ser'], 'shaderRgenSpectralSingleSer', [] ],
-  ['rgenSpectralHeroSer',   'entry/path/raygen_spectral_hero.slang',    'rgenSpectralHeroSer.spv',      'raygeneration', ['rt', 'ser'], 'shaderRgenSpectralHeroSer',   [] ],
   ['rchitSer',              'entry/path/closest_hit.slang',             'rchitSer.spv',                 'closesthit',    ['rt', 'ser'], 'shaderRchitSer',              [] ],
   ['rmissSer',              'entry/path/miss.slang',                    'rmissSer.spv',                 'miss',          ['rt', 'ser'], 'shaderRmissSer',              [] ],
   ['shadowRchitSer',        'entry/shadow/closest_hit.slang',           'shadowRchitSer.spv',           'closesthit',    ['rt', 'ser'], 'shaderShadowRchitSer',        [] ],

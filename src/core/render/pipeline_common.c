@@ -160,7 +160,7 @@ RayTracingShaderVariant selectRayTracingShaderVariant(VkBool32 useSerShaders) {
             {
                 useSerShaders ? shaderRgenSerData : shaderRgenData,
                 useSerShaders ? shaderRgenSpectralSingleSerData : shaderRgenSpectralSingleData,
-                useSerShaders ? shaderRgenSpectralHeroSerData : shaderRgenSpectralHeroData,
+                shaderRgenSpectralHeroData,
             },
         .closestHitData = useSerShaders ? shaderRchitSerData : shaderRchitData,
         .anyHitData = shaderRahitData,
@@ -172,7 +172,7 @@ RayTracingShaderVariant selectRayTracingShaderVariant(VkBool32 useSerShaders) {
             {
                 useSerShaders ? shaderRgenSerSize : shaderRgenSize,
                 useSerShaders ? shaderRgenSpectralSingleSerSize : shaderRgenSpectralSingleSize,
-                useSerShaders ? shaderRgenSpectralHeroSerSize : shaderRgenSpectralHeroSize,
+                shaderRgenSpectralHeroSize,
             },
         .closestHitSize = useSerShaders ? shaderRchitSerSize : shaderRchitSize,
         .anyHitSize = shaderRahitSize,
