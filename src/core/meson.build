@@ -55,7 +55,7 @@ vkrt_sources = files(
 rgb2spec_embedded_sources = [
   custom_target(
     'embed_rgb2spec_srgb_coeff',
-    input: files('../../external/rgb2spec/srgb.coeff'),
+    input: files('scene/srgb.coeff'),
     output: 'rgb2spec_srgb_coeff.c',
     command: [python, embed_data, '@INPUT@', '@OUTPUT@', 'rgb2specSrgbCoeff'],
   ),

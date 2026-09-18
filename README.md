@@ -54,7 +54,9 @@ meson compile -C build
 ./build/vkrt
 ```
 
-Meson downloads the external libraries. Bundled source is in `external/`.
+Meson downloads larger libraries through pinned wraps in `subprojects/`.
+Smaller libraries are checked in under `external/`; their source files match the pinned upstream versions.
+Project build rules live in `external/meson.build`, outside each vendor directory.
 
 ### Build options
 
@@ -157,7 +159,12 @@ Exact versions, download links, and checksums are in:
 - [AppImage tools](scripts/toolchain.json) for packaging tool versions and checksums.
 - [Build tools](scripts/requirements-build.txt) and [analysis tools](scripts/requirements-lint.txt) for Python packages.
 
+zlib and libjpeg-turbo use pinned WrapDB build files. OIDN uses a local wrapper for its upstream binaries.
+These add build integration without changing upstream source.
+The generated rgb2spec table is `src/core/scene/srgb.coeff`; its upstream license is in `external/rgb2spec/`.
+
 Update bundled source from the versions and URLs in the vendor manifest. Keep its version and checksum current.
+Keep vendor files unchanged. Set build options in the project build rules.
 Update ImGui and Dear Bindings together, with matching ImGui tags.
 
 Sample image from spectral mode:

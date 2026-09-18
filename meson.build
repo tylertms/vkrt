@@ -160,8 +160,6 @@ subdir('external')
 
 subdir('src')
 
-subdir('external/nfd')
-
 app_c_args = c_args + [
   c_define_prefix + 'VKRT_GLFW_X11=' + (glfw_build_x11 ? '1' : '0'),
   c_define_prefix + 'VKRT_GLFW_WAYLAND=' + (glfw_build_wayland ? '1' : '0'),
@@ -175,7 +173,7 @@ executable('vkrt',
   sources: [app_sources, app_dialog_source, embedded_shader_sources],
   dependencies: app_dependencies,
   include_directories: app_includes,
-  link_with: app_link_with,
+  link_with: [vkrt, dcimgui, cjson, nfd_libraries],
   install: true,
   install_dir: 'bin',
   build_rpath: runtime_origin,
