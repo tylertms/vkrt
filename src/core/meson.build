@@ -15,6 +15,7 @@ vkrt_sources = files(
   'scene/environment.c',
   'scene/exposure.c',
   'scene/geometry.c',
+  'scene/ggx_energy.c',
   'scene/lighting.c',
   'scene/rgb2spec.c',
   'scene/sheen.c',
@@ -53,7 +54,13 @@ vkrt_sources = files(
   'utility/platform.c',
 )
 
-rgb2spec_embedded_sources = [
+scene_embedded_sources = [
+  custom_target(
+    'embed_ggx_energy',
+    input: files('scene/ggx_energy.coeff'),
+    output: 'ggx_energy_data.c',
+    command: [python, embed_data, '@INPUT@', '@OUTPUT@', 'ggxEnergy'],
+  ),
   custom_target(
     'embed_rgb2spec_srgb_coeff',
     input: files('scene/srgb.coeff'),
@@ -65,7 +72,7 @@ rgb2spec_embedded_sources = [
 vkrt = static_library('vkrt_core',
   c_args: c_args,
   cpp_args: core_cpp_args,
-  sources: vkrt_sources + rgb2spec_embedded_sources,
+  sources: vkrt_sources + scene_embedded_sources,
   dependencies: core_dependencies,
   include_directories: [core_build_includes, core_internal_includes],
   link_with: [dcimgui],

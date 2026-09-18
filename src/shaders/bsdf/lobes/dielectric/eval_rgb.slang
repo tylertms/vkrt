@@ -31,8 +31,13 @@ BSDFEval evalDielectricReflection(
 
     float Dm = ggxDistribution(wm, params.alpha);
     float G = ggxMasking(wo, wi, params.alpha);
-    eval.value = dielectricReflectionColor(material, woDotWm, fresnel, lambdaNm, spectralMode) *
-                 (Dm * G / (4.0 * cosTheta(wo) * cosTheta(wi)));
+    float3 reflection = dielectricSchlickColor(material, woDotWm, lambdaNm, spectralMode) *
+                        dielectricReflectionEnergyScale(material, params, lambdaNm, spectralMode);
+    if (material.transmission > 0.0) {
+        float glassReflection = fresnel * params.glassEnergyScale.x;
+        reflection = lerp(reflection, glassReflection.xxx, material.transmission);
+    }
+    eval.value = reflection * (Dm * G / (4.0 * cosTheta(wo) * cosTheta(wi)));
     eval.pdf = reflectionProbability * ggxReflectionPdf(wo, wm, params);
     return eval;
 }
@@ -43,6 +48,7 @@ BSDFEval evalDielectricTransmissionInterface(
     float3 wi,
     uint frontFace,
     GGXParams params,
+    float glassEnergyScale,
     float lambdaNm,
     uint spectralMode
 ) {
@@ -74,7 +80,7 @@ BSDFEval evalDielectricTransmissionInterface(
     float dwmDwi = abs(wiDotWm) / denom2;
     float transmissionTerm = dwmDwi * woDotWm / (absCosTheta(wi) * cosTheta(wo));
 
-    eval.value = ((1.0 - fresnel) * Dm * G * transmissionTerm * transportScale).xxx;
+    eval.value = glassEnergyScale * ((1.0 - fresnel) * Dm * G * transmissionTerm * transportScale);
     eval.pdf = transmissionProbability * ggxVisibleNormalPdf(wo, wm, params) * dwmDwi;
     return eval;
 }
@@ -89,7 +95,16 @@ BSDFEval evalDielectricTransmission(
     float lambdaNm,
     uint spectralMode
 ) {
-    BSDFEval eval = evalDielectricTransmissionInterface(material, wo, wi, frontFace, params, lambdaNm, spectralMode);
+    BSDFEval eval = evalDielectricTransmissionInterface(
+        material,
+        wo,
+        wi,
+        frontFace,
+        params,
+        params.glassEnergyScale.x,
+        lambdaNm,
+        spectralMode
+    );
     float3 color = bsdfTransmissionColor(material);
     if (spectralMode != 0u) color = spectralScalarFromLinearSrgb(saturate(color), lambdaNm).xxx;
     eval.value *= color * ((1.0 - material.metallic) * material.transmission * coatAttenuation);

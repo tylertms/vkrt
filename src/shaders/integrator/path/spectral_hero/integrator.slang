@@ -58,9 +58,9 @@ void traceSpectralHeroPathSample(
         }
         resolveDenoiserFeatures(sampleState.features, bsdfMaterial, surfaceState, depth);
 
-        float stateWavelengthNm =
-            spectralHeroPathActive(pathState) ? pathState.wavelengthsNm.x : pathState.scalarWavelength.lambdaNm;
-        BSDFState state = makePathBSDFState(pathState.common, surfaceState, bsdfMaterial, stateWavelengthNm, 1u);
+        float4 stateWavelengthsNm =
+            spectralHeroPathActive(pathState) ? pathState.wavelengthsNm : pathState.scalarWavelength.lambdaNm.xxxx;
+        BSDFState state = makePathBSDFState(pathState.common, surfaceState, bsdfMaterial, stateWavelengthsNm, 1u);
         bool currentVertexNeeAllowed = !pathState.common.medium.refractiveActive();
         bool continuationAvailable = depth + 1u < scene.rrMaxDepth;
         bool bsdfContinuationAvailable =

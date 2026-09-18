@@ -7,6 +7,7 @@ void recordFrameTime(VKRT* vkrt, uint32_t frameIndex);
 VKRT_Result createSceneUniform(VKRT* vkrt);
 VKRT_Result createRGB2SpecResources(VKRT* vkrt);
 VKRT_Result createSheenResources(VKRT* vkrt);
+VKRT_Result createGGXEnergyResources(VKRT* vkrt);
 void markSelectionMaskDirty(VKRT* vkrt);
 void resetSceneData(VKRT* vkrt);
 void syncSceneStateData(VKRT* vkrt);

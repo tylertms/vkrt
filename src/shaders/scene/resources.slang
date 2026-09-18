@@ -59,5 +59,7 @@ Texture2D<float4> sceneTextures[VKRT_MAX_BINDLESS_TEXTURES];
 StructuredBuffer<float> rgb2specSRGBTable;
 [[vk::binding(25, 0)]]
 StructuredBuffer<float> sheenLtcTable;
+[[vk::binding(26, 0)]]
+StructuredBuffer<uint> ggxEnergyTable;
 
 #endif

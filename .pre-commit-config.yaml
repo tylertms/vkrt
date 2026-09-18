@@ -22,4 +22,4 @@ repos:
         entry: clang-format -i --assume-filename=source.cpp
         language: python
         additional_dependencies: [clang-format==22.1.8]
-        files: ^src/.*\.(c|h|cpp|hpp|slang)$
+        files: ^(src|scripts)/.*\.(c|h|cpp|hpp|slang)$

@@ -14,7 +14,7 @@ The renderer is available as the `vkrt_core` library with a [C API](src/core/api
 - Next-event estimation (NEE) and multiple importance sampling (MIS).
 - Emissive mesh lights and HDR environment lighting.
 - Layered BSDFs with diffuse, metal, dielectric, transmission, clearcoat, sheen, and subsurface approximation lobes.
-- Anisotropic GGX reflection and refraction with spherical-cap VNDF sampling.
+- Multiscatter anisotropic GGX reflection and refraction with spherical-cap VNDF sampling.
 - Complex-IOR conductor Fresnel and dielectric Fresnel.
 - Total internal reflection and Abbe-number spectral dispersion.
 - Beer-Lambert volume absorption.
@@ -38,9 +38,9 @@ The renderer is available as the `vkrt_core` library with a [C API](src/core/api
 | --- | --- | --- |
 | Lambertian diffuse | Ideal diffuse reflection. | [PBRT diffuse reflection][pbrt-diffuse] |
 | Oren-Nayar diffuse | Oren-Nayar rough diffuse reflection. | [Oren and Nayar 1994][oren-nayar], [PBRT implementation][pbrt-oren] |
-| Metal reflection | Anisotropic GGX, spherical-cap VNDF sampling, height-correlated Smith masking, and conductor (eta/k) or Schlick Fresnel. | [PBRT microfacets][pbrt-microfacet], [PBRT Fresnel][pbrt-fresnel], [Schlick 1994][schlick], [VNDF][ggx-heitz], [spherical caps][ggx-caps] |
-| Dielectric reflection | Anisotropic GGX, spherical-cap VNDF sampling, height-correlated Smith masking, and dielectric or tinted Schlick Fresnel. | [PBRT dielectric BSDF][pbrt-dielectric], [PBRT Fresnel][pbrt-fresnel], [Disney 2012][disney-2012], [VNDF][ggx-heitz], [spherical caps][ggx-caps] |
-| Dielectric transmission | Anisotropic GGX refraction, spherical-cap VNDF sampling, height-correlated Smith masking, total internal reflection, and wavelength-dependent IOR. | [Walter et al. 2007][walter], [PBRT dielectric BSDF][pbrt-dielectric], [Disney 2015][disney-2015], [VNDF][ggx-heitz], [spherical caps][ggx-caps] |
+| Metal reflection | Anisotropic GGX with multiscatter energy compensation, spherical-cap VNDF sampling, height-correlated Smith masking, and conductor (eta/k) or Schlick Fresnel. | [PBRT microfacets][pbrt-microfacet], [PBRT Fresnel][pbrt-fresnel], [Schlick 1994][schlick], [VNDF][ggx-heitz], [spherical caps][ggx-caps], [Turquin compensation][ggx-multiscatter], [Cycles implementation][cycles-ggx] |
+| Dielectric reflection | Anisotropic GGX with multiscatter energy compensation, spherical-cap VNDF sampling, height-correlated Smith masking, and dielectric or tinted Schlick Fresnel. | [PBRT dielectric BSDF][pbrt-dielectric], [PBRT Fresnel][pbrt-fresnel], [Disney 2012][disney-2012], [VNDF][ggx-heitz], [spherical caps][ggx-caps], [Turquin compensation][ggx-multiscatter], [Cycles implementation][cycles-ggx] |
+| Dielectric transmission | Anisotropic GGX refraction with multiscatter energy compensation, spherical-cap VNDF sampling, height-correlated Smith masking, total internal reflection, and wavelength-dependent IOR. | [Walter et al. 2007][walter], [PBRT dielectric BSDF][pbrt-dielectric], [Disney 2015][disney-2015], [VNDF][ggx-heitz], [spherical caps][ggx-caps], [Turquin compensation][ggx-multiscatter], [Cycles implementation][cycles-ggx] |
 | Clearcoat | Disney GTR1 with Schlick Fresnel and fixed-roughness Smith masking. | [Disney 2012][disney-2012], [reference implementation][disney-code], [PBRT microfacets][pbrt-microfacet] |
 | Sheen | LTC fiber sheen. | [Zeltner, Burley, and Chiang 2022][sheen-paper], [Cycles implementation][cycles-sheen], [lookup tables][cycles-tables] |
 | Subsurface approximation | Disney local diffuse approximation. | [Disney 2012][disney-2012], [reference implementation][disney-code], [Disney 2015][disney-2015] |
@@ -48,7 +48,7 @@ The renderer is available as the `vkrt_core` library with a [C API](src/core/api
 <details>
 <summary>Implementation references</summary>
 
-- Material layering: [Disney anisotropy][disney-2012], [Principled BSDF][principled-node], [Cycles closures][cycles-closure], and [Karis directional albedo][karis].
+- Material layering: [Disney anisotropy][disney-2012], [Principled BSDF][principled-node], and [Cycles closures][cycles-closure].
 - Spectral rendering: [hero wavelengths][hero], [PBRT sampled spectra][pbrt-spectra], [RGB2Spec][rgb2spec] ([implementation][rgb2spec-code], [API][rgb2spec-api]), and [Abbe dispersion][abbe].
 - Color: [CIE XYZ fits][cie] and [BT.709][bt709].
 - Sampling: [MIS][mis], [alias tables][alias], and [integer hashing][hash].
@@ -153,7 +153,6 @@ pre-commit run --all-files
 [ggx-heitz]: https://jcgt.org/published/0007/04/01/paper.pdf
 [principled-node]: https://github.com/blender/blender/blob/main/source/blender/nodes/shader/nodes/node_shader_bsdf_principled.cc
 [cycles-closure]: https://github.com/blender/blender/blob/main/intern/cycles/kernel/svm/closure.h
-[karis]: https://www.unrealengine.com/blog/physically-based-shading-on-mobile
 [hero]: https://cgg.mff.cuni.cz/publications/hero-wavelength-spectral-sampling/
 [pbrt-spectra]: https://www.pbr-book.org/4ed/Radiometry%2C_Spectra%2C_and_Color/Representing_Spectral_Distributions
 [rgb2spec]: https://rgl.epfl.ch/publications/Jakob2019Spectral
@@ -169,3 +168,5 @@ pre-commit run --all-files
 [cycles-normal]: https://github.com/blender/blender/blob/v4.3.0/intern/cycles/kernel/closure/bsdf_util.h#L129-L213
 [ray-origin]: https://developer.nvidia.com/blog/solving-self-intersection-artifacts-in-directx-raytracing/
 [gltf]: https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html
+[ggx-multiscatter]: https://blog.selfshadow.com/publications/turquin/ms_comp_final.pdf
+[cycles-ggx]: https://github.com/blender/blender/blob/main/intern/cycles/kernel/closure/bsdf_microfacet.h

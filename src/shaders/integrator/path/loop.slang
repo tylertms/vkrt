@@ -52,12 +52,12 @@ BSDFState makePathBSDFState(
     PathCommonState common,
     PathSurfaceState surfaceState,
     BSDFMaterial material,
-    float wavelengthNm,
+    float4 wavelengthsNm,
     uint wavelengthMode
 ) {
     float3 wo = worldToLocal(-common.ray.Direction, surfaceState.basis);
     float3 geometricNormal = worldToLocal(surfaceState.surface.geometricNormal, surfaceState.basis);
-    return BSDFState(material, wo, geometricNormal, surfaceState.surface.frontFace, wavelengthNm, wavelengthMode);
+    return BSDFState(material, wo, geometricNormal, surfaceState.surface.frontFace, wavelengthsNm, wavelengthMode);
 }
 
 float bsdfEmitterMisWeight(

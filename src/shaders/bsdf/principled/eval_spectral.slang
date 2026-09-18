@@ -81,7 +81,7 @@ float4 evalSpectralReflectionStack(BSDFState state, float3 wi, float4 wavelength
     float viewSheenAttenuation =
         sheenDirectionalAttenuation(bsdfSheenColor(state.material), state.wo, state.material.sheenRoughness);
     float4 viewDielectricAttenuation = spectralScalarFromLinearSrgb4(
-        saturate(dielectricDirectionalAttenuation(state.material, state.wo)),
+        saturate(dielectricDirectionalAttenuation(state.material, state.wo, state.ggx)),
         wavelengthsNm
     );
     float nonMetal = 1.0 - state.material.metallic;
@@ -119,6 +119,7 @@ float4 evalSpectralBSDF(BSDFState state, float3 wi, float4 wavelengthsNm, out fl
 BSDFEval evalSingleWavelengthBSDF(BSDFState state, float3 wi) {
     BSDFEval eval;
     float4 techniquePdf;
+    state.ggx.glassEnergyScale = state.ggx.glassEnergyScale.xxxx;
     eval.value = evalSpectralBSDF(state, wi, state.wavelengthNm.xxxx, techniquePdf).xxx;
     eval.pdf = techniquePdf.x;
     return eval;

@@ -31,18 +31,19 @@ struct BSDFState {
         float3 wo,
         float3 geometricNormal,
         uint frontFace,
-        float wavelengthNm,
+        float4 wavelengthsNm,
         uint spectralMode
     ) {
         this.material = material;
         this.wo = wo;
         this.geometricNormal = geometricNormal;
         this.frontFace = frontFace;
-        this.wavelengthNm = wavelengthNm;
+        this.wavelengthNm = wavelengthsNm.x;
         this.spectralMode = spectralMode;
         ggx = makeGGXParams(material, wo);
+        cacheDielectricGGXEnergy(ggx, material, wo, frontFace, wavelengthsNm, spectralMode);
         clearcoat = makeClearcoatParams(material);
-        sampleWeights = makeBSDFBranchWeights(material, wo, frontFace);
+        sampleWeights = makeBSDFBranchWeights(material, wo, frontFace, ggx);
     }
 };
 

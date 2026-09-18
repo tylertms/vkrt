@@ -27,28 +27,20 @@ float sheenDirectionalAttenuation(float3 sheenColor, float3 w, float sheenRoughn
     return sheenLayerAttenuation(sheenWeight, cosTheta(w), sheenRoughness);
 }
 
-float2 dielectricDirectionalAlbedoAB(float roughness, float cosThetaValue) {
-    float clampedRoughness = saturate(roughness);
-    float clampedCosTheta = saturate(cosThetaValue);
-    float4 c0 = float4(-1.0, -0.0275, -0.572, 0.022);
-    float4 c1 = float4(1.0, 0.0425, 1.04, -0.04);
-    float4 r = clampedRoughness * c0 + c1;
-    float a004 = min(r.x * r.x, exp2(-9.28 * clampedCosTheta)) * r.x + r.y;
-    return saturate(float2(-1.04, 1.04) * a004 + r.zw);
-}
-
-float3 dielectricDirectionalAlbedo(BSDFMaterial material, float3 w) {
+float3 dielectricDirectionalAlbedo(BSDFMaterial material, float3 w, GGXParams params) {
     if (dielectricIsIdentity(material)) return float3(0.0);
     if (absCosTheta(w) <= 0.0) {
         return float3(1.0);
     }
 
-    float2 ab = dielectricDirectionalAlbedoAB(material.roughness, absCosTheta(w));
-    return saturate(bsdfDielectricSpecularF0(material) * ab.x + ab.y);
+    float2 energy = float2(params.energy, params.schlickEnergy);
+    float3 f0 = bsdfDielectricSpecularF0(material);
+    float3 scale = ggxEnergyScale(energy.x, params.averageEnergy, lerp(f0, float3(1.0), 1.0 / 21.0));
+    return saturate((f0 * (energy.x - energy.y) + energy.y) * scale);
 }
 
-float3 dielectricDirectionalAttenuation(BSDFMaterial material, float3 w) {
-    return saturate(1.0 - dielectricDirectionalAlbedo(material, w));
+float3 dielectricDirectionalAttenuation(BSDFMaterial material, float3 w, GGXParams params) {
+    return saturate(1.0 - dielectricDirectionalAlbedo(material, w, params));
 }
 
 float reflectionStackAttenuation(BSDFMaterial material, float viewCoatAttenuation, float3 wi) {

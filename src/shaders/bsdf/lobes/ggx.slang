@@ -2,6 +2,7 @@
 #define VKRT_BSDF_GGX_SLANG
 
 #include "../base.slang"
+#include "./ggx_energy.slang"
 
 static const float GGX_MIN_ALPHA = 1e-3;
 static const float GGX_EPSILON = 1e-6;
@@ -9,6 +10,10 @@ static const float GGX_EPSILON = 1e-6;
 struct GGXParams {
     float2 alpha;
     float projectedWoLength;
+    float energy;
+    float averageEnergy;
+    float schlickEnergy;
+    float4 glassEnergyScale;
 };
 
 float2 ggxAlpha(BSDFMaterial material) {
@@ -40,6 +45,16 @@ GGXParams makeGGXParams(BSDFMaterial material, float3 wo) {
     GGXParams params;
     params.alpha = ggxAlpha(material);
     params.projectedWoLength = ggxProjectedLength(wo, params.alpha);
+    params.glassEnergyScale = float4(1.0);
+    params.energy = 1.0;
+    params.schlickEnergy = 0.0;
+    params.averageEnergy = 1.0;
+    if (material.metallic > 0.0 || (material.transmission < 1.0 && interfaceIor(material) > 1.0)) {
+        float2 energy = ggxReflectionEnergy(params.alpha, wo);
+        params.energy = energy.x;
+        params.schlickEnergy = energy.y;
+        params.averageEnergy = ggxAverageEnergy(params.alpha);
+    }
     return params;
 }
 
@@ -86,6 +101,17 @@ float4 ggxConductorFresnel4(BSDFMaterial material, float cosTheta, float4 wavele
     return spectralScalarFromLinearSrgb4(saturate(fresnelColor), wavelengthsNm);
 }
 
+float3 ggxConductorAverageFresnel(BSDFMaterial material) {
+    if (!materialHasConductor(material)) return lerp(material.baseColor, float3(1.0), 1.0 / 21.0);
+    float3 eta = max(material.eta, float3(1e-3));
+    float3 k = max(material.k, float3(0.0));
+    float3 f0 = fresnelConductor(1.0, eta, k);
+    float3 f82 = fresnelConductor(1.0 / 7.0, eta, k);
+    float edgeWeight = pow(6.0 / 7.0, 5.0);
+    float3 correction = (lerp(f0, float3(1.0), edgeWeight) - f82) * (7.0 / ((6.0 / 7.0) * edgeWeight));
+    return saturate(lerp(f0, float3(1.0), 1.0 / 21.0) - correction / 126.0);
+}
+
 BSDFEval evalGGXFromHalfVector(
     BSDFMaterial material,
     float3 wo,
@@ -99,8 +125,11 @@ BSDFEval evalGGXFromHalfVector(
     float Dm = ggxDistribution(m, params.alpha);
     float G = ggxMasking(wo, wi, params.alpha);
     float3 F = ggxConductorFresnel(material, woDotM, lambdaNm, spectralMode);
+    float3 averageFresnel = ggxConductorAverageFresnel(material);
+    if (spectralMode != 0u) averageFresnel = spectralScalarFromLinearSrgb(averageFresnel, lambdaNm).xxx;
     BSDFEval eval;
-    eval.value = F * (Dm * G / (4.0 * cosTheta(wo) * cosTheta(wi)));
+    eval.value = F * ggxEnergyScale(params.energy, params.averageEnergy, averageFresnel) *
+                 (Dm * G / (4.0 * cosTheta(wo) * cosTheta(wi)));
     eval.pdf = ggxReflectionPdf(wo, m, params);
     return eval;
 }
@@ -144,7 +173,10 @@ float4 evalSpectralGGX(
     float Dm = ggxDistribution(m, params.alpha);
     float G = ggxMasking(wo, wi, params.alpha);
     pdf = ggxReflectionPdf(wo, m, params);
-    return ggxConductorFresnel4(material, woDotM, wavelengthsNm) * (Dm * G / (4.0 * cosTheta(wo) * cosTheta(wi)));
+    float4 averageFresnel = spectralScalarFromLinearSrgb4(ggxConductorAverageFresnel(material), wavelengthsNm);
+    return ggxConductorFresnel4(material, woDotM, wavelengthsNm) *
+           ggxEnergyScale4(params.energy, params.averageEnergy, averageFresnel) *
+           (Dm * G / (4.0 * cosTheta(wo) * cosTheta(wi)));
 }
 
 bool sampleGGXVNDF(float3 wo, GGXParams params, float2 u, out float3 m) {

@@ -36,8 +36,13 @@ float4 evalSpectralDielectricReflection(
         return float4(0.0);
     }
 
-    float4 value = dielectricReflectionColor4(material, woDotWm, fresnel, wavelengthsNm) *
-                   (Dm * G / (4.0 * cosTheta(wo) * cosTheta(wi)));
+    float4 reflection = dielectricSchlickColor4(material, woDotWm, wavelengthsNm) *
+                        dielectricReflectionEnergyScale4(material, params, wavelengthsNm);
+    if (material.transmission > 0.0) {
+        float4 glassReflection = fresnel * params.glassEnergyScale;
+        reflection = lerp(reflection, glassReflection, material.transmission);
+    }
+    float4 value = reflection * (Dm * G / (4.0 * cosTheta(wo) * cosTheta(wi)));
     [unroll] for (uint lane = 0u; lane < 4u; lane++) {
         if (techniquePdf[lane] <= 0.0) value[lane] = 0.0;
     }
@@ -53,9 +58,11 @@ float evalSpectralDielectricTransmissionLane(
     float coatAttenuation,
     float transmissionColor,
     float lambdaNm,
+    float glassEnergyScale,
     out float pdf
 ) {
-    BSDFEval eval = evalDielectricTransmissionInterface(material, wo, wi, frontFace, params, lambdaNm, 1u);
+    BSDFEval eval =
+        evalDielectricTransmissionInterface(material, wo, wi, frontFace, params, glassEnergyScale, lambdaNm, 1u);
     pdf = eval.pdf;
     return coatAttenuation * transmissionColor * eval.value.x;
 }
@@ -84,6 +91,7 @@ float4 evalSpectralDielectricTransmission(
         coatAttenuation,
         transmissionColor.x,
         wavelengthsNm.x,
+        params.glassEnergyScale.x,
         techniquePdf.x
     );
     value.y = evalSpectralDielectricTransmissionLane(
@@ -95,6 +103,7 @@ float4 evalSpectralDielectricTransmission(
         coatAttenuation,
         transmissionColor.y,
         wavelengthsNm.y,
+        params.glassEnergyScale.y,
         techniquePdf.y
     );
     value.z = evalSpectralDielectricTransmissionLane(
@@ -106,6 +115,7 @@ float4 evalSpectralDielectricTransmission(
         coatAttenuation,
         transmissionColor.z,
         wavelengthsNm.z,
+        params.glassEnergyScale.z,
         techniquePdf.z
     );
     value.w = evalSpectralDielectricTransmissionLane(
@@ -117,6 +127,7 @@ float4 evalSpectralDielectricTransmission(
         coatAttenuation,
         transmissionColor.w,
         wavelengthsNm.w,
+        params.glassEnergyScale.w,
         techniquePdf.w
     );
     return value;

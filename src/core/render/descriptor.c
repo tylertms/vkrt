@@ -53,7 +53,8 @@ static VkBool32 descriptorResourcesReadyForFrame(VKRT* vkrt, uint32_t frameIndex
            vkrt->core.sceneMeshAliasIdx.buffer != VK_NULL_HANDLE &&
            vkrt->core.sceneTriAliasQ.buffer != VK_NULL_HANDLE && vkrt->core.sceneTriAliasIdx.buffer != VK_NULL_HANDLE &&
            vkrt->core.sceneRGB2SpecSRGBData.buffer != VK_NULL_HANDLE &&
-           vkrt->core.sceneSheenLtcData.buffer != VK_NULL_HANDLE && textureDescriptorsReady(vkrt);
+           vkrt->core.sceneSheenLtcData.buffer != VK_NULL_HANDLE &&
+           vkrt->core.sceneGGXEnergyData.buffer != VK_NULL_HANDLE && textureDescriptorsReady(vkrt);
 }
 
 static VkWriteDescriptorSet makeDescriptorWrite(
@@ -128,8 +129,8 @@ typedef struct ImageDescriptorWriteState {
 } ImageDescriptorWriteState;
 
 typedef struct BufferDescriptorWriteState {
-    VkDescriptorBufferInfo infos[14];
-    VkWriteDescriptorSet writes[14];
+    VkDescriptorBufferInfo infos[15];
+    VkWriteDescriptorSet writes[15];
 } BufferDescriptorWriteState;
 
 typedef struct TextureDescriptorWriteState {
@@ -273,6 +274,7 @@ static VKRT_Result updateDescriptorSetForFrame(VKRT* vkrt, uint32_t frameIndex) 
         {21u, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, vkrt->core.sceneTriAliasIdx.buffer, VK_WHOLE_SIZE},
         {24u, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, vkrt->core.sceneRGB2SpecSRGBData.buffer, VK_WHOLE_SIZE},
         {25u, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, vkrt->core.sceneSheenLtcData.buffer, VK_WHOLE_SIZE},
+        {26u, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, vkrt->core.sceneGGXEnergyData.buffer, VK_WHOLE_SIZE},
     };
     BufferDescriptorWriteState bufferState = {0};
     appendBufferDescriptorWrites(
@@ -341,6 +343,7 @@ VKRT_Result createDescriptorSetLayout(VKRT* vkrt) {
         makeDescriptorSetLayoutBinding(23u, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, VKRT_MAX_BINDLESS_TEXTURES, rtAll),
         makeDescriptorSetLayoutBinding(24u, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1u, rtAll),
         makeDescriptorSetLayoutBinding(25u, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1u, rgen),
+        makeDescriptorSetLayoutBinding(26u, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1u, rgen),
     };
 
     VkDescriptorSetLayoutCreateInfo createInfo = {0};
@@ -362,7 +365,7 @@ VKRT_Result createDescriptorPool(VKRT* vkrt) {
     static const VkDescriptorPoolSize rendererPoolSizes[] = {
         {VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 2u * VKRT_MAX_FRAMES_IN_FLIGHT},
         {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 8u * VKRT_MAX_FRAMES_IN_FLIGHT},
-        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 14u * VKRT_MAX_FRAMES_IN_FLIGHT},
+        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 15u * VKRT_MAX_FRAMES_IN_FLIGHT},
         {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VKRT_MAX_FRAMES_IN_FLIGHT},
         {VK_DESCRIPTOR_TYPE_SAMPLER, VKRT_TEXTURE_SAMPLER_VARIANT_COUNT * VKRT_MAX_FRAMES_IN_FLIGHT},
         {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, VKRT_MAX_BINDLESS_TEXTURES * VKRT_MAX_FRAMES_IN_FLIGHT},

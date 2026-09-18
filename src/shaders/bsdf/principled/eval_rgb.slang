@@ -78,7 +78,7 @@ BSDFEval evalRgbReflectionStack(BSDFState state, float3 wi) {
 
     float viewSheenAttenuation = sheenDirectionalAttenuation(sheenColor, state.wo, state.material.sheenRoughness);
     float viewCoatAttenuation = coatDirectionalAttenuation(state.material, state.wo);
-    float3 viewDielectricAttenuation = dielectricDirectionalAttenuation(state.material, state.wo);
+    float3 viewDielectricAttenuation = dielectricDirectionalAttenuation(state.material, state.wo, state.ggx);
     float nonMetal = 1.0 - state.material.metallic;
     float3 baseValue = coatValue + reflectionStackAttenuation(state.material, viewCoatAttenuation, wi) *
                                        (state.material.metallic * metalValue +
