@@ -192,6 +192,9 @@ static int writePNGFile(const char* path, const uint16_t* rgba16, uint32_t width
 
     int error = spng_set_png_file(context, file);
     if (error == 0) {
+        error = spng_set_option(context, SPNG_IMG_COMPRESSION_LEVEL, 1);
+    }
+    if (error == 0) {
         struct spng_ihdr header = {
             .width = width,
             .height = height,
