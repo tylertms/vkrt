@@ -1,5 +1,0 @@
-{
-  "oidn_root": "@OIDN_ROOT@",
-  "platform": "@PLATFORM@",
-  "cpu": "@CPU@"
-}

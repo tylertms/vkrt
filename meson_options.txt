@@ -1,17 +1,17 @@
 option(
   'linux_window_backend',
   type: 'combo',
-  choices: ['auto', 'x11', 'wayland', 'both'],
-  value: 'auto',
-  description: 'Select the GLFW window backend on Linux. auto enables the available backend(s).',
+  choices: ['x11', 'wayland', 'both'],
+  value: 'both',
+  description: 'Select the GLFW window backends on Linux.',
 )
 
 option(
   'nfd_backend',
   type: 'combo',
-  choices: ['auto', 'portal', 'gtk'],
-  value: 'auto',
-  description: 'Linux NFD backend. Prefers portal and falls back to gtk.',
+  choices: ['portal', 'gtk'],
+  value: 'portal',
+  description: 'Select the Linux file dialog backend.',
 )
 
 option(
@@ -33,11 +33,4 @@ option(
   type: 'string',
   value: 'dev',
   description: 'Version string embedded in the binary.',
-)
-
-option(
-  'static_analysis',
-  type: 'feature',
-  value: 'auto',
-  description: 'Require clang-tidy when enabled.',
 )

@@ -1,65 +1,29 @@
-#!/usr/bin/env python3
-
 import argparse
-import sys
 from pathlib import Path
 
 
-def write_u32le(handle, variable_name: str, data: bytes) -> None:
-    if len(data) % 4 != 0:
-        print("u32le size must be a multiple of 4 bytes", file=sys.stderr)
-        raise SystemExit(1)
-
-    handle.write("#include <stddef.h>\n")
-    handle.write("#include <stdint.h>\n\n")
-    handle.write(f"const uint32_t {variable_name}Data[] = {{\n")
-
-    for i in range(0, len(data), 16):
-        chunk = data[i : i + 16]
-        words = []
-        for word_start in range(0, len(chunk), 4):
-            words.append(int.from_bytes(chunk[word_start : word_start + 4], byteorder="little"))
-        handle.write("    " + ", ".join(f"0x{word:08x}u" for word in words) + ",\n")
-
-    handle.write("};\n")
-    handle.write(f"const size_t {variable_name}Size = sizeof({variable_name}Data);\n")
-
-
-def write_bytes(handle, variable_name: str, data: bytes) -> None:
-    handle.write("#include <stddef.h>\n")
-    handle.write("#include <stdint.h>\n\n")
-    handle.write(f"const uint8_t {variable_name}Data[] = {{\n")
-
-    for i in range(0, len(data), 12):
-        chunk = data[i : i + 12]
-        handle.write("    " + ", ".join(f"0x{byte:02x}" for byte in chunk) + ",\n")
-
-    handle.write("};\n")
-    handle.write(f"const size_t {variable_name}Size = sizeof({variable_name}Data);\n")
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Embed binary data in a C source file.")
-    parser.add_argument(
-        "--format",
-        choices=("bytes", "u32le"),
-        default="bytes",
-        help="Array element format used in the generated C source.",
-    )
-    parser.add_argument("input_path")
-    parser.add_argument("output_path")
+def main():
+    parser = argparse.ArgumentParser(description="Embed binary data as a C array.")
+    parser.add_argument("--format", choices=("bytes", "u32le"), default="bytes")
+    parser.add_argument("input_path", type=Path)
+    parser.add_argument("output_path", type=Path)
     parser.add_argument("variable_name")
     args = parser.parse_args()
-
-    data = Path(args.input_path).read_bytes()
-
-    with open(args.output_path, "w", encoding="utf-8") as handle:
-        if args.format == "u32le":
-            write_u32le(handle, args.variable_name, data)
-        else:
-            write_bytes(handle, args.variable_name, data)
-    return 0
+    data = args.input_path.read_bytes()
+    width = 4 if args.format == "u32le" else 1
+    if not data or len(data) % width:
+        parser.error(f"Input must contain a nonzero multiple of {width} bytes.")
+    with args.output_path.open("w", encoding="utf-8") as output:
+        output.write("#include <stddef.h>\n#include <stdint.h>\n\n")
+        output.write(f"const uint{width * 8}_t {args.variable_name}Data[] = {{\n")
+        for start in range(0, len(data), 16):
+            values = [
+                int.from_bytes(data[index : index + width], "little")
+                for index in range(start, min(start + 16, len(data)), width)
+            ]
+            output.write("    " + ", ".join(f"0x{value:0{width * 2}x}u" for value in values) + ",\n")
+        output.write(f"}};\nconst size_t {args.variable_name}Size = sizeof({args.variable_name}Data);\n")
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

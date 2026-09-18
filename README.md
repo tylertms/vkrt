@@ -14,23 +14,23 @@ Both use high-quality filtering with albedo and normal inputs.
 
 ## Build
 
-Install Git and Python 3.12 or newer.
-Get the source and install the build tools:
+Install Git, Python 3.12 or newer, and the [Vulkan SDK](https://vulkan.lunarg.com/sdk/home) 1.4.357 or newer.
+The SDK includes Slang. `VULKAN_SDK` must point to the SDK, and `slangc` must be on `PATH`.
 
 ```sh
 git clone https://github.com/tylertms/vkrt
 cd vkrt
-python -m pip install -r scripts/requirements-build.txt
 ```
 
 ### Windows
 
 Install Visual Studio Build Tools with the C++ desktop workload.
-Open an x64 developer PowerShell prompt in the repository directory:
+Open an x64 developer PowerShell prompt in the repository:
 
 ```powershell
-python scripts/setup_vulkan.py
-$env:VULKAN_SDK = "$PWD/.cache/vulkan-sdk"
+python -m venv .venv
+./.venv/Scripts/Activate.ps1
+python -m pip install -r scripts/requirements-build.txt
 $env:PATH = "$env:VULKAN_SDK/Bin;$env:PATH"
 meson setup build --buildtype=release -Db_vscrt=static_from_buildtype
 meson compile -C build
@@ -39,21 +39,22 @@ meson compile -C build
 
 ### Linux
 
-On Ubuntu 24.04:
+On Ubuntu 24.04, install the development packages and load the SDK environment.
+Replace the SDK path with your extracted SDK directory.
 
 ```sh
 sudo apt-get update
-sudo apt-get install build-essential pkg-config nasm libvulkan1 libdbus-1-dev libwayland-dev libxkbcommon-dev wayland-protocols libx11-dev libxrandr-dev libxinerama-dev libxi-dev libxcursor-dev libxext-dev
-python scripts/setup_vulkan.py
-export VULKAN_SDK="$PWD/.cache/vulkan-sdk"
-export PATH="$VULKAN_SDK/bin:$PATH"
-meson setup build --buildtype=release -Dlinux_window_backend=both -Dnfd_backend=portal -Dfile_dialogs=enabled
+sudo apt-get install build-essential pkg-config nasm python3-venv libvulkan1 libdbus-1-dev libwayland-dev libxkbcommon-dev wayland-protocols libx11-dev libxrandr-dev libxinerama-dev libxi-dev libxcursor-dev libxext-dev
+source /path/to/VulkanSDK/setup-env.sh
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r scripts/requirements-build.txt
+meson setup build --buildtype=release -Dfile_dialogs=enabled
 meson compile -C build
 ./build/vkrt
 ```
 
-The SDK script downloads the required Vulkan SDK and Slang compiler into `.cache/vulkan-sdk`.
-Meson downloads and builds the remaining external libraries.
+Meson downloads the external libraries. Bundled source is in `external/`.
 
 ### Build options
 
@@ -61,12 +62,12 @@ Meson downloads and builds the remaining external libraries.
 | --- | --- |
 | `--buildtype=debug` | Enable Vulkan validation and debug logs. |
 | `-Dprofiling=true` | Include debug symbols and profiling information. |
-| `-Dlinux_window_backend=x11/wayland/both` | Select the Linux window backends. |
-| `-Dnfd_backend=portal/gtk` | Select Linux file dialogs. GTK requires `libgtk-3-dev`. |
+| `-Dlinux_window_backend=x11/wayland/both` | Select Linux window backends. Default: `both`. |
+| `-Dnfd_backend=portal/gtk` | Select Linux file dialogs. Default: `portal`. GTK requires `libgtk-3-dev`. |
 | `-Dfile_dialogs=disabled` | Build without native file dialogs. |
 
 Use `meson configure build` to list all options.
-After a dependency update, use a new build directory.
+After dependency or build-option changes, use a new build directory.
 
 ## Render an image
 
@@ -79,40 +80,57 @@ The output extension selects EXR, PNG, or JPEG.
 EXR preserves linear HDR values. PNG and JPEG use the exposure and tone mapping from the scene.
 Use `--help` for more commands.
 
-## Static analysis
+## Lint and format
+
+Install the tools in the active Python environment:
 
 ```sh
 python -m pip install -r scripts/requirements-lint.txt
-meson configure build -Dstatic_analysis=enabled
-meson compile -C build clang-tidy
-ruff check scripts
 ```
+
+After building, run C/C++ analysis and formatting from the repository root.
+On PowerShell:
+
+```powershell
+run-clang-tidy -p build ([regex]::Escape("$PWD\src\"))
+clang-format -i --assume-filename=source.cpp (git ls-files 'src/*.c' 'src/*.h' 'src/*.cpp' 'src/*.hpp' 'src/*.slang')
+```
+
+On Bash:
+
+```sh
+run-clang-tidy -p build "$PWD/src/"
+git ls-files -z 'src/*.c' 'src/*.h' 'src/*.cpp' 'src/*.hpp' 'src/*.slang' | xargs -0 clang-format -i --assume-filename=source.cpp
+```
+
+For Python, on either platform:
+
+```sh
+ruff check scripts
+ruff format scripts
+```
+
+Replace `-i` with `--dry-run --Werror` to check C/C++ and shader formatting without writing files.
+Use `ruff format --check scripts` to check Python formatting.
 
 ## Packages and releases
 
-On Windows, use an x64 developer PowerShell prompt:
-
-```powershell
-python scripts/package_windows.py dist --msvc-redist "$env:VCToolsRedistDir"
-```
-
-This command creates a ZIP with the required MSVC runtime.
-Without `--msvc-redist` or `VCToolsRedistDir`, users need the Microsoft Visual C++ x64 Redistributable.
-
-On Linux:
+Build first, then create a Windows ZIP or Linux tarball:
 
 ```sh
-sudo apt-get install patchelf desktop-file-utils
-python scripts/package_linux.py dist --appimage
+python scripts/package.py
 ```
 
-This command creates a tarball and an AppImage.
-Both packaging scripts accept `--build-dir` and write their output to `dist/`.
+Use `--build-dir <directory>` for another build directory. Packages are written to `dist/`.
+Meson stages the executable, assets, and OIDN libraries. The packager adds runtime dependencies, licenses, and archives.
 
-CI builds and packages both platforms. Linux also runs static analysis.
-Push a `v*` tag to publish a release after both builds pass.
-Release files include the Windows ZIP, Linux tarball, AppImage, and `SHA256SUMS`.
-Tags with a hyphen create prereleases.
+On Windows, use an x64 developer prompt to bundle the MSVC runtime from `VCToolsRedistDir`.
+Without it, users need the Microsoft Visual C++ x64 Redistributable.
+On Linux, install `patchelf` and `desktop-file-utils`. Add `--appimage` to also create an AppImage.
+
+The [CI workflow](.github/workflows/ci.yml) builds and packages Windows and Linux. Linux also runs lint.
+Push a `v*` tag to release both platforms after both jobs pass.
+Release assets include the ZIP, tarball, AppImage, and `SHA256SUMS`. Tags with a hyphen create prereleases.
 
 ## Dependencies
 
@@ -135,15 +153,11 @@ Exact versions, download links, and checksums are in:
 
 - [Meson wraps](subprojects) for downloaded libraries.
 - [Vendor manifest](external/dependencies.json) for bundled source, including stb and rgb2spec.
-- [Toolchain manifest](scripts/toolchain.json) for the Vulkan SDK and AppImage tools.
+- [CI workflow](.github/workflows/ci.yml) for the Vulkan SDK versions and checksums.
+- [AppImage tools](scripts/toolchain.json) for packaging tool versions and checksums.
 - [Build tools](scripts/requirements-build.txt) and [analysis tools](scripts/requirements-lint.txt) for Python packages.
 
-To restore bundled source from the vendor manifest:
-
-```sh
-python scripts/sync_vendor.py
-```
-
+Update bundled source from the versions and URLs in the vendor manifest. Keep its version and checksum current.
 Update ImGui and Dear Bindings together, with matching ImGui tags.
 
 Sample image from spectral mode:

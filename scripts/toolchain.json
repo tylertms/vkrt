@@ -1,16 +1,4 @@
 {
-  "vulkan": {
-    "windows": {
-      "version": "1.4.357.0",
-      "url": "https://sdk.lunarg.com/sdk/download/1.4.357.0/windows/vulkan_sdk.exe?Human=true",
-      "sha256": "81f474711e9042f4cd22b31b2f7a8870db2e428b21586fb43dd80150be97310d"
-    },
-    "linux": {
-      "version": "1.4.357.1",
-      "url": "https://sdk.lunarg.com/sdk/download/1.4.357.1/linux/vulkan_sdk.tar.xz?Human=true",
-      "sha256": "4b41e3b30e8aedaa5dac7c136561ab463eb316a25a54e2c6245f2c299ea1fb85"
-    }
-  },
   "appimagetool": {
     "version": "1.9.1",
     "url": "https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage",

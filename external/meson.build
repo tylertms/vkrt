@@ -18,77 +18,13 @@ if is_darwin
   )
 endif
 
-linux_glfw_backend = 'auto'
-linux_x11_probe_deps = []
-linux_wayland_probe_deps = []
-linux_wayland_scanner = disabler()
-linux_has_x11 = false
-linux_has_wayland = false
-
-if is_linux
-  linux_x11_probe_deps = [
-    dependency('x11', required: false, method: 'pkg-config'),
-    dependency('xrandr', required: false, method: 'pkg-config'),
-    dependency('xinerama', required: false, method: 'pkg-config'),
-    dependency('xcursor', required: false, method: 'pkg-config'),
-    dependency('xi', required: false, method: 'pkg-config'),
-    dependency('xext', required: false, method: 'pkg-config'),
-  ]
-  linux_wayland_probe_deps = [
-    dependency('wayland-client', required: false, method: 'pkg-config'),
-    dependency('wayland-cursor', required: false, method: 'pkg-config'),
-    dependency('wayland-egl', required: false, method: 'pkg-config'),
-    dependency('xkbcommon', required: false, method: 'pkg-config'),
-  ]
-  linux_wayland_scanner = find_program('wayland-scanner', required: false, native: true)
-
-  linux_has_x11 = true
-  foreach dep : linux_x11_probe_deps
-    linux_has_x11 = linux_has_x11 and dep.found()
-  endforeach
-
-  linux_has_wayland = linux_wayland_scanner.found()
-  foreach dep : linux_wayland_probe_deps
-    linux_has_wayland = linux_has_wayland and dep.found()
-  endforeach
-
-  if linux_window_backend == 'auto'
-    if linux_has_x11 and linux_has_wayland
-      linux_glfw_backend = 'both'
-    elif linux_has_wayland
-      linux_glfw_backend = 'wayland'
-    elif linux_has_x11
-      linux_glfw_backend = 'x11'
-    else
-      error('No supported Linux GLFW backend was detected. Install X11 development files, or Wayland development files plus wayland-scanner, or set -Dlinux_window_backend explicitly.')
-    endif
-  else
-    linux_glfw_backend = linux_window_backend
-  endif
-
-  if linux_glfw_backend == 'x11'
-    if not linux_has_x11
-      error('linux_window_backend=x11 requires x11, xrandr, xinerama, xcursor, xi, and xext development files.')
-    endif
-  elif linux_glfw_backend == 'wayland'
-    if not linux_has_wayland
-      error('linux_window_backend=wayland requires wayland-client, wayland-cursor, wayland-egl, xkbcommon, and wayland-scanner.')
-    endif
-  elif linux_glfw_backend == 'both'
-    if not linux_has_x11 or not linux_has_wayland
-      error('linux_window_backend=both requires both the X11 and Wayland development stacks, plus wayland-scanner.')
-    endif
-  else
-    error('Invalid linux_window_backend option: ' + linux_glfw_backend)
-  endif
-elif linux_window_backend != 'auto'
-  message('Ignoring linux_window_backend=' + linux_window_backend + ' on ' + sys)
-endif
-
 glfw_build_win32 = is_windows
 glfw_build_cocoa = is_darwin
-glfw_build_x11 = is_linux and (linux_glfw_backend == 'x11' or linux_glfw_backend == 'both')
-glfw_build_wayland = is_linux and (linux_glfw_backend == 'wayland' or linux_glfw_backend == 'both')
+glfw_build_x11 = is_linux and linux_window_backend in ['x11', 'both']
+glfw_build_wayland = is_linux and linux_window_backend in ['wayland', 'both']
+if glfw_build_wayland
+  linux_wayland_scanner = find_program('wayland-scanner')
+endif
 
 glfw_msvc_runtime = ''
 if cc_is_msvc or cpp_is_msvc

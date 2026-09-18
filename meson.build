@@ -23,7 +23,6 @@ cmake = import('cmake')
 fs = import('fs')
 python = import('python').find_installation()
 embed_data = files('scripts/embed_data.py')
-clang_tidy = find_program('clang-tidy', required: get_option('static_analysis'))
 
 buildtype = get_option('buildtype')
 profiling_enabled = get_option('profiling')
@@ -168,6 +167,8 @@ app_c_args = c_args + [
   c_define_prefix + 'VKRT_GLFW_WAYLAND=' + (glfw_build_wayland ? '1' : '0'),
 ] + [c_define_prefix + 'VKRT_FILE_DIALOGS_ENABLED=' + (file_dialogs_enabled ? '1' : '0')]
 
+runtime_origin = {'linux': '$ORIGIN', 'darwin': '@loader_path', 'windows': ''}[sys]
+
 executable('vkrt',
   c_args: app_c_args,
   link_args: app_link_args,
@@ -175,17 +176,17 @@ executable('vkrt',
   dependencies: app_dependencies,
   include_directories: app_includes,
   link_with: app_link_with,
+  install: true,
+  install_dir: 'bin',
+  build_rpath: runtime_origin,
+  install_rpath: is_windows ? '' : runtime_origin + '/../lib',
 )
 
-configure_file(
-  input: 'scripts/release.json.in',
-  output: 'release.json',
-  configuration: {
-    'OIDN_ROOT': oidn_project.get_variable('oidn_root').replace('\\', '/'),
-    'PLATFORM': sys,
-    'CPU': host_machine.cpu_family(),
-  },
-)
+install_subdir('assets', install_dir: '.')
+install_data('README.md', 'LICENSE', install_dir: '.')
+install_data(oidn_runtime_files, install_dir: is_windows ? 'bin' : 'lib', follow_symlinks: false)
+install_subdir(oidn_project.get_variable('oidn_root') / 'doc',
+  install_dir: 'licenses/oidn', strip_directory: true)
 
 foreach oidn_runtime_file : oidn_runtime_files
   configure_file(
@@ -214,14 +215,3 @@ summary({
   'File dialogs': file_dialogs_backend,
   'Profiling': profiling_enabled,
 }, section: 'vkrt')
-
-if clang_tidy.found()
-  foreach mode : ['', '-fix']
-    run_target('clang-tidy' + mode,
-      command: [python, files('scripts/run_clang_tidy.py'), '--build-dir', meson.project_build_root()] + (mode == '-fix' ? ['--fix'] : []),
-      env: {
-        'CLANG_TIDY': clang_tidy.full_path(),
-      },
-    )
-  endforeach
-endif

@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: ['**']
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
@@ -10,9 +11,163 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
   build:
-    uses: ./.github/workflows/build.yml
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2025
+            platform: windows
+            sdk: '1.4.357.0'
+            sdk_hash: 81f474711e9042f4cd22b31b2f7a8870db2e428b21586fb43dd80150be97310d
+            sdk_bin: Bin
+            meson_args: -Db_vscrt=static_from_buildtype
+          - os: ubuntu-24.04
+            platform: linux
+            sdk: '1.4.357.1'
+            sdk_hash: 4b41e3b30e8aedaa5dac7c136561ab463eb316a25a54e2c6245f2c299ea1fb85
+            sdk_bin: bin
+            meson_args: ''
+    defaults:
+      run:
+        shell: bash
+    env:
+      VULKAN_SDK: ${{ github.workspace }}/.cache/vulkan-sdk
+      SDK_VERSION: ${{ matrix.sdk }}
+      SDK_SHA256: ${{ matrix.sdk_hash }}
+      VKRT_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || github.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: scripts/requirements-*.txt
+
+      - if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756
+        with:
+          arch: x64
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential pkg-config nasm patchelf libvulkan1 libdbus-1-dev libwayland-dev libxkbcommon-dev wayland-protocols libx11-dev libxrandr-dev libxinerama-dev libxi-dev libxcursor-dev libxext-dev desktop-file-utils
+          python -m pip install -r scripts/requirements-lint.txt
+
+      - name: Install build tools
+        run: python -m pip install -r scripts/requirements-build.txt
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        id: sdk
+        with:
+          path: .cache/vulkan-sdk
+          key: sdk-${{ runner.os }}-${{ runner.arch }}-${{ matrix.sdk_hash }}
+
+      - name: Install Windows Vulkan SDK
+        if: runner.os == 'Windows' && steps.sdk.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          curl.exe --fail --location --retry 3 --connect-timeout 30 --max-time 900 --output vulkan-sdk.exe "https://sdk.lunarg.com/sdk/download/$env:SDK_VERSION/windows/vulkan_sdk.exe?Human=true"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ((Get-FileHash vulkan-sdk.exe -Algorithm SHA256).Hash -ne $env:SDK_SHA256) { throw 'SDK checksum mismatch' }
+          $installer = Start-Process -FilePath "$PWD/vulkan-sdk.exe" -ArgumentList "--root `"$env:VULKAN_SDK`" --accept-licenses --default-answer --confirm-command install copy_only=1" -Wait -PassThru -WindowStyle Hidden
+          if ($installer.ExitCode -ne 0) { exit $installer.ExitCode }
+
+      - name: Install Linux Vulkan SDK
+        if: runner.os == 'Linux' && steps.sdk.outputs.cache-hit != 'true'
+        run: |
+          curl --fail --location --retry 3 --connect-timeout 30 --max-time 900 --output vulkan-sdk.tar.xz "https://sdk.lunarg.com/sdk/download/$SDK_VERSION/linux/vulkan_sdk.tar.xz?Human=true"
+          echo "$SDK_SHA256  vulkan-sdk.tar.xz" | sha256sum --check
+          mkdir -p "$VULKAN_SDK"
+          tar -xJf vulkan-sdk.tar.xz -C "$VULKAN_SDK" --strip-components=2 "$SDK_VERSION/x86_64"
+
+      - name: Set SDK path
+        run: echo "$VULKAN_SDK/${{ matrix.sdk_bin }}" >> "$GITHUB_PATH"
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: subprojects/packagecache
+          key: wraps-${{ runner.os }}-${{ hashFiles('subprojects/*.wrap') }}
+
+      - name: Build
+        run: |
+          meson setup build --buildtype=release -Dfile_dialogs=enabled ${{ matrix.meson_args }} "-Dvkrt_version=$VKRT_VERSION"
+          meson compile -C build
+
+      - name: Lint
+        if: runner.os == 'Linux'
+        run: |
+          ruff check scripts
+          run-clang-tidy -p build "$PWD/src/"
+
+      - name: Package
+        run: |
+          args=()
+          if [[ "$RUNNER_OS" == Linux && "$GITHUB_REF" == refs/tags/v* ]]; then args+=(--appimage); fi
+          python scripts/package.py "${args[@]}"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: vkrt-${{ matrix.platform }}-x64
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+          path: |
+            dist/*.zip
+            dist/*.tar.gz
+            dist/*.AppImage
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: failure()
+        with:
+          name: logs-${{ matrix.platform }}
+          retention-days: 7
+          path: build/meson-logs/
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: vkrt-*-x64
+          merge-multiple: true
+          path: dist
+
+      - name: Calculate checksums
+        working-directory: dist
+        run: sha256sum vkrt-windows-x64.zip vkrt-linux-x64.tar.gz vkrt-linux-x86_64.AppImage > SHA256SUMS
+
+      - name: Upload all assets to a draft
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64
+        with:
+          draft: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            dist/vkrt-windows-x64.zip
+            dist/vkrt-linux-x64.tar.gz
+            dist/vkrt-linux-x86_64.AppImage
+            dist/SHA256SUMS
+
+      - name: Publish complete release
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64
+        with:
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
