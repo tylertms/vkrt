@@ -3,6 +3,8 @@
 A Vulkan path tracer in C with Slang shaders, for Windows and Linux.
 The renderer is available as the `vkrt_core` library with a [C API](src/core/api/vkrt.h).
 
+<img width="1080" height="607" alt="image" src="https://github.com/user-attachments/assets/17a43e29-341f-4718-82ba-5b4ec32b923c" />
+
 ## Features
 
 ### Renderer
@@ -131,10 +133,6 @@ pre-commit run --all-files
 | cJSON | 1.7.19 |
 | TinyEXR | 3.2.0 |
 | Native File Dialog Extended | 1.4.0 |
-
-## Gallery
-
-<img width="1080" height="607" alt="image" src="https://github.com/user-attachments/assets/17a43e29-341f-4718-82ba-5b4ec32b923c" />
 
 [pbrt-diffuse]: https://www.pbr-book.org/4ed/Reflection_Models/Diffuse_Reflection
 [oren-nayar]: https://www.cs.columbia.edu/CAVE/publications/pdfs/Oren_SIGGRAPH94.pdf
